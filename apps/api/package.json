@@ -1,6 +1,6 @@
 {
   "name": "@subtracker/api",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,7 +17,7 @@
   "dependencies": {
     "@fastify/cors": "^10.0.2",
     "@prisma/client": "^6.6.0",
-    "@subtracker/shared": "0.1.0",
+    "@subtracker/shared": "0.0.1",
     "dayjs": "^1.11.13",
     "fastify": "^5.2.2",
     "node-cron": "^4.0.5",

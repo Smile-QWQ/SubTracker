@@ -1,6 +1,6 @@
 {
   "name": "subtracker",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "private": true,
   "description": "Subscription tracker with currency conversion, reminder webhooks, statistics and calendar.",
   "workspaces": [

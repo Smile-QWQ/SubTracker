@@ -119,16 +119,24 @@ npm run build -w apps/web
 
 ## 7. GitHub Actions 与镜像发布
 
-仓库已预置两个 workflow：
+仓库已预置一个统一 workflow：
 
-- `CI`：在 `main` 和 PR 上执行安装、Prisma Generate、Lint、Build
-- `Docker Publish`：在 `main`、`v*` tag 或手动触发时发布 API 镜像到 GHCR
+- `Build and Release`
+  - 在 `main` 和 PR 上执行安装、Prisma Generate、Lint、Build
+  - 在 `v*` tag 或手动触发时，额外发布：
+    - API Docker 镜像到 GHCR
+    - 前端静态文件 `subtracker-web-dist.zip` 到 GitHub Release
 
 默认镜像发布地址：
 
 ```text
 ghcr.io/smile-qwq/subtracker-api
 ```
+
+前端静态文件发布方式：
+
+- Release asset：`subtracker-web-dist.zip`
+- 可直接下载后解压到外部 Nginx 静态目录
 
 ## 8. 升级流程
 

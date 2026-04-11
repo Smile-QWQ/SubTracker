@@ -1,6 +1,6 @@
 {
   "name": "@subtracker/web",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,7 +11,7 @@
     "lint": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "@subtracker/shared": "0.1.0",
+    "@subtracker/shared": "0.0.1",
     "@tanstack/vue-query": "^5.74.9",
     "@vicons/ionicons5": "^0.13.0",
     "@vueuse/core": "^13.0.0",
