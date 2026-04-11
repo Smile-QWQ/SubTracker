@@ -1,0 +1,37 @@
+{
+  "name": "@subtracker/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "lint": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@subtracker/shared": "0.1.0",
+    "@tanstack/vue-query": "^5.74.9",
+    "@vicons/ionicons5": "^0.13.0",
+    "@vueuse/core": "^13.0.0",
+    "axios": "^1.8.4",
+    "dayjs": "^1.11.13",
+    "echarts": "^5.6.0",
+    "naive-ui": "^2.41.0",
+    "pinia": "^3.0.2",
+    "vue": "^3.5.13",
+    "vue-echarts": "^7.0.3",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "@vitejs/plugin-vue": "^5.2.3",
+    "@vue/test-utils": "^2.4.6",
+    "jsdom": "^26.0.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.2.6",
+    "vitest": "^3.1.1",
+    "vue-tsc": "^2.2.8"
+  }
+}

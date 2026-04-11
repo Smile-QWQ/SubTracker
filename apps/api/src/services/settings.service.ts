@@ -1,0 +1,64 @@
+import type { SettingsInput } from '@subtracker/shared'
+import { prisma } from '../db'
+import { config } from '../config'
+
+export async function getSetting<T>(key: string, fallback: T): Promise<T> {
+  const row = await prisma.setting.findUnique({ where: { key } })
+  if (!row) return fallback
+  return row.valueJson as T
+}
+
+export async function setSetting<T>(key: string, value: T): Promise<void> {
+  await prisma.setting.upsert({
+    where: { key },
+    update: { valueJson: value as object },
+    create: { key, valueJson: value as object }
+  })
+}
+
+export async function getAppSettings(): Promise<SettingsInput> {
+  const baseCurrency = await getSetting('baseCurrency', config.baseCurrency)
+  const defaultNotifyDays = await getSetting('defaultNotifyDays', config.defaultNotifyDays)
+  const monthlyBudgetBase = await getSetting<number | null>('monthlyBudgetBase', null)
+  const yearlyBudgetBase = await getSetting<number | null>('yearlyBudgetBase', null)
+  const enableCategoryBudgets = await getSetting('enableCategoryBudgets', false)
+  const categoryBudgets = await getSetting<Record<string, number>>('categoryBudgets', {})
+  const emailNotificationsEnabled = await getSetting('emailNotificationsEnabled', false)
+  const pushplusNotificationsEnabled = await getSetting('pushplusNotificationsEnabled', false)
+  const emailConfig = await getSetting<SettingsInput['emailConfig']>('emailConfig', {
+    host: '',
+    port: 587,
+    secure: false,
+    username: '',
+    password: '',
+    from: '',
+    to: ''
+  })
+  const pushplusConfig = await getSetting<SettingsInput['pushplusConfig']>('pushplusConfig', {
+    token: '',
+    topic: ''
+  })
+  const aiConfig = await getSetting<SettingsInput['aiConfig']>('aiConfig', {
+    enabled: false,
+    providerName: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com',
+    apiKey: '',
+    model: 'deepseek-chat',
+    timeoutMs: 30000,
+    promptTemplate: ''
+  })
+
+  return {
+    baseCurrency,
+    defaultNotifyDays,
+    monthlyBudgetBase,
+    yearlyBudgetBase,
+    enableCategoryBudgets,
+    categoryBudgets,
+    emailNotificationsEnabled,
+    pushplusNotificationsEnabled,
+    emailConfig,
+    pushplusConfig,
+    aiConfig
+  }
+}

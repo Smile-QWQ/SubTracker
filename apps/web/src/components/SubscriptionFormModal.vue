@@ -1,0 +1,873 @@
+<template>
+  <n-modal
+    :show="show"
+    preset="card"
+    title="订阅信息"
+    style="width: min(920px, calc(100vw - 24px))"
+    @mask-click="close"
+    @update:show="handleUpdateShow"
+  >
+    <n-form :model="form" label-placement="top">
+      <div class="name-logo-row">
+        <n-form-item label="名称" class="name-logo-row__name">
+          <n-input v-model:value="form.name" placeholder="例如：GitHub Pro" />
+        </n-form-item>
+
+        <div class="logo-dock">
+          <div class="logo-dock__row">
+            <div class="logo-dock__preview-wrap">
+              <button type="button" class="logo-dock__preview" @click="pickLogoFile">
+                <img v-if="resolvedLogoUrl" :src="resolvedLogoUrl" alt="logo" class="logo-dock__image" />
+                <div v-else class="logo-dock__placeholder">
+                  <span>{{ form.name.trim() ? '点击上传' : 'Logo' }}</span>
+                </div>
+              </button>
+
+              <button v-if="form.logoUrl" type="button" class="logo-dock__clear" @click.stop="clearLogo">
+                <n-icon :component="CloseOutline" />
+              </button>
+            </div>
+
+            <n-button circle tertiary type="primary" @click.stop="openLogoPanel">
+              <template #icon>
+                <n-icon :component="SearchOutline" />
+              </template>
+            </n-button>
+          </div>
+
+          <input ref="logoFileInputRef" type="file" accept="image/*" class="hidden-input" @change="handleLogoFileChange" />
+
+          <div v-if="showLogoPanel" class="logo-panel">
+            <div class="logo-panel__header">
+              <span>选择 Logo</span>
+              <button type="button" class="logo-panel__close" @click="showLogoPanel = false">
+                <n-icon :component="CloseOutline" />
+              </button>
+            </div>
+
+            <n-tabs v-model:value="logoPanelTab" type="segment" animated class="logo-panel__tabs">
+              <n-tab-pane :name="LOGO_TAB_WEB" :tab="`网络搜索 (${logoCandidates.length})`">
+                <div v-if="searchingLogoCandidates" class="logo-panel__state">
+                  <n-spin size="small" />
+                  <span>正在搜索 Logo...</span>
+                </div>
+
+                <div v-else-if="logoCandidates.length" class="logo-panel__list">
+                  <button
+                    v-for="item in logoCandidates"
+                    :key="`${item.source}-${item.logoUrl}`"
+                    type="button"
+                    class="logo-panel__item"
+                    @click="applyRemoteLogoCandidate(item)"
+                  >
+                    <img :src="item.logoUrl" :alt="item.label" class="logo-panel__item-image" />
+                    <span class="logo-panel__item-label">{{ item.label }}</span>
+                    <span class="logo-panel__item-meta">
+                      {{ formatLogoSource(item.source) }}
+                      <template v-if="item.width && item.height"> · {{ item.width }}×{{ item.height }}</template>
+                    </span>
+                  </button>
+                </div>
+
+                <n-empty v-else description="当前没有可用的网络搜索结果" size="small" class="logo-panel__empty" />
+              </n-tab-pane>
+
+              <n-tab-pane :name="LOGO_TAB_LIBRARY" :tab="`本地已保存 (${localLogoLibrary.length})`">
+                <div v-if="loadingLocalLogoLibrary" class="logo-panel__state">
+                  <n-spin size="small" />
+                  <span>正在加载本地 Logo...</span>
+                </div>
+
+                <div v-else-if="localLogoLibrary.length" class="logo-panel__list">
+                  <div v-for="item in localLogoLibrary" :key="item.logoUrl" class="logo-panel__item-wrap">
+                    <button
+                      v-if="(item.usageCount ?? 0) === 0 && item.filename"
+                      type="button"
+                      class="logo-panel__delete"
+                      @click.stop="deleteLocalLogo(item)"
+                    >
+                      <n-icon :component="CloseOutline" />
+                    </button>
+
+                    <button type="button" class="logo-panel__item" @click="applyLocalLogoCandidate(item)">
+                      <img :src="buildAbsoluteLogoUrl(item.logoUrl)" :alt="item.label" class="logo-panel__item-image" />
+                      <span class="logo-panel__item-label">{{ item.label }}</span>
+                      <span class="logo-panel__item-meta">
+                        {{ formatLogoSource(item.source) }}
+                        <template v-if="item.usageCount !== undefined"> · 已用 {{ item.usageCount }} 次</template>
+                      </span>
+                      <span v-if="item.relatedSubscriptionNames?.length" class="logo-panel__item-related">
+                        {{ item.relatedSubscriptionNames.join(' / ') }}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                <n-empty v-else description="本地还没有可复用的 Logo" size="small" class="logo-panel__empty" />
+              </n-tab-pane>
+            </n-tabs>
+          </div>
+        </div>
+      </div>
+
+      <n-grid :cols="layoutCols" :x-gap="16" :y-gap="8">
+        <n-grid-item>
+          <n-form-item label="分类">
+            <n-select v-model:value="form.categoryId" :options="categoryOptions" clearable placeholder="选择分类" />
+          </n-form-item>
+        </n-grid-item>
+        <n-grid-item>
+          <n-form-item label="官网 / 平台地址">
+            <n-input v-model:value="form.websiteUrl" placeholder="https://example.com" />
+          </n-form-item>
+        </n-grid-item>
+      </n-grid>
+
+      <n-form-item label="描述">
+        <n-input
+          v-model:value="form.description"
+          type="textarea"
+          :autosize="{ minRows: 2, maxRows: 4 }"
+          placeholder="可选，简单记录订阅用途"
+        />
+      </n-form-item>
+
+      <n-grid :cols="moneyCols" :x-gap="16" :y-gap="8">
+        <n-grid-item>
+          <n-form-item label="金额">
+            <n-input-number v-model:value="form.amount" :min="0" :precision="2" style="width: 100%" placeholder="输入金额" />
+          </n-form-item>
+        </n-grid-item>
+        <n-grid-item>
+          <n-form-item label="货币">
+            <n-select v-model:value="form.currency" :options="currencyOptions" filterable placeholder="选择货币" />
+          </n-form-item>
+        </n-grid-item>
+        <n-grid-item>
+          <n-form-item label="频率">
+            <n-select v-model:value="form.billingIntervalCount" :options="frequencyOptions" placeholder="选择频率" />
+          </n-form-item>
+        </n-grid-item>
+        <n-grid-item>
+          <n-form-item label="单位">
+            <n-select v-model:value="form.billingIntervalUnit" :options="intervalOptions" placeholder="选择单位" />
+          </n-form-item>
+        </n-grid-item>
+      </n-grid>
+
+      <n-grid :cols="dateCols" :x-gap="16" :y-gap="8">
+        <n-grid-item>
+          <n-form-item label="开始日期">
+            <n-date-picker v-model:value="form.startDateTs" type="date" style="width: 100%" clearable />
+          </n-form-item>
+        </n-grid-item>
+        <n-grid-item>
+          <n-form-item label="下次续费">
+            <n-date-picker v-model:value="form.nextRenewalDateTs" type="date" style="width: 100%" clearable />
+          </n-form-item>
+        </n-grid-item>
+        <n-grid-item>
+          <n-form-item label="提醒天数">
+            <n-select v-model:value="form.notifyDaysBefore" :options="notifyDayOptions" placeholder="选择提醒天数" />
+          </n-form-item>
+        </n-grid-item>
+      </n-grid>
+
+      <n-form-item label="备注">
+        <n-input
+          v-model:value="form.notes"
+          type="textarea"
+          :autosize="{ minRows: 2, maxRows: 4 }"
+          placeholder="可选，记录账号、套餐或特别说明"
+        />
+      </n-form-item>
+
+      <div class="form-footer">
+        <n-space>
+          <n-switch v-model:value="form.webhookEnabled" />
+          <span>启用提醒通知</span>
+        </n-space>
+        <n-space wrap>
+          <n-button @click="showAiModal = true">AI 识别</n-button>
+          <n-button @click="close">取消</n-button>
+          <n-button type="primary" @click="submit">保存</n-button>
+        </n-space>
+      </div>
+    </n-form>
+
+    <subscription-ai-modal :show="showAiModal" @close="showAiModal = false" @apply="applyAiResult" />
+  </n-modal>
+</template>
+
+<script setup lang="ts">
+import dayjs from 'dayjs'
+import { computed, reactive, ref, watch } from 'vue'
+import { useWindowSize } from '@vueuse/core'
+import {
+  NButton,
+  NDatePicker,
+  NEmpty,
+  NForm,
+  NFormItem,
+  NGrid,
+  NGridItem,
+  NIcon,
+  NInput,
+  NInputNumber,
+  NModal,
+  NSelect,
+  NSpace,
+  NSpin,
+  NSwitch,
+  NTabPane,
+  NTabs,
+  useMessage
+} from 'naive-ui'
+import { CloseOutline, SearchOutline } from '@vicons/ionicons5'
+import { api } from '@/composables/api'
+import SubscriptionAiModal from '@/components/SubscriptionAiModal.vue'
+import { buildCurrencyOptions } from '@/utils/currency'
+import type { AiRecognitionResult, Category, LogoSearchResult, Subscription } from '@/types/api'
+
+const LOGO_TAB_WEB = 'web'
+const LOGO_TAB_LIBRARY = 'library'
+
+const props = defineProps<{
+  show: boolean
+  model?: Subscription | null
+  categories: Category[]
+  currencies?: string[]
+  defaultNotifyDays?: number
+}>()
+
+const emit = defineEmits<{
+  close: []
+  submit: [payload: Record<string, unknown>, editingId?: string]
+}>()
+
+const { width } = useWindowSize()
+const message = useMessage()
+const showAiModal = ref(false)
+const showLogoPanel = ref(false)
+const logoPanelTab = ref<string>(LOGO_TAB_WEB)
+const searchingLogoCandidates = ref(false)
+const loadingLocalLogoLibrary = ref(false)
+const logoCandidates = ref<LogoSearchResult[]>([])
+const localLogoLibrary = ref<LogoSearchResult[]>([])
+const logoFileInputRef = ref<HTMLInputElement | null>(null)
+
+const layoutCols = computed(() => (width.value < 700 ? 1 : 2))
+const moneyCols = computed(() => (width.value < 900 ? 2 : 4))
+const dateCols = computed(() => (width.value < 900 ? 1 : 3))
+
+const intervalOptions = [
+  { label: '天', value: 'day' },
+  { label: '周', value: 'week' },
+  { label: '月', value: 'month' },
+  { label: '季', value: 'quarter' },
+  { label: '年', value: 'year' }
+]
+
+const frequencyOptions = Array.from({ length: 12 }, (_, index) => ({
+  label: `${index + 1}`,
+  value: index + 1
+}))
+
+const notifyDayOptions = [0, 1, 3, 5, 7, 10, 14, 30].map((day) => ({
+  label: day === 0 ? '到期当天' : `提前 ${day} 天`,
+  value: day
+}))
+
+const categoryOptions = computed(() =>
+  props.categories.map((item) => ({
+    label: item.name,
+    value: item.id
+  }))
+)
+
+const currencyOptions = computed(() =>
+  buildCurrencyOptions(props.currencies?.length ? props.currencies : ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'HKD'])
+)
+
+const form = reactive({
+  name: '',
+  categoryId: null as string | null,
+  description: '',
+  amount: null as number | null,
+  currency: 'CNY',
+  billingIntervalCount: 1,
+  billingIntervalUnit: 'month',
+  startDateTs: dayjs().valueOf(),
+  nextRenewalDateTs: dayjs().add(1, 'month').valueOf(),
+  notifyDaysBefore: props.defaultNotifyDays ?? 3,
+  webhookEnabled: true,
+  notes: '',
+  websiteUrl: '',
+  logoUrl: '',
+  logoSource: ''
+})
+
+const resolvedLogoUrl = computed(() => (form.logoUrl ? buildAbsoluteLogoUrl(form.logoUrl) : ''))
+
+watch(
+  () => props.model,
+  (model) => {
+    if (!model) {
+      resetForm()
+      return
+    }
+
+    form.name = model.name
+    form.categoryId = model.categoryId ?? null
+    form.description = model.description
+    form.amount = model.amount
+    form.currency = model.currency
+    form.billingIntervalCount = model.billingIntervalCount
+    form.billingIntervalUnit = model.billingIntervalUnit
+    form.startDateTs = dayjs(model.startDate).valueOf()
+    form.nextRenewalDateTs = dayjs(model.nextRenewalDate).valueOf()
+    form.notifyDaysBefore = model.notifyDaysBefore
+    form.webhookEnabled = model.webhookEnabled
+    form.notes = model.notes
+    form.websiteUrl = model.websiteUrl ?? ''
+    form.logoUrl = model.logoUrl ?? ''
+    form.logoSource = model.logoSource ?? ''
+    logoCandidates.value = []
+    showLogoPanel.value = false
+  },
+  { immediate: true }
+)
+
+watch(
+  () => props.defaultNotifyDays,
+  (value) => {
+    if (!props.model) {
+      form.notifyDaysBefore = value ?? 3
+    }
+  }
+)
+
+watch(
+  () => props.show,
+  (value) => {
+    if (!value) {
+      showLogoPanel.value = false
+      searchingLogoCandidates.value = false
+    }
+  }
+)
+
+function resetForm() {
+  form.name = ''
+  form.categoryId = null
+  form.description = ''
+  form.amount = null
+  form.currency = 'CNY'
+  form.billingIntervalCount = 1
+  form.billingIntervalUnit = 'month'
+  form.startDateTs = dayjs().valueOf()
+  form.nextRenewalDateTs = dayjs().add(1, 'month').valueOf()
+  form.notifyDaysBefore = props.defaultNotifyDays ?? 3
+  form.webhookEnabled = true
+  form.notes = ''
+  form.websiteUrl = ''
+  form.logoUrl = ''
+  form.logoSource = ''
+  logoCandidates.value = []
+  showLogoPanel.value = false
+}
+
+async function openLogoPanel() {
+  showLogoPanel.value = true
+  await loadLocalLogoLibrary()
+
+  if (!form.name.trim() && !form.websiteUrl.trim()) {
+    logoPanelTab.value = LOGO_TAB_LIBRARY
+    message.info('未填写名称或官网时，先为你展示本地已保存 Logo。')
+    return
+  }
+
+  logoPanelTab.value = LOGO_TAB_WEB
+  await searchLogos()
+}
+
+async function searchLogos() {
+  if (!form.name.trim() && !form.websiteUrl.trim()) {
+    logoCandidates.value = []
+    return
+  }
+
+  searchingLogoCandidates.value = true
+  try {
+    logoCandidates.value = await api.searchSubscriptionLogos({
+      name: form.name.trim() || 'subscription',
+      websiteUrl: form.websiteUrl.trim() || undefined,
+      categoryName: props.categories.find((item) => item.id === form.categoryId)?.name
+    })
+
+    if (!logoCandidates.value.length) {
+      message.warning('没有找到可用 Logo')
+    }
+  } catch (error) {
+    logoCandidates.value = []
+    message.error(error instanceof Error ? error.message : 'Logo 搜索失败')
+  } finally {
+    searchingLogoCandidates.value = false
+  }
+}
+
+async function loadLocalLogoLibrary(force = false) {
+  if (loadingLocalLogoLibrary.value) return
+  if (localLogoLibrary.value.length && !force) return
+
+  loadingLocalLogoLibrary.value = true
+  try {
+    localLogoLibrary.value = await api.getSubscriptionLogoLibrary()
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '本地 Logo 加载失败')
+  } finally {
+    loadingLocalLogoLibrary.value = false
+  }
+}
+
+async function applyRemoteLogoCandidate(item: LogoSearchResult) {
+  try {
+    const imported = await api.importSubscriptionLogo({
+      logoUrl: item.logoUrl,
+      source: item.source
+    })
+
+    form.logoUrl = imported.logoUrl
+    form.logoSource = imported.logoSource
+    if (item.websiteUrl && !form.websiteUrl) {
+      form.websiteUrl = item.websiteUrl
+    }
+    showLogoPanel.value = false
+    await loadLocalLogoLibrary(true)
+    message.success('已保存到本地并应用')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : 'Logo 保存失败')
+  }
+}
+
+function applyLocalLogoCandidate(item: LogoSearchResult) {
+  form.logoUrl = item.logoUrl
+  form.logoSource = item.source
+  showLogoPanel.value = false
+  message.success('已从本地库复用')
+}
+
+async function deleteLocalLogo(item: LogoSearchResult) {
+  if (!item.filename) return
+  try {
+    await api.deleteSubscriptionLogoFromLibrary(item.filename)
+    localLogoLibrary.value = localLogoLibrary.value.filter((entry) => entry.logoUrl !== item.logoUrl)
+    if (form.logoUrl === item.logoUrl) {
+      form.logoUrl = ''
+      form.logoSource = ''
+    }
+    message.success('本地 Logo 文件已删除')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '本地 Logo 删除失败')
+  }
+}
+
+function pickLogoFile() {
+  logoFileInputRef.value?.click()
+}
+
+async function handleLogoFileChange(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (!file) return
+
+  try {
+    const base64 = await readFileAsBase64(file)
+    const uploaded = await api.uploadSubscriptionLogo({
+      filename: file.name,
+      contentType: file.type || 'image/png',
+      base64
+    })
+
+    form.logoUrl = uploaded.logoUrl
+    form.logoSource = uploaded.logoSource
+    showLogoPanel.value = false
+    await loadLocalLogoLibrary(true)
+    message.success('Logo 已上传')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : 'Logo 上传失败')
+  } finally {
+    ;(event.target as HTMLInputElement).value = ''
+  }
+}
+
+function buildAbsoluteLogoUrl(url: string) {
+  if (!url) return ''
+  if (url.startsWith('http')) return url
+  const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001/api/v1'
+  return new URL(url, base.replace(/\/api\/v1$/, '')).toString()
+}
+
+function readFileAsBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const raw = String(reader.result ?? '')
+      resolve(raw.includes(',') ? raw.split(',')[1] : raw)
+    }
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+}
+
+function formatLogoSource(source: string) {
+  switch (source) {
+    case 'duckduckgo':
+      return 'DuckDuckGo'
+    case 'brave':
+      return 'Brave'
+    case 'apple-touch-icon':
+      return 'Apple Touch Icon'
+    case 'html-icon':
+      return '站点图标'
+    case 'favicon':
+      return 'Favicon'
+    case 'google-favicon':
+      return 'Google Favicon'
+    case 'clearbit':
+      return 'Clearbit'
+    case 'icon-horse':
+      return 'Icon Horse'
+    case 'local-file':
+      return '本地文件'
+    case 'upload':
+      return '本地上传'
+    default:
+      return source
+  }
+}
+
+function clearLogo() {
+  form.logoUrl = ''
+  form.logoSource = ''
+  logoCandidates.value = []
+  showLogoPanel.value = false
+}
+
+function applyAiResult(result: AiRecognitionResult) {
+  if (result.name) form.name = result.name
+  if (result.description) form.description = result.description
+  if (result.amount !== undefined) form.amount = result.amount
+  if (result.currency) form.currency = result.currency
+  if (result.billingIntervalCount) form.billingIntervalCount = result.billingIntervalCount
+  if (result.billingIntervalUnit) form.billingIntervalUnit = result.billingIntervalUnit
+  if (result.startDate) form.startDateTs = dayjs(result.startDate).valueOf()
+  if (result.nextRenewalDate) form.nextRenewalDateTs = dayjs(result.nextRenewalDate).valueOf()
+  if (result.notifyDaysBefore !== undefined) form.notifyDaysBefore = result.notifyDaysBefore
+  if (result.websiteUrl) form.websiteUrl = result.websiteUrl
+  if (result.notes) form.notes = result.notes
+}
+
+function submit() {
+  emit(
+    'submit',
+    {
+      name: form.name,
+      categoryId: form.categoryId,
+      description: form.description,
+      amount: Number(form.amount ?? 0),
+      currency: form.currency,
+      billingIntervalCount: Number(form.billingIntervalCount),
+      billingIntervalUnit: form.billingIntervalUnit,
+      startDate: dayjs(form.startDateTs).format('YYYY-MM-DD'),
+      nextRenewalDate: dayjs(form.nextRenewalDateTs).format('YYYY-MM-DD'),
+      notifyDaysBefore: Number(form.notifyDaysBefore),
+      webhookEnabled: form.webhookEnabled,
+      notes: form.notes,
+      websiteUrl: form.websiteUrl || null,
+      logoUrl: form.logoUrl || null,
+      logoSource: form.logoSource || null
+    },
+    props.model?.id
+  )
+}
+
+function close() {
+  emit('close')
+}
+
+function handleUpdateShow(value: boolean) {
+  if (!value) {
+    close()
+  }
+}
+</script>
+
+<style scoped>
+.hidden-input {
+  display: none;
+}
+
+.name-logo-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.name-logo-row__name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.logo-dock {
+  position: relative;
+  flex: 0 0 148px;
+  padding-top: 30px;
+}
+
+.logo-dock__row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.logo-dock__preview-wrap {
+  position: relative;
+}
+
+.logo-dock__preview {
+  width: 104px;
+  height: 42px;
+  padding: 6px 8px;
+  border: 1px solid #dbe2ea;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.logo-dock__preview:hover {
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+}
+
+.logo-dock__image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.logo-dock__placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #eff6ff 0%, #eef2ff 100%);
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0.02em;
+}
+
+.logo-dock__clear {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  width: 20px;
+  height: 20px;
+  border: 1px solid #dbe2ea;
+  border-radius: 999px;
+  background: #fff;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.12);
+}
+
+.logo-panel {
+  position: absolute;
+  top: 78px;
+  right: 0;
+  width: min(320px, calc(100vw - 48px));
+  max-height: 440px;
+  padding: 10px;
+  border: 1px solid #dbe2ea;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.16);
+  z-index: 20;
+  overflow: hidden;
+}
+
+.logo-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 2px 10px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.logo-panel__close {
+  border: none;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+}
+
+.logo-panel__tabs {
+  margin-top: 10px;
+}
+
+.logo-panel__state {
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.logo-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 290px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.logo-panel__item-wrap {
+  position: relative;
+}
+
+.logo-panel__item {
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #fff;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.logo-panel__delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.logo-panel__item:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 10px 24px rgba(59, 130, 246, 0.12);
+  transform: translateY(-1px);
+}
+
+.logo-panel__item-image {
+  width: 100%;
+  height: 88px;
+  object-fit: contain;
+}
+
+.logo-panel__item-label {
+  width: 100%;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  text-align: center;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.logo-panel__item-meta {
+  font-size: 12px;
+  color: #64748b;
+  text-align: center;
+}
+
+.logo-panel__item-related {
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.logo-panel__empty {
+  margin-top: 10px;
+}
+
+.form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .name-logo-row {
+    flex-direction: column;
+  }
+
+  .logo-dock {
+    width: 100%;
+    flex: none;
+    padding-top: 0;
+  }
+
+  .logo-dock__row {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .logo-panel {
+    position: static;
+    width: 100%;
+    max-height: none;
+    margin-top: 12px;
+  }
+
+  .form-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .form-footer :deep(.n-space) {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+</style>

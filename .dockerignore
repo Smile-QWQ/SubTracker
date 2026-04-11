@@ -1,0 +1,11 @@
+node_modules
+apps/*/node_modules
+apps/*/dist
+packages/*/dist
+.git
+.idea
+.vscode
+data
+apps/api/dev.db
+apps/api/storage/logos
+npm-debug.log

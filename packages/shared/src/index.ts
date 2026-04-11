@@ -1,0 +1,219 @@
+import { z } from 'zod'
+
+export const SubscriptionStatusSchema = z.enum(['active', 'paused', 'cancelled', 'expired'])
+export const BillingIntervalUnitSchema = z.enum(['day', 'week', 'month', 'quarter', 'year'])
+export const WebhookEventTypeSchema = z.enum([
+  'subscription.reminder_due',
+  'subscription.overdue',
+  'subscription.renewed',
+  'exchange-rate.stale'
+])
+
+export const CategorySchema = z.object({
+  id: z.string().cuid().optional(),
+  name: z.string().min(1).max(100),
+  color: z.string().min(4).max(20).default('#3b82f6'),
+  icon: z.string().max(50).default('apps-outline'),
+  sortOrder: z.number().int().default(0)
+})
+
+const OptionalMoneySchema = z.number().nonnegative().nullable().optional()
+
+export const SubscriptionLogoSchema = z.object({
+  websiteUrl: z.string().url().nullable().optional(),
+  logoUrl: z.string().max(500).nullable().optional(),
+  logoSource: z.string().max(100).nullable().optional()
+})
+
+export const CreateSubscriptionSchema = z
+  .object({
+    name: z.string().min(1).max(150),
+    categoryId: z.string().cuid().nullable().optional(),
+    description: z.string().max(500).default(''),
+    amount: z.number().positive(),
+    currency: z.string().length(3).transform((v) => v.toUpperCase()),
+    billingIntervalCount: z.number().int().positive().default(1),
+    billingIntervalUnit: BillingIntervalUnitSchema,
+    startDate: z.string().date(),
+    nextRenewalDate: z.string().date(),
+    notifyDaysBefore: z.number().int().min(0).max(365).default(3),
+    webhookEnabled: z.boolean().default(true),
+    notes: z.string().max(1000).default('')
+  })
+  .merge(SubscriptionLogoSchema)
+
+export const UpdateSubscriptionSchema = CreateSubscriptionSchema.partial().extend({
+  status: SubscriptionStatusSchema.optional()
+})
+
+export const RenewSubscriptionSchema = z.object({
+  paidAt: z.string().date().optional(),
+  amount: z.number().positive().optional(),
+  currency: z.string().length(3).optional()
+})
+
+export const CreateWebhookEndpointSchema = z.object({
+  name: z.string().min(1).max(100),
+  url: z.string().url(),
+  secret: z.string().min(3).max(200),
+  enabled: z.boolean().default(true),
+  events: z.array(WebhookEventTypeSchema).nonempty()
+})
+
+export const UpdateWebhookEndpointSchema = CreateWebhookEndpointSchema.partial()
+
+export const EmailConfigSchema = z.object({
+  host: z.string().max(200).default(''),
+  port: z.number().int().min(1).max(65535).default(587),
+  secure: z.boolean().default(false),
+  username: z.string().max(200).default(''),
+  password: z.string().max(500).default(''),
+  from: z.string().max(200).default(''),
+  to: z.string().max(500).default('')
+})
+
+export const PushPlusConfigSchema = z.object({
+  token: z.string().max(200).default(''),
+  topic: z.string().max(100).default('')
+})
+
+export const AiConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  providerName: z.string().max(100).default('DeepSeek'),
+  baseUrl: z.string().url().default('https://api.deepseek.com'),
+  apiKey: z.string().max(500).default(''),
+  model: z.string().max(100).default('deepseek-chat'),
+  timeoutMs: z.number().int().min(5000).max(120000).default(30000),
+  promptTemplate: z.string().max(5000).default('')
+})
+
+export const SettingsSchema = z.object({
+  baseCurrency: z.string().length(3).default('CNY').transform((v) => v.toUpperCase()),
+  defaultNotifyDays: z.number().int().min(0).max(365).default(3),
+  monthlyBudgetBase: OptionalMoneySchema,
+  yearlyBudgetBase: OptionalMoneySchema,
+  enableCategoryBudgets: z.boolean().default(false),
+  categoryBudgets: z.record(z.string(), z.number().nonnegative()).default({}),
+  emailNotificationsEnabled: z.boolean().default(false),
+  pushplusNotificationsEnabled: z.boolean().default(false),
+  emailConfig: EmailConfigSchema.default({}),
+  pushplusConfig: PushPlusConfigSchema.default({}),
+  aiConfig: AiConfigSchema.default({})
+})
+
+export const LoginSchema = z.object({
+  username: z.string().min(1).max(100),
+  password: z.string().min(1).max(200)
+})
+
+export const ChangeCredentialsSchema = z.object({
+  oldUsername: z.string().min(1).max(100),
+  oldPassword: z.string().min(1).max(200),
+  newUsername: z.string().min(1).max(100),
+  newPassword: z.string().min(4).max(200)
+})
+
+export const LogoSearchSchema = z.object({
+  name: z.string().min(1).max(150),
+  websiteUrl: z.string().url().optional(),
+  categoryName: z.string().max(100).optional()
+})
+
+export const LogoUploadSchema = z.object({
+  filename: z.string().min(1).max(200),
+  contentType: z.string().min(1).max(100),
+  base64: z.string().min(1)
+})
+
+export const AiRecognizeSubscriptionSchema = z.object({
+  text: z.string().max(8000).optional(),
+  imageBase64: z.string().max(10_000_000).optional(),
+  filename: z.string().max(200).optional(),
+  mimeType: z.string().max(100).optional()
+})
+
+export type SubscriptionStatus = z.infer<typeof SubscriptionStatusSchema>
+export type BillingIntervalUnit = z.infer<typeof BillingIntervalUnitSchema>
+export type WebhookEventType = z.infer<typeof WebhookEventTypeSchema>
+export type CreateSubscriptionInput = z.infer<typeof CreateSubscriptionSchema>
+export type UpdateSubscriptionInput = z.infer<typeof UpdateSubscriptionSchema>
+export type RenewSubscriptionInput = z.infer<typeof RenewSubscriptionSchema>
+export type CreateWebhookEndpointInput = z.infer<typeof CreateWebhookEndpointSchema>
+export type UpdateWebhookEndpointInput = z.infer<typeof UpdateWebhookEndpointSchema>
+export type SettingsInput = z.infer<typeof SettingsSchema>
+export type LoginInput = z.infer<typeof LoginSchema>
+export type ChangeCredentialsInput = z.infer<typeof ChangeCredentialsSchema>
+export type EmailConfigInput = z.infer<typeof EmailConfigSchema>
+export type PushPlusConfigInput = z.infer<typeof PushPlusConfigSchema>
+export type AiConfigInput = z.infer<typeof AiConfigSchema>
+export type LogoSearchInput = z.infer<typeof LogoSearchSchema>
+export type LogoUploadInput = z.infer<typeof LogoUploadSchema>
+export type AiRecognizeSubscriptionInput = z.infer<typeof AiRecognizeSubscriptionSchema>
+
+export interface MoneyDto {
+  amount: number
+  currency: string
+}
+
+export interface ExchangeRateSnapshotDto {
+  baseCurrency: string
+  rates: Record<string, number>
+  fetchedAt: string
+  provider: string
+  isStale: boolean
+}
+
+export interface LogoSearchResultDto {
+  label: string
+  logoUrl: string
+  source: string
+  websiteUrl?: string
+  width?: number
+  height?: number
+  isLocal?: boolean
+  usageCount?: number
+  filename?: string
+  updatedAt?: string
+  relatedSubscriptionNames?: string[]
+}
+
+export interface AiRecognitionResultDto {
+  name?: string
+  description?: string
+  amount?: number
+  currency?: string
+  billingIntervalCount?: number
+  billingIntervalUnit?: BillingIntervalUnit
+  startDate?: string
+  nextRenewalDate?: string
+  notifyDaysBefore?: number
+  websiteUrl?: string
+  notes?: string
+  confidence?: number
+  rawText?: string
+}
+
+export interface DashboardOverview {
+  activeSubscriptions: number
+  upcoming7Days: number
+  upcoming30Days: number
+  monthlyEstimatedBase: number
+  yearlyEstimatedBase: number
+  monthlyBudgetBase?: number | null
+  yearlyBudgetBase?: number | null
+  monthlyBudgetUsageRatio?: number | null
+  yearlyBudgetUsageRatio?: number | null
+  categorySpend: Array<{ name: string; value: number }>
+  monthlyTrend: Array<{ month: string; amount: number }>
+  categoryBudgetUsage?: Array<{ categoryId: string; name: string; budget: number; spent: number; ratio: number }>
+}
+
+export interface CalendarEventDto {
+  id: string
+  title: string
+  date: string
+  currency: string
+  amount: number
+  convertedAmount: number
+  status: SubscriptionStatus
+}

@@ -1,0 +1,134 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum SubscriptionStatus {
+  active
+  paused
+  cancelled
+  expired
+}
+
+enum BillingIntervalUnit {
+  day
+  week
+  month
+  quarter
+  year
+}
+
+enum WebhookDeliveryStatus {
+  pending
+  success
+  failed
+}
+
+model Category {
+  id            String         @id @default(cuid())
+  name          String
+  color         String         @default("#3b82f6")
+  icon          String         @default("apps-outline")
+  sortOrder     Int            @default(0)
+  subscriptions Subscription[]
+
+  @@unique([name])
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  name                 String
+  categoryId           String?
+  category             Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  description          String             @default("")
+  websiteUrl           String?
+  logoUrl              String?
+  logoSource           String?
+  logoFetchedAt        DateTime?
+  status               SubscriptionStatus @default(active)
+  amount               Float
+  currency             String
+  billingIntervalCount Int                @default(1)
+  billingIntervalUnit  BillingIntervalUnit
+  startDate            DateTime
+  nextRenewalDate      DateTime
+  notifyDaysBefore     Int                @default(3)
+  webhookEnabled       Boolean            @default(true)
+  notes                String             @default("")
+  paymentRecords       PaymentRecord[]
+  deliveries           WebhookDelivery[]
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@index([status, nextRenewalDate])
+}
+
+model PaymentRecord {
+  id              String       @id @default(cuid())
+  subscriptionId  String
+  subscription    Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  amount          Float
+  currency        String
+  baseCurrency    String
+  convertedAmount Float
+  exchangeRate    Float
+  paidAt          DateTime
+  periodStart     DateTime
+  periodEnd       DateTime
+  createdAt       DateTime     @default(now())
+
+  @@index([subscriptionId, paidAt])
+}
+
+model ExchangeRateSnapshot {
+  id           String   @id @default(cuid())
+  baseCurrency String   @unique
+  ratesJson    Json
+  provider     String
+  fetchedAt    DateTime
+  isStale      Boolean  @default(false)
+  updatedAt    DateTime @updatedAt
+}
+
+model WebhookEndpoint {
+  id         String            @id @default(cuid())
+  name       String
+  url        String
+  secret     String
+  enabled    Boolean           @default(true)
+  eventsJson Json
+  deliveries WebhookDelivery[]
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+}
+
+model WebhookDelivery {
+  id           String                @id @default(cuid())
+  endpointId   String
+  endpoint     WebhookEndpoint       @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  subscriptionId String?
+  subscription Subscription?         @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  eventType    String
+  resourceKey  String
+  periodKey    String
+  payloadJson  Json
+  status       WebhookDeliveryStatus @default(pending)
+  responseCode Int?
+  responseBody String?
+  attemptCount Int                   @default(0)
+  lastAttemptAt DateTime?
+  createdAt    DateTime              @default(now())
+
+  @@unique([endpointId, eventType, resourceKey, periodKey])
+  @@index([status, createdAt])
+}
+
+model Setting {
+  key       String   @id
+  valueJson Json
+  updatedAt DateTime @updatedAt
+}

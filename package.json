@@ -1,0 +1,24 @@
+{
+  "name": "subtracker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Subscription tracker with currency conversion, reminder webhooks, statistics and calendar.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "npm run build -w packages/shared && npm run build -w apps/api && npm run build -w apps/web",
+    "test": "npm run test -w packages/shared && npm run test -w apps/api && npm run test -w apps/web",
+    "lint": "npm run lint -w apps/api && npm run lint -w apps/web",
+    "prisma:generate": "npm run prisma:generate -w apps/api",
+    "prisma:migrate": "npm run prisma:migrate -w apps/api",
+    "prisma:push": "npm run prisma:push -w apps/api",
+    "prisma:seed": "npm run prisma:seed -w apps/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.8.3"
+  }
+}

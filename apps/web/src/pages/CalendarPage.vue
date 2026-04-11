@@ -1,0 +1,347 @@
+<template>
+  <div>
+    <page-header
+      title="订阅日历"
+      subtitle="查看续费日期分布，支持月视图和列表视图"
+      :icon="calendarOutline"
+      icon-background="linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)"
+    />
+
+    <n-grid :cols="summaryCols" :x-gap="12" :y-gap="12" style="margin-bottom: 12px">
+      <n-grid-item>
+        <stat-card label="当前月份" :value="panelMonthLabel" suffix="当前正在查看的月份" :icon="calendarClearOutline" />
+      </n-grid-item>
+      <n-grid-item>
+        <stat-card label="本月续费数量" :value="monthEventCount" suffix="当前月份内的订阅数" :icon="notificationsOutline" />
+      </n-grid-item>
+      <n-grid-item>
+        <stat-card
+          label="本月预计支出"
+          :value="`${baseCurrency} ${monthConvertedAmount.toFixed(2)}`"
+          suffix="已按汇率折算"
+          :icon="walletOutline"
+        />
+      </n-grid-item>
+      <n-grid-item>
+        <stat-card
+          label="选中日期续费"
+          :value="selectedDateEvents.length"
+          :suffix="`${selectedDateLabel} · ${baseCurrency} ${selectedDateConvertedAmount.toFixed(2)}`"
+          :icon="todayOutline"
+        />
+      </n-grid-item>
+    </n-grid>
+
+    <n-card class="calendar-panel-card">
+      <n-tabs v-model:value="tab">
+        <n-tab-pane name="month" tab="月视图">
+          <n-grid :cols="calendarCols" :x-gap="12" :y-gap="12">
+            <n-grid-item>
+              <div class="calendar-wrapper">
+                <n-calendar v-model:value="selectedDateTs" @panel-change="handlePanelChange">
+                  <template #default="{ year, month, date }">
+                    <div v-if="getDaySummary(year, month, date)" class="calendar-cell-summary">
+                      <div class="calendar-cell-summary__count">{{ getDaySummary(year, month, date)?.count }} 笔</div>
+                      <div class="calendar-cell-summary__amount">
+                        {{ baseCurrency }} {{ getDaySummary(year, month, date)?.convertedAmount.toFixed(0) }}
+                      </div>
+                    </div>
+                  </template>
+                </n-calendar>
+              </div>
+            </n-grid-item>
+
+            <n-grid-item>
+              <n-card :title="`当天续费（${selectedDateLabel}）`" size="small" class="day-detail-card">
+                <template #header-extra>
+                  <span class="day-summary-inline">
+                    共 {{ selectedDateEvents.length }} 笔 · {{ baseCurrency }} {{ selectedDateConvertedAmount.toFixed(2) }}
+                  </span>
+                </template>
+
+                <n-empty v-if="selectedDateEvents.length === 0" description="当天无续费" />
+
+                <n-space v-else vertical :size="10">
+                  <div v-for="item in selectedDateEvents" :key="item.id" class="day-event-item">
+                    <div class="day-event-item__title-row">
+                      <span class="day-event-item__title">{{ item.title }}</span>
+                      <n-tag size="small" :type="getSubscriptionStatusTagType(item.status)">
+                        {{ getSubscriptionStatusText(item.status) }}
+                      </n-tag>
+                    </div>
+
+                    <div class="day-event-item__meta">
+                      {{ item.currency }} {{ item.amount.toFixed(2) }} / 折算 {{ baseCurrency }}
+                      {{ item.convertedAmount.toFixed(2) }}
+                    </div>
+                  </div>
+                </n-space>
+              </n-card>
+            </n-grid-item>
+          </n-grid>
+        </n-tab-pane>
+
+        <n-tab-pane name="list" tab="列表视图">
+          <n-data-table :columns="columns" :data="events" :pagination="{ pageSize: 12 }" />
+        </n-tab-pane>
+      </n-tabs>
+    </n-card>
+  </div>
+</template>
+
+<script setup lang="ts">
+import dayjs from 'dayjs'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useWindowSize } from '@vueuse/core'
+import { NCalendar, NCard, NDataTable, NEmpty, NGrid, NGridItem, NSpace, NTabPane, NTabs, NTag } from 'naive-ui'
+import {
+  CalendarClearOutline,
+  CalendarOutline,
+  NotificationsOutline,
+  TodayOutline,
+  WalletOutline
+} from '@vicons/ionicons5'
+import { api } from '@/composables/api'
+import PageHeader from '@/components/PageHeader.vue'
+import StatCard from '@/components/StatCard.vue'
+import type { CalendarEvent } from '@/types/api'
+import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils/subscription-status'
+
+const { width } = useWindowSize()
+const calendarOutline = CalendarOutline
+const calendarClearOutline = CalendarClearOutline
+const notificationsOutline = NotificationsOutline
+const walletOutline = WalletOutline
+const todayOutline = TodayOutline
+
+const events = ref<CalendarEvent[]>([])
+const tab = ref('month')
+const selectedDateTs = ref(dayjs().valueOf())
+const panelMonthTs = ref(dayjs().startOf('month').valueOf())
+const baseCurrency = ref('CNY')
+let latestMonthRequestId = 0
+let ignoreSelectedDateWatch = false
+const monthEventsCache = new Map<string, CalendarEvent[]>()
+
+const summaryCols = computed(() => (width.value < 640 ? 1 : width.value < 1100 ? 2 : 4))
+const calendarCols = computed(() => (width.value < 1100 ? 1 : 2))
+
+onMounted(async () => {
+  if (width.value < 720) {
+    tab.value = 'list'
+  }
+  await Promise.all([loadEventsForMonth(panelMonthTs.value), loadSettings()])
+})
+
+watch(selectedDateTs, async (value) => {
+  if (ignoreSelectedDateWatch) {
+    ignoreSelectedDateWatch = false
+    return
+  }
+
+  const selectedMonth = dayjs(value).startOf('month')
+  if (!selectedMonth.isSame(dayjs(panelMonthTs.value), 'month')) {
+    await loadEventsForMonth(value)
+  }
+})
+
+async function loadEventsForMonth(monthTs: number) {
+  const requestId = ++latestMonthRequestId
+  const monthStart = dayjs(monthTs).startOf('month')
+  const cacheKey = monthStart.format('YYYY-MM')
+  panelMonthTs.value = monthStart.valueOf()
+
+  const cached = monthEventsCache.get(cacheKey)
+  if (cached) {
+    events.value = cached
+    void prefetchAdjacentMonths(monthStart.valueOf())
+    return
+  }
+
+  events.value = []
+  const start = monthStart.startOf('month').format('YYYY-MM-DD')
+  const end = monthStart.endOf('month').format('YYYY-MM-DD')
+  const rows = await api.getCalendarEvents({ start, end })
+
+  if (requestId !== latestMonthRequestId) return
+
+  monthEventsCache.set(cacheKey, rows)
+  events.value = rows
+  void prefetchAdjacentMonths(monthStart.valueOf())
+}
+
+async function fetchMonthEvents(monthTs: number) {
+  const monthStart = dayjs(monthTs).startOf('month')
+  const cacheKey = monthStart.format('YYYY-MM')
+  const cached = monthEventsCache.get(cacheKey)
+  if (cached) return cached
+
+  const rows = await api.getCalendarEvents({
+    start: monthStart.startOf('month').format('YYYY-MM-DD'),
+    end: monthStart.endOf('month').format('YYYY-MM-DD')
+  })
+  monthEventsCache.set(cacheKey, rows)
+  return rows
+}
+
+async function prefetchAdjacentMonths(monthTs: number) {
+  const currentMonth = dayjs(monthTs).startOf('month')
+  await Promise.allSettled([
+    fetchMonthEvents(currentMonth.add(1, 'month').valueOf()),
+    fetchMonthEvents(currentMonth.subtract(1, 'month').valueOf())
+  ])
+}
+
+async function loadSettings() {
+  const settings = await api.getSettings()
+  baseCurrency.value = settings.baseCurrency
+}
+
+const panelMonthLabel = computed(() => dayjs(panelMonthTs.value).format('YYYY 年 M 月'))
+const selectedDateLabel = computed(() => dayjs(selectedDateTs.value).format('YYYY-MM-DD'))
+
+const eventMap = computed(() => {
+  const map = new Map<string, CalendarEvent[]>()
+  for (const event of events.value) {
+    const key = dayjs(event.date).format('YYYY-MM-DD')
+    const list = map.get(key) ?? []
+    list.push(event)
+    map.set(key, list)
+  }
+  return map
+})
+
+const selectedDateEvents = computed(() =>
+  events.value.filter((item) => dayjs(item.date).format('YYYY-MM-DD') === selectedDateLabel.value)
+)
+const selectedDateConvertedAmount = computed(() => selectedDateEvents.value.reduce((sum, item) => sum + item.convertedAmount, 0))
+const monthEventCount = computed(() => events.value.length)
+const monthConvertedAmount = computed(() => events.value.reduce((sum, item) => sum + item.convertedAmount, 0))
+
+const columns = [
+  { title: '订阅', key: 'title' },
+  {
+    title: '日期',
+    key: 'date',
+    render: (row: CalendarEvent) => dayjs(row.date).format('YYYY-MM-DD')
+  },
+  {
+    title: '原始金额',
+    key: 'amount',
+    render: (row: CalendarEvent) => `${row.currency} ${row.amount.toFixed(2)}`
+  },
+  {
+    title: '折算金额',
+    key: 'convertedAmount',
+    render: (row: CalendarEvent) => `${baseCurrency.value} ${row.convertedAmount.toFixed(2)}`
+  },
+  {
+    title: '状态',
+    key: 'status',
+    render: (row: CalendarEvent) => getSubscriptionStatusText(row.status)
+  }
+]
+
+function handlePanelChange({ year, month }: { year: number; month: number }) {
+  const targetMonth = dayjs(`${year}-${String(month).padStart(2, '0')}-01`)
+  const currentSelectedDay = dayjs(selectedDateTs.value).date()
+  const targetSelectedDate = targetMonth.date(Math.min(currentSelectedDay, targetMonth.daysInMonth()))
+
+  ignoreSelectedDateWatch = true
+  selectedDateTs.value = targetSelectedDate.valueOf()
+  void loadEventsForMonth(targetMonth.valueOf())
+}
+
+function getDaySummary(year: number, month: number, date: number) {
+  const key = dayjs(`${year}-${String(month).padStart(2, '0')}-${String(date).padStart(2, '0')}`).format('YYYY-MM-DD')
+  const items = eventMap.value.get(key)
+  if (!items?.length) return null
+
+  return {
+    count: items.length,
+    convertedAmount: items.reduce((sum, item) => sum + item.convertedAmount, 0)
+  }
+}
+</script>
+
+<style scoped>
+.calendar-panel-card {
+  overflow: hidden;
+}
+
+.calendar-wrapper {
+  max-width: 720px;
+}
+
+.day-detail-card {
+  min-height: 180px;
+}
+
+.day-event-item {
+  padding: 10px 12px;
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  background: #fafcff;
+}
+
+.day-event-item__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.day-event-item__title {
+  min-width: 0;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.day-event-item__meta {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.calendar-cell-summary {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.calendar-cell-summary__count {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.calendar-cell-summary__amount {
+  color: #6b7280;
+}
+
+.day-summary-inline {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+:deep(.n-calendar .n-calendar-header) {
+  margin-bottom: 8px;
+}
+
+:deep(.n-calendar .n-calendar-dates .n-calendar-cell) {
+  min-height: 56px;
+}
+
+:deep(.n-calendar .n-calendar-dates .n-calendar-cell-value) {
+  padding: 3px 5px 2px;
+}
+
+@media (max-width: 1100px) {
+  .calendar-wrapper {
+    max-width: none;
+  }
+}
+</style>

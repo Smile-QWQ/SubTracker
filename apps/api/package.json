@@ -1,0 +1,37 @@
+{
+  "name": "@subtracker/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup src/index.ts --format esm --dts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "lint": "tsc --noEmit",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev --name init",
+    "prisma:push": "prisma db push",
+    "prisma:seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.2",
+    "@prisma/client": "^6.6.0",
+    "@subtracker/shared": "0.1.0",
+    "dayjs": "^1.11.13",
+    "fastify": "^5.2.2",
+    "node-cron": "^4.0.5",
+    "nodemailer": "^8.0.5",
+    "tesseract.js": "^7.0.0",
+    "zod": "^3.24.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "@types/nodemailer": "^8.0.0",
+    "prisma": "^6.6.0",
+    "tsup": "^8.4.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.1"
+  }
+}
