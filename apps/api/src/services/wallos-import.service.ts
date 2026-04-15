@@ -69,6 +69,18 @@ const previewCache = new Map<string, ImportCacheEntry>()
 const sqlJsPromise = initSqlJs({
   locateFile: (file: string) => path.resolve(path.dirname(require.resolve('sql.js/dist/sql-wasm.wasm')), file)
 })
+const IMPORT_TAG_COLORS = [
+  '#3b82f6',
+  '#8b5cf6',
+  '#ec4899',
+  '#ef4444',
+  '#f97316',
+  '#f59e0b',
+  '#10b981',
+  '#14b8a6',
+  '#06b6d4',
+  '#6366f1'
+]
 
 function cleanupExpiredImports() {
   const now = Date.now()
@@ -77,6 +89,14 @@ function cleanupExpiredImports() {
       previewCache.delete(token)
     }
   }
+}
+
+function getImportedTagColor(name: string) {
+  let hash = 0
+  for (const char of name) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+  }
+  return IMPORT_TAG_COLORS[hash % IMPORT_TAG_COLORS.length]
 }
 
 function openDatabase(buffer: Buffer) {
@@ -775,6 +795,7 @@ export async function commitWallosImport(input: WallosImportCommitInput): Promis
     const created = await prisma.tag.create({
       data: {
         name: tag.name,
+        color: getImportedTagColor(tag.name),
         sortOrder: tag.sortOrder
       }
     })
