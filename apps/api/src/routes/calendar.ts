@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { prisma } from '../db'
 import { sendOk, sendError } from '../http'
 import { ensureExchangeRates, getBaseCurrency } from '../services/exchange-rate.service'
+import { projectRenewalEvents } from '../services/projected-renewal.service'
 import { convertAmount } from '../utils/money'
 
 export async function calendarRoutes(app: FastifyInstance) {
@@ -23,8 +24,8 @@ export async function calendarRoutes(app: FastifyInstance) {
 
     const subscriptions = await prisma.subscription.findMany({
       where: {
+        status: { in: ['active', 'expired'] },
         nextRenewalDate: {
-          gte: start,
           lte: end
         }
       },
@@ -33,11 +34,16 @@ export async function calendarRoutes(app: FastifyInstance) {
 
     const baseCurrency = await getBaseCurrency()
     const rates = await ensureExchangeRates(baseCurrency)
+    const projectedEvents = projectRenewalEvents(subscriptions, {
+      start,
+      end,
+      statuses: ['active', 'expired']
+    })
 
-    const events = subscriptions.map((item) => ({
+    const events = projectedEvents.map((item) => ({
       id: item.id,
-      title: item.name,
-      date: item.nextRenewalDate.toISOString(),
+      title: item.title,
+      date: item.date.toISOString(),
       currency: item.currency,
       amount: item.amount,
       convertedAmount: convertAmount(item.amount, item.currency, baseCurrency, rates.baseCurrency, rates.rates),

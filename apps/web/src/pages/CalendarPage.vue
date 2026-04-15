@@ -2,7 +2,7 @@
   <div>
     <page-header
       title="订阅日历"
-      subtitle="查看续订日期分布，支持月视图和列表视图"
+      subtitle="查看订阅日期分布，支持月视图和列表视图"
       :icon="calendarOutline"
       icon-background="linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)"
     />

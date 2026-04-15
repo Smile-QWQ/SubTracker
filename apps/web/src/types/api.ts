@@ -79,6 +79,13 @@ export interface StatisticsOverview {
   yearlyBudgetUsageRatio?: number | null
   tagSpend: Array<{ name: string; value: number }>
   monthlyTrend: Array<{ month: string; amount: number }>
+  monthlyTrendMeta: {
+    mode: 'projected'
+    months: number
+  }
+  statusDistribution: Array<{ status: SubscriptionStatus; count: number }>
+  renewalModeDistribution: Array<{ autoRenew: boolean; count: number; amount: number }>
+  upcomingByDay: Array<{ date: string; count: number; amount: number }>
   tagBudgetUsage?: TagBudgetUsage[]
   currencyDistribution: Array<{ currency: string; amount: number }>
   upcomingRenewals: Array<{

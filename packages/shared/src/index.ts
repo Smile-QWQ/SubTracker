@@ -218,6 +218,13 @@ export interface DashboardOverview {
   yearlyBudgetUsageRatio?: number | null
   tagSpend: Array<{ name: string; value: number }>
   monthlyTrend: Array<{ month: string; amount: number }>
+  monthlyTrendMeta: {
+    mode: 'projected'
+    months: number
+  }
+  statusDistribution: Array<{ status: SubscriptionStatus; count: number }>
+  renewalModeDistribution: Array<{ autoRenew: boolean; count: number; amount: number }>
+  upcomingByDay: Array<{ date: string; count: number; amount: number }>
   tagBudgetUsage?: Array<{ tagId: string; name: string; budget: number; spent: number; ratio: number }>
 }
 

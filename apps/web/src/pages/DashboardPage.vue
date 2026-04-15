@@ -70,7 +70,7 @@
         </n-card>
       </n-grid-item>
       <n-grid-item>
-        <n-card title="支付历史趋势">
+        <n-card title="月支付趋势（未来12个月）">
           <chart-view v-if="trendOption" :option="trendOption" />
           <n-empty v-else description="暂无数据" />
         </n-card>
