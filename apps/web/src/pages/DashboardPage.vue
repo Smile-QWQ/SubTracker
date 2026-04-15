@@ -14,12 +14,19 @@
               <n-progress
                 type="line"
                 :percentage="formatBudgetPercentage(overview.monthlyBudgetUsageRatio)"
+                :status="budgetProgressStatus(overview.monthlyBudgetUsageRatio)"
                 :show-indicator="false"
               />
-              <span class="budget-progress-value">{{ formatBudgetPercentage(overview.monthlyBudgetUsageRatio) }}%</span>
+              <span class="budget-progress-value" :class="{ 'budget-progress-value--over': isBudgetExceeded(overview.monthlyBudgetUsageRatio) }">
+                {{ formatBudgetPercentage(overview.monthlyBudgetUsageRatio) }}%
+              </span>
             </div>
             <div class="budget-meta">
-              已使用 {{ formatMoney(overview.monthlyEstimatedBase, baseCurrency) }} / 预算
+              已使用
+              <span :class="{ 'budget-meta__used--over': isBudgetExceeded(overview.monthlyBudgetUsageRatio) }">
+                {{ formatMoney(overview.monthlyEstimatedBase, baseCurrency) }}
+              </span>
+              / 预算
               {{ formatMoney(overview.monthlyBudgetBase, baseCurrency) }}
             </div>
           </template>
@@ -34,13 +41,19 @@
               <n-progress
                 type="line"
                 :percentage="formatBudgetPercentage(overview.yearlyBudgetUsageRatio)"
-                status="warning"
+                :status="budgetProgressStatus(overview.yearlyBudgetUsageRatio)"
                 :show-indicator="false"
               />
-              <span class="budget-progress-value">{{ formatBudgetPercentage(overview.yearlyBudgetUsageRatio) }}%</span>
+              <span class="budget-progress-value" :class="{ 'budget-progress-value--over': isBudgetExceeded(overview.yearlyBudgetUsageRatio) }">
+                {{ formatBudgetPercentage(overview.yearlyBudgetUsageRatio) }}%
+              </span>
             </div>
             <div class="budget-meta">
-              已使用 {{ formatMoney(overview.yearlyEstimatedBase, baseCurrency) }} / 预算
+              已使用
+              <span :class="{ 'budget-meta__used--over': isBudgetExceeded(overview.yearlyBudgetUsageRatio) }">
+                {{ formatMoney(overview.yearlyEstimatedBase, baseCurrency) }}
+              </span>
+              / 预算
               {{ formatMoney(overview.yearlyBudgetBase, baseCurrency) }}
             </div>
           </template>
@@ -186,8 +199,17 @@ function formatMoney(amount: number, currency: string) {
 }
 
 function formatBudgetPercentage(ratio?: number | null) {
-  const raw = Math.min((ratio ?? 0) * 100, 100)
+  const raw = (ratio ?? 0) * 100
   return Math.round(raw * 100) / 100
+}
+
+function isBudgetExceeded(ratio?: number | null) {
+  return (ratio ?? 0) > 1
+}
+
+function budgetProgressStatus(ratio?: number | null) {
+  if (isBudgetExceeded(ratio)) return 'error'
+  return 'warning'
 }
 </script>
 
@@ -210,9 +232,19 @@ function formatBudgetPercentage(ratio?: number | null) {
   font-variant-numeric: tabular-nums;
 }
 
+.budget-progress-value--over {
+  color: #dc2626;
+  font-weight: 600;
+}
+
 .budget-meta {
   margin-top: 10px;
   color: #64748b;
   line-height: 1.5;
+}
+
+.budget-meta__used--over {
+  color: #dc2626;
+  font-weight: 600;
 }
 </style>
