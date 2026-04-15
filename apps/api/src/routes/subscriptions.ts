@@ -18,6 +18,7 @@ import {
 } from '../services/subscription-order.service'
 import { renewSubscription } from '../services/subscription.service'
 import { dispatchNotificationEvent } from '../services/channel-notification.service'
+import { flattenSubscriptionTags, normalizeTagIds, replaceSubscriptionTags } from '../services/tag.service'
 import {
   deleteLocalLogoFromLibrary,
   getLocalLogoLibrary,
@@ -26,6 +27,10 @@ import {
   saveUploadedLogo,
   searchSubscriptionLogos
 } from '../services/logo.service'
+
+const subscriptionInclude = {
+  tags: { include: { tag: true } }
+} as const
 
 export async function subscriptionRoutes(app: FastifyInstance) {
   app.post('/subscriptions/logo/search', async (request, reply) => {
@@ -42,12 +47,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   })
 
   app.delete('/subscriptions/logo/library/:filename', async (request, reply) => {
-    const parsed = z
-      .object({
-        filename: z.string().min(1).max(255)
-      })
-      .safeParse(request.params)
-
+    const parsed = z.object({ filename: z.string().min(1).max(255) }).safeParse(request.params)
     if (!parsed.success) {
       return sendError(reply, 422, 'validation_error', 'Invalid logo filename', parsed.error.flatten())
     }
@@ -73,12 +73,10 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   })
 
   app.post('/subscriptions/logo/import', async (request, reply) => {
-    const parsed = z
-      .object({
-        logoUrl: z.string().url(),
-        source: z.string().max(100).optional()
-      })
-      .safeParse(request.body)
+    const parsed = z.object({
+      logoUrl: z.string().url(),
+      source: z.string().max(100).optional()
+    }).safeParse(request.body)
 
     if (!parsed.success) {
       return sendError(reply, 422, 'validation_error', 'Invalid logo import payload', parsed.error.flatten())
@@ -95,7 +93,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     const querySchema = z.object({
       q: z.string().optional(),
       status: z.string().optional(),
-      categoryId: z.string().optional()
+      tagIds: z.string().optional()
     })
 
     const parsed = querySchema.safeParse(request.query)
@@ -107,24 +105,38 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     if (parsed.data.q) {
       where.OR = [{ name: { contains: parsed.data.q } }, { description: { contains: parsed.data.q } }]
     }
-    if (parsed.data.status) where.status = parsed.data.status
-    if (parsed.data.categoryId) where.categoryId = parsed.data.categoryId
+    if (parsed.data.status) {
+      where.status = parsed.data.status
+    }
+    if (parsed.data.tagIds) {
+      const tagIds = normalizeTagIds(
+        parsed.data.tagIds
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean)
+      )
+      if (tagIds.length > 0) {
+        where.tags = {
+          some: {
+            tagId: { in: tagIds }
+          }
+        }
+      }
+    }
 
     const rows = await prisma.subscription.findMany({
       where,
-      include: { category: true },
+      include: subscriptionInclude,
       orderBy: [{ createdAt: 'asc' }]
     })
 
-    return sendOk(reply, await sortSubscriptionsByOrder(rows))
+    return sendOk(reply, await sortSubscriptionsByOrder(rows.map(flattenSubscriptionTags)))
   })
 
   app.post('/subscriptions/reorder', async (request, reply) => {
-    const parsed = z
-      .object({
-        ids: z.array(z.string()).min(1)
-      })
-      .safeParse(request.body)
+    const parsed = z.object({
+      ids: z.array(z.string()).min(1)
+    }).safeParse(request.body)
 
     if (!parsed.success) {
       return sendError(reply, 422, 'validation_error', 'Invalid reorder payload', parsed.error.flatten())
@@ -142,16 +154,28 @@ export async function subscriptionRoutes(app: FastifyInstance) {
 
     const row = await prisma.subscription.findUnique({
       where: { id: params.data.id },
-      include: {
-        category: true
-      }
+      include: subscriptionInclude
     })
 
     if (!row) {
       return sendError(reply, 404, 'not_found', 'Subscription not found')
     }
 
-    return sendOk(reply, row)
+    return sendOk(reply, flattenSubscriptionTags(row))
+  })
+
+  app.get('/subscriptions/:id/payment-records', async (request, reply) => {
+    const params = z.object({ id: z.string() }).safeParse(request.params)
+    if (!params.success) {
+      return sendError(reply, 422, 'validation_error', 'Invalid subscription id')
+    }
+
+    const records = await prisma.paymentRecord.findMany({
+      where: { subscriptionId: params.data.id },
+      orderBy: { paidAt: 'desc' }
+    })
+
+    return sendOk(reply, records)
   })
 
   app.post('/subscriptions', async (request, reply) => {
@@ -170,30 +194,39 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       return sendError(reply, 400, 'logo_import_failed', error instanceof Error ? error.message : 'Logo import failed')
     }
 
-    const created = await prisma.subscription.create({
-      data: {
-        name: parsed.data.name,
-        categoryId: parsed.data.categoryId ?? null,
-        description: parsed.data.description,
-        amount: parsed.data.amount,
-        currency: parsed.data.currency,
-        billingIntervalCount: parsed.data.billingIntervalCount,
-        billingIntervalUnit: parsed.data.billingIntervalUnit,
-        startDate: dayjs(parsed.data.startDate).toDate(),
-        nextRenewalDate: dayjs(parsed.data.nextRenewalDate).toDate(),
-        notifyDaysBefore: parsed.data.notifyDaysBefore,
-        webhookEnabled: parsed.data.webhookEnabled,
-        notes: parsed.data.notes,
-        websiteUrl: parsed.data.websiteUrl ?? null,
-        logoUrl: normalizedLogo.logoUrl,
-        logoSource: normalizedLogo.logoSource,
-        logoFetchedAt: normalizedLogo.logoFetchedAt
-      },
-      include: { category: true }
+    const tagIds = normalizeTagIds(parsed.data.tagIds)
+
+    const created = await prisma.$transaction(async (tx) => {
+      const subscription = await tx.subscription.create({
+        data: {
+          name: parsed.data.name,
+          description: parsed.data.description,
+          amount: parsed.data.amount,
+          currency: parsed.data.currency,
+          billingIntervalCount: parsed.data.billingIntervalCount,
+          billingIntervalUnit: parsed.data.billingIntervalUnit,
+          autoRenew: parsed.data.autoRenew,
+          startDate: dayjs(parsed.data.startDate).toDate(),
+          nextRenewalDate: dayjs(parsed.data.nextRenewalDate).toDate(),
+          notifyDaysBefore: parsed.data.notifyDaysBefore,
+          webhookEnabled: parsed.data.webhookEnabled,
+          notes: parsed.data.notes,
+          websiteUrl: parsed.data.websiteUrl ?? null,
+          logoUrl: normalizedLogo.logoUrl,
+          logoSource: normalizedLogo.logoSource,
+          logoFetchedAt: normalizedLogo.logoFetchedAt
+        }
+      })
+
+      await replaceSubscriptionTags(tx, subscription.id, tagIds)
+      return tx.subscription.findUniqueOrThrow({
+        where: { id: subscription.id },
+        include: subscriptionInclude
+      })
     })
 
     await appendSubscriptionOrder(created.id)
-    return sendCreated(reply, created)
+    return sendCreated(reply, flattenSubscriptionTags(created))
   })
 
   app.patch('/subscriptions/:id', async (request, reply) => {
@@ -218,35 +251,47 @@ export async function subscriptionRoutes(app: FastifyInstance) {
             })
           : null
 
-      const updated = await prisma.subscription.update({
-        where: { id: params.data.id },
-        data: {
-          ...(payload.name !== undefined ? { name: payload.name } : {}),
-          ...(payload.categoryId !== undefined ? { categoryId: payload.categoryId } : {}),
-          ...(payload.description !== undefined ? { description: payload.description } : {}),
-          ...(payload.status !== undefined ? { status: payload.status } : {}),
-          ...(payload.amount !== undefined ? { amount: payload.amount } : {}),
-          ...(payload.currency !== undefined ? { currency: payload.currency } : {}),
-          ...(payload.billingIntervalCount !== undefined ? { billingIntervalCount: payload.billingIntervalCount } : {}),
-          ...(payload.billingIntervalUnit !== undefined ? { billingIntervalUnit: payload.billingIntervalUnit } : {}),
-          ...(payload.startDate !== undefined ? { startDate: dayjs(payload.startDate).toDate() } : {}),
-          ...(payload.nextRenewalDate !== undefined ? { nextRenewalDate: dayjs(payload.nextRenewalDate).toDate() } : {}),
-          ...(payload.notifyDaysBefore !== undefined ? { notifyDaysBefore: payload.notifyDaysBefore } : {}),
-          ...(payload.webhookEnabled !== undefined ? { webhookEnabled: payload.webhookEnabled } : {}),
-          ...(payload.notes !== undefined ? { notes: payload.notes } : {}),
-          ...(payload.websiteUrl !== undefined ? { websiteUrl: payload.websiteUrl } : {}),
-          ...(normalizedLogo
-            ? {
-                logoUrl: normalizedLogo.logoUrl,
-                logoSource: normalizedLogo.logoSource,
-                logoFetchedAt: normalizedLogo.logoFetchedAt
-              }
-            : {})
-        },
-        include: { category: true }
+      const updated = await prisma.$transaction(async (tx) => {
+        const tagIds = payload.tagIds !== undefined ? normalizeTagIds(payload.tagIds) : null
+
+        const subscription = await tx.subscription.update({
+          where: { id: params.data.id },
+          data: {
+            ...(payload.name !== undefined ? { name: payload.name } : {}),
+            ...(payload.description !== undefined ? { description: payload.description } : {}),
+            ...(payload.status !== undefined ? { status: payload.status } : {}),
+            ...(payload.amount !== undefined ? { amount: payload.amount } : {}),
+            ...(payload.currency !== undefined ? { currency: payload.currency } : {}),
+            ...(payload.billingIntervalCount !== undefined ? { billingIntervalCount: payload.billingIntervalCount } : {}),
+            ...(payload.billingIntervalUnit !== undefined ? { billingIntervalUnit: payload.billingIntervalUnit } : {}),
+            ...(payload.autoRenew !== undefined ? { autoRenew: payload.autoRenew } : {}),
+            ...(payload.startDate !== undefined ? { startDate: dayjs(payload.startDate).toDate() } : {}),
+            ...(payload.nextRenewalDate !== undefined ? { nextRenewalDate: dayjs(payload.nextRenewalDate).toDate() } : {}),
+            ...(payload.notifyDaysBefore !== undefined ? { notifyDaysBefore: payload.notifyDaysBefore } : {}),
+            ...(payload.webhookEnabled !== undefined ? { webhookEnabled: payload.webhookEnabled } : {}),
+            ...(payload.notes !== undefined ? { notes: payload.notes } : {}),
+            ...(payload.websiteUrl !== undefined ? { websiteUrl: payload.websiteUrl } : {}),
+            ...(normalizedLogo
+              ? {
+                  logoUrl: normalizedLogo.logoUrl,
+                  logoSource: normalizedLogo.logoSource,
+                  logoFetchedAt: normalizedLogo.logoFetchedAt
+                }
+              : {})
+          }
+        })
+
+        if (tagIds) {
+          await replaceSubscriptionTags(tx, subscription.id, tagIds)
+        }
+
+        return tx.subscription.findUniqueOrThrow({
+          where: { id: subscription.id },
+          include: subscriptionInclude
+        })
       })
 
-      return sendOk(reply, updated)
+      return sendOk(reply, flattenSubscriptionTags(updated))
     } catch (error) {
       if (error instanceof Error && error.message.includes('Logo')) {
         return sendError(reply, 400, 'logo_import_failed', error.message)

@@ -25,7 +25,7 @@ export interface ChangeCredentialsPayload {
   newPassword: string
 }
 
-export interface Category {
+export interface Tag {
   id: string
   name: string
   color: string
@@ -36,8 +36,7 @@ export interface Category {
 export interface Subscription {
   id: string
   name: string
-  categoryId?: string | null
-  category?: Category | null
+  tags?: Tag[]
   description: string
   websiteUrl?: string | null
   logoUrl?: string | null
@@ -48,6 +47,7 @@ export interface Subscription {
   currency: string
   billingIntervalCount: number
   billingIntervalUnit: 'day' | 'week' | 'month' | 'quarter' | 'year'
+  autoRenew: boolean
   startDate: string
   nextRenewalDate: string
   notifyDaysBefore: number
@@ -59,8 +59,8 @@ export interface Subscription {
 
 export interface SubscriptionDetail extends Subscription {}
 
-export interface CategoryBudgetUsage {
-  categoryId: string
+export interface TagBudgetUsage {
+  tagId: string
   name: string
   budget: number
   spent: number
@@ -77,9 +77,9 @@ export interface StatisticsOverview {
   yearlyBudgetBase?: number | null
   monthlyBudgetUsageRatio?: number | null
   yearlyBudgetUsageRatio?: number | null
-  categorySpend: Array<{ name: string; value: number }>
+  tagSpend: Array<{ name: string; value: number }>
   monthlyTrend: Array<{ month: string; amount: number }>
-  categoryBudgetUsage?: CategoryBudgetUsage[]
+  tagBudgetUsage?: TagBudgetUsage[]
   currencyDistribution: Array<{ currency: string; amount: number }>
   upcomingRenewals: Array<{
     id: string
@@ -132,8 +132,8 @@ export interface Settings {
   defaultNotifyDays: number
   monthlyBudgetBase?: number | null
   yearlyBudgetBase?: number | null
-  enableCategoryBudgets: boolean
-  categoryBudgets: Record<string, number>
+  enableTagBudgets: boolean
+  tagBudgets: Record<string, number>
   emailNotificationsEnabled: boolean
   pushplusNotificationsEnabled: boolean
   emailConfig: EmailConfig
@@ -214,4 +214,76 @@ export interface AiRecognitionResult {
   notes?: string
   confidence?: number
   rawText?: string
+}
+
+export interface WallosImportSummary {
+  fileType: 'json' | 'db' | 'zip'
+  subscriptionsTotal: number
+  tagsTotal: number
+  usedTagsTotal: number
+  supportedSubscriptions: number
+  skippedSubscriptions: number
+  globalNotifyDays: number
+  zipLogoMatched: number
+  zipLogoMissing: number
+}
+
+export interface WallosImportTag {
+  sourceId: number
+  name: string
+  sortOrder: number
+}
+
+export interface WallosImportSubscriptionPreview {
+  sourceId: number
+  name: string
+  amount: number
+  currency: string
+  status: SubscriptionStatus
+  autoRenew: boolean
+  billingIntervalCount: number
+  billingIntervalUnit: 'day' | 'week' | 'month' | 'quarter' | 'year'
+  startDate: string
+  nextRenewalDate: string
+  notifyDaysBefore: number
+  webhookEnabled: boolean
+  notes: string
+  description: string
+  websiteUrl?: string | null
+  tagNames: string[]
+  logoRef?: string | null
+  logoImportStatus: 'none' | 'pending-file-match' | 'ready-from-zip'
+  warnings: string[]
+}
+
+export interface WallosImportInspectResult {
+  isWallos: boolean
+  summary: WallosImportSummary
+  tags: WallosImportTag[]
+  usedTags: WallosImportTag[]
+  subscriptionsPreview: WallosImportSubscriptionPreview[]
+  warnings: string[]
+  importToken: string
+}
+
+export interface WallosImportCommitResult {
+  importedTags: number
+  importedSubscriptions: number
+  skippedSubscriptions: number
+  importedLogos: number
+  warnings: string[]
+}
+
+export interface PaymentRecord {
+  id: string
+  subscriptionId: string
+  amount: number
+  currency: string
+  baseCurrency: string
+  convertedAmount: number
+  exchangeRate: number
+  paidAt: string
+  periodStart: string
+  periodEnd: string
+  createdAt: string
 }

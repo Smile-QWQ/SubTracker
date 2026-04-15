@@ -9,7 +9,7 @@ export const WebhookEventTypeSchema = z.enum([
   'exchange-rate.stale'
 ])
 
-export const CategorySchema = z.object({
+export const TagSchema = z.object({
   id: z.string().cuid().optional(),
   name: z.string().min(1).max(100),
   color: z.string().min(4).max(20).default('#3b82f6'),
@@ -28,12 +28,13 @@ export const SubscriptionLogoSchema = z.object({
 export const CreateSubscriptionSchema = z
   .object({
     name: z.string().min(1).max(150),
-    categoryId: z.string().cuid().nullable().optional(),
+    tagIds: z.array(z.string().cuid()).default([]),
     description: z.string().max(500).default(''),
-    amount: z.number().positive(),
+    amount: z.number().nonnegative(),
     currency: z.string().length(3).transform((v) => v.toUpperCase()),
     billingIntervalCount: z.number().int().positive().default(1),
     billingIntervalUnit: BillingIntervalUnitSchema,
+    autoRenew: z.boolean().default(false),
     startDate: z.string().date(),
     nextRenewalDate: z.string().date(),
     notifyDaysBefore: z.number().int().min(0).max(365).default(3),
@@ -48,7 +49,7 @@ export const UpdateSubscriptionSchema = CreateSubscriptionSchema.partial().exten
 
 export const RenewSubscriptionSchema = z.object({
   paidAt: z.string().date().optional(),
-  amount: z.number().positive().optional(),
+  amount: z.number().nonnegative().optional(),
   currency: z.string().length(3).optional()
 })
 
@@ -92,8 +93,8 @@ export const SettingsSchema = z.object({
   defaultNotifyDays: z.number().int().min(0).max(365).default(3),
   monthlyBudgetBase: OptionalMoneySchema,
   yearlyBudgetBase: OptionalMoneySchema,
-  enableCategoryBudgets: z.boolean().default(false),
-  categoryBudgets: z.record(z.string(), z.number().nonnegative()).default({}),
+  enableTagBudgets: z.boolean().default(false),
+  tagBudgets: z.record(z.string(), z.number().nonnegative()).default({}),
   emailNotificationsEnabled: z.boolean().default(false),
   pushplusNotificationsEnabled: z.boolean().default(false),
   emailConfig: EmailConfigSchema.default({}),
@@ -116,7 +117,7 @@ export const ChangeCredentialsSchema = z.object({
 export const LogoSearchSchema = z.object({
   name: z.string().min(1).max(150),
   websiteUrl: z.string().url().optional(),
-  categoryName: z.string().max(100).optional()
+  tagName: z.string().max(100).optional()
 })
 
 export const LogoUploadSchema = z.object({
@@ -130,6 +131,16 @@ export const AiRecognizeSubscriptionSchema = z.object({
   imageBase64: z.string().max(10_000_000).optional(),
   filename: z.string().max(200).optional(),
   mimeType: z.string().max(100).optional()
+})
+
+export const WallosImportInspectSchema = z.object({
+  filename: z.string().min(1).max(255),
+  contentType: z.string().min(1).max(120),
+  base64: z.string().min(1)
+})
+
+export const WallosImportCommitSchema = z.object({
+  importToken: z.string().min(10).max(200)
 })
 
 export type SubscriptionStatus = z.infer<typeof SubscriptionStatusSchema>
@@ -149,6 +160,8 @@ export type AiConfigInput = z.infer<typeof AiConfigSchema>
 export type LogoSearchInput = z.infer<typeof LogoSearchSchema>
 export type LogoUploadInput = z.infer<typeof LogoUploadSchema>
 export type AiRecognizeSubscriptionInput = z.infer<typeof AiRecognizeSubscriptionSchema>
+export type WallosImportInspectInput = z.infer<typeof WallosImportInspectSchema>
+export type WallosImportCommitInput = z.infer<typeof WallosImportCommitSchema>
 
 export interface MoneyDto {
   amount: number
@@ -203,9 +216,9 @@ export interface DashboardOverview {
   yearlyBudgetBase?: number | null
   monthlyBudgetUsageRatio?: number | null
   yearlyBudgetUsageRatio?: number | null
-  categorySpend: Array<{ name: string; value: number }>
+  tagSpend: Array<{ name: string; value: number }>
   monthlyTrend: Array<{ month: string; amount: number }>
-  categoryBudgetUsage?: Array<{ categoryId: string; name: string; budget: number; spent: number; ratio: number }>
+  tagBudgetUsage?: Array<{ tagId: string; name: string; budget: number; spent: number; ratio: number }>
 }
 
 export interface CalendarEventDto {
@@ -216,4 +229,76 @@ export interface CalendarEventDto {
   amount: number
   convertedAmount: number
   status: SubscriptionStatus
+}
+
+export interface WallosImportSummaryDto {
+  fileType: 'json' | 'db' | 'zip'
+  subscriptionsTotal: number
+  tagsTotal: number
+  usedTagsTotal: number
+  supportedSubscriptions: number
+  skippedSubscriptions: number
+  globalNotifyDays: number
+  zipLogoMatched: number
+  zipLogoMissing: number
+}
+
+export interface WallosImportTagDto {
+  sourceId: number
+  name: string
+  sortOrder: number
+}
+
+export interface WallosImportSubscriptionPreviewDto {
+  sourceId: number
+  name: string
+  amount: number
+  currency: string
+  status: SubscriptionStatus
+  autoRenew: boolean
+  billingIntervalCount: number
+  billingIntervalUnit: BillingIntervalUnit
+  startDate: string
+  nextRenewalDate: string
+  notifyDaysBefore: number
+  webhookEnabled: boolean
+  notes: string
+  description: string
+  websiteUrl?: string | null
+  tagNames: string[]
+  logoRef?: string | null
+  logoImportStatus: 'none' | 'pending-file-match' | 'ready-from-zip'
+  warnings: string[]
+}
+
+export interface WallosImportInspectResultDto {
+  isWallos: boolean
+  summary: WallosImportSummaryDto
+  tags: WallosImportTagDto[]
+  usedTags: WallosImportTagDto[]
+  subscriptionsPreview: WallosImportSubscriptionPreviewDto[]
+  warnings: string[]
+  importToken: string
+}
+
+export interface WallosImportCommitResultDto {
+  importedTags: number
+  importedSubscriptions: number
+  skippedSubscriptions: number
+  importedLogos: number
+  warnings: string[]
+}
+
+export interface PaymentRecordDto {
+  id: string
+  subscriptionId: string
+  amount: number
+  currency: string
+  baseCurrency: string
+  convertedAmount: number
+  exchangeRate: number
+  paidAt: string
+  periodStart: string
+  periodEnd: string
+  createdAt: string
 }

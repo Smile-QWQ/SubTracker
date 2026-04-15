@@ -21,8 +21,8 @@ export async function getAppSettings(): Promise<SettingsInput> {
   const defaultNotifyDays = await getSetting('defaultNotifyDays', config.defaultNotifyDays)
   const monthlyBudgetBase = await getSetting<number | null>('monthlyBudgetBase', null)
   const yearlyBudgetBase = await getSetting<number | null>('yearlyBudgetBase', null)
-  const enableCategoryBudgets = await getSetting('enableCategoryBudgets', false)
-  const categoryBudgets = await getSetting<Record<string, number>>('categoryBudgets', {})
+  const enableTagBudgets = await getSetting('enableTagBudgets', false)
+  const tagBudgets = await getSetting<Record<string, number>>('tagBudgets', {})
   const emailNotificationsEnabled = await getSetting('emailNotificationsEnabled', false)
   const pushplusNotificationsEnabled = await getSetting('pushplusNotificationsEnabled', false)
   const emailConfig = await getSetting<SettingsInput['emailConfig']>('emailConfig', {
@@ -53,8 +53,8 @@ export async function getAppSettings(): Promise<SettingsInput> {
     defaultNotifyDays,
     monthlyBudgetBase,
     yearlyBudgetBase,
-    enableCategoryBudgets,
-    categoryBudgets,
+    enableTagBudgets,
+    tagBudgets,
     emailNotificationsEnabled,
     pushplusNotificationsEnabled,
     emailConfig,

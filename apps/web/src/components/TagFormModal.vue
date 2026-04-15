@@ -2,13 +2,13 @@
   <n-modal
     :show="show"
     preset="card"
-    :title="model ? '编辑分类' : '新增分类'"
+    :title="model ? '编辑标签' : '新增标签'"
     style="width: min(640px, calc(100vw - 24px))"
     @mask-click="close"
     @update:show="handleUpdateShow"
   >
     <n-form :model="form" label-placement="top">
-      <n-form-item label="分类名称">
+      <n-form-item label="标签名称">
         <n-input v-model:value="form.name" placeholder="例如：云服务" />
       </n-form-item>
 
@@ -17,25 +17,14 @@
           <n-form-item label="颜色">
             <div class="color-field">
               <n-input v-model:value="form.color" placeholder="#3b82f6 或 rgb(59,130,246)" />
-              <n-color-picker
-                v-model:value="form.color"
-                :modes="['hex', 'rgb']"
-                :show-alpha="false"
-                class="color-field__picker"
-              />
+              <n-color-picker v-model:value="form.color" :modes="['hex', 'rgb']" :show-alpha="false" class="color-field__picker" />
             </div>
           </n-form-item>
         </n-grid-item>
 
         <n-grid-item>
           <n-form-item label="图标">
-            <n-select
-              v-model:value="form.icon"
-              :options="iconOptions"
-              :render-label="renderIconOption"
-              filterable
-              placeholder="选择图标"
-            />
+            <n-select v-model:value="form.icon" :options="iconOptions" :render-label="renderIconOption" filterable placeholder="选择图标" />
           </n-form-item>
         </n-grid-item>
       </n-grid>
@@ -84,25 +73,12 @@ import {
   SchoolOutline,
   WalletOutline
 } from '@vicons/ionicons5'
-import {
-  NButton,
-  NColorPicker,
-  NForm,
-  NFormItem,
-  NGrid,
-  NGridItem,
-  NIcon,
-  NInput,
-  NInputNumber,
-  NModal,
-  NSelect,
-  NSpace
-} from 'naive-ui'
-import type { Category } from '@/types/api'
+import { NButton, NColorPicker, NForm, NFormItem, NGrid, NGridItem, NIcon, NInput, NInputNumber, NModal, NSelect, NSpace } from 'naive-ui'
+import type { Tag } from '@/types/api'
 
 const props = defineProps<{
   show: boolean
-  model?: Category | null
+  model?: Tag | null
 }>()
 
 const emit = defineEmits<{
@@ -201,27 +177,8 @@ function renderIconOption(option: { label: string; value: string }) {
           }
         },
         [
-          h(
-            'span',
-            {
-              style: {
-                color: '#0f172a',
-                lineHeight: '1.2'
-              }
-            },
-            option.label
-          ),
-          h(
-            'span',
-            {
-              style: {
-                color: '#94a3b8',
-                fontSize: '12px',
-                lineHeight: '1.2'
-              }
-            },
-            option.value
-          )
+          h('span', { style: { color: '#0f172a', lineHeight: '1.2' } }, option.label),
+          h('span', { style: { color: '#94a3b8', fontSize: '12px', lineHeight: '1.2' } }, option.value)
         ]
       )
     ]

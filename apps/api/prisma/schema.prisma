@@ -28,22 +28,18 @@ enum WebhookDeliveryStatus {
   failed
 }
 
-model Category {
-  id            String         @id @default(cuid())
-  name          String
-  color         String         @default("#3b82f6")
-  icon          String         @default("apps-outline")
-  sortOrder     Int            @default(0)
-  subscriptions Subscription[]
-
-  @@unique([name])
+model Tag {
+  id               String            @id @default(cuid())
+  name             String            @unique
+  color            String            @default("#3b82f6")
+  icon             String            @default("apps-outline")
+  sortOrder        Int               @default(0)
+  subscriptionTags SubscriptionTag[]
 }
 
 model Subscription {
   id                   String             @id @default(cuid())
   name                 String
-  categoryId           String?
-  category             Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   description          String             @default("")
   websiteUrl           String?
   logoUrl              String?
@@ -54,17 +50,30 @@ model Subscription {
   currency             String
   billingIntervalCount Int                @default(1)
   billingIntervalUnit  BillingIntervalUnit
+  autoRenew            Boolean            @default(false)
   startDate            DateTime
   nextRenewalDate      DateTime
   notifyDaysBefore     Int                @default(3)
   webhookEnabled       Boolean            @default(true)
   notes                String             @default("")
+  tags                 SubscriptionTag[]
   paymentRecords       PaymentRecord[]
   deliveries           WebhookDelivery[]
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
   @@index([status, nextRenewalDate])
+  @@index([autoRenew, nextRenewalDate])
+}
+
+model SubscriptionTag {
+  subscriptionId String
+  tagId          String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  tag            Tag          @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([subscriptionId, tagId])
+  @@index([tagId])
 }
 
 model PaymentRecord {
@@ -107,21 +116,21 @@ model WebhookEndpoint {
 }
 
 model WebhookDelivery {
-  id           String                @id @default(cuid())
-  endpointId   String
-  endpoint     WebhookEndpoint       @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  id             String                @id @default(cuid())
+  endpointId     String
+  endpoint       WebhookEndpoint       @relation(fields: [endpointId], references: [id], onDelete: Cascade)
   subscriptionId String?
-  subscription Subscription?         @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  eventType    String
-  resourceKey  String
-  periodKey    String
-  payloadJson  Json
-  status       WebhookDeliveryStatus @default(pending)
-  responseCode Int?
-  responseBody String?
-  attemptCount Int                   @default(0)
-  lastAttemptAt DateTime?
-  createdAt    DateTime              @default(now())
+  subscription   Subscription?         @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  eventType      String
+  resourceKey    String
+  periodKey      String
+  payloadJson    Json
+  status         WebhookDeliveryStatus @default(pending)
+  responseCode   Int?
+  responseBody   String?
+  attemptCount   Int                   @default(0)
+  lastAttemptAt  DateTime?
+  createdAt      DateTime              @default(now())
 
   @@unique([endpointId, eventType, resourceKey, periodKey])
   @@index([status, createdAt])

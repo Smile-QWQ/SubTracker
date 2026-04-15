@@ -25,7 +25,13 @@ function monthlyFactor(unit: string, count: number) {
 export async function getOverviewStatistics() {
   const [subscriptions, paymentRecords, appSettings] = await Promise.all([
     prisma.subscription.findMany({
-      include: { category: true },
+      include: {
+        tags: {
+          include: {
+            tag: true
+          }
+        }
+      },
       where: { status: { in: ['active', 'paused', 'expired'] } }
     }),
     prisma.paymentRecord.findMany({
@@ -44,8 +50,8 @@ export async function getOverviewStatistics() {
   let monthlyEstimatedBase = 0
   let yearlyEstimatedBase = 0
 
-  const categoryMap = new Map<string, number>()
-  const categoryBudgetMap = new Map<string, { name: string; spent: number }>()
+  const tagMap = new Map<string, number>()
+  const tagBudgetMap = new Map<string, { name: string; spent: number }>()
 
   for (const subscription of subscriptions.filter((item) => item.status === 'active')) {
     const baseAmount = convertAmount(
@@ -59,16 +65,28 @@ export async function getOverviewStatistics() {
     monthlyEstimatedBase += monthly
     yearlyEstimatedBase += monthly * 12
 
-    const categoryName = subscription.category?.name ?? '未分类'
-    categoryMap.set(categoryName, (categoryMap.get(categoryName) ?? 0) + monthly)
+    const tags =
+      subscription.tags
+        .map((item) => item.tag)
+        .filter((item): item is NonNullable<typeof item> => Boolean(item))
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'zh-CN')) ??
+      []
 
-    if (subscription.categoryId && subscription.category) {
-      const current = categoryBudgetMap.get(subscription.categoryId) ?? {
-        name: subscription.category.name,
+    if (!tags.length) {
+      tagMap.set('未打标签', (tagMap.get('未打标签') ?? 0) + monthly)
+      continue
+    }
+
+    const splitMonthly = monthly / tags.length
+    for (const tag of tags) {
+      tagMap.set(tag.name, (tagMap.get(tag.name) ?? 0) + splitMonthly)
+
+      const current = tagBudgetMap.get(tag.id) ?? {
+        name: tag.name,
         spent: 0
       }
-      current.spent += monthly
-      categoryBudgetMap.set(subscription.categoryId, current)
+      current.spent += splitMonthly
+      tagBudgetMap.set(tag.id, current)
     }
   }
 
@@ -109,7 +127,7 @@ export async function getOverviewStatistics() {
       appSettings.yearlyBudgetBase && appSettings.yearlyBudgetBase > 0
         ? Number((yearlyEstimatedBase / appSettings.yearlyBudgetBase).toFixed(4))
         : null,
-    categorySpend: Array.from(categoryMap.entries()).map(([name, value]) => ({
+    tagSpend: Array.from(tagMap.entries()).map(([name, value]) => ({
       name,
       value: Number(value.toFixed(2))
     })),
@@ -121,14 +139,14 @@ export async function getOverviewStatistics() {
       currency,
       amount: Number(amount.toFixed(2))
     })),
-    categoryBudgetUsage: appSettings.enableCategoryBudgets
-      ? Array.from(categoryBudgetMap.entries()).flatMap(([categoryId, item]) => {
-          const budget = appSettings.categoryBudgets[categoryId]
+    tagBudgetUsage: appSettings.enableTagBudgets
+      ? Array.from(tagBudgetMap.entries()).flatMap(([tagId, item]) => {
+          const budget = appSettings.tagBudgets[tagId]
           if (budget === undefined) return []
 
           return [
             {
-              categoryId,
+              tagId,
               name: item.name,
               budget: Number(budget.toFixed(2)),
               spent: Number(item.spent.toFixed(2)),

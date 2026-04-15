@@ -1,12 +1,5 @@
 <template>
-  <n-modal
-    :show="show"
-    preset="card"
-    title="订阅信息"
-    style="width: min(920px, calc(100vw - 24px))"
-    @mask-click="close"
-    @update:show="handleUpdateShow"
-  >
+  <n-modal :show="show" preset="card" title="订阅信息" style="width: min(920px, calc(100vw - 24px))" @mask-click="close" @update:show="handleUpdateShow">
     <n-form :model="form" label-placement="top">
       <div class="name-logo-row">
         <n-form-item label="名称" class="name-logo-row__name">
@@ -90,7 +83,7 @@
                     </button>
 
                     <button type="button" class="logo-panel__item" @click="applyLocalLogoCandidate(item)">
-                      <img :src="buildAbsoluteLogoUrl(item.logoUrl)" :alt="item.label" class="logo-panel__item-image" />
+                      <img :src="resolveLogoUrl(item.logoUrl)" :alt="item.label" class="logo-panel__item-image" />
                       <span class="logo-panel__item-label">{{ item.label }}</span>
                       <span class="logo-panel__item-meta">
                         {{ formatLogoSource(item.source) }}
@@ -112,8 +105,8 @@
 
       <n-grid :cols="layoutCols" :x-gap="16" :y-gap="8">
         <n-grid-item>
-          <n-form-item label="分类">
-            <n-select v-model:value="form.categoryId" :options="categoryOptions" clearable placeholder="选择分类" />
+          <n-form-item label="标签">
+            <n-select v-model:value="form.tagIds" :options="tagOptions" multiple filterable clearable placeholder="选择标签" />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
@@ -135,7 +128,7 @@
       <n-grid :cols="moneyCols" :x-gap="16" :y-gap="8">
         <n-grid-item>
           <n-form-item label="金额">
-            <n-input-number v-model:value="form.amount" :min="0" :precision="2" style="width: 100%" placeholder="输入金额" />
+            <n-input-number v-model:value="form.amount" :min="0" :precision="2" style="width: 100%" placeholder="输入金额，免费可填 0" />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
@@ -162,8 +155,8 @@
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
-          <n-form-item label="下次续费">
-            <n-date-picker v-model:value="form.nextRenewalDateTs" type="date" style="width: 100%" clearable />
+          <n-form-item label="下次续订">
+            <n-date-picker v-model:value="form.nextRenewalDateTs" type="date" style="width: 100%" clearable @update:value="handleNextRenewalDateChange" />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
@@ -186,6 +179,8 @@
         <n-space>
           <n-switch v-model:value="form.webhookEnabled" />
           <span>启用提醒通知</span>
+          <n-switch v-model:value="form.autoRenew" />
+          <span>自动续订</span>
         </n-space>
         <n-space wrap>
           <n-button @click="showAiModal = true">AI 识别</n-button>
@@ -227,7 +222,8 @@ import { CloseOutline, SearchOutline } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
 import SubscriptionAiModal from '@/components/SubscriptionAiModal.vue'
 import { buildCurrencyOptions } from '@/utils/currency'
-import type { AiRecognitionResult, Category, LogoSearchResult, Subscription } from '@/types/api'
+import { resolveLogoUrl } from '@/utils/logo'
+import type { AiRecognitionResult, LogoSearchResult, Subscription, Tag } from '@/types/api'
 
 const LOGO_TAB_WEB = 'web'
 const LOGO_TAB_LIBRARY = 'library'
@@ -235,7 +231,7 @@ const LOGO_TAB_LIBRARY = 'library'
 const props = defineProps<{
   show: boolean
   model?: Subscription | null
-  categories: Category[]
+  tags: Tag[]
   currencies?: string[]
   defaultNotifyDays?: number
 }>()
@@ -255,6 +251,8 @@ const loadingLocalLogoLibrary = ref(false)
 const logoCandidates = ref<LogoSearchResult[]>([])
 const localLogoLibrary = ref<LogoSearchResult[]>([])
 const logoFileInputRef = ref<HTMLInputElement | null>(null)
+const nextRenewalDirty = ref(false)
+const syncingNextRenewal = ref(false)
 
 const layoutCols = computed(() => (width.value < 700 ? 1 : 2))
 const moneyCols = computed(() => (width.value < 900 ? 2 : 4))
@@ -278,8 +276,8 @@ const notifyDayOptions = [0, 1, 3, 5, 7, 10, 14, 30].map((day) => ({
   value: day
 }))
 
-const categoryOptions = computed(() =>
-  props.categories.map((item) => ({
+const tagOptions = computed(() =>
+  props.tags.map((item) => ({
     label: item.name,
     value: item.id
   }))
@@ -291,12 +289,13 @@ const currencyOptions = computed(() =>
 
 const form = reactive({
   name: '',
-  categoryId: null as string | null,
+  tagIds: [] as string[],
   description: '',
   amount: null as number | null,
   currency: 'CNY',
   billingIntervalCount: 1,
   billingIntervalUnit: 'month',
+  autoRenew: false,
   startDateTs: dayjs().valueOf(),
   nextRenewalDateTs: dayjs().add(1, 'month').valueOf(),
   notifyDaysBefore: props.defaultNotifyDays ?? 3,
@@ -307,7 +306,7 @@ const form = reactive({
   logoSource: ''
 })
 
-const resolvedLogoUrl = computed(() => (form.logoUrl ? buildAbsoluteLogoUrl(form.logoUrl) : ''))
+const resolvedLogoUrl = computed(() => (form.logoUrl ? resolveLogoUrl(form.logoUrl) : ''))
 
 watch(
   () => props.model,
@@ -318,14 +317,16 @@ watch(
     }
 
     form.name = model.name
-    form.categoryId = model.categoryId ?? null
+    form.tagIds = model.tags?.map((item) => item.id) ?? []
     form.description = model.description
     form.amount = model.amount
     form.currency = model.currency
     form.billingIntervalCount = model.billingIntervalCount
     form.billingIntervalUnit = model.billingIntervalUnit
+    form.autoRenew = model.autoRenew ?? false
     form.startDateTs = dayjs(model.startDate).valueOf()
     form.nextRenewalDateTs = dayjs(model.nextRenewalDate).valueOf()
+    nextRenewalDirty.value = true
     form.notifyDaysBefore = model.notifyDaysBefore
     form.webhookEnabled = model.webhookEnabled
     form.notes = model.notes
@@ -357,14 +358,30 @@ watch(
   }
 )
 
+watch(
+  () => [form.startDateTs, form.billingIntervalCount, form.billingIntervalUnit, props.model?.id] as const,
+  () => {
+    if (props.model || nextRenewalDirty.value || !form.startDateTs) return
+
+    syncingNextRenewal.value = true
+    form.nextRenewalDateTs = calculateNextRenewalTs(
+      form.startDateTs,
+      Number(form.billingIntervalCount),
+      form.billingIntervalUnit as Subscription['billingIntervalUnit']
+    )
+    syncingNextRenewal.value = false
+  }
+)
+
 function resetForm() {
   form.name = ''
-  form.categoryId = null
+  form.tagIds = []
   form.description = ''
   form.amount = null
   form.currency = 'CNY'
   form.billingIntervalCount = 1
   form.billingIntervalUnit = 'month'
+  form.autoRenew = false
   form.startDateTs = dayjs().valueOf()
   form.nextRenewalDateTs = dayjs().add(1, 'month').valueOf()
   form.notifyDaysBefore = props.defaultNotifyDays ?? 3
@@ -373,8 +390,38 @@ function resetForm() {
   form.websiteUrl = ''
   form.logoUrl = ''
   form.logoSource = ''
+  nextRenewalDirty.value = false
   logoCandidates.value = []
   showLogoPanel.value = false
+}
+
+function calculateNextRenewalTs(startDateTs: number, intervalCount: number, unit: Subscription['billingIntervalUnit']) {
+  const start = dayjs(startDateTs)
+  const count = Math.max(Number(intervalCount) || 1, 1)
+
+  switch (unit) {
+    case 'day':
+      return start.add(count, 'day').valueOf()
+    case 'week':
+      return start.add(count, 'week').valueOf()
+    case 'month':
+      return start.add(count, 'month').valueOf()
+    case 'quarter':
+      return start.add(count * 3, 'month').valueOf()
+    case 'year':
+      return start.add(count, 'year').valueOf()
+    default:
+      return start.add(1, 'month').valueOf()
+  }
+}
+
+function handleNextRenewalDateChange(value: number | null) {
+  if (value === null) return
+
+  form.nextRenewalDateTs = value
+  if (!syncingNextRenewal.value) {
+    nextRenewalDirty.value = true
+  }
 }
 
 async function openLogoPanel() {
@@ -402,7 +449,7 @@ async function searchLogos() {
     logoCandidates.value = await api.searchSubscriptionLogos({
       name: form.name.trim() || 'subscription',
       websiteUrl: form.websiteUrl.trim() || undefined,
-      categoryName: props.categories.find((item) => item.id === form.categoryId)?.name
+      tagName: props.tags.find((item) => item.id === form.tagIds[0])?.name
     })
 
     if (!logoCandidates.value.length) {
@@ -418,16 +465,20 @@ async function searchLogos() {
 
 async function loadLocalLogoLibrary(force = false) {
   if (loadingLocalLogoLibrary.value) return
-  if (localLogoLibrary.value.length && !force) return
+  if (localLogoLibrary.value.length > 0 && !force) return
 
   loadingLocalLogoLibrary.value = true
   try {
     localLogoLibrary.value = await api.getSubscriptionLogoLibrary()
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '本地 Logo 加载失败')
+    message.error(error instanceof Error ? error.message : '读取本地 Logo 失败')
   } finally {
     loadingLocalLogoLibrary.value = false
   }
+}
+
+function pickLogoFile() {
+  logoFileInputRef.value?.click()
 }
 
 async function applyRemoteLogoCandidate(item: LogoSearchResult) {
@@ -442,11 +493,12 @@ async function applyRemoteLogoCandidate(item: LogoSearchResult) {
     if (item.websiteUrl && !form.websiteUrl) {
       form.websiteUrl = item.websiteUrl
     }
+
     showLogoPanel.value = false
     await loadLocalLogoLibrary(true)
     message.success('已保存到本地并应用')
   } catch (error) {
-    message.error(error instanceof Error ? error.message : 'Logo 保存失败')
+    message.error(error instanceof Error ? error.message : 'Logo 导入失败')
   }
 }
 
@@ -459,6 +511,7 @@ function applyLocalLogoCandidate(item: LogoSearchResult) {
 
 async function deleteLocalLogo(item: LogoSearchResult) {
   if (!item.filename) return
+
   try {
     await api.deleteSubscriptionLogoFromLibrary(item.filename)
     localLogoLibrary.value = localLogoLibrary.value.filter((entry) => entry.logoUrl !== item.logoUrl)
@@ -466,14 +519,10 @@ async function deleteLocalLogo(item: LogoSearchResult) {
       form.logoUrl = ''
       form.logoSource = ''
     }
-    message.success('本地 Logo 文件已删除')
+    message.success('本地 Logo 已删除')
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '本地 Logo 删除失败')
+    message.error(error instanceof Error ? error.message : '删除 Logo 失败')
   }
-}
-
-function pickLogoFile() {
-  logoFileInputRef.value?.click()
 }
 
 async function handleLogoFileChange(event: Event) {
@@ -484,73 +533,26 @@ async function handleLogoFileChange(event: Event) {
     const base64 = await readFileAsBase64(file)
     const uploaded = await api.uploadSubscriptionLogo({
       filename: file.name,
-      contentType: file.type || 'image/png',
+      contentType: file.type,
       base64
     })
 
     form.logoUrl = uploaded.logoUrl
     form.logoSource = uploaded.logoSource
-    showLogoPanel.value = false
     await loadLocalLogoLibrary(true)
-    message.success('Logo 已上传')
+    message.success('Logo 上传成功')
   } catch (error) {
     message.error(error instanceof Error ? error.message : 'Logo 上传失败')
   } finally {
-    ;(event.target as HTMLInputElement).value = ''
-  }
-}
-
-function buildAbsoluteLogoUrl(url: string) {
-  if (!url) return ''
-  if (url.startsWith('http')) return url
-  const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001/api/v1'
-  return new URL(url, base.replace(/\/api\/v1$/, '')).toString()
-}
-
-function readFileAsBase64(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const raw = String(reader.result ?? '')
-      resolve(raw.includes(',') ? raw.split(',')[1] : raw)
+    if (logoFileInputRef.value) {
+      logoFileInputRef.value.value = ''
     }
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
-}
-
-function formatLogoSource(source: string) {
-  switch (source) {
-    case 'duckduckgo':
-      return 'DuckDuckGo'
-    case 'brave':
-      return 'Brave'
-    case 'apple-touch-icon':
-      return 'Apple Touch Icon'
-    case 'html-icon':
-      return '站点图标'
-    case 'favicon':
-      return 'Favicon'
-    case 'google-favicon':
-      return 'Google Favicon'
-    case 'clearbit':
-      return 'Clearbit'
-    case 'icon-horse':
-      return 'Icon Horse'
-    case 'local-file':
-      return '本地文件'
-    case 'upload':
-      return '本地上传'
-    default:
-      return source
   }
 }
 
 function clearLogo() {
   form.logoUrl = ''
   form.logoSource = ''
-  logoCandidates.value = []
-  showLogoPanel.value = false
 }
 
 function applyAiResult(result: AiRecognitionResult) {
@@ -561,23 +563,36 @@ function applyAiResult(result: AiRecognitionResult) {
   if (result.billingIntervalCount) form.billingIntervalCount = result.billingIntervalCount
   if (result.billingIntervalUnit) form.billingIntervalUnit = result.billingIntervalUnit
   if (result.startDate) form.startDateTs = dayjs(result.startDate).valueOf()
-  if (result.nextRenewalDate) form.nextRenewalDateTs = dayjs(result.nextRenewalDate).valueOf()
+  if (result.nextRenewalDate) {
+    form.nextRenewalDateTs = dayjs(result.nextRenewalDate).valueOf()
+    nextRenewalDirty.value = true
+  }
   if (result.notifyDaysBefore !== undefined) form.notifyDaysBefore = result.notifyDaysBefore
   if (result.websiteUrl) form.websiteUrl = result.websiteUrl
   if (result.notes) form.notes = result.notes
 }
 
 function submit() {
+  if (!form.name.trim()) {
+    message.warning('请填写名称')
+    return
+  }
+  if (form.amount === null || form.amount === undefined || Number(form.amount) < 0) {
+    message.warning('请填写有效金额')
+    return
+  }
+
   emit(
     'submit',
     {
-      name: form.name,
-      categoryId: form.categoryId,
+      name: form.name.trim(),
+      tagIds: form.tagIds,
       description: form.description,
       amount: Number(form.amount ?? 0),
       currency: form.currency,
       billingIntervalCount: Number(form.billingIntervalCount),
       billingIntervalUnit: form.billingIntervalUnit,
+      autoRenew: form.autoRenew,
       startDate: dayjs(form.startDateTs).format('YYYY-MM-DD'),
       nextRenewalDate: dayjs(form.nextRenewalDateTs).format('YYYY-MM-DD'),
       notifyDaysBefore: Number(form.notifyDaysBefore),
@@ -599,6 +614,28 @@ function handleUpdateShow(value: boolean) {
   if (!value) {
     close()
   }
+}
+
+function readFileAsBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const raw = String(reader.result ?? '')
+      resolve(raw.includes(',') ? raw.split(',')[1] : raw)
+    }
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+}
+
+function formatLogoSource(source: string) {
+  const map: Record<string, string> = {
+    upload: '本地上传',
+    remote: '远程导入',
+    'wallos-zip': 'Wallos ZIP',
+    local: '本地库'
+  }
+  return map[source] ?? source
 }
 </script>
 
@@ -811,17 +848,15 @@ function handleUpdateShow(value: boolean) {
   word-break: break-word;
 }
 
-.logo-panel__item-meta {
+.logo-panel__item-meta,
+.logo-panel__item-related {
   font-size: 12px;
   color: #64748b;
   text-align: center;
 }
 
 .logo-panel__item-related {
-  font-size: 12px;
   color: #94a3b8;
-  text-align: center;
-  line-height: 1.4;
 }
 
 .logo-panel__empty {

@@ -26,11 +26,11 @@ async function markNotificationSent(channel: 'email' | 'pushplus', params: Notif
 function buildNotificationTitle(params: NotificationDispatchParams) {
   switch (params.eventType) {
     case 'subscription.reminder_due':
-      return `订阅即将续费：${String(params.payload.name ?? '')}`
+      return `订阅即将续订：${String(params.payload.name ?? '')}`
     case 'subscription.overdue':
       return `订阅已过期：${String(params.payload.name ?? '')}`
     case 'subscription.renewed':
-      return `订阅已续费：${String(params.payload.subscriptionId ?? params.payload.name ?? '')}`
+      return `订阅已续订：${String(params.payload.subscriptionId ?? params.payload.name ?? '')}`
     case 'exchange-rate.stale':
       return '汇率快照已过期'
     default:

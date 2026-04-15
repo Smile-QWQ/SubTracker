@@ -18,10 +18,12 @@
     "@fastify/cors": "^10.0.2",
     "@prisma/client": "^6.6.0",
     "@subtracker/shared": "0.0.1",
+    "adm-zip": "^0.5.17",
     "dayjs": "^1.11.13",
     "fastify": "^5.2.2",
     "node-cron": "^4.0.5",
     "nodemailer": "^8.0.5",
+    "sql.js": "^1.14.1",
     "tesseract.js": "^7.0.0",
     "zod": "^3.24.3"
   },

@@ -2,31 +2,21 @@
   <n-modal
     :show="show"
     preset="card"
-    title="分类管理"
+    title="标签管理"
     style="width: min(820px, calc(100vw - 24px))"
     @mask-click="$emit('close')"
     @update:show="handleUpdateShow"
   >
     <n-space vertical :size="16">
       <n-space justify="space-between" align="center">
-        <n-text depth="3">在这里统一新增、编辑和删除分类。</n-text>
-        <n-button type="primary" @click="openCreate">新增分类</n-button>
+        <n-text depth="3">在这里统一新增、编辑和删除标签。</n-text>
+        <n-button type="primary" @click="openCreate">新增标签</n-button>
       </n-space>
 
-      <n-data-table
-        :columns="columns"
-        :data="categories"
-        :pagination="{ pageSize: 8 }"
-        :bordered="false"
-      />
+      <n-data-table :columns="columns" :data="tags" :pagination="{ pageSize: 8 }" :bordered="false" />
     </n-space>
 
-    <category-form-modal
-      :show="showFormModal"
-      :model="editing"
-      @close="closeFormModal"
-      @submit="handleSubmit"
-    />
+    <tag-form-modal :show="showFormModal" :model="editing" @close="closeFormModal" @submit="handleSubmit" />
   </n-modal>
 </template>
 
@@ -34,12 +24,12 @@
 import { computed, h, ref } from 'vue'
 import { NButton, NDataTable, NIcon, NModal, NPopconfirm, NSpace, NTag, NText } from 'naive-ui'
 import { PricetagsOutline } from '@vicons/ionicons5'
-import CategoryFormModal from '@/components/CategoryFormModal.vue'
-import type { Category } from '@/types/api'
+import TagFormModal from '@/components/TagFormModal.vue'
+import type { Tag } from '@/types/api'
 
 const props = defineProps<{
   show: boolean
-  categories: Category[]
+  tags: Tag[]
   subscriptionCounts?: Record<string, number>
 }>()
 
@@ -47,17 +37,18 @@ const emit = defineEmits<{
   close: []
   create: [payload: { name: string; color: string; icon: string; sortOrder: number }]
   update: [payload: { name: string; color: string; icon: string; sortOrder: number }, id: string]
-  delete: [category: Category]
+  delete: [tag: Tag]
 }>()
 
+const tags = computed(() => props.tags)
 const showFormModal = ref(false)
-const editing = ref<Category | null>(null)
+const editing = ref<Tag | null>(null)
 
 const columns = computed(() => [
   {
-    title: '分类',
+    title: '标签',
     key: 'name',
-    render: (row: Category) =>
+    render: (row: Tag) =>
       h(
         'div',
         {
@@ -68,26 +59,22 @@ const columns = computed(() => [
           }
         },
         [
-          h(
-            'div',
-            {
-              style: {
-                width: '14px',
-                height: '14px',
-                borderRadius: '999px',
-                background: row.color,
-                flexShrink: '0'
-              }
-            },
-            undefined
-          ),
+          h('div', {
+            style: {
+              width: '14px',
+              height: '14px',
+              borderRadius: '999px',
+              background: row.color,
+              flexShrink: '0'
+            }
+          }),
           h(
             NIcon,
             {
               size: 18,
               color: '#475569'
             },
-            { default: () => h(resolveCategoryIcon(row.icon)) }
+            { default: () => h(resolveTagIcon(row.icon)) }
           ),
           h(
             'div',
@@ -128,7 +115,7 @@ const columns = computed(() => [
     title: '颜色',
     key: 'color',
     width: 140,
-    render: (row: Category) =>
+    render: (row: Tag) =>
       h(
         NTag,
         {
@@ -150,53 +137,47 @@ const columns = computed(() => [
     title: '订阅数',
     key: 'subscriptionCount',
     width: 100,
-    render: (row: Category) => props.subscriptionCounts?.[row.id] ?? 0
+    render: (row: Tag) => props.subscriptionCounts?.[row.id] ?? 0
   },
   {
     title: '操作',
     key: 'actions',
     width: 180,
-    render: (row: Category) =>
-      h(
-        NSpace,
-        { size: 8 },
-        {
-          default: () => [
-            h(
-              NButton,
-              {
-                size: 'small',
-                onClick: () => openEdit(row)
-              },
-              { default: () => '编辑' }
-            ),
-            h(
-              NPopconfirm,
-              {
-                positiveText: '删除',
-                negativeText: '取消',
-                onPositiveClick: () => emit('delete', row)
-              },
-              {
-                trigger: () =>
-                  h(
-                    NButton,
-                    {
-                      size: 'small',
-                      type: 'error',
-                      ghost: true
-                    },
-                    { default: () => '删除' }
-                  ),
-                default: () =>
-                  (props.subscriptionCounts?.[row.id] ?? 0) > 0
-                    ? '删除后，该分类下的订阅会变成未分类，确认继续？'
-                    : '确认删除该分类？'
-              }
-            )
-          ]
-        }
-      )
+    render: (row: Tag) =>
+      h(NSpace, { size: 8 }, {
+        default: () => [
+          h(
+            NButton,
+            {
+              size: 'small',
+              onClick: () => openEdit(row)
+            },
+            { default: () => '编辑' }
+          ),
+          h(
+            NPopconfirm,
+            {
+              positiveText: '删除',
+              negativeText: '取消',
+              onPositiveClick: () => emit('delete', row)
+            },
+            {
+              trigger: () =>
+                h(
+                  NButton,
+                  {
+                    size: 'small',
+                    type: 'error',
+                    ghost: true
+                  },
+                  { default: () => '删除' }
+                ),
+              default: () =>
+                (props.subscriptionCounts?.[row.id] ?? 0) > 0 ? '删除后，该标签会从订阅上移除，确认继续？' : '确认删除该标签？'
+            }
+          )
+        ]
+      })
   }
 ])
 
@@ -205,8 +186,8 @@ function openCreate() {
   showFormModal.value = true
 }
 
-function openEdit(category: Category) {
-  editing.value = category
+function openEdit(tag: Tag) {
+  editing.value = tag
   showFormModal.value = true
 }
 
@@ -262,7 +243,7 @@ const iconMap = {
   'wallet-outline': WalletOutline
 } as const
 
-function resolveCategoryIcon(icon: string) {
+function resolveTagIcon(icon: string) {
   return iconMap[icon as keyof typeof iconMap] ?? PricetagsOutline
 }
 </script>

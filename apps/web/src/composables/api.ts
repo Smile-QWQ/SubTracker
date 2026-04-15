@@ -4,16 +4,19 @@ import type {
   AuthResponse,
   AuthUserResponse,
   CalendarEvent,
-  Category,
   ChangeCredentialsPayload,
   ExchangeRateSnapshot,
   LoginPayload,
   LogoSearchResult,
   NotificationWebhookSettings,
+  PaymentRecord,
   Settings,
   StatisticsOverview,
   Subscription,
   SubscriptionDetail,
+  Tag,
+  WallosImportCommitResult,
+  WallosImportInspectResult,
   WebhookEndpoint
 } from '@/types/api'
 import { clearAuthSession, getStoredToken } from '@/utils/auth-storage'
@@ -71,7 +74,7 @@ export const api = {
     })
   },
 
-  async getSubscriptions(params?: { q?: string; status?: string; categoryId?: string }) {
+  async getSubscriptions(params?: { q?: string; status?: string; tagIds?: string }) {
     return unwrap<Subscription[]>((await client.get('/subscriptions', { params })) as { data: Envelope<Subscription[]> })
   },
 
@@ -79,11 +82,17 @@ export const api = {
     return unwrap<SubscriptionDetail>((await client.get(`/subscriptions/${id}`)) as { data: Envelope<SubscriptionDetail> })
   },
 
+  async getSubscriptionPaymentRecords(id: string) {
+    return unwrap<PaymentRecord[]>((await client.get(`/subscriptions/${id}/payment-records`)) as {
+      data: Envelope<PaymentRecord[]>
+    })
+  },
+
   async createSubscription(payload: Record<string, unknown>) {
     return unwrap<Subscription>((await client.post('/subscriptions', payload)) as { data: Envelope<Subscription> })
   },
 
-  async searchSubscriptionLogos(payload: { name: string; websiteUrl?: string; categoryName?: string }) {
+  async searchSubscriptionLogos(payload: { name: string; websiteUrl?: string; tagName?: string }) {
     return unwrap<LogoSearchResult[]>((await client.post('/subscriptions/logo/search', payload, { timeout: LOGO_REQUEST_TIMEOUT_MS })) as {
       data: Envelope<LogoSearchResult[]>
     })
@@ -174,21 +183,21 @@ export const api = {
     )
   },
 
-  async getCategories() {
-    return unwrap<Category[]>((await client.get('/categories')) as { data: Envelope<Category[]> })
+  async getTags() {
+    return unwrap<Tag[]>((await client.get('/tags')) as { data: Envelope<Tag[]> })
   },
 
-  async createCategory(payload: Record<string, unknown>) {
-    return unwrap<Category>((await client.post('/categories', payload)) as { data: Envelope<Category> })
+  async createTag(payload: Record<string, unknown>) {
+    return unwrap<Tag>((await client.post('/tags', payload)) as { data: Envelope<Tag> })
   },
 
-  async updateCategory(id: string, payload: Record<string, unknown>) {
-    return unwrap<Category>((await client.patch(`/categories/${id}`, payload)) as { data: Envelope<Category> })
+  async updateTag(id: string, payload: Record<string, unknown>) {
+    return unwrap<Tag>((await client.patch(`/tags/${id}`, payload)) as { data: Envelope<Tag> })
   },
 
-  async deleteCategory(id: string) {
+  async deleteTag(id: string) {
     return unwrap<{ id: string; deleted: boolean }>(
-      (await client.delete(`/categories/${id}`)) as { data: Envelope<{ id: string; deleted: boolean }> }
+      (await client.delete(`/tags/${id}`)) as { data: Envelope<{ id: string; deleted: boolean }> }
     )
   },
 
@@ -274,5 +283,17 @@ export const api = {
 
   async updateWebhookEndpoint(id: string, payload: Record<string, unknown>) {
     return unwrap<WebhookEndpoint>((await client.patch(`/webhooks/${id}`, payload)) as { data: Envelope<WebhookEndpoint> })
+  },
+
+  async inspectWallosImport(payload: { filename: string; contentType: string; base64: string }) {
+    return unwrap<WallosImportInspectResult>((await client.post('/import/wallos/inspect', payload, { timeout: 60000 })) as {
+      data: Envelope<WallosImportInspectResult>
+    })
+  },
+
+  async commitWallosImport(importToken: string) {
+    return unwrap<WallosImportCommitResult>((await client.post('/import/wallos/commit', { importToken })) as {
+      data: Envelope<WallosImportCommitResult>
+    })
   }
 }

@@ -38,15 +38,15 @@
             </n-grid>
 
             <n-form-item>
-              <n-switch v-model:value="settingsForm.enableCategoryBudgets" />
-              <span class="switch-label">启用分类月预算</span>
+              <n-switch v-model:value="settingsForm.enableTagBudgets" />
+              <span class="switch-label">启用标签月预算</span>
             </n-form-item>
 
-            <div v-if="settingsForm.enableCategoryBudgets" class="category-budget-grid">
-              <div v-for="category in categories" :key="category.id" class="category-budget-item">
-                <div class="category-budget-item__name">{{ category.name }}</div>
+            <div v-if="settingsForm.enableTagBudgets" class="tag-budget-grid">
+              <div v-for="tag in tags" :key="tag.id" class="tag-budget-item">
+                <div class="tag-budget-item__name">{{ tag.name }}</div>
                 <n-input-number
-                  v-model:value="settingsForm.categoryBudgets[category.id]"
+                  v-model:value="settingsForm.tagBudgets[tag.id]"
                   :min="0"
                   :precision="2"
                   placeholder="未设置"
@@ -321,7 +321,7 @@ import { api } from '@/composables/api'
 import PageHeader from '@/components/PageHeader.vue'
 import { useAuthStore } from '@/stores/auth'
 import { buildCurrencyOptions } from '@/utils/currency'
-import type { Category, ChangeCredentialsPayload, ExchangeRateSnapshot, NotificationWebhookSettings, Settings } from '@/types/api'
+import type { ChangeCredentialsPayload, ExchangeRateSnapshot, NotificationWebhookSettings, Settings, Tag } from '@/types/api'
 
 const message = useMessage()
 const authStore = useAuthStore()
@@ -333,8 +333,8 @@ const settingsForm = reactive<Settings>({
   defaultNotifyDays: 3,
   monthlyBudgetBase: null,
   yearlyBudgetBase: null,
-  enableCategoryBudgets: false,
-  categoryBudgets: {},
+  enableTagBudgets: false,
+  tagBudgets: {},
   emailNotificationsEnabled: false,
   pushplusNotificationsEnabled: false,
   emailConfig: {
@@ -376,7 +376,7 @@ const webhookForm = reactive<NotificationWebhookSettings>({
 })
 
 const snapshot = ref<ExchangeRateSnapshot | null>(null)
-const categories = ref<Category[]>([])
+const tags = ref<Tag[]>([])
 const sourceCurrency = ref('USD')
 const targetCurrency = ref('CNY')
 const converterAmount = ref(1)
@@ -405,7 +405,7 @@ async function loadSnapshot() {
 }
 
 async function loadCategories() {
-  categories.value = await api.getCategories()
+  tags.value = await api.getTags()
 }
 
 async function loadWebhook() {
@@ -419,8 +419,8 @@ async function saveBasicSettings() {
     defaultNotifyDays: settingsForm.defaultNotifyDays,
     monthlyBudgetBase: settingsForm.monthlyBudgetBase,
     yearlyBudgetBase: settingsForm.yearlyBudgetBase,
-    enableCategoryBudgets: settingsForm.enableCategoryBudgets,
-    categoryBudgets: settingsForm.categoryBudgets
+    enableTagBudgets: settingsForm.enableTagBudgets,
+    tagBudgets: settingsForm.tagBudgets
   })
   message.success('基础设置已保存')
   targetCurrency.value = settingsForm.baseCurrency.toUpperCase()
@@ -584,20 +584,20 @@ function formatTime(value: string) {
   color: #475569;
 }
 
-.category-budget-grid {
+.tag-budget-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
 }
 
-.category-budget-item {
+.tag-budget-item {
   padding: 10px;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   background: #f8fafc;
 }
 
-.category-budget-item__name {
+.tag-budget-item__name {
   margin-bottom: 8px;
   font-size: 13px;
   color: #334155;

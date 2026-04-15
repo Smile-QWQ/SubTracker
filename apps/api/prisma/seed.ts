@@ -22,7 +22,7 @@ async function main() {
   ]
 
   for (const item of defaults) {
-    await prisma.category.upsert({
+    await prisma.tag.upsert({
       where: { name: item.name },
       update: item,
       create: item

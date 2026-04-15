@@ -2,7 +2,7 @@
   <div>
     <page-header
       title="费用统计"
-      subtitle="从分类、月份、币种维度分析支出"
+      subtitle="从标签、月份、币种维度分析支出"
       :icon="barChartOutline"
       icon-background="linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%)"
     />
@@ -15,7 +15,7 @@
         </n-card>
       </n-grid-item>
       <n-grid-item>
-        <n-card title="分类占比">
+        <n-card title="标签占比">
           <chart-view v-if="categoryOption" :option="categoryOption" />
           <n-empty v-else description="暂无数据" />
         </n-card>
@@ -29,7 +29,7 @@
         </n-card>
       </n-grid-item>
       <n-grid-item>
-        <n-card title="即将续费金额（30 天）">
+        <n-card title="即将续订金额（30 天）">
           <n-data-table :columns="upcomingColumns" :data="overview?.upcomingRenewals ?? []" :pagination="false" />
         </n-card>
       </n-grid-item>
@@ -85,14 +85,14 @@ const trendOption = computed(() => {
 })
 
 const categoryOption = computed(() => {
-  if (!overview.value?.categorySpend.length) return null
+  if (!overview.value?.tagSpend.length) return null
   return {
     tooltip: { trigger: 'item' },
     series: [
       {
         type: 'pie',
         radius: ['35%', '65%'],
-        data: overview.value.categorySpend
+        data: overview.value.tagSpend
       }
     ]
   }

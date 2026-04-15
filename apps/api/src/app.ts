@@ -5,7 +5,6 @@ import path from 'node:path'
 import { config } from './config'
 import { sendError } from './http'
 import { authRoutes } from './routes/auth'
-import { categoryRoutes } from './routes/categories'
 import { subscriptionRoutes } from './routes/subscriptions'
 import { statisticsRoutes } from './routes/statistics'
 import { calendarRoutes } from './routes/calendar'
@@ -14,6 +13,8 @@ import { webhookRoutes } from './routes/webhooks'
 import { settingsRoutes } from './routes/settings'
 import { notificationRoutes } from './routes/notifications'
 import { aiRoutes } from './routes/ai'
+import { importRoutes } from './routes/imports'
+import { tagRoutes } from './routes/tags'
 import { verifyToken } from './services/auth.service'
 
 export async function buildApp() {
@@ -71,7 +72,7 @@ export async function buildApp() {
   await app.register(
     async (router) => {
       await authRoutes(router)
-      await categoryRoutes(router)
+      await tagRoutes(router)
       await subscriptionRoutes(router)
       await statisticsRoutes(router)
       await calendarRoutes(router)
@@ -80,6 +81,7 @@ export async function buildApp() {
       await settingsRoutes(router)
       await notificationRoutes(router)
       await aiRoutes(router)
+      await importRoutes(router)
     },
     { prefix: '/api/v1' }
   )

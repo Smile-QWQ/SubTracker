@@ -9,8 +9,8 @@ export const useAppStore = defineStore('app', () => {
     defaultNotifyDays: 3,
     monthlyBudgetBase: null,
     yearlyBudgetBase: null,
-    enableCategoryBudgets: false,
-    categoryBudgets: {},
+    enableTagBudgets: false,
+    tagBudgets: {},
     emailNotificationsEnabled: false,
     pushplusNotificationsEnabled: false,
     emailConfig: {

@@ -1,6 +1,6 @@
 <template>
   <div>
-    <page-header title="仪表盘" subtitle="总览订阅规模、预算使用、待续费与费用分布" :icon="gridOutline" />
+    <page-header title="仪表盘" subtitle="总览订阅规模、预算使用、待续订与费用分布" :icon="gridOutline" />
 
     <n-grid :cols="24" :x-gap="12" :y-gap="12">
       <n-grid-item v-for="item in summaryCards" :key="item.label" :span="summarySpan">
@@ -51,7 +51,7 @@
 
     <n-grid :cols="chartCols" :x-gap="12" :y-gap="12" style="margin-top: 12px">
       <n-grid-item>
-        <n-card title="分类月度支出">
+        <n-card title="标签月度支出">
           <chart-view v-if="categoryOption" :option="categoryOption" />
           <n-empty v-else description="暂无数据" />
         </n-card>
@@ -64,7 +64,7 @@
       </n-grid-item>
     </n-grid>
 
-    <n-card title="即将续费（30 天）" style="margin-top: 12px">
+    <n-card title="即将续订（30 天）" style="margin-top: 12px">
       <n-data-table :columns="columns" :data="overview?.upcomingRenewals ?? []" :pagination="false" />
     </n-card>
   </div>
@@ -108,7 +108,7 @@ const chartCols = computed(() => (width.value < 1100 ? 1 : 2))
 
 const summaryCards = computed(() => [
   { label: '活跃订阅', value: overview.value?.activeSubscriptions ?? 0, icon: LayersOutline },
-  { label: '7 天内续费', value: overview.value?.upcoming7Days ?? 0, icon: NotificationsOutline },
+  { label: '7 天内续订', value: overview.value?.upcoming7Days ?? 0, icon: NotificationsOutline },
   {
     label: '本月预计支出',
     value: overview.value ? formatMoney(overview.value.monthlyEstimatedBase, baseCurrency.value) : '--',
@@ -122,7 +122,7 @@ const summaryCards = computed(() => [
 ])
 
 const categoryOption = computed(() => {
-  if (!overview.value?.categorySpend?.length) return null
+  if (!overview.value?.tagSpend?.length) return null
   return {
     tooltip: { trigger: 'item' },
     legend: { bottom: 0 },
@@ -130,7 +130,7 @@ const categoryOption = computed(() => {
       {
         type: 'pie',
         radius: ['40%', '68%'],
-        data: overview.value.categorySpend
+        data: overview.value.tagSpend
       }
     ]
   }
@@ -159,7 +159,7 @@ const trendOption = computed(() => {
 const columns = [
   { title: '订阅', key: 'name' },
   {
-    title: '下次续费',
+    title: '下次续订',
     key: 'nextRenewalDate',
     render: (row: StatisticsOverview['upcomingRenewals'][number]) => dayjs(row.nextRenewalDate).format('YYYY-MM-DD')
   },

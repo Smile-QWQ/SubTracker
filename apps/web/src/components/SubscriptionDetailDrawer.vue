@@ -1,5 +1,5 @@
 <template>
-  <n-drawer :show="show" :width="drawerWidth" @mask-click="emit('close')">
+  <n-drawer :show="show" :width="drawerWidth" @mask-click="emit('close')" @update:show="handleShowUpdate">
     <n-drawer-content title="订阅详情" closable>
       <n-empty v-if="!detail" description="暂无数据" />
       <template v-else>
@@ -20,12 +20,26 @@
             <n-descriptions-item label="状态">
               <n-tag :type="getSubscriptionStatusTagType(detail.status)">{{ getSubscriptionStatusText(detail.status) }}</n-tag>
             </n-descriptions-item>
-            <n-descriptions-item label="分类">{{ detail.category?.name ?? '未分类' }}</n-descriptions-item>
-            <n-descriptions-item label="支付频率">每 {{ detail.billingIntervalCount }} {{ unitLabel(detail.billingIntervalUnit) }}</n-descriptions-item>
+            <n-descriptions-item label="标签">
+              <n-space size="small" wrap>
+                <n-tag
+                  v-for="item in detail.tags ?? []"
+                  :key="item.id"
+                  size="small"
+                  :bordered="false"
+                  :color="{ color: item.color, textColor: '#fff' }"
+                >
+                  {{ item.name }}
+                </n-tag>
+                <span v-if="!(detail.tags?.length)">未打标签</span>
+              </n-space>
+            </n-descriptions-item>
+            <n-descriptions-item label="自动续订">{{ detail.autoRenew ? '已启用' : '未启用' }}</n-descriptions-item>
+            <n-descriptions-item label="订阅频率">每 {{ detail.billingIntervalCount }} {{ unitLabel(detail.billingIntervalUnit) }}</n-descriptions-item>
             <n-descriptions-item label="开始日期">{{ formatDate(detail.startDate) }}</n-descriptions-item>
-            <n-descriptions-item label="下次续费">{{ formatDate(detail.nextRenewalDate) }}</n-descriptions-item>
+            <n-descriptions-item label="下次续订">{{ formatDate(detail.nextRenewalDate) }}</n-descriptions-item>
             <n-descriptions-item label="原始金额">{{ formatMoney(detail.amount, detail.currency) }}</n-descriptions-item>
-            <n-descriptions-item label="提前提醒">{{ detail.notifyDaysBefore }} 天</n-descriptions-item>
+            <n-descriptions-item label="提醒天数">{{ detail.notifyDaysBefore }} 天</n-descriptions-item>
             <n-descriptions-item label="提醒通知">{{ detail.webhookEnabled ? '已启用' : '未启用' }}</n-descriptions-item>
             <n-descriptions-item label="创建时间">{{ formatDateTime(detail.createdAt) }}</n-descriptions-item>
           </n-descriptions>
@@ -83,6 +97,12 @@ function unitLabel(unit: string) {
     quarter: '季',
     year: '年'
   }[unit] ?? unit
+}
+
+function handleShowUpdate(value: boolean) {
+  if (!value) {
+    emit('close')
+  }
 }
 </script>
 

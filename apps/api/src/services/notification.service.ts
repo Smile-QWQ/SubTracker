@@ -11,7 +11,11 @@ export async function scanRenewalNotifications() {
       webhookEnabled: true
     },
     include: {
-      category: true
+      tags: {
+        include: {
+          tag: true
+        }
+      }
     }
   })
 
@@ -58,7 +62,7 @@ export async function scanRenewalNotifications() {
           notifyDaysBefore: sub.notifyDaysBefore,
           amount: sub.amount,
           currency: sub.currency,
-          category: sub.category?.name ?? null
+          tagNames: sub.tags.map((item) => item.tag.name)
         }
       })
     }

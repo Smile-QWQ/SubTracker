@@ -505,11 +505,11 @@ function filenameFromLogoUrl(logoUrl: string) {
   return path.basename(new URL(logoUrl, 'http://localhost').pathname)
 }
 
-export async function searchSubscriptionLogos(params: { name: string; websiteUrl?: string; categoryName?: string }) {
+export async function searchSubscriptionLogos(params: { name: string; websiteUrl?: string; tagName?: string }) {
   const cacheKey = JSON.stringify({
     name: params.name.trim().toLowerCase(),
     websiteUrl: params.websiteUrl?.trim().toLowerCase() ?? '',
-    categoryName: params.categoryName?.trim().toLowerCase() ?? ''
+    tagName: params.tagName?.trim().toLowerCase() ?? ''
   })
   const cached = searchCache.get(cacheKey)
   if (cached && cached.expiresAt > Date.now()) {
@@ -519,7 +519,7 @@ export async function searchSubscriptionLogos(params: { name: string; websiteUrl
   const explicitOrigin = normalizeWebsiteUrl(params.websiteUrl)
   const fallbackSeed = deriveDomainSeed(params.name)
   const guessedOrigin = explicitOrigin || (fallbackSeed ? `https://${fallbackSeed}.com` : '')
-  const searchTerm = [params.name, params.categoryName].filter(Boolean).join(' ').trim() || params.name
+  const searchTerm = [params.name, params.tagName].filter(Boolean).join(' ').trim() || params.name
 
   const rawCandidates: RawCandidate[] = []
   const [websiteCandidates, duckCandidates, braveCandidates] = await Promise.all([
@@ -606,6 +606,16 @@ async function writeLogoBuffer(buffer: Buffer, contentType: string, logoSource: 
     logoUrl: `/static/logos/${filename}`,
     logoSource
   }
+}
+
+export async function saveImportedLogoBuffer(buffer: Buffer, contentType: string, logoSource = 'wallos-zip') {
+  if (!allowedTypes.has(contentType)) {
+    throw new Error('不支持的 Logo 图片类型')
+  }
+  if (!buffer.length) {
+    throw new Error('Logo 图片内容为空')
+  }
+  return writeLogoBuffer(buffer, contentType, logoSource)
 }
 
 function isLocalLogoUrl(url?: string | null) {

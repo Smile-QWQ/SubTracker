@@ -2,7 +2,7 @@
   <div>
     <page-header
       title="订阅日历"
-      subtitle="查看续费日期分布，支持月视图和列表视图"
+      subtitle="查看续订日期分布，支持月视图和列表视图"
       :icon="calendarOutline"
       icon-background="linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)"
     />
@@ -12,7 +12,7 @@
         <stat-card label="当前月份" :value="panelMonthLabel" suffix="当前正在查看的月份" :icon="calendarClearOutline" />
       </n-grid-item>
       <n-grid-item>
-        <stat-card label="本月续费数量" :value="monthEventCount" suffix="当前月份内的订阅数" :icon="notificationsOutline" />
+        <stat-card label="本月续订数量" :value="monthEventCount" suffix="当前月份内的订阅数" :icon="notificationsOutline" />
       </n-grid-item>
       <n-grid-item>
         <stat-card
@@ -24,7 +24,7 @@
       </n-grid-item>
       <n-grid-item>
         <stat-card
-          label="选中日期续费"
+          label="选中日期续订"
           :value="selectedDateEvents.length"
           :suffix="`${selectedDateLabel} · ${baseCurrency} ${selectedDateConvertedAmount.toFixed(2)}`"
           :icon="todayOutline"
@@ -52,14 +52,14 @@
             </n-grid-item>
 
             <n-grid-item>
-              <n-card :title="`当天续费（${selectedDateLabel}）`" size="small" class="day-detail-card">
+              <n-card :title="`当天续订（${selectedDateLabel}）`" size="small" class="day-detail-card">
                 <template #header-extra>
                   <span class="day-summary-inline">
                     共 {{ selectedDateEvents.length }} 笔 · {{ baseCurrency }} {{ selectedDateConvertedAmount.toFixed(2) }}
                   </span>
                 </template>
 
-                <n-empty v-if="selectedDateEvents.length === 0" description="当天无续费" />
+                <n-empty v-if="selectedDateEvents.length === 0" description="当天无续订" />
 
                 <n-space v-else vertical :size="10">
                   <div v-for="item in selectedDateEvents" :key="item.id" class="day-event-item">
