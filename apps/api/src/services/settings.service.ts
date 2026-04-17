@@ -19,6 +19,7 @@ export async function setSetting<T>(key: string, value: T): Promise<void> {
 export async function getAppSettings(): Promise<SettingsInput> {
   const baseCurrency = await getSetting('baseCurrency', config.baseCurrency)
   const defaultNotifyDays = await getSetting('defaultNotifyDays', config.defaultNotifyDays)
+  const rememberSessionDays = await getSetting('rememberSessionDays', 7)
   const monthlyBudgetBase = await getSetting<number | null>('monthlyBudgetBase', null)
   const yearlyBudgetBase = await getSetting<number | null>('yearlyBudgetBase', null)
   const enableTagBudgets = await getSetting('enableTagBudgets', false)
@@ -51,6 +52,7 @@ export async function getAppSettings(): Promise<SettingsInput> {
   return {
     baseCurrency,
     defaultNotifyDays,
+    rememberSessionDays,
     monthlyBudgetBase,
     yearlyBudgetBase,
     enableTagBudgets,

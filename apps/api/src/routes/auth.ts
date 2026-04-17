@@ -2,15 +2,26 @@ import { FastifyInstance } from 'fastify'
 import { ChangeCredentialsSchema, LoginSchema } from '@subtracker/shared'
 import { sendError, sendOk } from '../http'
 import { changeCredentials, loginWithCredentials } from '../services/auth.service'
+import { getAppSettings } from '../services/settings.service'
 
 export async function authRoutes(app: FastifyInstance) {
+  app.get('/auth/login-options', async (_request, reply) => {
+    const settings = await getAppSettings()
+    return sendOk(reply, {
+      rememberSessionDays: settings.rememberSessionDays
+    })
+  })
+
   app.post('/auth/login', async (request, reply) => {
     const parsed = LoginSchema.safeParse(request.body)
     if (!parsed.success) {
       return sendError(reply, 422, 'validation_error', 'Invalid login payload', parsed.error.flatten())
     }
 
-    const result = await loginWithCredentials(parsed.data.username, parsed.data.password)
+    const result = await loginWithCredentials(parsed.data.username, parsed.data.password, {
+      rememberMe: parsed.data.rememberMe,
+      rememberDays: parsed.data.rememberDays
+    })
     if (!result) {
       return sendError(reply, 401, 'invalid_credentials', '用户名或密码错误')
     }

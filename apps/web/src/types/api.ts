@@ -16,6 +16,12 @@ export interface AuthUserResponse {
 export interface LoginPayload {
   username: string
   password: string
+  rememberMe?: boolean
+  rememberDays?: number
+}
+
+export interface LoginOptions {
+  rememberSessionDays: number
 }
 
 export interface ChangeCredentialsPayload {
@@ -137,6 +143,7 @@ export interface AiConfig {
 export interface Settings {
   baseCurrency: string
   defaultNotifyDays: number
+  rememberSessionDays: number
   monthlyBudgetBase?: number | null
   yearlyBudgetBase?: number | null
   enableTagBudgets: boolean

@@ -17,15 +17,34 @@
             collapse-mode="width"
             :collapsed-width="64"
             :width="220"
-            show-trigger
           >
             <div class="logo" :class="{ 'logo--collapsed': siderCollapsed }">
-              <div class="logo__icon">
-                <n-icon :size="18">
-                  <wallet-outline />
-                </n-icon>
-              </div>
-              <span v-show="!siderCollapsed" class="logo__text">SubTracker</span>
+              <template v-if="!siderCollapsed">
+                <div class="logo__brand">
+                  <div class="logo__icon">
+                    <n-icon :size="18">
+                      <wallet-outline />
+                    </n-icon>
+                  </div>
+                  <span class="logo__text">SubTracker</span>
+                </div>
+                <n-button quaternary circle class="logo__toggle" @click="siderCollapsed = !siderCollapsed">
+                  <template #icon>
+                    <n-icon>
+                      <component :is="chevronBackOutline" />
+                    </n-icon>
+                  </template>
+                </n-button>
+              </template>
+              <template v-else>
+                <n-button quaternary circle class="logo__toggle logo__toggle--collapsed" @click="siderCollapsed = !siderCollapsed">
+                  <template #icon>
+                    <n-icon>
+                      <component :is="chevronForwardOutline" />
+                    </n-icon>
+                  </template>
+                </n-button>
+              </template>
             </div>
             <n-menu :collapsed="siderCollapsed" :collapsed-width="64" :options="menuOptions" :value="activeKey" @update:value="handleMenuClick" />
           </n-layout-sider>
@@ -91,6 +110,8 @@ import type { MenuOption } from 'naive-ui'
 import {
   BarChartOutline,
   CalendarOutline,
+  ChevronBackOutline,
+  ChevronForwardOutline,
   GridOutline,
   LayersOutline,
   MenuOutline,
@@ -106,6 +127,8 @@ const authStore = useAuthStore()
 const mobileMenuVisible = ref(false)
 const siderCollapsed = ref(false)
 const { width } = useWindowSize()
+const chevronBackOutline = ChevronBackOutline
+const chevronForwardOutline = ChevronForwardOutline
 
 function renderMenuIcon(icon: typeof GridOutline) {
   return () => h(NIcon, null, { default: () => h(icon) })
@@ -149,12 +172,19 @@ async function logout() {
   height: 56px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
   padding: 0 18px;
   font-size: 18px;
   font-weight: 700;
   border-bottom: 1px solid #e5e7eb;
   overflow: hidden;
+}
+
+.logo__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .logo--collapsed {
@@ -177,6 +207,14 @@ async function logout() {
 .logo__text {
   min-width: 0;
   white-space: nowrap;
+}
+
+.logo__toggle {
+  flex-shrink: 0;
+}
+
+.logo__toggle--collapsed {
+  margin: 0 auto;
 }
 
 .header {

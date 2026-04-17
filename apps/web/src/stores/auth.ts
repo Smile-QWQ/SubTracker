@@ -11,19 +11,19 @@ export const useAuthStore = defineStore('auth', {
     isAuthenticated: (state) => Boolean(state.token)
   },
   actions: {
-    setSession(token: string, username: string) {
+    setSession(token: string, username: string, remember = false) {
       this.token = token
       this.username = username
-      saveAuthSession(token, username)
+      saveAuthSession(token, username, remember)
     },
     clearSession() {
       this.token = ''
       this.username = ''
       clearAuthSession()
     },
-    async login(username: string, password: string) {
-      const result = await api.login(username, password)
-      this.setSession(result.token, result.user.username)
+    async login(username: string, password: string, rememberMe = false, rememberDays?: number) {
+      const result = await api.login(username, password, rememberMe, rememberDays)
+      this.setSession(result.token, result.user.username, rememberMe)
       return result
     }
   }

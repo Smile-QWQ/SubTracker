@@ -91,6 +91,7 @@ export const AiConfigSchema = z.object({
 export const SettingsSchema = z.object({
   baseCurrency: z.string().length(3).default('CNY').transform((v) => v.toUpperCase()),
   defaultNotifyDays: z.number().int().min(0).max(365).default(3),
+  rememberSessionDays: z.number().int().min(1).max(365).default(7),
   monthlyBudgetBase: OptionalMoneySchema,
   yearlyBudgetBase: OptionalMoneySchema,
   enableTagBudgets: z.boolean().default(false),
@@ -104,7 +105,9 @@ export const SettingsSchema = z.object({
 
 export const LoginSchema = z.object({
   username: z.string().min(1).max(100),
-  password: z.string().min(1).max(200)
+  password: z.string().min(1).max(200),
+  rememberMe: z.boolean().optional().default(false),
+  rememberDays: z.number().int().min(1).max(365).optional()
 })
 
 export const ChangeCredentialsSchema = z.object({

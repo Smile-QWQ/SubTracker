@@ -54,7 +54,13 @@ export async function buildApp() {
 
   app.addHook('onRequest', async (request, reply) => {
     const url = request.url.split('?')[0]
-    if (request.method === 'OPTIONS' || url === '/health' || url.startsWith('/static/logos/') || url === '/api/v1/auth/login') {
+    if (
+      request.method === 'OPTIONS' ||
+      url === '/health' ||
+      url.startsWith('/static/logos/') ||
+      url === '/api/v1/auth/login' ||
+      url === '/api/v1/auth/login-options'
+    ) {
       return
     }
 

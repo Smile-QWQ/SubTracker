@@ -26,6 +26,14 @@
 
             <n-grid :cols="formCols" :x-gap="12">
               <n-grid-item>
+                <n-form-item label="记住登录天数">
+                  <n-input-number v-model:value="settingsForm.rememberSessionDays" :min="1" :max="365" style="width: 100%" />
+                </n-form-item>
+              </n-grid-item>
+            </n-grid>
+
+            <n-grid :cols="formCols" :x-gap="12">
+              <n-grid-item>
                 <n-form-item label="月预算（基准货币）">
                   <n-input-number v-model:value="settingsForm.monthlyBudgetBase" :min="0" :precision="2" style="width: 100%" />
                 </n-form-item>
@@ -331,6 +339,7 @@ const settingsOutline = SettingsOutline
 const settingsForm = reactive<Settings>({
   baseCurrency: 'CNY',
   defaultNotifyDays: 3,
+  rememberSessionDays: 7,
   monthlyBudgetBase: null,
   yearlyBudgetBase: null,
   enableTagBudgets: false,
@@ -417,6 +426,7 @@ async function saveBasicSettings() {
   await api.updateSettings({
     baseCurrency: settingsForm.baseCurrency.toUpperCase(),
     defaultNotifyDays: settingsForm.defaultNotifyDays,
+    rememberSessionDays: settingsForm.rememberSessionDays,
     monthlyBudgetBase: settingsForm.monthlyBudgetBase,
     yearlyBudgetBase: settingsForm.yearlyBudgetBase,
     enableTagBudgets: settingsForm.enableTagBudgets,

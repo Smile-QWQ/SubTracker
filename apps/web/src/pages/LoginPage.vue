@@ -30,37 +30,66 @@
             @keydown.enter.prevent="submit"
           />
         </n-form-item>
-        <n-button type="primary" block attr-type="submit" @click="submit">登录</n-button>
+        <div class="login-options">
+          <n-checkbox v-model:checked="form.rememberMe">
+            记住我
+            <span class="login-options__hint">（{{ rememberSessionDays }} 天）</span>
+          </n-checkbox>
+        </div>
+        <n-button type="primary" block attr-type="submit" :loading="submitting" @click="submit">登录</n-button>
       </n-form>
     </n-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NCard, NForm, NFormItem, NIcon, NInput, useMessage } from 'naive-ui'
+import { NButton, NCard, NCheckbox, NForm, NFormItem, NIcon, NInput, useMessage } from 'naive-ui'
 import { LockClosedOutline } from '@vicons/ionicons5'
+import { api } from '@/composables/api'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const router = useRouter()
 const message = useMessage()
 const authStore = useAuthStore()
+const rememberSessionDays = ref(7)
+const submitting = ref(false)
 
 const form = reactive({
   username: '',
-  password: ''
+  password: '',
+  rememberMe: false
+})
+
+onMounted(async () => {
+  try {
+    const options = await api.getLoginOptions()
+    rememberSessionDays.value = options.rememberSessionDays
+  } catch {
+    rememberSessionDays.value = 7
+  }
 })
 
 async function submit() {
+  if (submitting.value) return
+
   try {
-    await authStore.login(form.username, form.password)
+    submitting.value = true
+    await authStore.login(
+      form.username,
+      form.password,
+      form.rememberMe,
+      form.rememberMe ? rememberSessionDays.value : undefined
+    )
     message.success('登录成功')
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard'
     await router.replace(redirect)
   } catch (error) {
     message.error(error instanceof Error ? error.message : '登录失败')
+  } finally {
+    submitting.value = false
   }
 }
 </script>
@@ -107,6 +136,15 @@ async function submit() {
 .login-subtitle {
   margin: 6px 0 0;
   color: #64748b;
+}
+
+.login-options {
+  margin: -2px 0 14px;
+  color: #475569;
+}
+
+.login-options__hint {
+  color: #94a3b8;
 }
 
 @media (max-width: 520px) {

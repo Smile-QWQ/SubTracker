@@ -7,6 +7,7 @@ export const useAppStore = defineStore('app', () => {
   const settings = ref<Settings>({
     baseCurrency: 'CNY',
     defaultNotifyDays: 3,
+    rememberSessionDays: 7,
     monthlyBudgetBase: null,
     yearlyBudgetBase: null,
     enableTagBudgets: false,

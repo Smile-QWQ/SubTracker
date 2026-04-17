@@ -6,6 +6,7 @@ const SESSION_SECRET_KEY = 'authSessionSecret'
 const DEFAULT_USERNAME = 'admin'
 const DEFAULT_PASSWORD = 'admin'
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const MIN_TOKEN_TTL_MS = 60 * 60 * 1000
 
 type StoredCredentials = {
   username: string
@@ -85,12 +86,12 @@ async function signPayload(payload: SessionPayload) {
   return `${body}.${signature}`
 }
 
-export async function issueToken(username: string) {
+export async function issueToken(username: string, ttlMs = TOKEN_TTL_MS) {
   const now = Date.now()
   return signPayload({
     sub: username,
     iat: now,
-    exp: now + TOKEN_TTL_MS
+    exp: now + Math.max(ttlMs, MIN_TOKEN_TTL_MS)
   })
 }
 
@@ -123,14 +124,24 @@ export async function verifyToken(token?: string) {
   }
 }
 
-export async function loginWithCredentials(username: string, password: string) {
+export async function loginWithCredentials(
+  username: string,
+  password: string,
+  options?: {
+    rememberMe?: boolean
+    rememberDays?: number
+  }
+) {
   const credentials = await getStoredCredentials()
   if (credentials.username !== username || !verifyPassword(password, credentials)) {
     return null
   }
 
+  const rememberDays = Math.max(1, options?.rememberDays ?? 7)
+  const ttlMs = options?.rememberMe ? rememberDays * 24 * 60 * 60 * 1000 : TOKEN_TTL_MS
+
   return {
-    token: await issueToken(credentials.username),
+    token: await issueToken(credentials.username, ttlMs),
     user: {
       username: credentials.username
     } satisfies AuthUser

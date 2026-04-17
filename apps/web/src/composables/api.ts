@@ -6,6 +6,7 @@ import type {
   CalendarEvent,
   ChangeCredentialsPayload,
   ExchangeRateSnapshot,
+  LoginOptions,
   LoginPayload,
   LogoSearchResult,
   NotificationWebhookSettings,
@@ -58,10 +59,19 @@ function unwrap<T>(res: { data: Envelope<T> }): T {
 }
 
 export const api = {
-  async login(username: string, password: string) {
-    return unwrap<AuthResponse>((await client.post('/auth/login', { username, password } satisfies LoginPayload)) as {
+  async login(username: string, password: string, rememberMe = false, rememberDays?: number) {
+    return unwrap<AuthResponse>((await client.post('/auth/login', {
+      username,
+      password,
+      rememberMe,
+      rememberDays
+    } satisfies LoginPayload)) as {
       data: Envelope<AuthResponse>
     })
+  },
+
+  async getLoginOptions() {
+    return unwrap<LoginOptions>((await client.get('/auth/login-options')) as { data: Envelope<LoginOptions> })
   },
 
   async getCurrentUser() {
