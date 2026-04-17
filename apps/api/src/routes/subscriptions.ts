@@ -17,7 +17,6 @@ import {
   sortSubscriptionsByOrder
 } from '../services/subscription-order.service'
 import { renewSubscription } from '../services/subscription.service'
-import { dispatchNotificationEvent } from '../services/channel-notification.service'
 import { flattenSubscriptionTags, normalizeTagIds, replaceSubscriptionTags } from '../services/tag.service'
 import {
   deleteLocalLogoFromLibrary,
@@ -318,23 +317,6 @@ export async function subscriptionRoutes(app: FastifyInstance) {
         parsed.data.amount,
         parsed.data.currency
       )
-
-      await dispatchNotificationEvent({
-        eventType: 'subscription.renewed',
-        resourceKey: `subscription:${params.data.id}`,
-        periodKey: dayjs(result.payment.paidAt).format('YYYY-MM-DD'),
-        subscriptionId: params.data.id,
-        payload: {
-          subscriptionId: params.data.id,
-          paymentId: result.payment.id,
-          amount: result.payment.amount,
-          currency: result.payment.currency,
-          convertedAmount: result.payment.convertedAmount,
-          baseCurrency: result.payment.baseCurrency,
-          paidAt: result.payment.paidAt.toISOString(),
-          nextRenewalDate: result.subscription.nextRenewalDate.toISOString()
-        }
-      })
 
       return sendOk(reply, result)
     } catch (error) {

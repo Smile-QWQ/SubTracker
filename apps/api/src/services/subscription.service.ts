@@ -3,7 +3,6 @@ import { addInterval } from '../utils/date'
 import { ensureExchangeRates, getBaseCurrency } from './exchange-rate.service'
 import { convertAmount } from '../utils/money'
 import dayjs from 'dayjs'
-import { dispatchNotificationEvent } from './channel-notification.service'
 
 export async function renewSubscription(subscriptionId: string, paidAt?: Date, paidAmount?: number, paidCurrency?: string) {
   const subscription = await prisma.subscription.findUnique({ where: { id: subscriptionId } })
@@ -78,24 +77,6 @@ export async function autoRenewDueSubscriptions(today = new Date()) {
       renewedCount += 1
       currentNextRenewalDate = result.subscription.nextRenewalDate
       guard += 1
-
-      await dispatchNotificationEvent({
-        eventType: 'subscription.renewed',
-        resourceKey: `subscription:${subscription.id}`,
-        periodKey: dayjs(result.payment.paidAt).format('YYYY-MM-DD'),
-        subscriptionId: subscription.id,
-        payload: {
-          subscriptionId: subscription.id,
-          paymentId: result.payment.id,
-          amount: result.payment.amount,
-          currency: result.payment.currency,
-          convertedAmount: result.payment.convertedAmount,
-          baseCurrency: result.payment.baseCurrency,
-          paidAt: result.payment.paidAt.toISOString(),
-          nextRenewalDate: result.subscription.nextRenewalDate.toISOString(),
-          autoRenew: true
-        }
-      })
     }
   }
 

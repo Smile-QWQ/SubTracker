@@ -1,7 +1,6 @@
 import { FastifyInstance } from 'fastify'
-import { z } from 'zod'
+import { EmailConfigSchema, NotificationWebhookSettingsSchema, PushPlusConfigSchema } from '@subtracker/shared'
 import { sendError, sendOk } from '../http'
-import { EmailConfigSchema, PushPlusConfigSchema } from '@subtracker/shared'
 import {
   sendTestEmailNotification,
   sendTestEmailNotificationWithConfig,
@@ -15,40 +14,24 @@ import {
   upsertPrimaryWebhookEndpoint
 } from '../services/webhook.service'
 
-const WebhookSettingsSchema = z.object({
-  url: z.string().trim().max(500).default(''),
-  secret: z.string().trim().max(200).default(''),
-  enabled: z.boolean().default(false)
-})
-
 export async function notificationRoutes(app: FastifyInstance) {
   app.get('/notifications/webhook', async (_, reply) => {
     const current = await getPrimaryWebhookEndpoint()
-    return sendOk(reply, {
-      id: current?.id ?? '',
-      enabled: current?.enabled ?? false,
-      url: current?.url ?? '',
-      secret: current?.secret ?? ''
-    })
+    return sendOk(reply, current)
   })
 
   app.put('/notifications/webhook', async (request, reply) => {
-    const parsed = WebhookSettingsSchema.safeParse(request.body)
+    const parsed = NotificationWebhookSettingsSchema.safeParse(request.body)
     if (!parsed.success) {
       return sendError(reply, 422, 'validation_error', 'Invalid webhook settings payload', parsed.error.flatten())
     }
 
-    if (parsed.data.enabled && (!parsed.data.url || !parsed.data.secret)) {
-      return sendError(reply, 422, 'validation_error', '启用 Webhook 时必须填写 URL 和 Secret')
+    if (parsed.data.enabled && !parsed.data.url) {
+      return sendError(reply, 422, 'validation_error', '启用 Webhook 时必须填写 URL')
     }
 
     const saved = await upsertPrimaryWebhookEndpoint(parsed.data)
-    return sendOk(reply, {
-      id: saved.id,
-      enabled: saved.enabled,
-      url: saved.url,
-      secret: saved.secret
-    })
+    return sendOk(reply, saved)
   })
 
   app.post('/notifications/test/email', async (request, reply) => {
@@ -83,14 +66,15 @@ export async function notificationRoutes(app: FastifyInstance) {
         if (!parsed.success) {
           return sendError(reply, 422, 'validation_error', 'Invalid PushPlus config payload', parsed.error.flatten())
         }
-        await sendTestPushplusNotificationWithConfig({
+        const result = await sendTestPushplusNotificationWithConfig({
           token: parsed.data.token ?? '',
           topic: parsed.data.topic ?? ''
         })
-      } else {
-        await sendTestPushplusNotification()
+        return sendOk(reply, result)
       }
-      return sendOk(reply, { success: true })
+
+      const result = await sendTestPushplusNotification()
+      return sendOk(reply, result)
     } catch (error) {
       return sendError(reply, 400, 'pushplus_test_failed', error instanceof Error ? error.message : 'PushPlus test failed')
     }
@@ -99,15 +83,16 @@ export async function notificationRoutes(app: FastifyInstance) {
   app.post('/notifications/test/webhook', async (request, reply) => {
     try {
       if (request.body) {
-        const parsed = WebhookSettingsSchema.safeParse(request.body)
+        const parsed = NotificationWebhookSettingsSchema.safeParse(request.body)
         if (!parsed.success) {
           return sendError(reply, 422, 'validation_error', 'Invalid webhook settings payload', parsed.error.flatten())
         }
-        await sendTestWebhookNotificationWithConfig(parsed.data)
-      } else {
-        await sendTestWebhookNotification()
+        const result = await sendTestWebhookNotificationWithConfig(parsed.data)
+        return sendOk(reply, result)
       }
-      return sendOk(reply, { success: true })
+
+      const result = await sendTestWebhookNotification()
+      return sendOk(reply, result)
     } catch (error) {
       return sendError(reply, 400, 'webhook_test_failed', error instanceof Error ? error.message : 'Webhook test failed')
     }

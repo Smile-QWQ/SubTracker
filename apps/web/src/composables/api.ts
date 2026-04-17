@@ -253,14 +253,14 @@ export const api = {
   },
 
   async testPushplusNotification() {
-    return unwrap<{ success: boolean }>((await client.post('/notifications/test/pushplus')) as {
-      data: Envelope<{ success: boolean }>
+    return unwrap<{ accepted: boolean; code?: number; message?: string; shortCode?: string }>((await client.post('/notifications/test/pushplus')) as {
+      data: Envelope<{ accepted: boolean; code?: number; message?: string; shortCode?: string }>
     })
   },
 
   async testPushplusNotificationWithPayload(payload: Settings['pushplusConfig']) {
-    return unwrap<{ success: boolean }>((await client.post('/notifications/test/pushplus', payload)) as {
-      data: Envelope<{ success: boolean }>
+    return unwrap<{ accepted: boolean; code?: number; message?: string; shortCode?: string }>((await client.post('/notifications/test/pushplus', payload)) as {
+      data: Envelope<{ accepted: boolean; code?: number; message?: string; shortCode?: string }>
     })
   },
 
@@ -270,21 +270,21 @@ export const api = {
     })
   },
 
-  async updateNotificationWebhook(payload: { url: string; secret: string; enabled: boolean }) {
+  async updateNotificationWebhook(payload: NotificationWebhookSettings) {
     return unwrap<NotificationWebhookSettings>((await client.put('/notifications/webhook', payload)) as {
       data: Envelope<NotificationWebhookSettings>
     })
   },
 
   async testWebhookNotification() {
-    return unwrap<{ success: boolean }>((await client.post('/notifications/test/webhook')) as {
-      data: Envelope<{ success: boolean }>
+    return unwrap<{ success: boolean; statusCode: number; responseBody: string }>((await client.post('/notifications/test/webhook')) as {
+      data: Envelope<{ success: boolean; statusCode: number; responseBody: string }>
     })
   },
 
-  async testWebhookNotificationWithPayload(payload: { url: string; secret: string; enabled: boolean }) {
-    return unwrap<{ success: boolean }>((await client.post('/notifications/test/webhook', payload)) as {
-      data: Envelope<{ success: boolean }>
+  async testWebhookNotificationWithPayload(payload: NotificationWebhookSettings) {
+    return unwrap<{ success: boolean; statusCode: number; responseBody: string }>((await client.post('/notifications/test/webhook', payload)) as {
+      data: Envelope<{ success: boolean; statusCode: number; responseBody: string }>
     })
   },
 

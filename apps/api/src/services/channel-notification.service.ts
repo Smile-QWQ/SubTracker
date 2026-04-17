@@ -11,6 +11,19 @@ type NotificationDispatchParams = {
   payload: Record<string, unknown>
 }
 
+type PushplusApiResponse = {
+  code?: number
+  msg?: string
+  data?: unknown
+}
+
+export type PushplusSendResult = {
+  accepted: boolean
+  code: number
+  message: string
+  shortCode?: string
+}
+
 function buildNotificationKey(channel: 'email' | 'pushplus', params: NotificationDispatchParams) {
   return `notification:${channel}:${params.eventType}:${params.resourceKey}:${params.periodKey}`
 }
@@ -23,29 +36,35 @@ async function markNotificationSent(channel: 'email' | 'pushplus', params: Notif
   await setSetting(buildNotificationKey(channel, params), true)
 }
 
-function buildNotificationTitle(params: NotificationDispatchParams) {
-  switch (params.eventType) {
-    case 'subscription.reminder_due':
-      return `订阅即将续订：${String(params.payload.name ?? '')}`
-    case 'subscription.overdue':
-      return `订阅已过期：${String(params.payload.name ?? '')}`
-    case 'subscription.renewed':
-      return `订阅已续订：${String(params.payload.subscriptionId ?? params.payload.name ?? '')}`
-    case 'exchange-rate.stale':
-      return '汇率快照已过期'
-    default:
-      return 'SubTracker 通知'
+function getPhaseLabel(params: NotificationDispatchParams) {
+  const phase = String(params.payload.phase ?? '')
+  const daysUntilRenewal = Number(params.payload.daysUntilRenewal ?? 0)
+  const daysOverdue = Number(params.payload.daysOverdue ?? 0)
+
+  if (params.eventType === 'subscription.reminder_due') {
+    return phase === 'due_today' ? '今天到期' : `还有 ${daysUntilRenewal} 天到期`
   }
+
+  return `已过期第 ${daysOverdue} 天`
+}
+
+function buildNotificationTitle(params: NotificationDispatchParams) {
+  const name = String(params.payload.name ?? '未命名订阅')
+  return `${getPhaseLabel(params)}：${name}`
 }
 
 function buildNotificationBody(params: NotificationDispatchParams) {
-  return [
-    `事件：${params.eventType}`,
-    `资源：${params.resourceKey}`,
-    `周期：${params.periodKey}`,
-    '',
-    JSON.stringify(params.payload, null, 2)
-  ].join('\n')
+  const lines = [
+    `提醒类型：${getPhaseLabel(params)}`,
+    `订阅名称：${String(params.payload.name ?? '')}`,
+    `下次续订：${String(params.payload.nextRenewalDate ?? '')}`,
+    `金额：${String(params.payload.amount ?? '')} ${String(params.payload.currency ?? '')}`.trim(),
+    `标签：${Array.isArray(params.payload.tagNames) ? params.payload.tagNames.join('、') : ''}`,
+    `网址：${String(params.payload.websiteUrl ?? '')}`,
+    `备注：${String(params.payload.notes ?? '')}`
+  ]
+
+  return lines.filter((line) => !line.endsWith('：')).join('\n')
 }
 
 async function sendEmailWithConfig(params: NotificationDispatchParams, config: EmailConfigInput) {
@@ -84,7 +103,29 @@ async function sendEmailNotification(params: NotificationDispatchParams) {
   return true
 }
 
-async function sendPushplusWithConfig(params: NotificationDispatchParams, config: PushPlusConfigInput) {
+function extractPushplusShortCode(data: unknown): string | undefined {
+  if (typeof data === 'string' && data.trim()) return data.trim()
+
+  if (data && typeof data === 'object') {
+    const record = data as Record<string, unknown>
+    if (typeof record.shortCode === 'string' && record.shortCode.trim()) return record.shortCode.trim()
+    if (typeof record.code === 'string' && record.code.trim()) return record.code.trim()
+  }
+
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      const shortCode = extractPushplusShortCode(item)
+      if (shortCode) return shortCode
+    }
+  }
+
+  return undefined
+}
+
+async function sendPushplusWithConfig(
+  params: NotificationDispatchParams,
+  config: PushPlusConfigInput
+): Promise<PushplusSendResult> {
   const { token, topic } = config
   if (!token) {
     throw new Error('PushPlus 通知未启用或配置不完整')
@@ -104,8 +145,27 @@ async function sendPushplusWithConfig(params: NotificationDispatchParams, config
     })
   })
 
+  const rawText = await response.text()
   if (!response.ok) {
-    throw new Error(`PushPlus request failed with status ${response.status}`)
+    throw new Error(`PushPlus 请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
+  }
+
+  let parsed: PushplusApiResponse | null = null
+  try {
+    parsed = rawText ? (JSON.parse(rawText) as PushplusApiResponse) : null
+  } catch {
+    throw new Error(`PushPlus 返回了无法解析的响应：${rawText || 'empty response'}`)
+  }
+
+  if (!parsed || parsed.code !== 200) {
+    throw new Error(`PushPlus 请求被拒绝：${parsed?.msg || rawText || 'unknown error'}`)
+  }
+
+  return {
+    accepted: true,
+    code: parsed.code,
+    message: parsed.msg || '请求已提交',
+    shortCode: extractPushplusShortCode(parsed.data)
   }
 }
 
@@ -126,15 +186,27 @@ export async function dispatchNotificationEvent(params: NotificationDispatchPara
   await Promise.allSettled([sendEmailNotification(params), sendPushplusNotification(params)])
 }
 
+function buildTestReminderPayload() {
+  return {
+    name: '测试订阅',
+    nextRenewalDate: new Date().toISOString(),
+    amount: 19.9,
+    currency: 'CNY',
+    tagNames: ['测试标签'],
+    websiteUrl: 'https://example.com',
+    notes: '这是一条测试通知',
+    phase: 'upcoming',
+    daysUntilRenewal: 3,
+    daysOverdue: 0
+  }
+}
+
 export async function sendTestEmailNotification() {
   const success = await sendEmailNotification({
     eventType: 'subscription.reminder_due',
     resourceKey: 'test:email',
-    periodKey: new Date().toISOString().slice(0, 10),
-    payload: {
-      name: '测试订阅',
-      nextRenewalDate: new Date().toISOString()
-    }
+    periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
+    payload: buildTestReminderPayload()
   })
 
   if (!success) {
@@ -147,11 +219,8 @@ export async function sendTestEmailNotificationWithConfig(config: EmailConfigInp
     {
       eventType: 'subscription.reminder_due',
       resourceKey: 'test:email',
-      periodKey: new Date().toISOString().slice(0, 10),
-      payload: {
-        name: '测试订阅',
-        nextRenewalDate: new Date().toISOString()
-      }
+      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
+      payload: buildTestReminderPayload()
     },
     config
   )
@@ -161,28 +230,27 @@ export async function sendTestPushplusNotification() {
   const success = await sendPushplusNotification({
     eventType: 'subscription.reminder_due',
     resourceKey: 'test:pushplus',
-    periodKey: new Date().toISOString().slice(0, 10),
-    payload: {
-      name: '测试订阅',
-      nextRenewalDate: new Date().toISOString()
-    }
+    periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
+    payload: buildTestReminderPayload()
   })
 
   if (!success) {
     throw new Error('PushPlus 通知未启用或配置不完整')
   }
+
+  return {
+    accepted: true,
+    message: 'PushPlus 使用已保存配置提交了测试请求'
+  }
 }
 
 export async function sendTestPushplusNotificationWithConfig(config: PushPlusConfigInput) {
-  await sendPushplusWithConfig(
+  return sendPushplusWithConfig(
     {
       eventType: 'subscription.reminder_due',
       resourceKey: 'test:pushplus',
-      periodKey: new Date().toISOString().slice(0, 10),
-      payload: {
-        name: '测试订阅',
-        nextRenewalDate: new Date().toISOString()
-      }
+      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
+      payload: buildTestReminderPayload()
     },
     config
   )

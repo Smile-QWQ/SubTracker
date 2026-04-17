@@ -201,12 +201,47 @@
                   <n-switch v-model:value="webhookForm.enabled" />
                 </div>
                 <n-form label-placement="top">
-                  <n-form-item label="URL">
-                    <n-input v-model:value="webhookForm.url" placeholder="https://example.com/hook" />
-                  </n-form-item>
-                  <n-form-item label="Secret">
-                    <n-input v-model:value="webhookForm.secret" type="password" show-password-on="click" />
-                  </n-form-item>
+                  <n-grid :cols="formCols" :x-gap="8">
+                    <n-grid-item :span="formCols === 1 ? 1 : 2">
+                      <n-form-item label="URL">
+                        <n-input v-model:value="webhookForm.url" placeholder="https://example.com/hook" />
+                      </n-form-item>
+                    </n-grid-item>
+                    <n-grid-item>
+                      <n-form-item label="请求方法">
+                        <n-select v-model:value="webhookForm.requestMethod" :options="webhookMethodOptions" />
+                      </n-form-item>
+                    </n-grid-item>
+                    <n-grid-item>
+                      <n-form-item>
+                        <n-switch v-model:value="webhookForm.ignoreSsl" />
+                        <span class="switch-label">忽略 SSL 校验</span>
+                      </n-form-item>
+                    </n-grid-item>
+                  </n-grid>
+
+                  <n-collapse arrow-placement="right" class="webhook-advanced">
+                    <n-collapse-item title="高级配置与 Payload 模板" name="advanced">
+                      <n-form-item label="自定义请求头">
+                        <n-input
+                          v-model:value="webhookForm.headers"
+                          type="textarea"
+                          :autosize="{ minRows: 3, maxRows: 6 }"
+                          placeholder="支持 JSON 对象或每行一个 Header，例如：&#10;Content-Type: application/json&#10;X-App: SubTracker"
+                        />
+                      </n-form-item>
+                      <n-form-item label="Payload 模板">
+                        <n-input
+                          v-model:value="webhookForm.payloadTemplate"
+                          type="textarea"
+                          :autosize="{ minRows: 6, maxRows: 12 }"
+                        />
+                      </n-form-item>
+                      <n-alert type="info" :show-icon="false">
+                        可用变量：{{ webhookVariablesText }}
+                      </n-alert>
+                    </n-collapse-item>
+                  </n-collapse>
                   <n-space>
                     <n-button @click="saveWebhook">保存</n-button>
                     <n-button type="primary" @click="testWebhook">测试</n-button>
@@ -292,11 +327,13 @@ import dayjs from 'dayjs'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { useQueryClient } from '@tanstack/vue-query'
-import { DEFAULT_AI_SUBSCRIPTION_PROMPT } from '@subtracker/shared'
+import { DEFAULT_AI_SUBSCRIPTION_PROMPT, DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE } from '@subtracker/shared'
 import {
   NAlert,
   NButton,
   NCard,
+  NCollapse,
+  NCollapseItem,
   NDataTable,
   NDescriptions,
   NDescriptionsItem,
@@ -368,10 +405,12 @@ const credentialsForm = reactive<ChangeCredentialsPayload>({
 })
 
 const webhookForm = reactive<NotificationWebhookSettings>({
-  id: '',
   enabled: false,
   url: '',
-  secret: ''
+  requestMethod: 'POST',
+  headers: 'Content-Type: application/json',
+  payloadTemplate: DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
+  ignoreSsl: false
 })
 
 const snapshot = ref<ExchangeRateSnapshot | null>(null)
@@ -386,6 +425,14 @@ const gridCols = computed(() => (isMobile.value ? 1 : 2))
 const notificationGridCols = computed(() => (isMobile.value ? 1 : 3))
 const gridSpanFull = computed(() => (isMobile.value ? 1 : 2))
 const watchedCurrencies = ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'HKD']
+const webhookMethodOptions = [
+  { label: 'POST', value: 'POST' },
+  { label: 'PUT', value: 'PUT' },
+  { label: 'PATCH', value: 'PATCH' },
+  { label: 'DELETE', value: 'DELETE' }
+]
+const webhookVariablesText =
+  '{{phase}}、{{days_until}}、{{days_overdue}}、{{subscription_id}}、{{subscription_name}}、{{subscription_amount}}、{{subscription_currency}}、{{subscription_next_renewal_date}}、{{subscription_tags}}、{{subscription_url}}、{{subscription_notes}}'
 
 onMounted(async () => {
   await Promise.all([loadSettings(), loadSnapshot(), loadWebhook()])
@@ -506,8 +553,12 @@ async function testEmail() {
 
 async function testPushplus() {
   try {
-    await api.testPushplusNotificationWithPayload(settingsForm.pushplusConfig)
-    message.success('PushPlus 测试消息已发送')
+    const result = await api.testPushplusNotificationWithPayload(settingsForm.pushplusConfig)
+    message.success(
+      result.shortCode
+        ? `PushPlus 测试请求已提交，流水号：${result.shortCode}`
+        : result.message || 'PushPlus 测试请求已提交'
+    )
   } catch (error) {
     message.error(error instanceof Error ? error.message : 'PushPlus 测试失败')
   }
@@ -516,8 +567,11 @@ async function testPushplus() {
 async function saveWebhook() {
   const saved = await api.updateNotificationWebhook({
     url: webhookForm.url.trim(),
-    secret: webhookForm.secret.trim(),
-    enabled: webhookForm.enabled
+    enabled: webhookForm.enabled,
+    requestMethod: webhookForm.requestMethod,
+    headers: webhookForm.headers.trim() || 'Content-Type: application/json',
+    payloadTemplate: webhookForm.payloadTemplate.trim() || DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
+    ignoreSsl: webhookForm.ignoreSsl
   })
   Object.assign(webhookForm, saved)
   message.success('Webhook 已保存')
@@ -525,12 +579,16 @@ async function saveWebhook() {
 
 async function testWebhook() {
   try {
-    await api.testWebhookNotificationWithPayload({
+    const result = await api.testWebhookNotificationWithPayload({
       url: webhookForm.url,
-      secret: webhookForm.secret,
-      enabled: webhookForm.enabled
+      enabled: webhookForm.enabled,
+      requestMethod: webhookForm.requestMethod,
+      headers: webhookForm.headers.trim() || 'Content-Type: application/json',
+      payloadTemplate: webhookForm.payloadTemplate.trim() || DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
+      ignoreSsl: webhookForm.ignoreSsl
     })
-    message.success('Webhook 测试已发送')
+    const preview = result.responseBody?.trim()
+    message.success(preview ? `Webhook 测试成功，HTTP ${result.statusCode}：${preview}` : `Webhook 测试成功，HTTP ${result.statusCode}`)
   } catch (error) {
     message.error(error instanceof Error ? error.message : 'Webhook 测试失败')
   }
@@ -664,6 +722,10 @@ function formatTime(value: string) {
   margin-bottom: 12px;
   font-weight: 700;
   color: #0f172a;
+}
+
+.webhook-advanced {
+  margin-bottom: 12px;
 }
 
 :deep(.n-grid-item),

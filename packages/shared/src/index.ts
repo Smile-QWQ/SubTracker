@@ -25,12 +25,27 @@ export const DEFAULT_AI_SUBSCRIPTION_PROMPT = `你是订阅账单信息提取助
 
 export const SubscriptionStatusSchema = z.enum(['active', 'paused', 'cancelled', 'expired'])
 export const BillingIntervalUnitSchema = z.enum(['day', 'week', 'month', 'quarter', 'year'])
+export const WebhookRequestMethodSchema = z.enum(['POST', 'PUT', 'PATCH', 'DELETE'])
 export const WebhookEventTypeSchema = z.enum([
   'subscription.reminder_due',
-  'subscription.overdue',
-  'subscription.renewed',
-  'exchange-rate.stale'
+  'subscription.overdue'
 ])
+
+export const DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE = `{
+  "phase": "{{phase}}",
+  "daysUntilRenewal": {{days_until}},
+  "daysOverdue": {{days_overdue}},
+  "subscription": {
+    "id": "{{subscription_id}}",
+    "name": "{{subscription_name}}",
+    "amount": "{{subscription_amount}}",
+    "currency": "{{subscription_currency}}",
+    "nextRenewalDate": "{{subscription_next_renewal_date}}",
+    "tags": "{{subscription_tags}}",
+    "url": "{{subscription_url}}",
+    "notes": "{{subscription_notes}}"
+  }
+}`
 
 export const TagSchema = z.object({
   id: z.string().cuid().optional(),
@@ -99,6 +114,15 @@ export const EmailConfigSchema = z.object({
 export const PushPlusConfigSchema = z.object({
   token: z.string().max(200).default(''),
   topic: z.string().max(100).default('')
+})
+
+export const NotificationWebhookSettingsSchema = z.object({
+  enabled: z.boolean().default(false),
+  url: z.string().trim().max(500).default(''),
+  requestMethod: WebhookRequestMethodSchema.default('POST'),
+  headers: z.string().max(4000).default('Content-Type: application/json'),
+  payloadTemplate: z.string().max(20000).default(DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE),
+  ignoreSsl: z.boolean().default(false)
 })
 
 export const AiConfigSchema = z.object({
@@ -171,6 +195,7 @@ export const WallosImportCommitSchema = z.object({
 
 export type SubscriptionStatus = z.infer<typeof SubscriptionStatusSchema>
 export type BillingIntervalUnit = z.infer<typeof BillingIntervalUnitSchema>
+export type WebhookRequestMethod = z.infer<typeof WebhookRequestMethodSchema>
 export type WebhookEventType = z.infer<typeof WebhookEventTypeSchema>
 export type CreateSubscriptionInput = z.infer<typeof CreateSubscriptionSchema>
 export type UpdateSubscriptionInput = z.infer<typeof UpdateSubscriptionSchema>
@@ -182,6 +207,7 @@ export type LoginInput = z.infer<typeof LoginSchema>
 export type ChangeCredentialsInput = z.infer<typeof ChangeCredentialsSchema>
 export type EmailConfigInput = z.infer<typeof EmailConfigSchema>
 export type PushPlusConfigInput = z.infer<typeof PushPlusConfigSchema>
+export type NotificationWebhookSettingsInput = z.infer<typeof NotificationWebhookSettingsSchema>
 export type AiConfigInput = z.infer<typeof AiConfigSchema>
 export type LogoSearchInput = z.infer<typeof LogoSearchSchema>
 export type LogoUploadInput = z.infer<typeof LogoUploadSchema>

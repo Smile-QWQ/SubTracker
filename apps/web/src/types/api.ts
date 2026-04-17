@@ -188,10 +188,12 @@ export interface Settings {
 }
 
 export interface NotificationWebhookSettings {
-  id: string
-  url: string
-  secret: string
   enabled: boolean
+  url: string
+  requestMethod: 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  headers: string
+  payloadTemplate: string
+  ignoreSsl: boolean
 }
 
 export interface WebhookEndpoint {

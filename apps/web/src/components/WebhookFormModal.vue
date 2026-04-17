@@ -22,8 +22,6 @@
           <n-space vertical>
             <n-checkbox value="subscription.reminder_due">subscription.reminder_due</n-checkbox>
             <n-checkbox value="subscription.overdue">subscription.overdue</n-checkbox>
-            <n-checkbox value="subscription.renewed">subscription.renewed</n-checkbox>
-            <n-checkbox value="exchange-rate.stale">exchange-rate.stale</n-checkbox>
           </n-space>
         </n-checkbox-group>
       </n-form-item>

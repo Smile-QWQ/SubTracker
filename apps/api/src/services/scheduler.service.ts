@@ -1,14 +1,13 @@
 import cron from 'node-cron'
 import { config } from '../config'
 import { refreshExchangeRates } from './exchange-rate.service'
-import { notifyIfExchangeRateStale, scanRenewalNotifications } from './notification.service'
+import { scanRenewalNotifications } from './notification.service'
 import { autoRenewDueSubscriptions } from './subscription.service'
 
 export function startSchedulers() {
   cron.schedule(config.cronRefreshRates, async () => {
     try {
       await refreshExchangeRates()
-      await notifyIfExchangeRateStale()
       console.log('[cron] exchange rates refreshed')
     } catch (e) {
       console.error('[cron] exchange rate refresh failed', e)
