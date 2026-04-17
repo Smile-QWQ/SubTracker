@@ -250,10 +250,10 @@
             </n-form-item>
             <n-form-item label="自定义提示词">
               <n-input
-                v-model:value="settingsForm.aiConfig.promptTemplate"
+                v-model:value="aiPromptInput"
                 type="textarea"
-                :autosize="{ minRows: 4, maxRows: 8 }"
-                placeholder="留空则使用系统默认提示词"
+                :autosize="{ minRows: 6, maxRows: 12 }"
+                placeholder="未修改或为空时，会继续使用系统预设提示词"
               />
             </n-form-item>
             <n-space>
@@ -292,6 +292,7 @@ import dayjs from 'dayjs'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { useQueryClient } from '@tanstack/vue-query'
+import { DEFAULT_AI_SUBSCRIPTION_PROMPT } from '@subtracker/shared'
 import {
   NAlert,
   NButton,
@@ -374,6 +375,7 @@ const webhookForm = reactive<NotificationWebhookSettings>({
 })
 
 const snapshot = ref<ExchangeRateSnapshot | null>(null)
+const aiPromptInput = ref(DEFAULT_AI_SUBSCRIPTION_PROMPT)
 const sourceCurrency = ref('USD')
 const targetCurrency = ref('CNY')
 const converterAmount = ref(1)
@@ -392,6 +394,7 @@ onMounted(async () => {
 async function loadSettings() {
   const settings = await api.getSettings()
   Object.assign(settingsForm, settings)
+  aiPromptInput.value = settings.aiConfig.promptTemplate.trim() || DEFAULT_AI_SUBSCRIPTION_PROMPT
   credentialsForm.oldUsername = authStore.username
   credentialsForm.newUsername = authStore.username
   targetCurrency.value = settings.baseCurrency
@@ -445,17 +448,36 @@ async function savePushplusSettings() {
 }
 
 async function saveAiSettings() {
-  await api.updateSettings({ aiConfig: settingsForm.aiConfig })
+  const promptTemplate = normalizeAiPrompt(aiPromptInput.value)
+  settingsForm.aiConfig.promptTemplate = promptTemplate
+  aiPromptInput.value = promptTemplate || DEFAULT_AI_SUBSCRIPTION_PROMPT
+  await api.updateSettings({
+    aiConfig: {
+      ...settingsForm.aiConfig,
+      promptTemplate
+    }
+  })
   message.success('AI 识别设置已保存')
 }
 
 async function testAiSettings() {
   try {
-    const result = await api.testAiConfigurationWithPayload(settingsForm.aiConfig)
+    const promptTemplate = normalizeAiPrompt(aiPromptInput.value)
+    const result = await api.testAiConfigurationWithPayload({
+      ...settingsForm.aiConfig,
+      promptTemplate
+    })
     message.success(`AI 测试成功：${result.providerName} / ${result.model}`)
   } catch (error) {
     message.error(error instanceof Error ? error.message : 'AI 测试失败')
   }
+}
+
+function normalizeAiPrompt(value: string) {
+  const normalized = value.trim()
+  if (!normalized) return ''
+  if (normalized === DEFAULT_AI_SUBSCRIPTION_PROMPT.trim()) return ''
+  return value
 }
 
 async function refreshRates() {

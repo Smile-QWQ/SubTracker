@@ -1,32 +1,9 @@
-import { mkdir } from 'node:fs/promises'
+﻿import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { createWorker, type Worker } from 'tesseract.js'
-import { AiRecognizeSubscriptionSchema } from '@subtracker/shared'
+import { AiRecognizeSubscriptionSchema, DEFAULT_AI_SUBSCRIPTION_PROMPT } from '@subtracker/shared'
 import type { AiRecognitionResultDto } from '@subtracker/shared'
 import { getAppSettings } from './settings.service'
-
-const defaultPrompt = `你是订阅账单信息提取助手。请从输入的文本或截图中提取订阅信息，并且只返回 JSON。
-输出字段：
-- name
-- description
-- amount
-- currency
-- billingIntervalCount
-- billingIntervalUnit(day|week|month|quarter|year)
-- startDate(YYYY-MM-DD)
-- nextRenewalDate(YYYY-MM-DD)
-- notifyDaysBefore
-- websiteUrl
-- notes
-- confidence(0~1)
-- rawText
-
-规则：
-1. 不确定就留空，不要猜。
-2. 金额必须是数字。
-3. 货币必须是 3 位大写代码，例如 CNY、USD。
-4. 周期单位必须在 day/week/month/quarter/year 中。
-5. 只返回 JSON，不要返回 Markdown。`
 
 export type AiSettings = Awaited<ReturnType<typeof getAppSettings>>['aiConfig']
 
@@ -159,7 +136,7 @@ async function recognizeByTextOnly(params: {
     messages: [
       {
         role: 'system',
-        content: params.aiConfig.promptTemplate?.trim() || defaultPrompt
+        content: params.aiConfig.promptTemplate?.trim() || DEFAULT_AI_SUBSCRIPTION_PROMPT
       },
       {
         role: 'user',
@@ -199,7 +176,7 @@ async function recognizeByVision(params: {
     messages: [
       {
         role: 'system',
-        content: params.aiConfig.promptTemplate?.trim() || defaultPrompt
+        content: params.aiConfig.promptTemplate?.trim() || DEFAULT_AI_SUBSCRIPTION_PROMPT
       },
       {
         role: 'user',
@@ -283,3 +260,4 @@ export async function testAiConnection(overrideConfig?: AiSettings) {
     response: raw.trim()
   }
 }
+
