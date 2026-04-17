@@ -4,6 +4,7 @@ import type {
   AuthResponse,
   AuthUserResponse,
   CalendarEvent,
+  BudgetStatistics,
   ChangeCredentialsPayload,
   ExchangeRateSnapshot,
   LoginOptions,
@@ -213,6 +214,10 @@ export const api = {
 
   async getStatisticsOverview() {
     return unwrap<StatisticsOverview>((await client.get('/statistics/overview')) as { data: Envelope<StatisticsOverview> })
+  },
+
+  async getBudgetStatistics() {
+    return unwrap<BudgetStatistics>((await client.get('/statistics/budgets')) as { data: Envelope<BudgetStatistics> })
   },
 
   async getCalendarEvents(params?: { start?: string; end?: string }) {

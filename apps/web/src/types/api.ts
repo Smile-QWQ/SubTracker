@@ -71,6 +71,36 @@ export interface TagBudgetUsage {
   budget: number
   spent: number
   ratio: number
+  remaining: number
+  overBudget: number
+  status: 'normal' | 'warning' | 'over'
+}
+
+export interface BudgetSummaryEntry {
+  spent: number
+  budget: number | null
+  ratio: number | null
+  overBudget: number
+  status: 'normal' | 'warning' | 'over'
+}
+
+export interface BudgetSummary {
+  monthly: BudgetSummaryEntry
+  yearly: BudgetSummaryEntry
+}
+
+export interface TagBudgetSummary {
+  configuredCount: number
+  warningCount: number
+  overBudgetCount: number
+  topTags: TagBudgetUsage[]
+}
+
+export interface BudgetStatistics {
+  enabledTagBudgets: boolean
+  budgetSummary: BudgetSummary
+  tagBudgetSummary: TagBudgetSummary | null
+  tagBudgetUsage: TagBudgetUsage[]
 }
 
 export interface StatisticsOverview {
@@ -89,6 +119,8 @@ export interface StatisticsOverview {
     mode: 'projected'
     months: number
   }
+  budgetSummary: BudgetSummary
+  tagBudgetSummary?: TagBudgetSummary | null
   statusDistribution: Array<{ status: SubscriptionStatus; count: number }>
   renewalModeDistribution: Array<{ autoRenew: boolean; count: number; amount: number }>
   upcomingByDay: Array<{ date: string; count: number; amount: number }>

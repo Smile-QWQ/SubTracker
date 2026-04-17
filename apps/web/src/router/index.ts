@@ -34,6 +34,12 @@ export const routes = [
     meta: { label: '费用统计' }
   },
   {
+    path: '/budgets',
+    name: 'budgets',
+    component: () => import('@/pages/BudgetPage.vue'),
+    meta: { label: '预算统计' }
+  },
+  {
     path: '/settings',
     name: 'settings',
     component: () => import('@/pages/SettingsPage.vue'),

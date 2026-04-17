@@ -31,7 +31,7 @@
                 <n-button quaternary circle class="logo__toggle" @click="siderCollapsed = !siderCollapsed">
                   <template #icon>
                     <n-icon>
-                      <component :is="chevronBackOutline" />
+                      <chevron-back-outline />
                     </n-icon>
                   </template>
                 </n-button>
@@ -40,7 +40,7 @@
                 <n-button quaternary circle class="logo__toggle logo__toggle--collapsed" @click="siderCollapsed = !siderCollapsed">
                   <template #icon>
                     <n-icon>
-                      <component :is="chevronForwardOutline" />
+                      <chevron-forward-outline />
                     </n-icon>
                   </template>
                 </n-button>
@@ -89,6 +89,7 @@
 import { computed, h, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useWindowSize } from '@vueuse/core'
+import { useQuery } from '@tanstack/vue-query'
 import {
   NButton,
   NConfigProvider,
@@ -119,6 +120,7 @@ import {
   SparklesOutline,
   WalletOutline
 } from '@vicons/ionicons5'
+import { api } from '@/composables/api'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -127,20 +129,31 @@ const authStore = useAuthStore()
 const mobileMenuVisible = ref(false)
 const siderCollapsed = ref(false)
 const { width } = useWindowSize()
-const chevronBackOutline = ChevronBackOutline
-const chevronForwardOutline = ChevronForwardOutline
+
+const { data: settings } = useQuery({
+  queryKey: ['app-menu-settings'],
+  queryFn: api.getSettings
+})
 
 function renderMenuIcon(icon: typeof GridOutline) {
   return () => h(NIcon, null, { default: () => h(icon) })
 }
 
-const menuOptions: MenuOption[] = [
-  { label: '仪表盘', key: '/dashboard', icon: renderMenuIcon(GridOutline) },
-  { label: '订阅管理', key: '/subscriptions', icon: renderMenuIcon(LayersOutline) },
-  { label: '订阅日历', key: '/calendar', icon: renderMenuIcon(CalendarOutline) },
-  { label: '费用统计', key: '/statistics', icon: renderMenuIcon(BarChartOutline) },
-  { label: '系统设置', key: '/settings', icon: renderMenuIcon(SettingsOutline) }
-]
+const menuOptions = computed<MenuOption[]>(() => {
+  const options: MenuOption[] = [
+    { label: '仪表盘', key: '/dashboard', icon: renderMenuIcon(GridOutline) },
+    { label: '订阅管理', key: '/subscriptions', icon: renderMenuIcon(LayersOutline) },
+    { label: '订阅日历', key: '/calendar', icon: renderMenuIcon(CalendarOutline) },
+    { label: '费用统计', key: '/statistics', icon: renderMenuIcon(BarChartOutline) }
+  ]
+
+  if (settings.value?.enableTagBudgets) {
+    options.push({ label: '预算统计', key: '/budgets', icon: renderMenuIcon(WalletOutline) })
+  }
+
+  options.push({ label: '系统设置', key: '/settings', icon: renderMenuIcon(SettingsOutline) })
+  return options
+})
 
 const activeKey = computed(() => route.path)
 const isLoginPage = computed(() => route.path === '/login')
@@ -245,7 +258,12 @@ async function logout() {
   display: flex;
   align-items: center;
   gap: 8px;
+  font-size: 18px;
   color: #0f172a;
+}
+
+.header__right {
+  flex-shrink: 0;
 }
 
 .card-muted {
@@ -253,29 +271,13 @@ async function logout() {
   font-size: 13px;
 }
 
-@media (max-width: 960px) {
-  .header {
-    padding: 10px 12px;
-  }
-
-  .header__right {
-    gap: 6px;
-  }
-
-  .header :deep(.n-tag) {
-    max-width: 120px;
-  }
-}
-
 @media (max-width: 640px) {
   .header {
-    flex-wrap: wrap;
-    align-items: flex-start;
+    padding: 0 12px;
   }
 
-  .header__right {
-    width: 100%;
-    justify-content: space-between;
+  .header__title {
+    font-size: 16px;
   }
 }
 </style>

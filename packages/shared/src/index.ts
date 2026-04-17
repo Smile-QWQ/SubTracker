@@ -225,10 +225,67 @@ export interface DashboardOverview {
     mode: 'projected'
     months: number
   }
+  budgetSummary: {
+    monthly: {
+      spent: number
+      budget: number | null
+      ratio: number | null
+      overBudget: number
+      status: 'normal' | 'warning' | 'over'
+    }
+    yearly: {
+      spent: number
+      budget: number | null
+      ratio: number | null
+      overBudget: number
+      status: 'normal' | 'warning' | 'over'
+    }
+  }
+  tagBudgetSummary?: {
+    configuredCount: number
+    warningCount: number
+    overBudgetCount: number
+    topTags: Array<{
+      tagId: string
+      name: string
+      budget: number
+      spent: number
+      ratio: number
+      remaining: number
+      overBudget: number
+      status: 'normal' | 'warning' | 'over'
+    }>
+  } | null
   statusDistribution: Array<{ status: SubscriptionStatus; count: number }>
   renewalModeDistribution: Array<{ autoRenew: boolean; count: number; amount: number }>
   upcomingByDay: Array<{ date: string; count: number; amount: number }>
-  tagBudgetUsage?: Array<{ tagId: string; name: string; budget: number; spent: number; ratio: number }>
+  tagBudgetUsage?: Array<{
+    tagId: string
+    name: string
+    budget: number
+    spent: number
+    ratio: number
+    remaining: number
+    overBudget: number
+    status: 'normal' | 'warning' | 'over'
+  }>
+  currencyDistribution: Array<{ currency: string; amount: number }>
+  upcomingRenewals: Array<{
+    id: string
+    name: string
+    nextRenewalDate: string
+    amount: number
+    currency: string
+    convertedAmount: number
+    status: SubscriptionStatus
+  }>
+}
+
+export interface BudgetStatisticsDto {
+  enabledTagBudgets: boolean
+  budgetSummary: DashboardOverview['budgetSummary']
+  tagBudgetSummary: DashboardOverview['tagBudgetSummary']
+  tagBudgetUsage: NonNullable<DashboardOverview['tagBudgetUsage']>
 }
 
 export interface CalendarEventDto {

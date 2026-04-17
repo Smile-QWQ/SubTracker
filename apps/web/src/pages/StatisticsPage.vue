@@ -39,7 +39,7 @@
 
     <n-grid :cols="gridCols" :x-gap="12" :y-gap="12" style="margin-top: 12px">
       <n-grid-item>
-        <n-card title="币种分布">
+        <n-card title="订阅币种分布">
           <chart-view v-if="currencyOption" :option="currencyOption" />
           <n-empty v-else description="暂无数据" />
         </n-card>
@@ -51,10 +51,6 @@
         </n-card>
       </n-grid-item>
     </n-grid>
-
-    <n-card title="即将续订金额（30天）" style="margin-top: 12px">
-      <n-data-table :columns="upcomingColumns" :data="overview?.upcomingRenewals ?? []" :pagination="false" />
-    </n-card>
   </div>
 </template>
 
@@ -63,7 +59,7 @@ import dayjs from 'dayjs'
 import { computed } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { useWindowSize } from '@vueuse/core'
-import { NCard, NDataTable, NEmpty, NGrid, NGridItem } from 'naive-ui'
+import { NCard, NEmpty, NGrid, NGridItem } from 'naive-ui'
 import { BarChartOutline } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
 import ChartView from '@/components/ChartView.vue'
@@ -251,25 +247,6 @@ const upcoming30Option = computed(() => {
     ]
   }
 })
-
-const upcomingColumns = [
-  { title: '订阅', key: 'name' },
-  {
-    title: '日期',
-    key: 'nextRenewalDate',
-    render: (row: StatisticsOverview['upcomingRenewals'][number]) => dayjs(row.nextRenewalDate).format('YYYY-MM-DD')
-  },
-  {
-    title: '原始金额',
-    key: 'amount',
-    render: (row: StatisticsOverview['upcomingRenewals'][number]) => `${row.currency} ${Number(row.amount).toFixed(2)}`
-  },
-  {
-    title: '折算金额',
-    key: 'convertedAmount',
-    render: (row: StatisticsOverview['upcomingRenewals'][number]) => `${baseCurrency.value} ${Number(row.convertedAmount).toFixed(2)}`
-  }
-]
 
 function formatMoney(amount: number, currency: string) {
   return `${currency} ${amount.toFixed(2)}`

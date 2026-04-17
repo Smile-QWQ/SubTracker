@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div>
     <page-header
       title="系统设置"
@@ -49,19 +49,6 @@
               <n-switch v-model:value="settingsForm.enableTagBudgets" />
               <span class="switch-label">启用标签月预算</span>
             </n-form-item>
-
-            <div v-if="settingsForm.enableTagBudgets" class="tag-budget-grid">
-              <div v-for="tag in tags" :key="tag.id" class="tag-budget-item">
-                <div class="tag-budget-item__name">{{ tag.name }}</div>
-                <n-input-number
-                  v-model:value="settingsForm.tagBudgets[tag.id]"
-                  :min="0"
-                  :precision="2"
-                  placeholder="未设置"
-                  style="width: 100%"
-                />
-              </div>
-            </div>
 
             <n-space style="margin-top: 12px">
               <n-button type="primary" @click="saveBasicSettings">
@@ -304,6 +291,7 @@
 import dayjs from 'dayjs'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useWindowSize } from '@vueuse/core'
+import { useQueryClient } from '@tanstack/vue-query'
 import {
   NAlert,
   NButton,
@@ -329,10 +317,11 @@ import { api } from '@/composables/api'
 import PageHeader from '@/components/PageHeader.vue'
 import { useAuthStore } from '@/stores/auth'
 import { buildCurrencyOptions } from '@/utils/currency'
-import type { ChangeCredentialsPayload, ExchangeRateSnapshot, NotificationWebhookSettings, Settings, Tag } from '@/types/api'
+import type { ChangeCredentialsPayload, ExchangeRateSnapshot, NotificationWebhookSettings, Settings } from '@/types/api'
 
 const message = useMessage()
 const authStore = useAuthStore()
+const queryClient = useQueryClient()
 const { width } = useWindowSize()
 const settingsOutline = SettingsOutline
 
@@ -385,7 +374,6 @@ const webhookForm = reactive<NotificationWebhookSettings>({
 })
 
 const snapshot = ref<ExchangeRateSnapshot | null>(null)
-const tags = ref<Tag[]>([])
 const sourceCurrency = ref('USD')
 const targetCurrency = ref('CNY')
 const converterAmount = ref(1)
@@ -398,7 +386,7 @@ const gridSpanFull = computed(() => (isMobile.value ? 1 : 2))
 const watchedCurrencies = ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'HKD']
 
 onMounted(async () => {
-  await Promise.all([loadSettings(), loadSnapshot(), loadCategories(), loadWebhook()])
+  await Promise.all([loadSettings(), loadSnapshot(), loadWebhook()])
 })
 
 async function loadSettings() {
@@ -411,10 +399,6 @@ async function loadSettings() {
 
 async function loadSnapshot() {
   snapshot.value = await api.getExchangeRateSnapshot()
-}
-
-async function loadCategories() {
-  tags.value = await api.getTags()
 }
 
 async function loadWebhook() {
@@ -434,6 +418,13 @@ async function saveBasicSettings() {
   })
   message.success('基础设置已保存')
   targetCurrency.value = settingsForm.baseCurrency.toUpperCase()
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['settings'] }),
+    queryClient.invalidateQueries({ queryKey: ['settings-budget-page'] }),
+    queryClient.invalidateQueries({ queryKey: ['app-menu-settings'] }),
+    queryClient.invalidateQueries({ queryKey: ['statistics-overview'] }),
+    queryClient.invalidateQueries({ queryKey: ['statistics-budgets'] })
+  ])
   await loadSnapshot()
 }
 
