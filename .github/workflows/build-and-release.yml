@@ -49,12 +49,32 @@ jobs:
           cd apps/web/dist
           zip -r ../../../subtracker-web-dist.zip .
 
+      - name: Archive deployment bundle
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        run: |
+          mkdir -p release-assets/subtracker-deploy/docker
+          cp docker-compose.yml release-assets/subtracker-deploy/
+          cp docker-compose.full.yml release-assets/subtracker-deploy/
+          cp DEPLOYMENT.md release-assets/subtracker-deploy/
+          cp README.md release-assets/subtracker-deploy/
+          cp apps/api/.env.example release-assets/subtracker-deploy/api.env.example
+          cp docker/nginx.full.conf release-assets/subtracker-deploy/docker/nginx.full.conf
+          cd release-assets
+          zip -r ../subtracker-deploy-bundle.zip subtracker-deploy
+
       - name: Upload web artifact
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: subtracker-web-dist
           path: subtracker-web-dist.zip
+
+      - name: Upload deployment artifact
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: subtracker-deploy-bundle
+          path: subtracker-deploy-bundle.zip
 
   release:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
@@ -90,6 +110,18 @@ jobs:
         run: |
           cd apps/web/dist
           zip -r ../../../subtracker-web-dist.zip .
+
+      - name: Archive deployment bundle
+        run: |
+          mkdir -p release-assets/subtracker-deploy/docker
+          cp docker-compose.yml release-assets/subtracker-deploy/
+          cp docker-compose.full.yml release-assets/subtracker-deploy/
+          cp DEPLOYMENT.md release-assets/subtracker-deploy/
+          cp README.md release-assets/subtracker-deploy/
+          cp apps/api/.env.example release-assets/subtracker-deploy/api.env.example
+          cp docker/nginx.full.conf release-assets/subtracker-deploy/docker/nginx.full.conf
+          cd release-assets
+          zip -r ../subtracker-deploy-bundle.zip subtracker-deploy
 
       - name: Resolve release tag
         id: release_tag
@@ -136,5 +168,7 @@ jobs:
         with:
           tag_name: ${{ steps.release_tag.outputs.value }}
           name: ${{ steps.release_tag.outputs.value }}
-          files: subtracker-web-dist.zip
+          files: |
+            subtracker-web-dist.zip
+            subtracker-deploy-bundle.zip
           generate_release_notes: true
