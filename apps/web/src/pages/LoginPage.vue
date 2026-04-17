@@ -9,18 +9,28 @@
         </div>
         <div>
           <h1 class="login-title">登录 SubTracker</h1>
-          <p class="login-subtitle">默认账号：admin / admin</p>
+          <p class="login-subtitle">请输入您的用户名和密码</p>
         </div>
       </div>
 
-      <n-form :model="form" label-placement="top">
+      <n-form :model="form" label-placement="top" @submit.prevent="submit">
         <n-form-item label="用户名">
-          <n-input v-model:value="form.username" placeholder="请输入用户名" />
+          <n-input
+            v-model:value="form.username"
+            placeholder="请输入用户名"
+            @keydown.enter.prevent="submit"
+          />
         </n-form-item>
         <n-form-item label="密码">
-          <n-input v-model:value="form.password" type="password" show-password-on="click" placeholder="请输入密码" />
+          <n-input
+            v-model:value="form.password"
+            type="password"
+            show-password-on="click"
+            placeholder="请输入密码"
+            @keydown.enter.prevent="submit"
+          />
         </n-form-item>
-        <n-button type="primary" block @click="submit">登录</n-button>
+        <n-button type="primary" block attr-type="submit" @click="submit">登录</n-button>
       </n-form>
     </n-card>
   </div>
@@ -39,8 +49,8 @@ const message = useMessage()
 const authStore = useAuthStore()
 
 const form = reactive({
-  username: 'admin',
-  password: 'admin'
+  username: '',
+  password: ''
 })
 
 async function submit() {

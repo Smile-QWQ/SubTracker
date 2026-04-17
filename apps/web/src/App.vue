@@ -12,21 +12,22 @@
 
           <n-layout-sider
             v-if="!isMobile"
+            v-model:collapsed="siderCollapsed"
             bordered
             collapse-mode="width"
             :collapsed-width="64"
             :width="220"
             show-trigger
           >
-            <div class="logo">
+            <div class="logo" :class="{ 'logo--collapsed': siderCollapsed }">
               <div class="logo__icon">
                 <n-icon :size="18">
                   <wallet-outline />
                 </n-icon>
               </div>
-              <span>SubTracker</span>
+              <span v-show="!siderCollapsed" class="logo__text">SubTracker</span>
             </div>
-            <n-menu :options="menuOptions" :value="activeKey" @update:value="handleMenuClick" />
+            <n-menu :collapsed="siderCollapsed" :collapsed-width="64" :options="menuOptions" :value="activeKey" @update:value="handleMenuClick" />
           </n-layout-sider>
 
           <n-layout>
@@ -103,6 +104,7 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const mobileMenuVisible = ref(false)
+const siderCollapsed = ref(false)
 const { width } = useWindowSize()
 
 function renderMenuIcon(icon: typeof GridOutline) {
@@ -152,6 +154,12 @@ async function logout() {
   font-size: 18px;
   font-weight: 700;
   border-bottom: 1px solid #e5e7eb;
+  overflow: hidden;
+}
+
+.logo--collapsed {
+  justify-content: center;
+  padding: 0;
 }
 
 .logo__icon {
@@ -163,6 +171,12 @@ async function logout() {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+}
+
+.logo__text {
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .header {
