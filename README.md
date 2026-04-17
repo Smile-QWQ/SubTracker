@@ -1,17 +1,19 @@
 # SubTracker
 
-一个现代化的自托管订阅管理工具，用来统一管理多币种订阅、预算、续订提醒、Logo 资源和 Wallos 数据迁移。
+一个现代化的自托管订阅管理工具，用来统一管理多币种订阅、续订提醒、预算分析、Logo 资源，以及 Wallos 数据迁移。
 
 ## 功能亮点
 
-- **订阅管理**：新增、编辑、续订、暂停、停用、记录查看、拖拽排序
-- **标签系统**：多标签归类、筛选、预算统计
+- **订阅管理**：新增、编辑、续订、暂停、停用、记录查看、自定义排序
+- **标签系统**：多标签归类、筛选、预算分析
+- **预算能力**：总月预算、总年预算、标签月预算、独立的预算统计页
+- **统计分析**：未来 12 个月支付趋势、标签支出占比、状态分布、自动续订占比、未来 30 天续订分布
 - **多币种支持**：基准货币换算、汇率快照、货币转换器
-- **预算与统计**：月/年预算、标签占比、未来 12 个月支付趋势
 - **通知能力**：Webhook、SMTP 邮件、PushPlus
 - **Logo 能力**：上传、本地复用、网络搜索、Wallos ZIP 导入匹配
-- **AI 识别**：支持文本/图片识别后自动填充订阅信息
+- **AI 识别**：支持文本 / 图片识别后自动填充订阅信息
 - **Wallos 导入**：兼容 JSON、SQLite、ZIP
+- **登录体验**：支持“记住我”和可配置的登录保留时长
 
 ## 技术栈
 
@@ -32,7 +34,7 @@ npm install
 cp apps/api/.env.example apps/api/.env
 ```
 
-如果你在 Windows PowerShell 下，也可以用：
+如果你在 Windows PowerShell 下，也可以使用：
 
 ```powershell
 Copy-Item apps/api/.env.example apps/api/.env
@@ -84,9 +86,10 @@ npm test
 
 ## Release 产物
 
-仓库的 `Build and Release` workflow 会在 tag 发布时自动产出：
+仓库的 `Build and Release` workflow 会在打 tag 时自动发布：
 
 - `subtracker-web-dist.zip`：前端静态文件
+- `subtracker-deploy-bundle.zip`：部署所需配置与说明文档
 - `ghcr.io/smile-qwq/subtracker-api`：API Docker 镜像
 
 适合直接用于服务器部署。
