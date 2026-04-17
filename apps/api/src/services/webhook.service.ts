@@ -20,10 +20,7 @@ export type WebhookTestResult = {
   responseBody: string
 }
 
-const ALL_WEBHOOK_EVENTS: WebhookEventType[] = ['subscription.reminder_due', 'subscription.overdue']
-const PRIMARY_WEBHOOK_NAME = 'Default Webhook'
 const PRIMARY_WEBHOOK_SETTINGS_KEY = 'notificationWebhook'
-const PRIMARY_WEBHOOK_PLACEHOLDER_SECRET = '__subtracker_primary_webhook__'
 
 function defaultWebhookSettings(): NotificationWebhookSettingsInput {
   return {
@@ -37,15 +34,13 @@ function defaultWebhookSettings(): NotificationWebhookSettingsInput {
 }
 
 function normalizeWebhookSettings(input: Partial<NotificationWebhookSettingsInput>): NotificationWebhookSettingsInput {
-  const parsed = NotificationWebhookSettingsSchema.parse({
+  return NotificationWebhookSettingsSchema.parse({
     ...defaultWebhookSettings(),
     ...input,
     url: input.url?.trim() ?? '',
     headers: input.headers?.trim() || 'Content-Type: application/json',
     payloadTemplate: input.payloadTemplate?.trim() || DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE
   })
-
-  return parsed
 }
 
 function parseHeaders(headersText: string) {
@@ -109,10 +104,7 @@ function validateWebhookUrl(rawUrl: string) {
   return parsed
 }
 
-function buildTemplateValues(params: {
-  eventType: WebhookEventType | 'test'
-  payload: DeliveryPayload
-}) {
+function buildTemplateValues(params: { eventType: WebhookEventType | 'test'; payload: DeliveryPayload }) {
   const payload = params.payload
   return {
     phase: String(payload.phase ?? (params.eventType === 'subscription.overdue' ? 'overdue' : 'upcoming')),
@@ -131,9 +123,7 @@ function buildTemplateValues(params: {
 
 function applyPayloadTemplate(template: string, params: { eventType: WebhookEventType | 'test'; payload: DeliveryPayload }) {
   const values = buildTemplateValues(params)
-  return Object.entries(values).reduce((result, [key, value]) => {
-    return result.replaceAll(`{{${key}}}`, value)
-  }, template)
+  return Object.entries(values).reduce((result, [key, value]) => result.replaceAll(`{{${key}}}`, value), template)
 }
 
 async function sendWebhookRequest(
@@ -175,54 +165,13 @@ async function sendWebhookRequest(
   })
 }
 
-async function ensurePrimaryWebhookDeliveryEndpoint(config: NotificationWebhookSettingsInput) {
-  const current = await prisma.webhookEndpoint.findFirst({
-    where: { name: PRIMARY_WEBHOOK_NAME },
-    orderBy: { createdAt: 'asc' }
-  })
-
-  const data = {
-    name: PRIMARY_WEBHOOK_NAME,
-    url: config.url,
-    secret: PRIMARY_WEBHOOK_PLACEHOLDER_SECRET,
-    enabled: config.enabled,
-    eventsJson: ALL_WEBHOOK_EVENTS as Prisma.InputJsonValue
-  }
-
-  if (current) {
-    return prisma.webhookEndpoint.update({
-      where: { id: current.id },
-      data
-    })
-  }
-
-  return prisma.webhookEndpoint.create({ data })
-}
-
-export async function listWebhookEndpoints() {
-  return prisma.webhookEndpoint.findMany({ orderBy: { createdAt: 'desc' } })
-}
-
 export async function getPrimaryWebhookEndpoint() {
   return getSetting<NotificationWebhookSettingsInput>(PRIMARY_WEBHOOK_SETTINGS_KEY, defaultWebhookSettings())
-}
-
-export async function listWebhookDeliveries(limit = 100) {
-  return prisma.webhookDelivery.findMany({
-    take: limit,
-    orderBy: { createdAt: 'desc' },
-    include: {
-      endpoint: {
-        select: { id: true, name: true, url: true }
-      }
-    }
-  })
 }
 
 export async function upsertPrimaryWebhookEndpoint(input: PrimaryWebhookInput) {
   const normalized = normalizeWebhookSettings(input)
   await setSetting(PRIMARY_WEBHOOK_SETTINGS_KEY, normalized)
-  await ensurePrimaryWebhookDeliveryEndpoint(normalized)
   return normalized
 }
 
@@ -279,11 +228,9 @@ export async function dispatchWebhookEvent(params: {
   const config = normalizeWebhookSettings(await getPrimaryWebhookEndpoint())
   if (!config.enabled || !config.url) return
 
-  const endpoint = await ensurePrimaryWebhookDeliveryEndpoint(config)
   const existing = await prisma.webhookDelivery.findUnique({
     where: {
-      endpointId_eventType_resourceKey_periodKey: {
-        endpointId: endpoint.id,
+      eventType_resourceKey_periodKey: {
         eventType: params.eventType,
         resourceKey: params.resourceKey,
         periodKey: params.periodKey
@@ -299,11 +246,12 @@ export async function dispatchWebhookEvent(params: {
     existing ??
     (await prisma.webhookDelivery.create({
       data: {
-        endpointId: endpoint.id,
         eventType: params.eventType,
         resourceKey: params.resourceKey,
         periodKey: params.periodKey,
         subscriptionId: params.subscriptionId,
+        targetUrl: config.url,
+        requestMethod: config.requestMethod,
         payloadJson: params.payload as Prisma.InputJsonValue,
         status: 'pending'
       }
@@ -322,7 +270,9 @@ export async function dispatchWebhookEvent(params: {
         responseCode: result.statusCode,
         responseBody: result.responseBody,
         attemptCount: { increment: 1 },
-        lastAttemptAt: new Date()
+        lastAttemptAt: new Date(),
+        targetUrl: config.url,
+        requestMethod: config.requestMethod
       }
     })
   } catch (error) {
@@ -333,7 +283,9 @@ export async function dispatchWebhookEvent(params: {
         responseCode: 0,
         responseBody: error instanceof Error ? error.message : 'Unknown error',
         attemptCount: { increment: 1 },
-        lastAttemptAt: new Date()
+        lastAttemptAt: new Date(),
+        targetUrl: config.url,
+        requestMethod: config.requestMethod
       }
     })
   }

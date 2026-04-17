@@ -9,7 +9,6 @@ import { subscriptionRoutes } from './routes/subscriptions'
 import { statisticsRoutes } from './routes/statistics'
 import { calendarRoutes } from './routes/calendar'
 import { exchangeRateRoutes } from './routes/exchange-rates'
-import { webhookRoutes } from './routes/webhooks'
 import { settingsRoutes } from './routes/settings'
 import { notificationRoutes } from './routes/notifications'
 import { aiRoutes } from './routes/ai'
@@ -83,7 +82,6 @@ export async function buildApp() {
       await statisticsRoutes(router)
       await calendarRoutes(router)
       await exchangeRateRoutes(router)
-      await webhookRoutes(router)
       await settingsRoutes(router)
       await notificationRoutes(router)
       await aiRoutes(router)

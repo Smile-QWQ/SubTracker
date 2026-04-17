@@ -196,42 +196,12 @@ export interface NotificationWebhookSettings {
   ignoreSsl: boolean
 }
 
-export interface WebhookEndpoint {
-  id: string
-  name: string
-  url: string
-  secret: string
-  enabled: boolean
-  eventsJson: string[]
-  createdAt: string
-  updatedAt: string
-}
-
 export interface ExchangeRateSnapshot {
   baseCurrency: string
   rates: Record<string, number>
   fetchedAt: string
   provider: string
   isStale: boolean
-}
-
-export interface WebhookDelivery {
-  id: string
-  endpointId: string
-  eventType: string
-  resourceKey: string
-  periodKey: string
-  status: 'pending' | 'success' | 'failed'
-  responseCode?: number
-  responseBody?: string
-  attemptCount: number
-  lastAttemptAt?: string
-  createdAt: string
-  endpoint?: {
-    id: string
-    name: string
-    url: string
-  }
 }
 
 export interface LogoSearchResult {

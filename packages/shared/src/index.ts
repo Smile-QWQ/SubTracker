@@ -91,16 +91,6 @@ export const RenewSubscriptionSchema = z.object({
   currency: z.string().length(3).optional()
 })
 
-export const CreateWebhookEndpointSchema = z.object({
-  name: z.string().min(1).max(100),
-  url: z.string().url(),
-  secret: z.string().min(3).max(200),
-  enabled: z.boolean().default(true),
-  events: z.array(WebhookEventTypeSchema).nonempty()
-})
-
-export const UpdateWebhookEndpointSchema = CreateWebhookEndpointSchema.partial()
-
 export const EmailConfigSchema = z.object({
   host: z.string().max(200).default(''),
   port: z.number().int().min(1).max(65535).default(587),
@@ -200,8 +190,6 @@ export type WebhookEventType = z.infer<typeof WebhookEventTypeSchema>
 export type CreateSubscriptionInput = z.infer<typeof CreateSubscriptionSchema>
 export type UpdateSubscriptionInput = z.infer<typeof UpdateSubscriptionSchema>
 export type RenewSubscriptionInput = z.infer<typeof RenewSubscriptionSchema>
-export type CreateWebhookEndpointInput = z.infer<typeof CreateWebhookEndpointSchema>
-export type UpdateWebhookEndpointInput = z.infer<typeof UpdateWebhookEndpointSchema>
 export type SettingsInput = z.infer<typeof SettingsSchema>
 export type LoginInput = z.infer<typeof LoginSchema>
 export type ChangeCredentialsInput = z.infer<typeof ChangeCredentialsSchema>

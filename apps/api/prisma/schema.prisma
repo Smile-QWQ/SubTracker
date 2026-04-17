@@ -103,27 +103,15 @@ model ExchangeRateSnapshot {
   updatedAt    DateTime @updatedAt
 }
 
-model WebhookEndpoint {
-  id         String            @id @default(cuid())
-  name       String
-  url        String
-  secret     String
-  enabled    Boolean           @default(true)
-  eventsJson Json
-  deliveries WebhookDelivery[]
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
-}
-
 model WebhookDelivery {
   id             String                @id @default(cuid())
-  endpointId     String
-  endpoint       WebhookEndpoint       @relation(fields: [endpointId], references: [id], onDelete: Cascade)
   subscriptionId String?
   subscription   Subscription?         @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   eventType      String
   resourceKey    String
   periodKey      String
+  targetUrl      String?
+  requestMethod  String?
   payloadJson    Json
   status         WebhookDeliveryStatus @default(pending)
   responseCode   Int?
@@ -132,7 +120,7 @@ model WebhookDelivery {
   lastAttemptAt  DateTime?
   createdAt      DateTime              @default(now())
 
-  @@unique([endpointId, eventType, resourceKey, periodKey])
+  @@unique([eventType, resourceKey, periodKey])
   @@index([status, createdAt])
 }
 

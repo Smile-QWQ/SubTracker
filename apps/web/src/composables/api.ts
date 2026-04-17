@@ -18,8 +18,7 @@ import type {
   SubscriptionDetail,
   Tag,
   WallosImportCommitResult,
-  WallosImportInspectResult,
-  WebhookEndpoint
+  WallosImportInspectResult
 } from '@/types/api'
 import { clearAuthSession, getStoredToken } from '@/utils/auth-storage'
 
@@ -286,18 +285,6 @@ export const api = {
     return unwrap<{ success: boolean; statusCode: number; responseBody: string }>((await client.post('/notifications/test/webhook', payload)) as {
       data: Envelope<{ success: boolean; statusCode: number; responseBody: string }>
     })
-  },
-
-  async getWebhookEndpoints() {
-    return unwrap<WebhookEndpoint[]>((await client.get('/webhooks')) as { data: Envelope<WebhookEndpoint[]> })
-  },
-
-  async createWebhookEndpoint(payload: Record<string, unknown>) {
-    return unwrap<WebhookEndpoint>((await client.post('/webhooks', payload)) as { data: Envelope<WebhookEndpoint> })
-  },
-
-  async updateWebhookEndpoint(id: string, payload: Record<string, unknown>) {
-    return unwrap<WebhookEndpoint>((await client.patch(`/webhooks/${id}`, payload)) as { data: Envelope<WebhookEndpoint> })
   },
 
   async inspectWallosImport(payload: { filename: string; contentType: string; base64: string }) {
