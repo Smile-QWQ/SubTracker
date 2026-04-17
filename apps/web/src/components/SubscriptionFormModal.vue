@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <n-modal :show="show" preset="card" title="订阅信息" style="width: min(920px, calc(100vw - 24px))" @mask-click="close" @update:show="handleUpdateShow">
     <n-form :model="form" label-placement="top">
       <div class="name-logo-row">
@@ -184,6 +184,7 @@
         </n-space>
         <n-space wrap>
           <n-button @click="showAiModal = true">AI 识别</n-button>
+          <n-button @click="handleReset">重置</n-button>
           <n-button @click="close">取消</n-button>
           <n-button type="primary" @click="submit">保存</n-button>
         </n-space>
@@ -315,26 +316,7 @@ watch(
       resetForm()
       return
     }
-
-    form.name = model.name
-    form.tagIds = model.tags?.map((item) => item.id) ?? []
-    form.description = model.description
-    form.amount = model.amount
-    form.currency = model.currency
-    form.billingIntervalCount = model.billingIntervalCount
-    form.billingIntervalUnit = model.billingIntervalUnit
-    form.autoRenew = model.autoRenew ?? false
-    form.startDateTs = dayjs(model.startDate).valueOf()
-    form.nextRenewalDateTs = dayjs(model.nextRenewalDate).valueOf()
-    nextRenewalDirty.value = true
-    form.notifyDaysBefore = model.notifyDaysBefore
-    form.webhookEnabled = model.webhookEnabled
-    form.notes = model.notes
-    form.websiteUrl = model.websiteUrl ?? ''
-    form.logoUrl = model.logoUrl ?? ''
-    form.logoSource = model.logoSource ?? ''
-    logoCandidates.value = []
-    showLogoPanel.value = false
+    hydrateFromModel(model)
   },
   { immediate: true }
 )
@@ -393,6 +375,39 @@ function resetForm() {
   nextRenewalDirty.value = false
   logoCandidates.value = []
   showLogoPanel.value = false
+}
+
+function hydrateFromModel(model: Subscription) {
+  form.name = model.name
+  form.tagIds = model.tags?.map((item) => item.id) ?? []
+  form.description = model.description
+  form.amount = model.amount
+  form.currency = model.currency
+  form.billingIntervalCount = model.billingIntervalCount
+  form.billingIntervalUnit = model.billingIntervalUnit
+  form.autoRenew = model.autoRenew ?? false
+  form.startDateTs = dayjs(model.startDate).valueOf()
+  form.nextRenewalDateTs = dayjs(model.nextRenewalDate).valueOf()
+  nextRenewalDirty.value = true
+  form.notifyDaysBefore = model.notifyDaysBefore
+  form.webhookEnabled = model.webhookEnabled
+  form.notes = model.notes
+  form.websiteUrl = model.websiteUrl ?? ''
+  form.logoUrl = model.logoUrl ?? ''
+  form.logoSource = model.logoSource ?? ''
+  logoCandidates.value = []
+  showLogoPanel.value = false
+}
+
+function handleReset() {
+  if (props.model) {
+    hydrateFromModel(props.model)
+    message.success('已重置为当前订阅内容')
+    return
+  }
+
+  resetForm()
+  message.success('已重置表单')
 }
 
 function calculateNextRenewalTs(startDateTs: number, intervalCount: number, unit: Subscription['billingIntervalUnit']) {

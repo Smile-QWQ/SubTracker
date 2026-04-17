@@ -1,5 +1,12 @@
 <template>
-  <n-modal :show="show" preset="card" title="AI 识别订阅" style="width: 720px" @mask-click="emit('close')" @update:show="handleUpdateShow">
+  <n-modal
+    :show="show"
+    preset="card"
+    title="AI 识别订阅"
+    style="width: min(720px, calc(100vw - 24px))"
+    @mask-click="emit('close')"
+    @update:show="handleUpdateShow"
+  >
     <n-space vertical>
       <n-alert type="info" :show-icon="false">
         支持输入文本、上传图片或直接粘贴截图。若当前模型不支持图片识别，将自动回退到本地 OCR 提取文本后再交给模型清洗。识别结果只会回填表单，不会自动保存。
@@ -40,19 +47,24 @@
       </n-space>
 
       <n-card v-if="result" size="small" embedded title="识别结果">
-        <pre class="ai-result">{{ prettyResult }}</pre>
+        <n-data-table :columns="resultColumns" :data="resultRows" :pagination="false" size="small" />
+
+        <div v-if="result.rawText" class="ai-raw-text">
+          <div class="ai-raw-text__title">原始提取文本</div>
+          <pre class="ai-result">{{ result.rawText }}</pre>
+        </div>
       </n-card>
     </n-space>
   </n-modal>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { NAlert, NButton, NCard, NForm, NFormItem, NInput, NModal, NSpace, useMessage } from 'naive-ui'
+import { computed, h, ref } from 'vue'
+import { NAlert, NButton, NCard, NDataTable, NForm, NFormItem, NInput, NModal, NSpace, useMessage } from 'naive-ui'
 import { api } from '@/composables/api'
 import type { AiRecognitionResult } from '@/types/api'
 
-const props = defineProps<{
+defineProps<{
   show: boolean
 }>()
 
@@ -71,7 +83,70 @@ const imageMimeType = ref('image/png')
 const loading = ref(false)
 const result = ref<AiRecognitionResult | null>(null)
 
-const prettyResult = computed(() => JSON.stringify(result.value, null, 2))
+const fieldLabels: Record<string, string> = {
+  name: '名称',
+  description: '描述',
+  amount: '金额',
+  currency: '币种',
+  billingIntervalCount: '频率',
+  billingIntervalUnit: '周期单位',
+  startDate: '开始日期',
+  nextRenewalDate: '下次续订',
+  notifyDaysBefore: '提醒天数',
+  websiteUrl: '官网 / 平台地址',
+  notes: '备注'
+}
+
+const intervalLabelMap: Record<string, string> = {
+  day: '天',
+  week: '周',
+  month: '月',
+  quarter: '季度',
+  year: '年'
+}
+
+const resultRows = computed(() => {
+  if (!result.value) return []
+
+  const rows: Array<{ field: string; value: string }> = []
+  const push = (field: string, value: string | number | undefined | null) => {
+    if (value === undefined || value === null || value === '') return
+    rows.push({ field, value: String(value) })
+  }
+
+  push('name', result.value.name)
+  push('description', result.value.description)
+  push('amount', result.value.amount !== undefined ? Number(result.value.amount).toFixed(2) : undefined)
+  push('currency', result.value.currency)
+  push('billingIntervalCount', result.value.billingIntervalCount)
+  push(
+    'billingIntervalUnit',
+    result.value.billingIntervalUnit
+      ? intervalLabelMap[result.value.billingIntervalUnit] ?? result.value.billingIntervalUnit
+      : undefined
+  )
+  push('startDate', result.value.startDate)
+  push('nextRenewalDate', result.value.nextRenewalDate)
+  push('notifyDaysBefore', result.value.notifyDaysBefore !== undefined ? `${result.value.notifyDaysBefore} 天` : undefined)
+  push('websiteUrl', result.value.websiteUrl)
+  push('notes', result.value.notes)
+
+  return rows
+})
+
+const resultColumns = [
+  {
+    title: '字段',
+    key: 'field',
+    width: 150,
+    render: (row: { field: string }) => fieldLabels[row.field] ?? row.field
+  },
+  {
+    title: '识别结果',
+    key: 'value',
+    render: (row: { value: string }) => h('span', { class: 'ai-result-value' }, row.value)
+  }
+]
 
 function handleUpdateShow(value: boolean) {
   if (!value) emit('close')
@@ -166,10 +241,25 @@ function applyResult() {
   border: 1px solid #e5e7eb;
 }
 
+.ai-raw-text {
+  margin-top: 12px;
+}
+
+.ai-raw-text__title {
+  margin-bottom: 8px;
+  color: #64748b;
+  font-size: 12px;
+}
+
 .ai-result {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 12px;
+}
+
+.ai-result-value {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>
