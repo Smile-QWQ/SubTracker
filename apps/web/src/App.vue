@@ -5,7 +5,13 @@
       <template v-else>
         <n-layout has-sider class="app-layout">
           <n-drawer v-model:show="mobileMenuVisible" placement="left" :width="260">
-            <n-drawer-content title="SubTracker" closable body-content-style="padding: 8px 0;">
+            <n-drawer-content closable body-content-style="padding: 8px 0;">
+              <template #header>
+                <div class="logo__stack">
+                  <span class="logo__text">SubTracker</span>
+                  <span class="logo__version">{{ appVersion }}</span>
+                </div>
+              </template>
               <n-menu :options="menuOptions" :value="activeKey" @update:value="handleMobileMenuClick" />
             </n-drawer-content>
           </n-drawer>
@@ -26,7 +32,10 @@
                       <wallet-outline />
                     </n-icon>
                   </div>
-                  <span class="logo__text">SubTracker</span>
+                  <div class="logo__stack">
+                    <span class="logo__text">SubTracker</span>
+                    <span class="logo__version">{{ appVersion }}</span>
+                  </div>
                 </div>
                 <n-button quaternary circle class="logo__toggle" @click="siderCollapsed = !siderCollapsed">
                   <template #icon>
@@ -126,6 +135,7 @@ import { useAuthStore } from '@/stores/auth'
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const appVersion = __APP_VERSION__
 const mobileMenuVisible = ref(false)
 const siderCollapsed = ref(false)
 const { width } = useWindowSize()
@@ -200,6 +210,13 @@ async function logout() {
   min-width: 0;
 }
 
+.logo__stack {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.1;
+}
+
 .logo--collapsed {
   justify-content: center;
   padding: 0;
@@ -219,6 +236,14 @@ async function logout() {
 
 .logo__text {
   min-width: 0;
+  white-space: nowrap;
+}
+
+.logo__version {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
   white-space: nowrap;
 }
 

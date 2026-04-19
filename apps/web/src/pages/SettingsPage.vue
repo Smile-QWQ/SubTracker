@@ -18,7 +18,7 @@
                 </n-form-item>
               </n-grid-item>
               <n-grid-item>
-                <n-form-item label="默认提醒天数">
+                <n-form-item label="默认提前提醒天数">
                   <n-input-number v-model:value="settingsForm.defaultNotifyDays" :min="0" :max="365" style="width: 100%" />
                 </n-form-item>
               </n-grid-item>
@@ -28,6 +28,11 @@
               <n-grid-item>
                 <n-form-item label="记住登录天数">
                   <n-input-number v-model:value="settingsForm.rememberSessionDays" :min="1" :max="365" style="width: 100%" />
+                </n-form-item>
+              </n-grid-item>
+              <n-grid-item>
+                <n-form-item label="到期当天提醒">
+                  <n-switch v-model:value="settingsForm.notifyOnDueDay" />
                 </n-form-item>
               </n-grid-item>
             </n-grid>
@@ -45,10 +50,25 @@
               </n-grid-item>
             </n-grid>
 
-            <n-form-item>
-              <n-switch v-model:value="settingsForm.enableTagBudgets" />
-              <span class="switch-label">启用标签月预算</span>
-            </n-form-item>
+            <n-grid :cols="formCols" :x-gap="12">
+              <n-grid-item>
+                <n-form-item>
+                  <n-switch v-model:value="settingsForm.enableTagBudgets" />
+                  <span class="switch-label">启用标签月预算</span>
+                </n-form-item>
+              </n-grid-item>
+              <n-grid-item>
+                <n-form-item label="过期提醒">
+                  <n-checkbox-group v-model:value="settingsForm.overdueReminderDays">
+                    <n-space :wrap="true" size="small">
+                      <n-checkbox v-for="option in overdueReminderOptions" :key="option.value" :value="option.value">
+                        {{ option.label }}
+                      </n-checkbox>
+                    </n-space>
+                  </n-checkbox-group>
+                </n-form-item>
+              </n-grid-item>
+            </n-grid>
 
             <n-space style="margin-top: 12px">
               <n-button type="primary" @click="saveBasicSettings">
@@ -359,6 +379,8 @@ import {
   NAlert,
   NButton,
   NCard,
+  NCheckbox,
+  NCheckboxGroup,
   NCollapse,
   NCollapseItem,
   NDataTable,
@@ -426,9 +448,11 @@ const settingsForm = reactive<Settings>({
   baseCurrency: 'CNY',
   defaultNotifyDays: 3,
   rememberSessionDays: 7,
+  notifyOnDueDay: true,
   monthlyBudgetBase: null,
   yearlyBudgetBase: null,
   enableTagBudgets: false,
+  overdueReminderDays: [1, 2, 3],
   tagBudgets: {},
   emailNotificationsEnabled: false,
   pushplusNotificationsEnabled: false,
@@ -495,6 +519,11 @@ const aiProviderPresetOptions = [
   { label: '腾讯混元', value: 'tencent-hunyuan' },
   { label: '火山方舟', value: 'volcengine-ark' }
 ] satisfies Array<{ label: string; value: AiProviderPreset }>
+const overdueReminderOptions = [
+  { label: '过期第 1 天', value: 1 },
+  { label: '过期第 2 天', value: 2 },
+  { label: '过期第 3 天', value: 3 }
+] as const
 
 function getMissingRequiredFields(fields: Array<[string, unknown]>) {
   return fields
@@ -590,9 +619,11 @@ async function saveBasicSettings() {
     baseCurrency: settingsForm.baseCurrency.toUpperCase(),
     defaultNotifyDays: settingsForm.defaultNotifyDays,
     rememberSessionDays: settingsForm.rememberSessionDays,
+    notifyOnDueDay: settingsForm.notifyOnDueDay,
     monthlyBudgetBase: settingsForm.monthlyBudgetBase,
     yearlyBudgetBase: settingsForm.yearlyBudgetBase,
     enableTagBudgets: settingsForm.enableTagBudgets,
+    overdueReminderDays: [...settingsForm.overdueReminderDays].sort((a, b) => a - b) as Array<1 | 2 | 3>,
     tagBudgets: settingsForm.tagBudgets
   })
   message.success('基础设置已保存')

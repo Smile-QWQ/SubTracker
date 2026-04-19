@@ -126,3 +126,17 @@ docker compose up -d
 - `ghcr.io/smile-qwq/subtracker-web`：完整部署使用的前端 Docker 镜像
 
 适合直接用于服务器部署。
+
+## 许可证
+
+本项目采用 **GNU General Public License v3.0（GPLv3）** 许可证发布。
+
+## 致谢
+
+感谢以下项目和生态为 SubTracker 提供支持：
+
+- [Wallos](https://github.com/ellite/Wallos) —— 提供了导入兼容方向与迁移参考
+- [Vue 3](https://vuejs.org/) 与 [Vite](https://vitejs.dev/) —— 提供前端开发基础
+- [Naive UI](https://www.naiveui.com/) —— 提供界面组件支持
+- [Fastify](https://fastify.dev/) 与 [Prisma](https://www.prisma.io/) —— 提供后端与数据访问能力
+- [Pinia](https://pinia.vuejs.org/)、[TanStack Query](https://tanstack.com/query/latest) 与 [ECharts](https://echarts.apache.org/) —— 提供状态管理、数据请求与图表展示能力

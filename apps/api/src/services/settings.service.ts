@@ -20,9 +20,11 @@ export async function getAppSettings(): Promise<SettingsInput> {
   const baseCurrency = await getSetting('baseCurrency', config.baseCurrency)
   const defaultNotifyDays = await getSetting('defaultNotifyDays', config.defaultNotifyDays)
   const rememberSessionDays = await getSetting('rememberSessionDays', 7)
+  const notifyOnDueDay = await getSetting('notifyOnDueDay', true)
   const monthlyBudgetBase = await getSetting<number | null>('monthlyBudgetBase', null)
   const yearlyBudgetBase = await getSetting<number | null>('yearlyBudgetBase', null)
   const enableTagBudgets = await getSetting('enableTagBudgets', false)
+  const overdueReminderDays = await getSetting<Array<1 | 2 | 3>>('overdueReminderDays', [1, 2, 3])
   const tagBudgets = await getSetting<Record<string, number>>('tagBudgets', {})
   const emailNotificationsEnabled = await getSetting('emailNotificationsEnabled', false)
   const pushplusNotificationsEnabled = await getSetting('pushplusNotificationsEnabled', false)
@@ -45,9 +47,11 @@ export async function getAppSettings(): Promise<SettingsInput> {
     baseCurrency,
     defaultNotifyDays,
     rememberSessionDays,
+    notifyOnDueDay,
     monthlyBudgetBase,
     yearlyBudgetBase,
     enableTagBudgets,
+    overdueReminderDays,
     tagBudgets,
     emailNotificationsEnabled,
     pushplusNotificationsEnabled,

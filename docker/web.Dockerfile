@@ -1,6 +1,8 @@
 FROM node:20-alpine AS builder
 
 WORKDIR /app
+ARG VITE_APP_VERSION=dev
+ENV VITE_APP_VERSION=$VITE_APP_VERSION
 
 COPY package*.json ./
 COPY apps/api/package.json apps/api/package.json

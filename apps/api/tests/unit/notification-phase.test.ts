@@ -16,6 +16,15 @@ describe('resolveReminderPhase', () => {
     })
   })
 
+  it('can disable due_today reminder', () => {
+    expect(
+      resolveReminderPhase(new Date('2026-04-23'), new Date('2026-04-23'), 3, {
+        notifyOnDueDay: false,
+        overdueReminderDays: [1, 2, 3]
+      })
+    ).toBeNull()
+  })
+
   it('returns overdue phases for first three overdue days only', () => {
     expect(resolveReminderPhase(new Date('2026-04-24'), new Date('2026-04-23'), 3)).toEqual({
       eventType: 'subscription.overdue',
@@ -30,5 +39,33 @@ describe('resolveReminderPhase', () => {
       phase: 'overdue_day_3'
     })
     expect(resolveReminderPhase(new Date('2026-04-27'), new Date('2026-04-23'), 3)).toBeNull()
+  })
+
+  it('only returns configured overdue reminder days', () => {
+    expect(
+      resolveReminderPhase(new Date('2026-04-24'), new Date('2026-04-23'), 3, {
+        notifyOnDueDay: true,
+        overdueReminderDays: [2, 3]
+      })
+    ).toBeNull()
+
+    expect(
+      resolveReminderPhase(new Date('2026-04-25'), new Date('2026-04-23'), 3, {
+        notifyOnDueDay: true,
+        overdueReminderDays: [2, 3]
+      })
+    ).toEqual({
+      eventType: 'subscription.overdue',
+      phase: 'overdue_day_2'
+    })
+  })
+
+  it('does not treat notifyDaysBefore = 0 as an upcoming reminder on due date', () => {
+    expect(
+      resolveReminderPhase(new Date('2026-04-23'), new Date('2026-04-23'), 0, {
+        notifyOnDueDay: false,
+        overdueReminderDays: [1, 2, 3]
+      })
+    ).toBeNull()
   })
 })

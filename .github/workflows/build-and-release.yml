@@ -42,6 +42,8 @@ jobs:
         run: npm run lint
 
       - name: Build
+        env:
+          VITE_APP_VERSION: ${{ github.event.inputs.tag_name || github.ref_name }}
         run: npm run build
 
       - name: Archive web dist
@@ -85,6 +87,8 @@ jobs:
         run: npm run build -w packages/shared
 
       - name: Build web
+        env:
+          VITE_APP_VERSION: ${{ steps.release_tag.outputs.value }}
         run: npm run build -w apps/web
 
       - name: Archive web dist
@@ -149,6 +153,8 @@ jobs:
           context: .
           file: ./docker/web.Dockerfile
           push: true
+          build-args: |
+            VITE_APP_VERSION=${{ steps.release_tag.outputs.value }}
           tags: ${{ steps.web_meta.outputs.tags }}
           labels: ${{ steps.web_meta.outputs.labels }}
 

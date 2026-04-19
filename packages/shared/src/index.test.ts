@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CreateSubscriptionSchema } from '../src/index'
+import { CreateSubscriptionSchema, SettingsSchema } from '../src/index'
 
 describe('shared schema', () => {
   it('should validate create subscription payload', () => {
@@ -14,5 +14,13 @@ describe('shared schema', () => {
 
     expect(parsed.currency).toBe('USD')
     expect(parsed.billingIntervalCount).toBe(1)
+  })
+
+  it('should provide reminder-related setting defaults', () => {
+    const parsed = SettingsSchema.parse({})
+
+    expect(parsed.defaultNotifyDays).toBe(3)
+    expect(parsed.notifyOnDueDay).toBe(true)
+    expect(parsed.overdueReminderDays).toEqual([1, 2, 3])
   })
 })

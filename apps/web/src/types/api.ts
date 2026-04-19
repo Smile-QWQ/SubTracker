@@ -200,9 +200,11 @@ export interface Settings {
   baseCurrency: string
   defaultNotifyDays: number
   rememberSessionDays: number
+  notifyOnDueDay: boolean
   monthlyBudgetBase?: number | null
   yearlyBudgetBase?: number | null
   enableTagBudgets: boolean
+  overdueReminderDays: Array<1 | 2 | 3>
   tagBudgets: Record<string, number>
   emailNotificationsEnabled: boolean
   pushplusNotificationsEnabled: boolean

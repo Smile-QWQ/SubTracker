@@ -15,6 +15,18 @@ async function main() {
     create: { key: 'defaultNotifyDays', valueJson: 3 }
   })
 
+  await prisma.setting.upsert({
+    where: { key: 'notifyOnDueDay' },
+    update: { valueJson: true },
+    create: { key: 'notifyOnDueDay', valueJson: true }
+  })
+
+  await prisma.setting.upsert({
+    where: { key: 'overdueReminderDays' },
+    update: { valueJson: [1, 2, 3] },
+    create: { key: 'overdueReminderDays', valueJson: [1, 2, 3] }
+  })
+
   const defaults = [
     { name: '开发工具', color: '#4f46e5', icon: 'code-slash-outline', sortOrder: 1 },
     { name: '影音娱乐', color: '#ef4444', icon: 'film-outline', sortOrder: 2 },
