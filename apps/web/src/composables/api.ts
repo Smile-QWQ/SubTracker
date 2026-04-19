@@ -1,6 +1,7 @@
 import axios from 'axios'
 import type {
   AiRecognitionResult,
+  AiTestResponse,
   AuthResponse,
   AuthUserResponse,
   CalendarEvent,
@@ -178,19 +179,15 @@ export const api = {
   },
 
   async testAiConfiguration() {
-    return unwrap<{ success: boolean; providerName: string; model: string; response: string }>(
-      (await client.post('/ai/test')) as {
-        data: Envelope<{ success: boolean; providerName: string; model: string; response: string }>
-      }
-    )
+    return unwrap<AiTestResponse>((await client.post('/ai/test')) as { data: Envelope<AiTestResponse> })
   },
 
   async testAiConfigurationWithPayload(payload: Settings['aiConfig']) {
-    return unwrap<{ success: boolean; providerName: string; model: string; response: string }>(
-      (await client.post('/ai/test', payload)) as {
-        data: Envelope<{ success: boolean; providerName: string; model: string; response: string }>
-      }
-    )
+    return unwrap<AiTestResponse>((await client.post('/ai/test', payload)) as { data: Envelope<AiTestResponse> })
+  },
+
+  async testAiVisionConfigurationWithPayload(payload: Settings['aiConfig']) {
+    return unwrap<AiTestResponse>((await client.post('/ai/test-vision', payload)) as { data: Envelope<AiTestResponse> })
   },
 
   async getTags() {

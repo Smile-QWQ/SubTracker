@@ -162,14 +162,30 @@ export interface PushplusConfig {
   topic: string
 }
 
+export type AiProviderPreset = 'custom' | 'aliyun-bailian' | 'tencent-hunyuan' | 'volcengine-ark'
+
+export interface AiCapabilities {
+  vision: boolean
+  structuredOutput: boolean
+}
+
 export interface AiConfig {
   enabled: boolean
+  providerPreset: AiProviderPreset
   providerName: string
   baseUrl: string
   apiKey: string
   model: string
   timeoutMs: number
   promptTemplate: string
+  capabilities: AiCapabilities
+}
+
+export interface AiTestResponse {
+  success: boolean
+  providerName: string
+  model: string
+  response: string
 }
 
 export interface Settings {

@@ -106,6 +106,27 @@ export const PushPlusConfigSchema = z.object({
   topic: z.string().max(100).default('')
 })
 
+export const AiProviderPresetSchema = z.enum(['custom', 'aliyun-bailian', 'tencent-hunyuan', 'volcengine-ark'])
+
+export const DEFAULT_AI_CAPABILITIES = {
+  vision: false,
+  structuredOutput: true
+} as const
+
+export const DEFAULT_AI_CONFIG = {
+  enabled: false,
+  providerPreset: 'custom',
+  providerName: 'DeepSeek',
+  baseUrl: 'https://api.deepseek.com',
+  apiKey: '',
+  model: 'deepseek-chat',
+  timeoutMs: 30000,
+  promptTemplate: '',
+  capabilities: {
+    ...DEFAULT_AI_CAPABILITIES
+  }
+} as const
+
 export const NotificationWebhookSettingsSchema = z.object({
   enabled: z.boolean().default(false),
   url: z.string().trim().max(500).default(''),
@@ -115,14 +136,23 @@ export const NotificationWebhookSettingsSchema = z.object({
   ignoreSsl: z.boolean().default(false)
 })
 
+export const AiCapabilitiesSchema = z.object({
+  vision: z.boolean().default(DEFAULT_AI_CAPABILITIES.vision),
+  structuredOutput: z.boolean().default(DEFAULT_AI_CAPABILITIES.structuredOutput)
+})
+
 export const AiConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  providerName: z.string().max(100).default('DeepSeek'),
-  baseUrl: z.string().url().default('https://api.deepseek.com'),
-  apiKey: z.string().max(500).default(''),
-  model: z.string().max(100).default('deepseek-chat'),
-  timeoutMs: z.number().int().min(5000).max(120000).default(30000),
-  promptTemplate: z.string().max(5000).default('')
+  enabled: z.boolean().default(DEFAULT_AI_CONFIG.enabled),
+  providerPreset: AiProviderPresetSchema.default(DEFAULT_AI_CONFIG.providerPreset),
+  providerName: z.string().max(100).default(DEFAULT_AI_CONFIG.providerName),
+  baseUrl: z.string().url().default(DEFAULT_AI_CONFIG.baseUrl),
+  apiKey: z.string().max(500).default(DEFAULT_AI_CONFIG.apiKey),
+  model: z.string().max(100).default(DEFAULT_AI_CONFIG.model),
+  timeoutMs: z.number().int().min(5000).max(120000).default(DEFAULT_AI_CONFIG.timeoutMs),
+  promptTemplate: z.string().max(5000).default(DEFAULT_AI_CONFIG.promptTemplate),
+  capabilities: AiCapabilitiesSchema.default({
+    ...DEFAULT_AI_CAPABILITIES
+  })
 })
 
 export const SettingsSchema = z.object({
@@ -196,6 +226,8 @@ export type ChangeCredentialsInput = z.infer<typeof ChangeCredentialsSchema>
 export type EmailConfigInput = z.infer<typeof EmailConfigSchema>
 export type PushPlusConfigInput = z.infer<typeof PushPlusConfigSchema>
 export type NotificationWebhookSettingsInput = z.infer<typeof NotificationWebhookSettingsSchema>
+export type AiProviderPreset = z.infer<typeof AiProviderPresetSchema>
+export type AiCapabilitiesInput = z.infer<typeof AiCapabilitiesSchema>
 export type AiConfigInput = z.infer<typeof AiConfigSchema>
 export type LogoSearchInput = z.infer<typeof LogoSearchSchema>
 export type LogoUploadInput = z.infer<typeof LogoUploadSchema>

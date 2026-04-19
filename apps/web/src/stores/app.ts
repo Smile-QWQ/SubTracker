@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { DEFAULT_AI_CONFIG } from '@subtracker/shared'
 import { api } from '@/composables/api'
 import type { Settings } from '@/types/api'
 
@@ -28,13 +29,10 @@ export const useAppStore = defineStore('app', () => {
       topic: ''
     },
     aiConfig: {
-      enabled: false,
-      providerName: 'DeepSeek',
-      baseUrl: 'https://api.deepseek.com',
-      apiKey: '',
-      model: 'deepseek-chat',
-      timeoutMs: 30000,
-      promptTemplate: ''
+      ...DEFAULT_AI_CONFIG,
+      capabilities: {
+        ...DEFAULT_AI_CONFIG.capabilities
+      }
     }
   })
 

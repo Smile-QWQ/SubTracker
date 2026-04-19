@@ -1,4 +1,4 @@
-import type { SettingsInput } from '@subtracker/shared'
+import { AiConfigSchema, DEFAULT_AI_CONFIG, SettingsSchema, type SettingsInput } from '@subtracker/shared'
 import { prisma } from '../db'
 import { config } from '../config'
 
@@ -39,17 +39,9 @@ export async function getAppSettings(): Promise<SettingsInput> {
     token: '',
     topic: ''
   })
-  const aiConfig = await getSetting<SettingsInput['aiConfig']>('aiConfig', {
-    enabled: false,
-    providerName: 'DeepSeek',
-    baseUrl: 'https://api.deepseek.com',
-    apiKey: '',
-    model: 'deepseek-chat',
-    timeoutMs: 30000,
-    promptTemplate: ''
-  })
+  const aiConfig = AiConfigSchema.parse(await getSetting<unknown>('aiConfig', DEFAULT_AI_CONFIG))
 
-  return {
+  return SettingsSchema.parse({
     baseCurrency,
     defaultNotifyDays,
     rememberSessionDays,
@@ -62,5 +54,5 @@ export async function getAppSettings(): Promise<SettingsInput> {
     emailConfig,
     pushplusConfig,
     aiConfig
-  }
+  })
 }

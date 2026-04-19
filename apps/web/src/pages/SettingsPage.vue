@@ -221,7 +221,7 @@
                   </n-grid>
 
                   <n-collapse arrow-placement="right" class="webhook-advanced">
-                    <n-collapse-item title="高级配置与 Payload 模板" name="advanced">
+                    <n-collapse-item title="高级配置" name="advanced">
                       <n-form-item label="自定义请求头">
                         <n-input
                           v-model:value="webhookForm.headers"
@@ -263,6 +263,15 @@
 
             <n-grid :cols="formCols" :x-gap="12" :y-gap="12">
               <n-grid-item>
+                <n-form-item label="Provider 预设">
+                  <n-select
+                    :value="settingsForm.aiConfig.providerPreset"
+                    :options="aiProviderPresetOptions"
+                    @update:value="handleAiPresetChange"
+                  />
+                </n-form-item>
+              </n-grid-item>
+              <n-grid-item>
                 <n-form-item label="Provider 名称">
                   <n-input v-model:value="settingsForm.aiConfig.providerName" />
                 </n-form-item>
@@ -270,6 +279,12 @@
               <n-grid-item>
                 <n-form-item label="Model">
                   <n-input v-model:value="settingsForm.aiConfig.model" />
+                </n-form-item>
+              </n-grid-item>
+              <n-grid-item>
+                <n-form-item>
+                  <n-switch v-model:value="settingsForm.aiConfig.capabilities.vision" />
+                  <span class="switch-label">模型视觉输入</span>
                 </n-form-item>
               </n-grid-item>
             </n-grid>
@@ -280,20 +295,32 @@
             <n-form-item label="API Key">
               <n-input v-model:value="settingsForm.aiConfig.apiKey" type="password" show-password-on="click" />
             </n-form-item>
-            <n-form-item label="请求超时（毫秒）">
-              <n-input-number v-model:value="settingsForm.aiConfig.timeoutMs" :min="5000" :max="120000" style="width: 100%" />
-            </n-form-item>
-            <n-form-item label="自定义提示词">
-              <n-input
-                v-model:value="aiPromptInput"
-                type="textarea"
-                :autosize="{ minRows: 6, maxRows: 12 }"
-                placeholder="未修改或为空时，会继续使用系统预设提示词"
-              />
-            </n-form-item>
+            <n-collapse arrow-placement="right" class="ai-advanced">
+              <n-collapse-item title="高级配置" name="advanced">
+                <n-form-item>
+                  <n-switch v-model:value="settingsForm.aiConfig.capabilities.structuredOutput" />
+                  <span class="switch-label">优先结构化 JSON 输出</span>
+                </n-form-item>
+                <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
+                  开启后会优先使用厂商支持的结构化 JSON 输出；若不支持，系统会自动降级为普通 JSON 提示词模式。
+                </n-alert>
+                <n-form-item label="请求超时（毫秒）">
+                  <n-input-number v-model:value="settingsForm.aiConfig.timeoutMs" :min="5000" :max="120000" style="width: 100%" />
+                </n-form-item>
+                <n-form-item label="自定义提示词">
+                  <n-input
+                    v-model:value="aiPromptInput"
+                    type="textarea"
+                    :autosize="{ minRows: 6, maxRows: 12 }"
+                    placeholder="未修改或为空时，会继续使用系统预设提示词"
+                  />
+                </n-form-item>
+              </n-collapse-item>
+            </n-collapse>
             <n-space>
               <n-button @click="saveAiSettings">保存</n-button>
-              <n-button type="primary" @click="testAiSettings">测试</n-button>
+              <n-button type="primary" ghost @click="testAiConnectionSettings">连接测试</n-button>
+              <n-button v-if="settingsForm.aiConfig.capabilities.vision" type="primary" @click="testAiVisionSettings">视觉测试</n-button>
             </n-space>
           </n-form>
         </n-card>
@@ -327,7 +354,7 @@ import dayjs from 'dayjs'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { useQueryClient } from '@tanstack/vue-query'
-import { DEFAULT_AI_SUBSCRIPTION_PROMPT, DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE } from '@subtracker/shared'
+import { DEFAULT_AI_CONFIG, DEFAULT_AI_SUBSCRIPTION_PROMPT, DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE } from '@subtracker/shared'
 import {
   NAlert,
   NButton,
@@ -355,13 +382,45 @@ import { api } from '@/composables/api'
 import PageHeader from '@/components/PageHeader.vue'
 import { useAuthStore } from '@/stores/auth'
 import { buildCurrencyOptions } from '@/utils/currency'
-import type { ChangeCredentialsPayload, ExchangeRateSnapshot, NotificationWebhookSettings, Settings } from '@/types/api'
+import type { AiProviderPreset, ChangeCredentialsPayload, ExchangeRateSnapshot, NotificationWebhookSettings, Settings } from '@/types/api'
 
 const message = useMessage()
 const authStore = useAuthStore()
 const queryClient = useQueryClient()
 const { width } = useWindowSize()
 const settingsOutline = SettingsOutline
+const AI_PROVIDER_PRESETS: Record<
+  Exclude<AiProviderPreset, 'custom'>,
+  Pick<Settings['aiConfig'], 'providerName' | 'baseUrl' | 'model' | 'capabilities'>
+> = {
+  'aliyun-bailian': {
+    providerName: '阿里百炼',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    model: 'qwen3-vl-plus',
+    capabilities: {
+      vision: true,
+      structuredOutput: true
+    }
+  },
+  'tencent-hunyuan': {
+    providerName: '腾讯混元',
+    baseUrl: 'https://api.hunyuan.cloud.tencent.com/v1',
+    model: 'hunyuan-vision',
+    capabilities: {
+      vision: true,
+      structuredOutput: true
+    }
+  },
+  'volcengine-ark': {
+    providerName: '火山方舟',
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+    model: 'doubao-1-5-vision-pro-32k-250115',
+    capabilities: {
+      vision: true,
+      structuredOutput: true
+    }
+  }
+}
 
 const settingsForm = reactive<Settings>({
   baseCurrency: 'CNY',
@@ -387,13 +446,10 @@ const settingsForm = reactive<Settings>({
     topic: ''
   },
   aiConfig: {
-    enabled: false,
-    providerName: 'DeepSeek',
-    baseUrl: 'https://api.deepseek.com',
-    apiKey: '',
-    model: 'deepseek-chat',
-    timeoutMs: 30000,
-    promptTemplate: ''
+    ...DEFAULT_AI_CONFIG,
+    capabilities: {
+      ...DEFAULT_AI_CONFIG.capabilities
+    }
   }
 })
 
@@ -433,6 +489,12 @@ const webhookMethodOptions = [
 ]
 const webhookVariablesText =
   '{{phase}}、{{days_until}}、{{days_overdue}}、{{subscription_id}}、{{subscription_name}}、{{subscription_amount}}、{{subscription_currency}}、{{subscription_next_renewal_date}}、{{subscription_tags}}、{{subscription_url}}、{{subscription_notes}}'
+const aiProviderPresetOptions = [
+  { label: '自定义', value: 'custom' },
+  { label: '阿里百炼', value: 'aliyun-bailian' },
+  { label: '腾讯混元', value: 'tencent-hunyuan' },
+  { label: '火山方舟', value: 'volcengine-ark' }
+] satisfies Array<{ label: string; value: AiProviderPreset }>
 
 onMounted(async () => {
   await Promise.all([loadSettings(), loadSnapshot(), loadWebhook()])
@@ -501,22 +563,44 @@ async function saveAiSettings() {
   await api.updateSettings({
     aiConfig: {
       ...settingsForm.aiConfig,
+      capabilities: {
+        ...settingsForm.aiConfig.capabilities
+      },
       promptTemplate
     }
   })
   message.success('AI 识别设置已保存')
 }
 
-async function testAiSettings() {
+async function testAiConnectionSettings() {
   try {
     const promptTemplate = normalizeAiPrompt(aiPromptInput.value)
     const result = await api.testAiConfigurationWithPayload({
       ...settingsForm.aiConfig,
-      promptTemplate
+      promptTemplate,
+      capabilities: {
+        ...settingsForm.aiConfig.capabilities
+      }
     })
-    message.success(`AI 测试成功：${result.providerName} / ${result.model}`)
+    message.success(`连接测试成功：${result.providerName} / ${result.model} / ${result.response}`)
   } catch (error) {
-    message.error(error instanceof Error ? error.message : 'AI 测试失败')
+    message.error(error instanceof Error ? error.message : 'AI 连接测试失败')
+  }
+}
+
+async function testAiVisionSettings() {
+  try {
+    const promptTemplate = normalizeAiPrompt(aiPromptInput.value)
+    const result = await api.testAiVisionConfigurationWithPayload({
+      ...settingsForm.aiConfig,
+      promptTemplate,
+      capabilities: {
+        ...settingsForm.aiConfig.capabilities
+      }
+    })
+    message.success(`视觉测试成功：${result.providerName} / ${result.model} / ${result.response}`)
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : 'AI 视觉测试失败')
   }
 }
 
@@ -525,6 +609,21 @@ function normalizeAiPrompt(value: string) {
   if (!normalized) return ''
   if (normalized === DEFAULT_AI_SUBSCRIPTION_PROMPT.trim()) return ''
   return value
+}
+
+function handleAiPresetChange(value: AiProviderPreset) {
+  settingsForm.aiConfig.providerPreset = value
+  if (value === 'custom') {
+    return
+  }
+
+  const preset = AI_PROVIDER_PRESETS[value]
+  settingsForm.aiConfig.providerName = preset.providerName
+  settingsForm.aiConfig.baseUrl = preset.baseUrl
+  settingsForm.aiConfig.model = preset.model
+  settingsForm.aiConfig.capabilities = {
+    ...preset.capabilities
+  }
 }
 
 async function refreshRates() {
@@ -724,7 +823,8 @@ function formatTime(value: string) {
   color: #0f172a;
 }
 
-.webhook-advanced {
+.webhook-advanced,
+.ai-advanced {
   margin-bottom: 12px;
 }
 

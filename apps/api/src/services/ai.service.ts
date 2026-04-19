@@ -1,4 +1,4 @@
-﻿import { mkdir } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { createWorker, type Worker } from 'tesseract.js'
 import { AiRecognizeSubscriptionSchema, DEFAULT_AI_SUBSCRIPTION_PROMPT } from '@subtracker/shared'
@@ -7,7 +7,23 @@ import { getAppSettings } from './settings.service'
 
 export type AiSettings = Awaited<ReturnType<typeof getAppSettings>>['aiConfig']
 
+type ChatMessage = {
+  role: 'system' | 'user' | 'assistant'
+  content: string | Array<Record<string, unknown>>
+}
+
+type ChatCompletionPayload = {
+  choices?: Array<{
+    message?: {
+      content?: string | Array<Record<string, unknown>>
+    }
+  }>
+}
+
 const ocrCachePath = path.resolve(process.cwd(), 'apps/api/storage/tesseract-cache')
+const visionTestImageBase64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=='
+const jsonOnlySuffix = '必须只返回合法 JSON 对象，不要返回 Markdown、代码块或额外解释。'
 let ocrWorkerPromise: Promise<Worker> | null = null
 
 function ensureAiConfig(aiConfig: AiSettings) {
@@ -20,14 +36,7 @@ function ensureAiConfig(aiConfig: AiSettings) {
   }
 }
 
-function modelLooksVisionCapable(model: string) {
-  const normalized = model.toLowerCase()
-  return ['vision', 'vl', 'gpt-4o', 'gpt-4.1', 'gemini', 'claude-3', 'qwen-vl'].some((keyword) =>
-    normalized.includes(keyword)
-  )
-}
-
-function looksLikeImageFormatUnsupported(errorText: string) {
+export function looksLikeImageFormatUnsupported(errorText: string) {
   const normalized = errorText.toLowerCase()
   return (
     normalized.includes('unknown variant `image_url`') ||
@@ -35,8 +44,46 @@ function looksLikeImageFormatUnsupported(errorText: string) {
     normalized.includes('expected `text`') ||
     normalized.includes('expected "text"') ||
     normalized.includes('does not support image') ||
-    normalized.includes('image input')
+    normalized.includes('image input') ||
+    normalized.includes('image_url')
   )
+}
+
+export function looksLikeStructuredOutputUnsupported(errorText: string) {
+  const normalized = errorText.toLowerCase()
+  return (
+    normalized.includes('response_format') ||
+    normalized.includes('json_object') ||
+    normalized.includes('json schema') ||
+    normalized.includes('structured output') ||
+    normalized.includes('json mode')
+  )
+}
+
+export function extractChatCompletionText(payload: ChatCompletionPayload) {
+  const content = payload.choices?.[0]?.message?.content
+
+  if (typeof content === 'string') {
+    return content.trim()
+  }
+
+  if (Array.isArray(content)) {
+    const text = content
+      .map((part) => {
+        if (typeof part === 'string') return part
+        if (typeof part?.text === 'string') return part.text
+        return ''
+      })
+      .filter(Boolean)
+      .join('\n')
+      .trim()
+
+    if (text) {
+      return text
+    }
+  }
+
+  throw new Error('AI 未返回有效内容')
 }
 
 async function getOcrWorker() {
@@ -60,9 +107,18 @@ async function extractTextFromImageWithOcr(imageBase64: string) {
   return (result.data.text || '').trim()
 }
 
+function buildRecognitionSystemPrompt(aiConfig: AiSettings, forceJsonPromptOnly = false) {
+  const basePrompt = aiConfig.promptTemplate?.trim() || DEFAULT_AI_SUBSCRIPTION_PROMPT
+  if (!forceJsonPromptOnly) {
+    return basePrompt
+  }
+
+  return `${basePrompt}\n\n${jsonOnlySuffix}`
+}
+
 async function requestAiChatCompletion(params: {
   aiConfig: AiSettings
-  messages: Array<Record<string, unknown>>
+  messages: ChatMessage[]
   responseFormat?: { type: 'json_object' }
 }) {
   const { aiConfig } = params
@@ -92,18 +148,46 @@ async function requestAiChatCompletion(params: {
       throw new Error(`AI 接口请求失败：${response.status}${errorText ? ` - ${errorText}` : ''}`)
     }
 
-    const payload = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>
-    }
-
-    const raw = payload.choices?.[0]?.message?.content
-    if (!raw) {
-      throw new Error('AI 未返回有效内容')
-    }
-
-    return raw
+    const payload = (await response.json()) as ChatCompletionPayload
+    return extractChatCompletionText(payload)
   } finally {
     clearTimeout(timeout)
+  }
+}
+
+async function requestStructuredJsonCompletion(params: {
+  aiConfig: AiSettings
+  userContent: string | Array<Record<string, unknown>>
+}) {
+  const attempt = async (promptOnlyJson: boolean) => {
+    return requestAiChatCompletion({
+      aiConfig: params.aiConfig,
+      responseFormat: promptOnlyJson ? undefined : { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: buildRecognitionSystemPrompt(params.aiConfig, promptOnlyJson)
+        },
+        {
+          role: 'user',
+          content: params.userContent
+        }
+      ]
+    })
+  }
+
+  if (!params.aiConfig.capabilities.structuredOutput) {
+    return attempt(true)
+  }
+
+  try {
+    return await attempt(false)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (!looksLikeStructuredOutputUnsupported(message)) {
+      throw error
+    }
+    return attempt(true)
   }
 }
 
@@ -130,19 +214,9 @@ async function recognizeByTextOnly(params: {
     throw new Error('未获取到可用于识别的文本内容')
   }
 
-  const raw = await requestAiChatCompletion({
+  const raw = await requestStructuredJsonCompletion({
     aiConfig: params.aiConfig,
-    responseFormat: { type: 'json_object' },
-    messages: [
-      {
-        role: 'system',
-        content: params.aiConfig.promptTemplate?.trim() || DEFAULT_AI_SUBSCRIPTION_PROMPT
-      },
-      {
-        role: 'user',
-        content: userText
-      }
-    ]
+    userContent: userText
   })
 
   return JSON.parse(raw) as AiRecognitionResultDto
@@ -170,19 +244,9 @@ async function recognizeByVision(params: {
     }
   })
 
-  const raw = await requestAiChatCompletion({
+  const raw = await requestStructuredJsonCompletion({
     aiConfig: params.aiConfig,
-    responseFormat: { type: 'json_object' },
-    messages: [
-      {
-        role: 'system',
-        content: params.aiConfig.promptTemplate?.trim() || DEFAULT_AI_SUBSCRIPTION_PROMPT
-      },
-      {
-        role: 'user',
-        content
-      }
-    ]
+    userContent: content
   })
 
   return JSON.parse(raw) as AiRecognitionResultDto
@@ -207,7 +271,7 @@ export async function recognizeSubscriptionByAi(input: unknown): Promise<AiRecog
     })
   }
 
-  if (modelLooksVisionCapable(aiConfig.model)) {
+  if (aiConfig.capabilities.vision) {
     try {
       return await recognizeByVision({
         aiConfig,
@@ -236,8 +300,7 @@ export async function recognizeSubscriptionByAi(input: unknown): Promise<AiRecog
 }
 
 export async function testAiConnection(overrideConfig?: AiSettings) {
-  const settings = await getAppSettings()
-  const aiConfig = overrideConfig ?? settings.aiConfig
+  const aiConfig = overrideConfig ?? (await getAppSettings()).aiConfig
 
   const raw = await requestAiChatCompletion({
     aiConfig,
@@ -261,3 +324,41 @@ export async function testAiConnection(overrideConfig?: AiSettings) {
   }
 }
 
+export async function testAiVisionConnection(overrideConfig?: AiSettings) {
+  const aiConfig = overrideConfig ?? (await getAppSettings()).aiConfig
+  if (!aiConfig.capabilities.vision) {
+    throw new Error('当前 Provider 未启用视觉输入能力')
+  }
+
+  const raw = await requestAiChatCompletion({
+    aiConfig,
+    messages: [
+      {
+        role: 'system',
+        content: '请根据用户发送的图片进行响应，只返回一句简短确认。'
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: '请确认你已成功接收到这张测试图片。'
+          },
+          {
+            type: 'image_url',
+            image_url: {
+              url: `data:image/png;base64,${visionTestImageBase64}`
+            }
+          }
+        ]
+      }
+    ]
+  })
+
+  return {
+    success: true,
+    providerName: aiConfig.providerName,
+    model: aiConfig.model,
+    response: raw.trim()
+  }
+}

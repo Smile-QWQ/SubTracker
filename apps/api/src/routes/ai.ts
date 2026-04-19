@@ -1,7 +1,18 @@
 import { FastifyInstance } from 'fastify'
-import { AiConfigSchema } from '@subtracker/shared'
+import { AiConfigSchema, DEFAULT_AI_CONFIG, type AiConfigInput } from '@subtracker/shared'
 import { sendError, sendOk } from '../http'
-import { recognizeSubscriptionByAi, testAiConnection } from '../services/ai.service'
+import { recognizeSubscriptionByAi, testAiConnection, testAiVisionConnection } from '../services/ai.service'
+
+function normalizeAiConfigPayload(payload: Partial<AiConfigInput>) {
+  return AiConfigSchema.parse({
+    ...DEFAULT_AI_CONFIG,
+    ...payload,
+    capabilities: {
+      ...DEFAULT_AI_CONFIG.capabilities,
+      ...payload.capabilities
+    }
+  })
+}
 
 export async function aiRoutes(app: FastifyInstance) {
   app.post('/ai/test', async (request, reply) => {
@@ -13,21 +24,29 @@ export async function aiRoutes(app: FastifyInstance) {
         }
         return sendOk(
           reply,
-          await testAiConnection({
-            enabled: parsed.data.enabled ?? false,
-            providerName: parsed.data.providerName ?? 'Custom',
-            baseUrl: parsed.data.baseUrl ?? '',
-            apiKey: parsed.data.apiKey ?? '',
-            model: parsed.data.model ?? '',
-            timeoutMs: parsed.data.timeoutMs ?? 30000,
-            promptTemplate: parsed.data.promptTemplate ?? ''
-          })
+          await testAiConnection(normalizeAiConfigPayload(parsed.data))
         )
       }
 
       return sendOk(reply, await testAiConnection())
     } catch (error) {
       return sendError(reply, 400, 'ai_test_failed', error instanceof Error ? error.message : 'AI test failed')
+    }
+  })
+
+  app.post('/ai/test-vision', async (request, reply) => {
+    try {
+      if (request.body) {
+        const parsed = AiConfigSchema.partial().safeParse(request.body)
+        if (!parsed.success) {
+          return sendError(reply, 422, 'validation_error', 'Invalid AI config payload', parsed.error.flatten())
+        }
+        return sendOk(reply, await testAiVisionConnection(normalizeAiConfigPayload(parsed.data)))
+      }
+
+      return sendOk(reply, await testAiVisionConnection())
+    } catch (error) {
+      return sendError(reply, 400, 'ai_vision_test_failed', error instanceof Error ? error.message : 'AI vision test failed')
     }
   })
 
