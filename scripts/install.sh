@@ -154,7 +154,7 @@ select_mode() {
   fi
 
   if [ "$NON_INTERACTIVE" = "true" ] || [ ! -r /dev/tty ]; then
-    MODE="api"
+    MODE="full"
     return 0
   fi
 
@@ -168,10 +168,10 @@ select_mode() {
          直接使用前端镜像，不需要手工准备 web-dist
 
 EOF
-  printf '请输入部署方式 [api/full]（默认 api）: ' > /dev/tty
+  printf '请输入部署方式 [api/full]（默认 full）: ' > /dev/tty
   local answer=""
   IFS= read -r answer < /dev/tty || true
-  MODE="${answer:-api}"
+  MODE="${answer:-full}"
 }
 
 normalize_inputs() {

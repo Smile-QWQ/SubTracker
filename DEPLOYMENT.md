@@ -35,7 +35,15 @@ curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/i
 
 ## 1. 两种部署方式怎么选
 
-### 方式 A：API-only（推荐）
+如果你没有特别强的“前后端分离部署”需求，**主要推荐 `full` 模式**，因为它更简单方便：
+
+- 不需要自己准备 `web-dist/`
+- 不需要单独托管前端静态文件
+- 更适合直接 `docker compose pull && up -d` 更新
+
+`api` 模式更适合已经有自己 Nginx / 宝塔 / 静态站点目录的用户。
+
+### 方式 A：API-only
 适合你已经有自己的 Nginx / 宝塔 / 现成网站目录：
 
 - 脚本会下载当前 Release 对应版本的原始部署文件
@@ -80,7 +88,8 @@ curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/i
 - 部署模式：`api` 或 `full`
 - 部署目录
 - `WEB_ORIGIN`
-- 端口
+- `api` 模式下会问：**API 对外端口**
+- `full` 模式下会问：**前端对外端口 `WEB_PORT`**
 
 然后自动下载对应 Release 资产并生成部署目录。
 
@@ -118,7 +127,7 @@ curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/i
 --dir <path>             输出目录，默认 ./subtracker-<mode>
 --release <tag|latest>   下载哪个 Release，默认 latest
 --api-image <image>      API 镜像，默认 ghcr.io/smile-qwq/subtracker-api:latest
---api-port <port>        API 端口，默认 3001
+--api-port <port>        API 端口；api 模式会对外暴露，full 模式默认内部使用 3001
 --web-port <port>        Full 模式前端端口，默认 8080
 --web-origin <origin>    WEB_ORIGIN
 --log-level <level>      LOG_LEVEL，默认 warn
@@ -138,7 +147,6 @@ curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/i
 subtracker-api/
   ├─ docker-compose.yml
   ├─ .env
-  ├─ DEPLOYMENT.md
   ├─ INSTALL-README.md
   ├─ data/
   │  └─ logos/
@@ -167,7 +175,6 @@ docker compose up -d
 subtracker-full/
   ├─ docker-compose.full.yml
   ├─ .env
-  ├─ DEPLOYMENT.md
   ├─ INSTALL-README.md
   ├─ data/
   │  └─ logos/
@@ -188,6 +195,14 @@ docker compose -f docker-compose.full.yml up -d
 
 - Web：`http://localhost:8080`
 - API：由前端镜像内置 Nginx 反代到内部 `api:3001`
+
+补充说明：
+
+- `.env` 里的 `WEB_PORT` 代表**宿主机对外暴露的前端端口**
+- `docker-compose.full.yml` 里容器内部仍然是 Nginx 默认监听的 `80`
+- 也就是说：
+  - `WEB_PORT=8080` -> 映射为 `8080:80`
+  - `WEB_PORT=9000` -> 映射为 `9000:80`
 
 ---
 
@@ -312,6 +327,12 @@ WEB_ORIGIN=http://localhost:8080
 
 一句话：**`WEB_ORIGIN` 永远填用户浏览器里真正打开的那个地址。**
 
+如果你把 `WEB_PORT` 改成别的值，比如 `9000`，那外层 Nginx 就应该反代到：
+
+```text
+http://127.0.0.1:9000
+```
+
 ---
 
 ## 7. 升级
@@ -332,11 +353,22 @@ docker compose -f docker-compose.full.yml pull
 docker compose -f docker-compose.full.yml up -d
 ```
 
-如果你升级的是 Full 模式，并且前端资源有变化，重新运行安装脚本覆盖目录即可：
+日常升级通常**不需要**重新运行安装脚本，因为 Full 模式已经直接使用前端镜像，API-only 模式也只是更新 API 镜像。
+
+只有在这些场景下，才建议重新运行安装脚本：
+
+- 首次部署
+- 想重建部署目录
+- 想切换部署模式（`api` / `full`）
+- 部署模板或 `.env` 模板有明显变化
+
+例如你要重建 Full 部署目录时，可以执行：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/install.sh | bash -s -- --mode full --force
 ```
+
+从 `v0.4.6` 开始，Full 模式还包含了前端生产构建分包稳定性修复；如果你此前遇到前端白屏或浏览器控制台报类似 `can't access lexical declaration before initialization`，请直接升级到 `v0.4.6` 或更高版本。
 
 ---
 
