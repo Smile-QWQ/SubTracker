@@ -75,6 +75,17 @@ npm test
 
 ## 部署
 
+如果你只是想快速部署，不需要自己编译源码，直接用安装脚本即可：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/install.sh | bash
+```
+
+脚本会按你选择的模式自动下载 Release 产物并生成部署目录：
+
+- `api`：只部署后端 API，前端静态文件由你自己的 Nginx 托管
+- `full`：前端 + 后端一起部署，自动准备 `web-dist`
+
 详细部署说明见：
 
 - [DEPLOYMENT.md](./DEPLOYMENT.md)

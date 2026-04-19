@@ -1,68 +1,210 @@
-# SubTracker Deployment
+# SubTracker 部署说明
 
-本文档面向服务器部署，提供两种方式：
+SubTracker 现在**不需要用户自己编译**。发布页已经提供了两个现成资产：
 
-1. **推荐方式**：外部 Nginx 托管前端，Docker 仅部署 API
-2. **完整方式**：使用 `docker-compose.full.yml` 同时启动前端 Nginx + API
+- `subtracker-deploy-bundle.zip`：部署所需的 compose / 文档 / Nginx 配置
+- `subtracker-web-dist.zip`：前端静态文件
+
+如果你只是想尽快把它跑起来，优先用下面这个脚本：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/install.sh | bash
+```
+
+它会根据你选择的部署方式，自动把需要的文件下载到本地目录。
 
 ---
 
-## 1. API 镜像
+## 0. 本次部署文档更新说明
 
-默认镜像地址：
+这版部署文档相对之前做了几处收敛，避免用户还要自己从源码编译：
+
+- 改为以 **GitHub Release 现成产物** 为主，不再把“本地自行编译前端”当默认路径
+- 增加 `install.sh` 一键辅助部署入口，脚本会自动下载所需部署文件
+- 明确区分两种模式：
+  - `api`：只部署后端，前端静态文件由你自己的 Nginx 托管
+  - `full`：前端和后端一起部署，脚本会自动准备 `web-dist`
+- 明确补充了 **反向代理 / SSL** 的实际用法，尤其是 `WEB_ORIGIN` 应该填写用户最终访问的 HTTPS 域名
+
+如果你只是想快速部署给别人试用，建议直接按本文的 `install.sh` 方式走。
+
+---
+
+## 1. 两种部署方式怎么选
+
+### 方式 A：API-only（推荐）
+适合你已经有自己的 Nginx / 宝塔 / 现成网站目录：
+
+- 脚本会下载：`subtracker-deploy-bundle.zip`
+- 会为你准备：
+  - `docker-compose.yml`
+  - `.env`
+  - `data/`
+  - `data/logos/`
+- **不会**自动托管前端静态文件
+
+这时你只需要：
+
+1. 用脚本准备 API 部署目录
+2. 把 `subtracker-web-dist.zip` 解压到你自己的 Nginx 网站根目录
+3. 按下面的反代配置把 `/api/`、`/static/logos/` 转给 API
+
+### 方式 B：Full
+适合你想直接用 Docker Compose 同时跑前端和 API：
+
+- 脚本会下载：
+  - `subtracker-deploy-bundle.zip`
+  - `subtracker-web-dist.zip`
+- 会为你准备：
+  - `docker-compose.full.yml`
+  - `.env`
+  - `docker/nginx.full.conf`
+  - `web-dist/`
+  - `data/`
+  - `data/logos/`
+
+这种方式不需要你额外准备外部 Nginx。
+
+---
+
+## 2. 一键安装脚本
+
+### 2.1 最简单用法
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/install.sh | bash
+```
+
+脚本会交互式询问：
+
+- 部署模式：`api` 或 `full`
+- 部署目录
+- `WEB_ORIGIN`
+- 端口
+
+然后自动下载对应 Release 资产并生成部署目录。
+
+> 如果你外面还会再套一层 Nginx / 宝塔 / HTTPS 证书，`WEB_ORIGIN` 请填写**用户最终访问的地址**，例如：`https://subtracker.example.com`，不要填 `127.0.0.1` 或容器内部地址。
+
+---
+
+### 2.2 指定参数运行
+
+#### API-only
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/install.sh | bash -s -- \
+  --mode api \
+  --dir /opt/subtracker-api \
+  --web-origin https://subtracker.example.com
+```
+
+#### Full
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/install.sh | bash -s -- \
+  --mode full \
+  --dir /opt/subtracker-full \
+  --web-origin https://subtracker.example.com \
+  --web-port 8080
+```
+
+---
+
+### 2.3 常用参数
 
 ```text
-ghcr.io/smile-qwq/subtracker-api:latest
-```
-
-`docker-compose.yml` 默认会使用：
-
-```bash
-SUBTRACKER_API_IMAGE=ghcr.io/smile-qwq/subtracker-api:latest
+--mode <api|full>        部署模式
+--dir <path>             输出目录，默认 ./subtracker-<mode>
+--release <tag|latest>   下载哪个 Release，默认 latest
+--api-image <image>      API 镜像，默认 ghcr.io/smile-qwq/subtracker-api:latest
+--api-port <port>        API 端口，默认 3001
+--web-port <port>        Full 模式前端端口，默认 8080
+--web-origin <origin>    WEB_ORIGIN
+--log-level <level>      LOG_LEVEL，默认 warn
+--force                  若目录已存在则覆盖
+--yes                    非交互模式，直接使用默认值
 ```
 
 ---
 
-## 2. 推荐方式：外部 Nginx + API Docker
+## 3. 脚本执行后会得到什么
 
-适合：
+### 3.1 API-only
 
-- 前端静态文件已经由 GitHub Release 或 CI 构建好
-- 服务器已有外部 Nginx
-- 你希望前后端职责分离
+典型目录：
 
-### 启动 API
+```text
+subtracker-api/
+  ├─ docker-compose.yml
+  ├─ .env
+  ├─ DEPLOYMENT.md
+  ├─ INSTALL-README.md
+  ├─ data/
+  │  └─ logos/
+  └─ api.env.example
+```
 
-准备：
-
-- `docker-compose.yml`
-- `data/`
-- `data/logos/`
-
-执行：
+启动：
 
 ```bash
+cd subtracker-api
 docker compose pull
 docker compose up -d
 ```
 
-### 核心环境变量
+> 注意：API-only 模式下，前端静态文件需要你自己放到 Nginx。
 
-```bash
-SUBTRACKER_API_IMAGE=ghcr.io/smile-qwq/subtracker-api:latest
-PORT=3001
-HOST=0.0.0.0
-DATABASE_URL=file:/app/data/subtracker.db
-WEB_ORIGIN=https://subtracker.example.com
-LOG_LEVEL=warn
+---
+
+### 3.2 Full
+
+典型目录：
+
+```text
+subtracker-full/
+  ├─ docker-compose.full.yml
+  ├─ .env
+  ├─ DEPLOYMENT.md
+  ├─ INSTALL-README.md
+  ├─ docker/
+  │  └─ nginx.full.conf
+  ├─ web-dist/
+  ├─ data/
+  │  └─ logos/
+  └─ api.env.example
 ```
 
-### 持久化目录
+启动：
 
-- `./data` -> SQLite 数据库
-- `./data/logos` -> 本地 Logo 文件
+```bash
+cd subtracker-full
+docker compose -f docker-compose.full.yml pull
+docker compose -f docker-compose.full.yml up -d
+```
 
-### 外部 Nginx 示例
+默认访问：
+
+- Web：`http://localhost:8080`
+- API：由前端 Nginx 反代到内部 `api:3001`
+
+---
+
+## 4. API-only 模式下的前端静态文件
+
+如果你选的是 API-only，前端需要你自己放到外部 Nginx。
+
+静态文件来源：
+
+- 发布页资产：`subtracker-web-dist.zip`
+
+把它解压到你的站点目录，例如：
+
+```text
+/var/www/subtracker
+```
+
+然后使用类似下面的 Nginx 配置：
 
 ```nginx
 server {
@@ -96,127 +238,111 @@ server {
 }
 ```
 
-### 前端静态文件部署
+---
 
-前端不进入 API 镜像。
+## 5. 核心环境变量
 
-你可以：
-
-1. 从 Release 下载 `subtracker-web-dist.zip`
-2. 解压后部署到外部 Nginx 静态目录
-
-或者在本地自行构建：
+脚本会自动生成 `.env`，常见需要改的主要是这些：
 
 ```bash
-npm install
-npm run build -w apps/web
+SUBTRACKER_API_IMAGE=ghcr.io/smile-qwq/subtracker-api:latest
+PORT=3001
+HOST=0.0.0.0
+DATABASE_URL=file:/app/data/subtracker.db
+WEB_ORIGIN=https://subtracker.example.com
+LOG_LEVEL=warn
 ```
 
-然后将 `apps/web/dist` 发布到外部 Nginx 根目录。
+Full 模式还会多一个：
+
+```bash
+WEB_PORT=8080
+```
+
+### `WEB_ORIGIN` 怎么填
+
+这个值用于浏览器跨域校验（CORS），**应该填写前端最终访问地址**。
+
+常见情况：
+
+- 外层 Nginx + HTTPS 域名：
+
+```bash
+WEB_ORIGIN=https://subtracker.example.com
+```
+
+- 本机临时测试 Full 模式：
+
+```bash
+WEB_ORIGIN=http://localhost:8080
+```
+
+不要填这些：
+
+- `http://127.0.0.1:3001`
+- `http://api:3001`
+- 容器内部地址
+- 只给后端的监听地址
 
 ---
 
-## 3. 完整方式：docker-compose.full.yml
+## 6. 反向代理 / SSL 说明
 
-适合：
+生产环境里，通常建议最外层再套一层 Nginx 处理：
 
-- 想用 Compose 一次性启动前端和 API
-- 不想单独维护外部 Nginx
+- HTTPS 证书
+- 域名访问
+- 统一反向代理
 
-### 前提
+这时可以按下面理解：
 
-需要先准备前端静态文件目录：
+### API-only
 
-```text
-./web-dist
-```
+- 前端静态文件：由外部 Nginx 托管
+- API：反代到 `http://127.0.0.1:3001`
+- `WEB_ORIGIN`：填外部 HTTPS 域名，例如 `https://subtracker.example.com`
 
-你可以通过两种方式获得它：
+### Full
 
-#### 方式 A：从 Release 解压
+- 用户访问：`https://subtracker.example.com`
+- 外层 Nginx：反代到内部 `http://127.0.0.1:8080`
+- Full 自带的 Nginx：再转发给 API 容器
+- `WEB_ORIGIN`：仍然填 `https://subtracker.example.com`
 
-把 `subtracker-web-dist.zip` 解压到：
-
-```text
-./web-dist
-```
-
-#### 方式 B：本地构建
-
-```bash
-npm install
-npm run build -w apps/web
-```
-
-然后把：
-
-```text
-apps/web/dist
-```
-
-拷贝到：
-
-```text
-./web-dist
-```
-
-### 启动完整部署
-
-```bash
-docker compose -f docker-compose.full.yml up -d
-```
-
-默认访问：
-
-- Web：`http://localhost:8080`
-- API：由前端 Nginx 反代到内部 `api:3001`
-
-### 完整部署持久化目录
-
-- `./data`
-- `./data/logos`
-- `./web-dist`
+一句话：**`WEB_ORIGIN` 永远填用户浏览器里真正打开的那个地址。**
 
 ---
 
-## 4. Release 与镜像发布
+## 7. 升级
 
-仓库的 `Build and Release` workflow 会在发布 tag 时自动生成：
-
-- API 镜像：`ghcr.io/smile-qwq/subtracker-api`
-- 前端静态包：`subtracker-web-dist.zip`
-
-因此服务端升级通常只需要：
-
-### API-only 模式
+### API-only
 
 ```bash
+cd /你的部署目录
 docker compose pull
 docker compose up -d
 ```
 
-### Full compose 模式
-
-1. 更新 `web-dist`
-2. 更新 API 镜像
+### Full
 
 ```bash
+cd /你的部署目录
 docker compose -f docker-compose.full.yml pull
 docker compose -f docker-compose.full.yml up -d
 ```
 
----
-
-## 5. 开发环境变量
-
-本地开发前请先复制：
+如果你升级的是 Full 模式，并且前端资源有变化，重新运行安装脚本覆盖目录即可：
 
 ```bash
-cp apps/api/.env.example apps/api/.env
+curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/install.sh | bash -s -- --mode full --force
 ```
 
-PowerShell：
+---
 
-```powershell
-Copy-Item apps/api/.env.example apps/api/.env
-```
+## 8. 说明
+
+- 这套部署流程是基于 **GitHub Release 现成产物**，不是源码编译部署
+- 如果你只是想给别人快速试用，优先推荐：
+  - 有自己 Nginx：用 `api`
+  - 想少折腾：用 `full`
+- 脚本只负责**下载并准备部署目录**，真正启动服务仍然需要你本机/服务器已安装 Docker / Docker Compose
