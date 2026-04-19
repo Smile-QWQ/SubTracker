@@ -169,10 +169,27 @@
         v-else
         :columns="columns"
         :data="tableRows"
-        :pagination="{ pageSize: 10 }"
+        :pagination="false"
         :row-key="rowKey"
         :row-props="getRowProps"
       />
+      <div v-if="!isMobile" class="desktop-pagination">
+        <n-pagination
+          :page="currentPage"
+          :page-size="desktopPageSize"
+          :item-count="orderedSubscriptions.length"
+          show-size-picker
+          :page-sizes="[...SUBSCRIPTION_PAGE_SIZE_OPTIONS]"
+          @update:page="currentPage = $event"
+          @update:page-size="
+            (pageSize) => {
+              desktopPageSize = pageSize
+              currentPage = 1
+              setStoredSubscriptionPageSize(pageSize)
+            }
+          "
+        />
+      </div>
     </n-card>
 
     <subscription-form-modal
@@ -214,6 +231,7 @@ import {
   NEmpty,
   NIcon,
   NInput,
+  NPagination,
   NPopconfirm,
   NSelect,
   NSpace,
@@ -237,17 +255,15 @@ import SubscriptionPaymentRecordsDrawer from '@/components/SubscriptionPaymentRe
 import WallosImportModal from '@/components/WallosImportModal.vue'
 import type { PaymentRecord, Settings, Subscription, SubscriptionDetail, Tag } from '@/types/api'
 import { resolveLogoUrl } from '@/utils/logo'
+import {
+  DEFAULT_SUBSCRIPTION_PAGE_SIZE,
+  SUBSCRIPTION_PAGE_SIZE_OPTIONS,
+  getStoredSubscriptionPageSize,
+  setStoredSubscriptionPageSize
+} from '@/utils/subscription-pagination'
+import { buildSubscriptionTableRows, paginateSubscriptions, type SubscriptionTableRow } from '@/utils/subscription-table'
 
 type SortMode = 'custom' | 'renewal' | 'amount-desc' | 'name'
-
-type SubscriptionTableRow =
-  | (Subscription & { __rowType: 'main' })
-  | {
-      id: string
-      __rowType: 'note'
-      note: string
-      subscriptionId: string
-    }
 
 const message = useMessage()
 const { width } = useWindowSize()
@@ -280,6 +296,8 @@ const dragOverId = ref<string | null>(null)
 const armedDragId = ref<string | null>(null)
 const savingOrder = ref(false)
 const showDragHandles = ref(false)
+const currentPage = ref(1)
+const desktopPageSize = ref<number>(DEFAULT_SUBSCRIPTION_PAGE_SIZE)
 
 const statusOptions = [
   { label: '正常', value: 'active' },
@@ -336,8 +354,9 @@ const orderedSubscriptions = computed(() => {
       return rows
   }
 })
-
-const baseColumnCount = computed(() => (dragHandleVisible.value ? 8 : 7))
+const pagedSubscriptions = computed(() =>
+  paginateSubscriptions(orderedSubscriptions.value, currentPage.value, desktopPageSize.value)
+)
 
 const dragColumn = {
   title: '',
@@ -431,7 +450,7 @@ const mainColumns = [
   {
     title: '名称',
     key: 'name',
-    colSpan: (row: SubscriptionTableRow) => (row.__rowType === 'note' ? baseColumnCount.value : 1),
+    colSpan: (row: SubscriptionTableRow) => (row.__rowType === 'note' ? (dragHandleVisible.value ? 8 : 7) : 1),
     render: (row: SubscriptionTableRow) => {
       if (row.__rowType === 'note') {
         return h('div', { style: noteContainerStyle }, [
@@ -507,7 +526,6 @@ const mainColumns = [
   {
     title: '操作',
     key: 'actions',
-    colSpan: (row: SubscriptionTableRow) => (row.__rowType === 'note' ? 0 : 1),
     render: (row: SubscriptionTableRow) => {
       if (row.__rowType === 'note') return null
 
@@ -549,23 +567,10 @@ const mainColumns = [
 ]
 
 const columns = computed(() => (dragHandleVisible.value ? [dragColumn, ...mainColumns] : mainColumns))
-
-const tableRows = computed<SubscriptionTableRow[]>(() =>
-  orderedSubscriptions.value.flatMap((item) => {
-    const rows: SubscriptionTableRow[] = [{ ...item, __rowType: 'main' }]
-    if (item.notes?.trim()) {
-      rows.push({
-        id: `${item.id}__note`,
-        __rowType: 'note',
-        note: item.notes.trim(),
-        subscriptionId: item.id
-      })
-    }
-    return rows
-  })
-)
+const tableRows = computed<SubscriptionTableRow[]>(() => buildSubscriptionTableRows(pagedSubscriptions.value))
 
 onMounted(async () => {
+  desktopPageSize.value = getStoredSubscriptionPageSize()
   window.addEventListener('mouseup', resetArmedDrag)
   await Promise.all([loadTags(), loadSubscriptions(), loadCurrencies(), loadSettings()])
 })
@@ -579,7 +584,18 @@ watch(sortMode, (value) => {
     showDragHandles.value = false
     resetDragState()
   }
+  currentPage.value = 1
 })
+
+watch(
+  () => orderedSubscriptions.value.length,
+  (count) => {
+    const maxPage = Math.max(1, Math.ceil(count / desktopPageSize.value))
+    if (currentPage.value > maxPage) {
+      currentPage.value = maxPage
+    }
+  }
+)
 
 async function loadTags() {
   tags.value = await api.getTags()
@@ -587,6 +603,7 @@ async function loadTags() {
 
 async function loadSubscriptions() {
   resetDragState()
+  currentPage.value = 1
   subscriptions.value = await api.getSubscriptions({
     q: filters.q || undefined,
     status: filters.status || undefined,
@@ -744,12 +761,8 @@ function rowKey(row: SubscriptionTableRow) {
   return row.id
 }
 
-function resolveSubscriptionId(row: SubscriptionTableRow) {
-  return row.__rowType === 'main' ? row.id : row.subscriptionId
-}
-
 function getRowProps(row: SubscriptionTableRow) {
-  const targetId = resolveSubscriptionId(row)
+  const targetId = row.__rowType === 'main' ? row.id : row.subscriptionId
 
   return {
     draggable: canDragReorder.value && row.__rowType === 'main' && armedDragId.value === targetId,
@@ -989,6 +1002,12 @@ function unitLabel(unit: string) {
 .muted-text {
   color: #94a3b8;
   font-size: 12px;
+}
+
+.desktop-pagination {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 :deep(.subscription-row--draggable td) {

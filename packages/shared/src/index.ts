@@ -339,6 +339,14 @@ export interface DashboardOverview {
     status: 'normal' | 'warning' | 'over'
   }>
   currencyDistribution: Array<{ currency: string; amount: number }>
+  topSubscriptionsByMonthlyCost: Array<{
+    id: string
+    name: string
+    amount: number
+    currency: string
+    monthlyAmountBase: number
+    baseCurrency: string
+  }>
   upcomingRenewals: Array<{
     id: string
     name: string

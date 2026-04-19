@@ -126,6 +126,14 @@ export interface StatisticsOverview {
   upcomingByDay: Array<{ date: string; count: number; amount: number }>
   tagBudgetUsage?: TagBudgetUsage[]
   currencyDistribution: Array<{ currency: string; amount: number }>
+  topSubscriptionsByMonthlyCost: Array<{
+    id: string
+    name: string
+    amount: number
+    currency: string
+    monthlyAmountBase: number
+    baseCurrency: string
+  }>
   upcomingRenewals: Array<{
     id: string
     name: string

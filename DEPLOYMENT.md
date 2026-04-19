@@ -345,6 +345,9 @@ docker compose pull
 docker compose up -d
 ```
 
+同时请把发布页最新的 `subtracker-web-dist.zip` 重新下载并覆盖到你的 Nginx 站点目录。  
+API-only 模式的前端静态文件是独立托管的，**升级时默认需要同时更新后端镜像和前端静态文件**。
+
 ### Full
 
 ```bash
@@ -353,7 +356,7 @@ docker compose -f docker-compose.full.yml pull
 docker compose -f docker-compose.full.yml up -d
 ```
 
-日常升级通常**不需要**重新运行安装脚本，因为 Full 模式已经直接使用前端镜像，API-only 模式也只是更新 API 镜像。
+日常升级通常**不需要**重新运行安装脚本，因为 Full 模式已经直接使用前端镜像；API-only 虽然也不用重跑脚本，但仍需要手动覆盖前端静态文件。
 
 只有在这些场景下，才建议重新运行安装脚本：
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getApiBaseUrl, resolveApiOrigin, resolveAssetUrl } from '@/utils/api-base'
+import { getApiBaseUrl, resolveApiOrigin, resolveAssetUrl } from '../../../src/utils/api-base'
 
 describe('api-base utils', () => {
   it('uses relative /api/v1 as default api base url', () => {

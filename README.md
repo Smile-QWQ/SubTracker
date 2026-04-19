@@ -100,6 +100,7 @@ docker compose -f docker-compose.full.yml up -d
 ```
 
 如果你是 API-only 模式，把 `docker-compose.full.yml` 换成 `docker-compose.yml` 即可。  
+另外，**API-only 升级时还需要重新下载并覆盖 `subtracker-web-dist.zip` 解压后的前端静态文件目录**；只有 Full 模式的前端才会随镜像一起升级。  
 只有在这些场景下，才建议重新运行安装脚本：
 
 - 首次部署

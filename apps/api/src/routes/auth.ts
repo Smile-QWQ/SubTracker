@@ -4,6 +4,17 @@ import { sendError, sendOk } from '../http'
 import { changeCredentials, loginWithCredentials } from '../services/auth.service'
 import { getAppSettings } from '../services/settings.service'
 
+function resolveLoginValidationMessage(body: unknown) {
+  const payload = (body ?? {}) as Partial<{ username: string; password: string }>
+  const username = payload.username?.trim() ?? ''
+  const password = payload.password?.trim() ?? ''
+
+  if (!username && !password) return '请输入用户名和密码'
+  if (!username) return '请输入用户名'
+  if (!password) return '请输入密码'
+  return '登录信息格式不正确'
+}
+
 export async function authRoutes(app: FastifyInstance) {
   app.get('/auth/login-options', async (_request, reply) => {
     const settings = await getAppSettings()
@@ -15,7 +26,7 @@ export async function authRoutes(app: FastifyInstance) {
   app.post('/auth/login', async (request, reply) => {
     const parsed = LoginSchema.safeParse(request.body)
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid login payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', resolveLoginValidationMessage(request.body), parsed.error.flatten())
     }
 
     const result = await loginWithCredentials(parsed.data.username, parsed.data.password, {

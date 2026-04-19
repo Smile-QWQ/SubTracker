@@ -49,6 +49,7 @@ import { NButton, NCard, NCheckbox, NForm, NFormItem, NIcon, NInput, useMessage 
 import { LockClosedOutline } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
 import { useAuthStore } from '@/stores/auth'
+import { validateLoginForm } from '@/utils/login-validation'
 
 const route = useRoute()
 const router = useRouter()
@@ -74,6 +75,12 @@ onMounted(async () => {
 
 async function submit() {
   if (submitting.value) return
+
+  const validationMessage = validateLoginForm(form.username, form.password)
+  if (validationMessage) {
+    message.error(validationMessage)
+    return
+  }
 
   try {
     submitting.value = true

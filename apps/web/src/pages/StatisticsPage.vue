@@ -51,6 +51,15 @@
         </n-card>
       </n-grid-item>
     </n-grid>
+
+    <n-grid :cols="1" :x-gap="12" :y-gap="12" style="margin-top: 12px">
+      <n-grid-item>
+        <n-card title="月订阅支出 TOP10">
+          <chart-view v-if="topSubscriptionsOption" :option="topSubscriptionsOption" />
+          <n-empty v-else description="暂无数据" />
+        </n-card>
+      </n-grid-item>
+    </n-grid>
   </div>
 </template>
 
@@ -65,6 +74,7 @@ import { api } from '@/composables/api'
 import ChartView from '@/components/ChartView.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import type { StatisticsOverview, SubscriptionStatus } from '@/types/api'
+import { buildTopSubscriptionsOption } from '@/utils/statistics-top-subscriptions'
 
 const { width } = useWindowSize()
 const barChartOutline = BarChartOutline
@@ -247,6 +257,10 @@ const upcoming30Option = computed(() => {
     ]
   }
 })
+
+const topSubscriptionsOption = computed(() =>
+  buildTopSubscriptionsOption(overview.value?.topSubscriptionsByMonthlyCost, baseCurrency.value)
+)
 
 function formatMoney(amount: number, currency: string) {
   return `${currency} ${amount.toFixed(2)}`

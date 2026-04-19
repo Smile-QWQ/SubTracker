@@ -28,6 +28,15 @@ interface TagBudgetUsageEntry {
   status: BudgetStatus
 }
 
+interface TopSubscriptionEntry {
+  id: string
+  name: string
+  amount: number
+  currency: string
+  monthlyAmountBase: number
+  baseCurrency: string
+}
+
 async function fetchStatisticsSubscriptions() {
   return prisma.subscription.findMany({
     include: {
@@ -170,6 +179,7 @@ async function buildStatisticsState() {
     ['manual', { count: 0, amount: 0 }]
   ])
   const currencyDistributionMap = new Map<string, number>()
+  const topSubscriptionsByMonthlyCost: TopSubscriptionEntry[] = []
 
   for (const subscription of subscriptions) {
     statusDistributionMap.set(subscription.status, (statusDistributionMap.get(subscription.status) ?? 0) + 1)
@@ -189,6 +199,14 @@ async function buildStatisticsState() {
     const monthly = baseAmount * monthlyFactor(subscription.billingIntervalUnit, subscription.billingIntervalCount)
     monthlyEstimatedBase += monthly
     yearlyEstimatedBase += monthly * 12
+    topSubscriptionsByMonthlyCost.push({
+      id: subscription.id,
+      name: subscription.name,
+      amount: subscription.amount,
+      currency: subscription.currency,
+      monthlyAmountBase: Number(monthly.toFixed(2)),
+      baseCurrency
+    })
 
     const modeKey = subscription.autoRenew ? 'auto' : 'manual'
     const currentMode = renewalModeMap.get(modeKey) ?? { count: 0, amount: 0 }
@@ -330,6 +348,9 @@ async function buildStatisticsState() {
       currency,
       amount: Number(amount.toFixed(2))
     })),
+    topSubscriptionsByMonthlyCost: topSubscriptionsByMonthlyCost
+      .sort((a, b) => b.monthlyAmountBase - a.monthlyAmountBase || a.name.localeCompare(b.name, 'zh-CN'))
+      .slice(0, 10),
     activeSubscriptionCount: activeSubscriptions.length,
     upcoming7DaysCount: projectedSubscriptions.filter((item) => {
       const renewalDate = dayjs(item.nextRenewalDate)
@@ -364,6 +385,7 @@ export async function getOverviewStatistics() {
     renewalModeDistribution: state.renewalModeDistribution,
     upcomingByDay: state.upcomingByDay,
     currencyDistribution: state.currencyDistribution,
+    topSubscriptionsByMonthlyCost: state.topSubscriptionsByMonthlyCost,
     tagBudgetUsage: state.appSettings.enableTagBudgets ? state.tagBudgetUsage : [],
     upcomingRenewals: state.upcomingRenewals
   }
