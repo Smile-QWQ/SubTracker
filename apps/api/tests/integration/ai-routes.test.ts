@@ -63,6 +63,44 @@ describe('ai routes', () => {
     expect(res.json().data.providerName).toBe('阿里百炼')
   })
 
+  it('allows connection test with override payload even when enabled is false', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          choices: [
+            {
+              message: {
+                content: 'OK'
+              }
+            }
+          ]
+        })
+      )
+    )
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/ai/test',
+      payload: {
+        enabled: false,
+        providerName: '火山方舟',
+        providerPreset: 'volcengine-ark',
+        baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+        apiKey: 'token',
+        model: 'doubao-1-5-vision-pro-32k-250115',
+        timeoutMs: 30000,
+        capabilities: {
+          vision: true,
+          structuredOutput: true
+        }
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data.response).toBe('OK')
+  })
+
   it('tests vision endpoint with image_url payload', async () => {
     const fetchMock = vi.fn(async () =>
       jsonResponse({

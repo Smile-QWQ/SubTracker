@@ -496,6 +496,73 @@ const aiProviderPresetOptions = [
   { label: '火山方舟', value: 'volcengine-ark' }
 ] satisfies Array<{ label: string; value: AiProviderPreset }>
 
+function getMissingRequiredFields(fields: Array<[string, unknown]>) {
+  return fields
+    .filter(([, value]) => {
+      if (typeof value === 'number') return Number.isNaN(value)
+      return !String(value ?? '').trim()
+    })
+    .map(([label]) => label)
+}
+
+function validateEmailSettings(action: 'save' | 'test') {
+  if (action === 'save' && !settingsForm.emailNotificationsEnabled) {
+    return true
+  }
+
+  const missing = getMissingRequiredFields([
+    ['SMTP Host', settingsForm.emailConfig.host],
+    ['端口', settingsForm.emailConfig.port],
+    ['用户名', settingsForm.emailConfig.username],
+    ['密码', settingsForm.emailConfig.password],
+    ['发件人', settingsForm.emailConfig.from],
+    ['收件人', settingsForm.emailConfig.to]
+  ])
+
+  if (!missing.length) return true
+  message.error(`邮箱通知缺少必填项：${missing.join('、')}`)
+  return false
+}
+
+function validatePushplusSettings(action: 'save' | 'test') {
+  if (action === 'save' && !settingsForm.pushplusNotificationsEnabled) {
+    return true
+  }
+
+  const missing = getMissingRequiredFields([['Token', settingsForm.pushplusConfig.token]])
+  if (!missing.length) return true
+  message.error(`PushPlus 缺少必填项：${missing.join('、')}`)
+  return false
+}
+
+function validateWebhookSettings(action: 'save' | 'test') {
+  if (action === 'save' && !webhookForm.enabled) {
+    return true
+  }
+
+  const missing = getMissingRequiredFields([['URL', webhookForm.url]])
+  if (!missing.length) return true
+  message.error(`Webhook 缺少必填项：${missing.join('、')}`)
+  return false
+}
+
+function validateAiSettings(action: 'save' | 'connection-test' | 'vision-test') {
+  if (action === 'save' && !settingsForm.aiConfig.enabled) {
+    return true
+  }
+
+  const missing = getMissingRequiredFields([
+    ['Provider 名称', settingsForm.aiConfig.providerName],
+    ['Model', settingsForm.aiConfig.model],
+    ['API Base URL', settingsForm.aiConfig.baseUrl],
+    ['API Key', settingsForm.aiConfig.apiKey]
+  ])
+
+  if (!missing.length) return true
+  message.error(`AI 识别缺少必填项：${missing.join('、')}`)
+  return false
+}
+
 onMounted(async () => {
   await Promise.all([loadSettings(), loadSnapshot(), loadWebhook()])
 })
@@ -541,22 +608,25 @@ async function saveBasicSettings() {
 }
 
 async function saveEmailSettings() {
+  if (!validateEmailSettings('save')) return
   await api.updateSettings({
     emailNotificationsEnabled: settingsForm.emailNotificationsEnabled,
     emailConfig: settingsForm.emailConfig
   })
-  message.success('邮箱通知已保存')
+  message.success(settingsForm.emailNotificationsEnabled ? '邮箱通知配置已保存' : '邮箱通知已关闭')
 }
 
 async function savePushplusSettings() {
+  if (!validatePushplusSettings('save')) return
   await api.updateSettings({
     pushplusNotificationsEnabled: settingsForm.pushplusNotificationsEnabled,
     pushplusConfig: settingsForm.pushplusConfig
   })
-  message.success('PushPlus 已保存')
+  message.success(settingsForm.pushplusNotificationsEnabled ? 'PushPlus 配置已保存' : 'PushPlus 已关闭')
 }
 
 async function saveAiSettings() {
+  if (!validateAiSettings('save')) return
   const promptTemplate = normalizeAiPrompt(aiPromptInput.value)
   settingsForm.aiConfig.promptTemplate = promptTemplate
   aiPromptInput.value = promptTemplate || DEFAULT_AI_SUBSCRIPTION_PROMPT
@@ -569,10 +639,11 @@ async function saveAiSettings() {
       promptTemplate
     }
   })
-  message.success('AI 识别设置已保存')
+  message.success(settingsForm.aiConfig.enabled ? 'AI 识别配置已保存' : 'AI 识别已关闭')
 }
 
 async function testAiConnectionSettings() {
+  if (!validateAiSettings('connection-test')) return
   try {
     const promptTemplate = normalizeAiPrompt(aiPromptInput.value)
     const result = await api.testAiConfigurationWithPayload({
@@ -589,6 +660,7 @@ async function testAiConnectionSettings() {
 }
 
 async function testAiVisionSettings() {
+  if (!validateAiSettings('vision-test')) return
   try {
     const promptTemplate = normalizeAiPrompt(aiPromptInput.value)
     const result = await api.testAiVisionConfigurationWithPayload({
@@ -642,6 +714,7 @@ async function submitCredentialsChange() {
 }
 
 async function testEmail() {
+  if (!validateEmailSettings('test')) return
   try {
     await api.testEmailNotificationWithPayload(settingsForm.emailConfig)
     message.success('测试邮件已发送')
@@ -651,6 +724,7 @@ async function testEmail() {
 }
 
 async function testPushplus() {
+  if (!validatePushplusSettings('test')) return
   try {
     const result = await api.testPushplusNotificationWithPayload(settingsForm.pushplusConfig)
     message.success(
@@ -664,6 +738,7 @@ async function testPushplus() {
 }
 
 async function saveWebhook() {
+  if (!validateWebhookSettings('save')) return
   const saved = await api.updateNotificationWebhook({
     url: webhookForm.url.trim(),
     enabled: webhookForm.enabled,
@@ -673,10 +748,11 @@ async function saveWebhook() {
     ignoreSsl: webhookForm.ignoreSsl
   })
   Object.assign(webhookForm, saved)
-  message.success('Webhook 已保存')
+  message.success(webhookForm.enabled ? 'Webhook 配置已保存' : 'Webhook 已关闭')
 }
 
 async function testWebhook() {
+  if (!validateWebhookSettings('test')) return
   try {
     const result = await api.testWebhookNotificationWithPayload({
       url: webhookForm.url,

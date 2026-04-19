@@ -22,12 +22,12 @@ type ChatCompletionPayload = {
 
 const ocrCachePath = path.resolve(process.cwd(), 'apps/api/storage/tesseract-cache')
 const visionTestImageBase64 =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=='
+  'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAKUlEQVR4nO3OIQEAAAACIP+f1hkWWEB6FgEBAQEBAQEBAQEBAQEBgXdgl/rw4unIZ5cAAAAASUVORK5CYII='
 const jsonOnlySuffix = '必须只返回合法 JSON 对象，不要返回 Markdown、代码块或额外解释。'
 let ocrWorkerPromise: Promise<Worker> | null = null
 
-function ensureAiConfig(aiConfig: AiSettings) {
-  if (!aiConfig.enabled) {
+function ensureAiConfig(aiConfig: AiSettings, options?: { requireEnabled?: boolean }) {
+  if (options?.requireEnabled !== false && !aiConfig.enabled) {
     throw new Error('AI 识别未启用')
   }
 
@@ -120,9 +120,10 @@ async function requestAiChatCompletion(params: {
   aiConfig: AiSettings
   messages: ChatMessage[]
   responseFormat?: { type: 'json_object' }
+  requireEnabled?: boolean
 }) {
   const { aiConfig } = params
-  ensureAiConfig(aiConfig)
+  ensureAiConfig(aiConfig, { requireEnabled: params.requireEnabled })
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), aiConfig.timeoutMs)
@@ -304,6 +305,7 @@ export async function testAiConnection(overrideConfig?: AiSettings) {
 
   const raw = await requestAiChatCompletion({
     aiConfig,
+    requireEnabled: false,
     messages: [
       {
         role: 'system',
@@ -332,6 +334,7 @@ export async function testAiVisionConnection(overrideConfig?: AiSettings) {
 
   const raw = await requestAiChatCompletion({
     aiConfig,
+    requireEnabled: false,
     messages: [
       {
         role: 'system',

@@ -72,6 +72,29 @@ describe('ai service', () => {
     expect(result.response).toBe('OK')
   })
 
+  it('allows connection test even when AI recognition is disabled', async () => {
+    mockedSettings.aiConfig.enabled = false
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          choices: [
+            {
+              message: {
+                content: 'OK'
+              }
+            }
+          ]
+        })
+      )
+    )
+
+    const result = await testAiConnection(mockedSettings.aiConfig)
+
+    expect(result.response).toBe('OK')
+  })
+
   it('falls back to prompt-only JSON when response_format is unsupported', async () => {
     const fetchMock = vi
       .fn()
