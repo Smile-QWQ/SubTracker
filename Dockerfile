@@ -26,9 +26,11 @@ COPY --from=builder /app/packages/shared/package.json ./packages/shared/package.
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
+COPY docker/entrypoint.sh /usr/local/bin/subtracker-entrypoint.sh
 
-RUN mkdir -p /app/data /app/apps/api/storage/logos
+RUN chmod +x /usr/local/bin/subtracker-entrypoint.sh \
+  && mkdir -p /app/data /app/apps/api/storage/logos
 
 EXPOSE 3001
 
-CMD ["node", "apps/api/dist/index.js"]
+CMD ["/usr/local/bin/subtracker-entrypoint.sh"]

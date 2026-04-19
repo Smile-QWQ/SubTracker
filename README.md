@@ -84,7 +84,9 @@ curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/i
 脚本会按你选择的模式自动下载 Release 产物并生成部署目录：
 
 - `api`：只部署后端 API，前端静态文件由你自己的 Nginx 托管
-- `full`：前端 + 后端一起部署，自动准备 `web-dist`
+- `full`：前端 + 后端一起部署，直接使用前端镜像
+
+API 容器首次启动时会自动初始化 SQLite 数据库表结构，不需要再手工跑 Prisma 初始化命令。
 
 详细部署说明见：
 
@@ -100,7 +102,7 @@ curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/i
 仓库的 `Build and Release` workflow 会在打 tag 时自动发布：
 
 - `subtracker-web-dist.zip`：前端静态文件
-- `subtracker-deploy-bundle.zip`：部署所需配置与说明文档
 - `ghcr.io/smile-qwq/subtracker-api`：API Docker 镜像
+- `ghcr.io/smile-qwq/subtracker-web`：Full 模式前端 Docker 镜像
 
 适合直接用于服务器部署。

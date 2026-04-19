@@ -5,6 +5,7 @@ REPO_OWNER="Smile-QWQ"
 REPO_NAME="SubTracker"
 DEFAULT_RELEASE_TAG="latest"
 DEFAULT_API_IMAGE="ghcr.io/smile-qwq/subtracker-api:latest"
+DEFAULT_WEB_IMAGE="ghcr.io/smile-qwq/subtracker-web:latest"
 DEFAULT_API_PORT="3001"
 DEFAULT_WEB_PORT="8080"
 DEFAULT_LOG_LEVEL="warn"
@@ -13,12 +14,14 @@ MODE=""
 INSTALL_DIR=""
 RELEASE_TAG="${DEFAULT_RELEASE_TAG}"
 API_IMAGE="${DEFAULT_API_IMAGE}"
+WEB_IMAGE="${DEFAULT_WEB_IMAGE}"
 API_PORT="${DEFAULT_API_PORT}"
 WEB_PORT="${DEFAULT_WEB_PORT}"
 WEB_ORIGIN=""
 LOG_LEVEL="${DEFAULT_LOG_LEVEL}"
 NON_INTERACTIVE="false"
 FORCE="false"
+RESOLVED_REF=""
 
 info() {
   printf '[INFO] %s\n' "$*"
@@ -46,6 +49,7 @@ Options:
   --dir <path>             部署目录，默认 ./subtracker-<mode>
   --release <tag|latest>   使用哪个 Release，默认 latest
   --api-image <image>      API 镜像，默认 ghcr.io/smile-qwq/subtracker-api:latest
+  --web-image <image>      Full 模式前端镜像，默认 ghcr.io/smile-qwq/subtracker-web:latest
   --api-port <port>        API 对外端口，默认 3001
   --web-port <port>        Full 模式前端对外端口，默认 8080
   --web-origin <origin>    前端最终访问地址（用于 CORS），例如 https://subtracker.example.com
@@ -77,6 +81,10 @@ parse_args() {
         ;;
       --api-image)
         API_IMAGE="${2:-}"
+        shift 2
+        ;;
+      --web-image)
+        WEB_IMAGE="${2:-}"
         shift 2
         ;;
       --api-port)
@@ -156,7 +164,7 @@ select_mode() {
          前端静态文件需要你自己放到 Nginx / 宝塔 / 站点目录
 
   full = 前端 + 后端一起部署
-         脚本会自动下载前端静态文件并准备 web-dist/
+         直接使用前端镜像，不需要手工准备 web-dist
 
 EOF
   printf '请输入部署方式 [api/full]（默认 api）: ' > /dev/tty
@@ -198,36 +206,6 @@ http_get() {
   fi
 }
 
-extract_zip() {
-  local zip_file="$1"
-  local target_dir="$2"
-
-  mkdir -p "$target_dir"
-
-  if command -v unzip >/dev/null 2>&1; then
-    unzip -oq "$zip_file" -d "$target_dir"
-    return 0
-  fi
-
-  if command -v python3 >/dev/null 2>&1; then
-    python3 - <<PY
-import zipfile
-zipfile.ZipFile(r'''$zip_file''').extractall(r'''$target_dir''')
-PY
-    return 0
-  fi
-
-  if command -v python >/dev/null 2>&1; then
-    python - <<PY
-import zipfile
-zipfile.ZipFile(r'''$zip_file''').extractall(r'''$target_dir''')
-PY
-    return 0
-  fi
-
-  fail '无法解压 zip：缺少 unzip / python3 / python'
-}
-
 prepare_dir() {
   if [ -e "$INSTALL_DIR" ]; then
     if [ "$FORCE" = "true" ]; then
@@ -249,6 +227,64 @@ release_asset_url() {
   fi
 }
 
+resolve_repo_ref() {
+  if [ -n "$RESOLVED_REF" ]; then
+    printf '%s' "$RESOLVED_REF"
+    return 0
+  fi
+
+  if [ "$RELEASE_TAG" != "latest" ]; then
+    RESOLVED_REF="$RELEASE_TAG"
+    printf '%s' "$RESOLVED_REF"
+    return 0
+  fi
+
+  local metadata_url="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest"
+  local metadata_file="$INSTALL_DIR/.release.json"
+  http_get "$metadata_url" "$metadata_file"
+
+  if command -v python3 >/dev/null 2>&1; then
+    RESOLVED_REF="$(python3 - <<PY
+import json
+from pathlib import Path
+data = json.loads(Path(r'''$metadata_file''').read_text(encoding='utf-8'))
+print(data.get('tag_name', ''))
+PY
+)"
+  elif command -v python >/dev/null 2>&1; then
+    RESOLVED_REF="$(python - <<PY
+import json
+from pathlib import Path
+data = json.loads(Path(r'''$metadata_file''').read_text(encoding='utf-8'))
+print(data.get('tag_name', ''))
+PY
+)"
+  else
+    RESOLVED_REF="$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$metadata_file" | head -n 1)"
+  fi
+
+  rm -f "$metadata_file"
+  [ -n "$RESOLVED_REF" ] || fail '无法解析 latest Release 对应的 tag'
+  printf '%s' "$RESOLVED_REF"
+}
+
+raw_file_url() {
+  local file_path="$1"
+  local ref
+  ref="$(resolve_repo_ref)"
+  printf 'https://raw.githubusercontent.com/%s/%s/%s/%s' "$REPO_OWNER" "$REPO_NAME" "$ref" "$file_path"
+}
+
+download_repo_file() {
+  local repo_path="$1"
+  local target_path="$2"
+  local url
+  url="$(raw_file_url "$repo_path")"
+  info "下载文件：$url"
+  mkdir -p "$(dirname "$target_path")"
+  http_get "$url" "$target_path"
+}
+
 write_env_file() {
   {
     printf 'SUBTRACKER_API_IMAGE=%s\n' "$API_IMAGE"
@@ -258,6 +294,7 @@ write_env_file() {
     printf 'WEB_ORIGIN=%s\n' "$WEB_ORIGIN"
     printf 'LOG_LEVEL=%s\n' "$LOG_LEVEL"
     if [ "$MODE" = "full" ]; then
+      printf 'SUBTRACKER_WEB_IMAGE=%s\n' "$WEB_IMAGE"
       printf 'WEB_PORT=%s\n' "$WEB_PORT"
     fi
   } > "$INSTALL_DIR/.env"
@@ -291,8 +328,7 @@ EOF
 
   if [ "$MODE" = "full" ]; then
     cat >> "$INSTALL_DIR/INSTALL-README.md" <<EOF
-- docker/nginx.full.conf
-- web-dist/
+- Full 模式前端镜像：${WEB_IMAGE}
 EOF
   else
     cat >> "$INSTALL_DIR/INSTALL-README.md" <<EOF
@@ -358,48 +394,16 @@ EOF
 EOF
 }
 
-download_bundle() {
-  local bundle_zip="$INSTALL_DIR/subtracker-deploy-bundle.zip"
-  local bundle_url
-  bundle_url="$(release_asset_url 'subtracker-deploy-bundle.zip')"
-  info "下载部署包：$bundle_url"
-  http_get "$bundle_url" "$bundle_zip"
-
-  local extract_dir="$INSTALL_DIR/.bundle-tmp"
-  extract_zip "$bundle_zip" "$extract_dir"
-
-  local root_dir="$extract_dir/subtracker-deploy"
-  [ -d "$root_dir" ] || fail '部署包结构不符合预期，缺少 subtracker-deploy/'
-
-  cp "$root_dir/DEPLOYMENT.md" "$INSTALL_DIR/"
-  cp "$root_dir/README.md" "$INSTALL_DIR/"
-
-  if [ -f "$root_dir/api.env.example" ]; then
-    cp "$root_dir/api.env.example" "$INSTALL_DIR/"
-  fi
+download_deployment_files() {
+  download_repo_file "DEPLOYMENT.md" "$INSTALL_DIR/DEPLOYMENT.md"
+  download_repo_file "README.md" "$INSTALL_DIR/README.md"
+  download_repo_file "apps/api/.env.example" "$INSTALL_DIR/api.env.example"
 
   if [ "$MODE" = "full" ]; then
-    cp "$root_dir/docker-compose.full.yml" "$INSTALL_DIR/"
-    mkdir -p "$INSTALL_DIR/docker"
-    cp "$root_dir/docker/nginx.full.conf" "$INSTALL_DIR/docker/"
+    download_repo_file "docker-compose.full.yml" "$INSTALL_DIR/docker-compose.full.yml"
   else
-    cp "$root_dir/docker-compose.yml" "$INSTALL_DIR/"
+    download_repo_file "docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
   fi
-
-  rm -rf "$extract_dir" "$bundle_zip"
-}
-
-download_web_dist_if_needed() {
-  [ "$MODE" = "full" ] || return 0
-
-  local web_zip="$INSTALL_DIR/subtracker-web-dist.zip"
-  local web_url
-  web_url="$(release_asset_url 'subtracker-web-dist.zip')"
-  info "下载前端静态包：$web_url"
-  http_get "$web_url" "$web_zip"
-
-  extract_zip "$web_zip" "$INSTALL_DIR/web-dist"
-  rm -f "$web_zip"
 }
 
 show_summary() {
@@ -412,7 +416,7 @@ show_summary() {
   printf '\n'
   info "部署目录已生成：$INSTALL_DIR"
   info "部署模式：$MODE"
-  info "Release 版本：$RELEASE_TAG"
+  info "Release 版本：$(resolve_repo_ref)"
   info "安装脚本已执行完成，建议按下面步骤继续："
 
   printf '\n'
@@ -424,6 +428,7 @@ show_summary() {
   printf '2) 拉取镜像并启动\n'
   printf '   %s pull\n' "$compose_cmd"
   printf '   %s up -d\n' "$compose_cmd"
+  printf '   首次启动时，API 容器会自动初始化 SQLite 数据库表结构\n'
 
   printf '\n'
   printf '3) 查看日志\n'
@@ -438,7 +443,7 @@ show_summary() {
     warn '  2. 按 DEPLOYMENT.md 的示例，把 /api/ 和 /static/logos/ 反代到 API'
   else
     printf '\n'
-    info "Full 模式下前端静态文件已准备在：$INSTALL_DIR/web-dist"
+    info "Full 模式会直接使用前端镜像：$WEB_IMAGE"
     info "如果你外层还会再套一层 Nginx / HTTPS，请把它反代到 http://127.0.0.1:$WEB_PORT"
   fi
 
@@ -450,12 +455,10 @@ show_summary() {
 main() {
   parse_args "$@"
   need_cmd mkdir
-  need_cmd cp
   need_cmd rm
   normalize_inputs
   prepare_dir
-  download_bundle
-  download_web_dist_if_needed
+  download_deployment_files
   write_env_file
   write_readme
   show_summary

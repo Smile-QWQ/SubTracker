@@ -2,8 +2,11 @@
 
 SubTracker 现在**不需要用户自己编译**。发布页已经提供了两个现成资产：
 
-- `subtracker-deploy-bundle.zip`：部署所需的 compose / 文档 / Nginx 配置
 - `subtracker-web-dist.zip`：前端静态文件
+- `ghcr.io/smile-qwq/subtracker-api`：API Docker 镜像
+- `ghcr.io/smile-qwq/subtracker-web`：Full 模式前端 Docker 镜像
+
+另外，从 `v0.4.2` 之后开始，API 容器在启动时会自动执行一次 Prisma `db push`，用于初始化或补齐 SQLite 表结构，因此 fresh deploy 不再需要你手工执行数据库初始化命令。
 
 如果你只是想尽快把它跑起来，优先用下面这个脚本：
 
@@ -23,7 +26,7 @@ curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/i
 - 增加 `install.sh` 一键辅助部署入口，脚本会自动下载所需部署文件
 - 明确区分两种模式：
   - `api`：只部署后端，前端静态文件由你自己的 Nginx 托管
-  - `full`：前端和后端一起部署，脚本会自动准备 `web-dist`
+  - `full`：前端和后端一起部署，直接使用前端镜像
 - 明确补充了 **反向代理 / SSL** 的实际用法，尤其是 `WEB_ORIGIN` 应该填写用户最终访问的 HTTPS 域名
 
 如果你只是想快速部署给别人试用，建议直接按本文的 `install.sh` 方式走。
@@ -35,7 +38,7 @@ curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/i
 ### 方式 A：API-only（推荐）
 适合你已经有自己的 Nginx / 宝塔 / 现成网站目录：
 
-- 脚本会下载：`subtracker-deploy-bundle.zip`
+- 脚本会下载当前 Release 对应版本的原始部署文件
 - 会为你准备：
   - `docker-compose.yml`
   - `.env`
@@ -52,18 +55,15 @@ curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/i
 ### 方式 B：Full
 适合你想直接用 Docker Compose 同时跑前端和 API：
 
-- 脚本会下载：
-  - `subtracker-deploy-bundle.zip`
-  - `subtracker-web-dist.zip`
+- 脚本会下载当前 Release 对应版本的原始部署文件
 - 会为你准备：
   - `docker-compose.full.yml`
   - `.env`
-  - `docker/nginx.full.conf`
-  - `web-dist/`
   - `data/`
   - `data/logos/`
+  - `SUBTRACKER_WEB_IMAGE` 配置
 
-这种方式不需要你额外准备外部 Nginx。
+这种方式不需要你手工准备 `web-dist/`，直接拉前端镜像即可。
 
 ---
 
@@ -153,6 +153,8 @@ docker compose pull
 docker compose up -d
 ```
 
+首次启动时，API 容器会自动检查并初始化数据库表结构。
+
 > 注意：API-only 模式下，前端静态文件需要你自己放到 Nginx。
 
 ---
@@ -167,9 +169,6 @@ subtracker-full/
   ├─ .env
   ├─ DEPLOYMENT.md
   ├─ INSTALL-README.md
-  ├─ docker/
-  │  └─ nginx.full.conf
-  ├─ web-dist/
   ├─ data/
   │  └─ logos/
   └─ api.env.example
@@ -183,10 +182,12 @@ docker compose -f docker-compose.full.yml pull
 docker compose -f docker-compose.full.yml up -d
 ```
 
+首次启动时，API 容器会自动检查并初始化数据库表结构。
+
 默认访问：
 
 - Web：`http://localhost:8080`
-- API：由前端 Nginx 反代到内部 `api:3001`
+- API：由前端镜像内置 Nginx 反代到内部 `api:3001`
 
 ---
 
@@ -306,7 +307,7 @@ WEB_ORIGIN=http://localhost:8080
 
 - 用户访问：`https://subtracker.example.com`
 - 外层 Nginx：反代到内部 `http://127.0.0.1:8080`
-- Full 自带的 Nginx：再转发给 API 容器
+- Full 前端镜像内置 Nginx：再转发给 API 容器
 - `WEB_ORIGIN`：仍然填 `https://subtracker.example.com`
 
 一句话：**`WEB_ORIGIN` 永远填用户浏览器里真正打开的那个地址。**

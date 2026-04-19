@@ -7,20 +7,17 @@ services:
       PORT: ${PORT:-3001}
       HOST: ${HOST:-0.0.0.0}
       DATABASE_URL: ${DATABASE_URL:-file:/app/data/subtracker.db}
-      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
+      WEB_ORIGIN: ${WEB_ORIGIN:-https://subtracker.example.com}
       LOG_LEVEL: ${LOG_LEVEL:-warn}
     volumes:
       - ./data:/app/data
       - ./data/logos:/app/apps/api/storage/logos
 
   web:
-    image: nginx:1.27-alpine
+    image: ${SUBTRACKER_WEB_IMAGE:-ghcr.io/smile-qwq/subtracker-web:latest}
     container_name: subtracker-web
     restart: unless-stopped
     depends_on:
       - api
-    volumes:
-      - ./web-dist:/usr/share/nginx/html:ro
-      - ./docker/nginx.full.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "${WEB_PORT:-8080}:80"

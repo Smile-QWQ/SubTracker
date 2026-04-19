@@ -22,9 +22,10 @@ import type {
   WallosImportInspectResult
 } from '@/types/api'
 import { clearAuthSession, getStoredToken } from '@/utils/auth-storage'
+import { getApiBaseUrl } from '@/utils/api-base'
 
 const client = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001/api/v1',
+  baseURL: getApiBaseUrl(import.meta.env.VITE_API_BASE_URL),
   timeout: 30000
 })
 
