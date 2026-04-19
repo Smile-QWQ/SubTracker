@@ -1,5 +1,7 @@
 # SubTracker 部署说明
 
+本项目目前提供的部署方式为 **Docker / Docker Compose**。如果你已经有可用的 Nginx，也可以直接复用它来托管前端静态文件并反代 API。
+
 发布页已提供可直接部署的产物：
 
 - `subtracker-web-dist.zip`：前端静态文件
