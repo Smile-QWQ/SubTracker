@@ -9,14 +9,15 @@ DEFAULT_WEB_IMAGE="ghcr.io/smile-qwq/subtracker-web:latest"
 DEFAULT_API_PORT="3001"
 DEFAULT_WEB_PORT="8080"
 DEFAULT_LOG_LEVEL="warn"
+DEPLOYMENT_DOC_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/blob/main/DEPLOYMENT.md"
 
 MODE=""
 INSTALL_DIR=""
 RELEASE_TAG="${DEFAULT_RELEASE_TAG}"
 API_IMAGE="${DEFAULT_API_IMAGE}"
 WEB_IMAGE="${DEFAULT_WEB_IMAGE}"
-API_PORT="${DEFAULT_API_PORT}"
-WEB_PORT="${DEFAULT_WEB_PORT}"
+API_PORT=""
+WEB_PORT=""
 WEB_ORIGIN=""
 LOG_LEVEL="${DEFAULT_LOG_LEVEL}"
 NON_INTERACTIVE="false"
@@ -50,7 +51,7 @@ Options:
   --release <tag|latest>   使用哪个 Release，默认 latest
   --api-image <image>      API 镜像，默认 ghcr.io/smile-qwq/subtracker-api:latest
   --web-image <image>      Full 模式前端镜像，默认 ghcr.io/smile-qwq/subtracker-web:latest
-  --api-port <port>        API 对外端口，默认 3001
+  --api-port <port>        API 端口；api 模式会对外暴露，full 模式默认内部使用 3001
   --web-port <port>        Full 模式前端对外端口，默认 8080
   --web-origin <origin>    前端最终访问地址（用于 CORS），例如 https://subtracker.example.com
   --log-level <level>      API 日志级别，默认 warn
@@ -184,8 +185,10 @@ normalize_inputs() {
     INSTALL_DIR="$(prompt_value '部署目录（脚本会在这里生成 compose、.env、data）' "./subtracker-${MODE}" "$INSTALL_DIR")"
   fi
 
-  API_PORT="$(prompt_value 'API 端口' "$DEFAULT_API_PORT" "$API_PORT")"
-  if [ "$MODE" = "full" ]; then
+  if [ "$MODE" = "api" ]; then
+    API_PORT="$(prompt_value 'API 对外端口（API-only 模式）' "$DEFAULT_API_PORT" "$API_PORT")"
+  else
+    API_PORT="${API_PORT:-$DEFAULT_API_PORT}"
     WEB_PORT="$(prompt_value '前端对外端口（Full 模式）' "$DEFAULT_WEB_PORT" "$WEB_PORT")"
   fi
 
@@ -341,7 +344,9 @@ EOF
 - Release 资产：subtracker-web-dist.zip
 - 下载地址：$(release_asset_url 'subtracker-web-dist.zip')
 
-你可以把它解压到你的 Nginx 网站根目录，然后按 DEPLOYMENT.md 里的反代配置把 /api/ 和 /static/logos/ 转给 API。
+你可以把它解压到你的 Nginx 网站根目录，然后按在线部署文档里的反代配置把 /api/ 和 /static/logos/ 转给 API：
+
+- ${DEPLOYMENT_DOC_URL}
 EOF
   fi
 
@@ -350,11 +355,11 @@ EOF
 ## 反代 / SSL 说明
 
 - 如果你外层还会再套一层 Nginx / 宝塔 / HTTPS 证书：
-  - `WEB_ORIGIN` 请填写用户最终访问地址
-  - 例如：`https://subtracker.example.com`
-- 不要把 `WEB_ORIGIN` 填成：
-  - `http://127.0.0.1:${API_PORT}`
-  - `http://api:${API_PORT}`
+  - WEB_ORIGIN 请填写用户最终访问地址
+  - 例如：https://subtracker.example.com
+- 不要把 WEB_ORIGIN 填成：
+  - http://127.0.0.1:${API_PORT}
+  - http://api:${API_PORT}
   - 容器内部地址
 
 EOF
@@ -395,8 +400,6 @@ EOF
 }
 
 download_deployment_files() {
-  download_repo_file "DEPLOYMENT.md" "$INSTALL_DIR/DEPLOYMENT.md"
-  download_repo_file "README.md" "$INSTALL_DIR/README.md"
   download_repo_file "apps/api/.env.example" "$INSTALL_DIR/api.env.example"
 
   if [ "$MODE" = "full" ]; then
@@ -440,7 +443,7 @@ show_summary() {
     warn "可直接下载：$(release_asset_url 'subtracker-web-dist.zip')"
     warn '你还需要做这两件事：'
     warn '  1. 把 subtracker-web-dist.zip 解压到你的 Nginx 网站根目录'
-    warn '  2. 按 DEPLOYMENT.md 的示例，把 /api/ 和 /static/logos/ 反代到 API'
+    warn "  2. 按部署文档的示例，把 /api/ 和 /static/logos/ 反代到 API：$DEPLOYMENT_DOC_URL"
   else
     printf '\n'
     info "Full 模式会直接使用前端镜像：$WEB_IMAGE"
@@ -450,6 +453,7 @@ show_summary() {
   printf '\n'
   info "如果使用反向代理 / SSL，WEB_ORIGIN 应填写用户最终访问地址，例如 https://subtracker.example.com"
   info "更详细的说明见：$INSTALL_DIR/INSTALL-README.md"
+  info "在线部署文档：$DEPLOYMENT_DOC_URL"
 }
 
 main() {

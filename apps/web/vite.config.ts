@@ -18,21 +18,8 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes('node_modules')) return
 
-          if (id.includes('vue-router') || id.includes('/vue/') || id.includes('pinia')) {
-            return 'vendor-vue'
-          }
-
-          if (id.includes('naive-ui')) {
-            if (id.includes('/data-table') || id.includes('/pagination')) {
-              return 'vendor-naive-table'
-            }
-            if (id.includes('/date-picker') || id.includes('/select') || id.includes('/input') || id.includes('/form')) {
-              return 'vendor-naive-form'
-            }
-            if (id.includes('/layout') || id.includes('/drawer') || id.includes('/menu') || id.includes('/tabs')) {
-              return 'vendor-naive-layout'
-            }
-            return 'vendor-naive-core'
+          if (id.includes('vue-router') || id.includes('/vue/') || id.includes('pinia') || id.includes('naive-ui')) {
+            return 'vendor-ui'
           }
 
           if (id.includes('@vicons')) {
