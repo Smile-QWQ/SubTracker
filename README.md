@@ -1,5 +1,9 @@
 # SubTracker
 
+[![GitHub release](https://img.shields.io/github/v/release/Smile-QWQ/SubTracker?style=flat-square)](https://github.com/Smile-QWQ/SubTracker/releases)
+[![GitHub stars](https://img.shields.io/github/stars/Smile-QWQ/SubTracker?style=flat-square)](https://github.com/Smile-QWQ/SubTracker/stargazers)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat-square)](https://www.gnu.org/licenses/gpl-3.0)
+
 一个现代化的自托管订阅管理工具，用来统一管理多币种订阅、续订提醒、预算分析、Logo 资源，以及 Wallos 数据迁移。
 
 本项目目前提供的部署方式为 **Docker / Docker Compose**。
@@ -142,3 +146,7 @@ docker compose up -d
 - [Naive UI](https://www.naiveui.com/) —— 提供界面组件支持
 - [Fastify](https://fastify.dev/) 与 [Prisma](https://www.prisma.io/) —— 提供后端与数据访问能力
 - [Pinia](https://pinia.vuejs.org/)、[TanStack Query](https://tanstack.com/query/latest) 与 [ECharts](https://echarts.apache.org/) —— 提供状态管理、数据请求与图表展示能力
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Smile-QWQ/SubTracker&type=Date)](https://www.star-history.com/?repos=Smile-QWQ%2FSubTracker&type=date&legend=top-left)
