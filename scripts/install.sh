@@ -24,6 +24,14 @@ NON_INTERACTIVE="false"
 FORCE="false"
 RESOLVED_REF=""
 
+mode_label() {
+  if [ "${1:-$MODE}" = "full" ]; then
+    printf '完整部署'
+  else
+    printf '仅后端部署'
+  fi
+}
+
 info() {
   printf '[INFO] %s\n' "$*"
 }
@@ -46,13 +54,13 @@ Usage:
   curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/install.sh | bash -s -- --mode full --dir /opt/subtracker
 
 Options:
-  --mode <api|full>        部署方式：api=只部署后端；full=前端+后端一起部署
+  --mode <api|full>        部署方式：api=仅后端部署；full=完整部署
   --dir <path>             部署目录，默认 ./subtracker-<mode>
   --release <tag|latest>   使用哪个 Release，默认 latest
   --api-image <image>      API 镜像，默认 ghcr.io/smile-qwq/subtracker-api:latest
-  --web-image <image>      Full 模式前端镜像，默认 ghcr.io/smile-qwq/subtracker-web:latest
-  --api-port <port>        API 端口；api 模式会对外暴露，full 模式默认内部使用 3001
-  --web-port <port>        Full 模式前端对外端口，默认 8080
+  --web-image <image>      完整部署的前端镜像，默认 ghcr.io/smile-qwq/subtracker-web:latest
+  --api-port <port>        API 端口；仅后端部署会对外暴露，完整部署默认内部使用 3001
+  --web-port <port>        完整部署前端对外端口，默认 8080
   --web-origin <origin>    前端最终访问地址（用于 CORS），例如 https://subtracker.example.com
   --log-level <level>      API 日志级别，默认 warn
   --force                  若目录已存在则覆盖
@@ -161,11 +169,11 @@ select_mode() {
   cat > /dev/tty <<'EOF'
 
 请选择部署方式：
-  api  = 只部署后端 API
+  api  = 仅后端部署
          前端静态文件需要你自己放到 Nginx / 宝塔 / 站点目录
 
-  full = 前端 + 后端一起部署
-         直接使用前端镜像，不需要手工准备 web-dist
+  full = 完整部署
+         前端 + 后端一起部署，直接使用前端镜像
 
 EOF
   printf '请输入部署方式 [api/full]（默认 full）: ' > /dev/tty
@@ -186,10 +194,10 @@ normalize_inputs() {
   fi
 
   if [ "$MODE" = "api" ]; then
-    API_PORT="$(prompt_value 'API 对外端口（API-only 模式）' "$DEFAULT_API_PORT" "$API_PORT")"
+    API_PORT="$(prompt_value 'API 对外端口（仅后端部署）' "$DEFAULT_API_PORT" "$API_PORT")"
   else
     API_PORT="${API_PORT:-$DEFAULT_API_PORT}"
-    WEB_PORT="$(prompt_value '前端对外端口（Full 模式）' "$DEFAULT_WEB_PORT" "$WEB_PORT")"
+    WEB_PORT="$(prompt_value '前端对外端口（完整部署）' "$DEFAULT_WEB_PORT" "$WEB_PORT")"
   fi
 
   if [ -z "$WEB_ORIGIN" ]; then
@@ -308,20 +316,19 @@ write_readme() {
   local pull_cmd='docker compose pull'
   local up_cmd='docker compose up -d'
   local logs_cmd='docker compose logs -f api'
+  local mode_display
+  mode_display="$(mode_label)"
 
   if [ "$MODE" = "full" ]; then
-    compose_file='docker-compose.full.yml'
-    pull_cmd='docker compose -f docker-compose.full.yml pull'
-    up_cmd='docker compose -f docker-compose.full.yml up -d'
-    logs_cmd='docker compose -f docker-compose.full.yml logs -f api'
+    compose_file='docker-compose.yml'
   fi
 
   cat > "$INSTALL_DIR/INSTALL-README.md" <<EOF
-# SubTracker ${MODE} 部署目录
+# SubTracker ${mode_display}目录
 
-此目录由 install.sh 自动生成。
+此目录由安装脚本自动生成。
 
-## 已准备好的内容
+## 已准备好的文件
 
 - ${compose_file}
 - .env
@@ -331,42 +338,32 @@ EOF
 
   if [ "$MODE" = "full" ]; then
     cat >> "$INSTALL_DIR/INSTALL-README.md" <<EOF
-- Full 模式前端镜像：${WEB_IMAGE}
+- 完整部署前端镜像：${WEB_IMAGE}
 EOF
   else
     cat >> "$INSTALL_DIR/INSTALL-README.md" <<EOF
 
-## 你还需要自行处理的内容
+## 前端静态文件
 
-当前是 API-only 模式，脚本**不会**帮你托管前端静态文件。
-请把 SubTracker 前端静态文件部署到你自己的 Nginx：
-
-- Release 资产：subtracker-web-dist.zip
+- 需要你自行下载并放到站点目录
+- 资产：subtracker-web-dist.zip
 - 下载地址：$(release_asset_url 'subtracker-web-dist.zip')
-
-你可以把它解压到你的 Nginx 网站根目录，然后按在线部署文档里的反代配置把 /api/ 和 /static/logos/ 转给 API：
-
-- ${DEPLOYMENT_DOC_URL}
 EOF
   fi
 
   cat >> "$INSTALL_DIR/INSTALL-README.md" <<EOF
 
-## 反代 / SSL 说明
+## WEB_ORIGIN
 
-- 如果你外层还会再套一层 Nginx / 宝塔 / HTTPS 证书：
-  - WEB_ORIGIN 请填写用户最终访问地址
-  - 例如：https://subtracker.example.com
-- 不要把 WEB_ORIGIN 填成：
-  - http://127.0.0.1:${API_PORT}
-  - http://api:${API_PORT}
-  - 容器内部地址
+WEB_ORIGIN 请填写用户最终访问地址，例如：
+
+- https://subtracker.example.com
 
 EOF
 
   if [ "$MODE" = "api" ]; then
     cat >> "$INSTALL_DIR/INSTALL-README.md" <<EOF
-API-only 模式常见链路：
+仅后端部署常见链路：
 
 - 浏览器 -> https://你的域名
 - 外层 Nginx -> http://127.0.0.1:${API_PORT} （API）
@@ -375,11 +372,11 @@ API-only 模式常见链路：
 EOF
   else
     cat >> "$INSTALL_DIR/INSTALL-README.md" <<EOF
-Full 模式常见链路：
+完整部署常见链路：
 
 - 浏览器 -> https://你的域名
 - 外层 Nginx -> http://127.0.0.1:${WEB_PORT}
-- Full 自带 Nginx -> API 容器
+- 完整部署自带 Nginx -> API 容器
 
 EOF
   fi
@@ -396,14 +393,27 @@ EOF
 
     cd ${INSTALL_DIR}
     ${logs_cmd}
+
+## 升级
+
+    cd ${INSTALL_DIR}
+    ${pull_cmd}
+    ${up_cmd}
 EOF
+
+  if [ "$MODE" = "api" ]; then
+    cat >> "$INSTALL_DIR/INSTALL-README.md" <<EOF
+
+仅后端部署升级时，还需要把最新的 subtracker-web-dist.zip 重新下载并覆盖到站点目录。
+EOF
+  fi
 }
 
 download_deployment_files() {
   download_repo_file "apps/api/.env.example" "$INSTALL_DIR/api.env.example"
 
   if [ "$MODE" = "full" ]; then
-    download_repo_file "docker-compose.full.yml" "$INSTALL_DIR/docker-compose.full.yml"
+    download_repo_file "docker-compose.full.yml" "$INSTALL_DIR/docker-compose.yml"
   else
     download_repo_file "docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
   fi
@@ -412,20 +422,16 @@ download_deployment_files() {
 show_summary() {
   local compose_cmd='docker compose'
 
-  if [ "$MODE" = "full" ]; then
-    compose_cmd='docker compose -f docker-compose.full.yml'
-  fi
-
   printf '\n'
   info "部署目录已生成：$INSTALL_DIR"
-  info "部署模式：$MODE"
+  info "部署方式：$(mode_label)"
   info "Release 版本：$(resolve_repo_ref)"
-  info "安装脚本已执行完成，建议按下面步骤继续："
+  info "下一步："
 
   printf '\n'
-  printf '1) 进入部署目录并检查环境变量\n'
+  printf '1) 进入部署目录并检查 .env\n'
   printf '   cd %s\n' "$INSTALL_DIR"
-  printf '   查看并按需修改 .env\n'
+  printf '   按需修改 .env\n'
 
   printf '\n'
   printf '2) 拉取镜像并启动\n'
@@ -439,19 +445,13 @@ show_summary() {
 
   if [ "$MODE" = "api" ]; then
     printf '\n'
-    warn '当前是 API-only 模式：前端静态文件需要你自己放到 Nginx。'
-    warn "可直接下载：$(release_asset_url 'subtracker-web-dist.zip')"
-    warn '你还需要做这两件事：'
-    warn '  1. 把 subtracker-web-dist.zip 解压到你的 Nginx 网站根目录'
-    warn "  2. 按部署文档的示例，把 /api/ 和 /static/logos/ 反代到 API：$DEPLOYMENT_DOC_URL"
+    info "前端静态文件：$(release_asset_url 'subtracker-web-dist.zip')"
   else
     printf '\n'
-    info "Full 模式会直接使用前端镜像：$WEB_IMAGE"
-    info "如果你外层还会再套一层 Nginx / HTTPS，请把它反代到 http://127.0.0.1:$WEB_PORT"
+    info "前端镜像：$WEB_IMAGE"
   fi
 
   printf '\n'
-  info "如果使用反向代理 / SSL，WEB_ORIGIN 应填写用户最终访问地址，例如 https://subtracker.example.com"
   info "更详细的说明见：$INSTALL_DIR/INSTALL-README.md"
   info "在线部署文档：$DEPLOYMENT_DOC_URL"
 }

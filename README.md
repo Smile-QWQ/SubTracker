@@ -75,37 +75,37 @@ npm test
 
 ## 部署
 
-如果你只是想快速部署，不需要自己编译源码，直接用安装脚本即可：
+直接使用安装脚本即可：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/install.sh | bash
 ```
 
-脚本会按你选择的模式自动下载 Release 产物并生成部署目录：
+脚本会按你选择的方式自动下载 Release 产物并生成部署目录：
 
-- `api`：只部署后端 API，前端静态文件由你自己的 Nginx 托管
-- `full`：前端 + 后端一起部署，直接使用前端镜像
+- **完整部署（full）**：前端 + 后端一起部署，直接使用前端镜像
+- **仅后端部署（api）**：只部署后端 API，前端静态文件由你自己的 Nginx 托管
 
-如果你只是想尽快跑起来，**更推荐 `full` 模式**，因为它更简单方便，不需要额外准备静态文件目录。
+推荐使用**完整部署**，步骤更少。
 
-API 容器首次启动时会自动初始化 SQLite 数据库表结构，不需要再手工跑 Prisma 初始化命令。
+API 容器首次启动时会自动初始化 SQLite 数据库表结构。
 
 ### 升级
 
-如果你已经部署过，日常升级通常**不需要**重新运行安装脚本，直接拉取新镜像并重启即可：
+日常升级直接拉取新镜像并重启：
 
 ```bash
-docker compose -f docker-compose.full.yml pull
-docker compose -f docker-compose.full.yml up -d
+docker compose pull
+docker compose up -d
 ```
 
-如果你是 API-only 模式，把 `docker-compose.full.yml` 换成 `docker-compose.yml` 即可。  
-另外，**API-only 升级时还需要重新下载并覆盖 `subtracker-web-dist.zip` 解压后的前端静态文件目录**；只有 Full 模式的前端才会随镜像一起升级。  
-只有在这些场景下，才建议重新运行安装脚本：
+仅后端部署升级时，还需要重新下载并覆盖 `subtracker-web-dist.zip` 解压后的前端静态文件目录。
+
+只有在这些场景下，才需要重新运行安装脚本：
 
 - 首次部署
 - 想重建部署目录
-- 想切换部署模式（`api` / `full`）
+- 想切换部署方式（`仅后端部署 / 完整部署`）
 - 部署模板或 `.env` 模板有明显变化
 
 详细部署说明见：
@@ -114,8 +114,8 @@ docker compose -f docker-compose.full.yml up -d
 
 当前提供两种方式：
 
-1. **主要推荐**：使用 `docker-compose.full.yml` 直接拉起前端镜像 + API，简单方便
-2. **可选方式**：外部 Nginx 托管前端静态文件，Docker 仅部署 API
+1. **推荐**：完整部署，脚本准备部署目录后直接 `docker compose up -d`
+2. **可选**：仅后端部署，外部 Nginx 托管前端静态文件，Docker 仅部署 API
 
 ## Release 产物
 
@@ -123,6 +123,6 @@ docker compose -f docker-compose.full.yml up -d
 
 - `subtracker-web-dist.zip`：前端静态文件
 - `ghcr.io/smile-qwq/subtracker-api`：API Docker 镜像
-- `ghcr.io/smile-qwq/subtracker-web`：Full 模式前端 Docker 镜像
+- `ghcr.io/smile-qwq/subtracker-web`：完整部署使用的前端 Docker 镜像
 
 适合直接用于服务器部署。

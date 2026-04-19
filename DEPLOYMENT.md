@@ -1,14 +1,14 @@
 # SubTracker 部署说明
 
-SubTracker 现在**不需要用户自己编译**。发布页已经提供了两个现成资产：
+发布页已提供可直接部署的产物：
 
 - `subtracker-web-dist.zip`：前端静态文件
 - `ghcr.io/smile-qwq/subtracker-api`：API Docker 镜像
-- `ghcr.io/smile-qwq/subtracker-web`：Full 模式前端 Docker 镜像
+- `ghcr.io/smile-qwq/subtracker-web`：完整部署使用的前端 Docker 镜像
 
-另外，从 `v0.4.2` 之后开始，API 容器在启动时会自动执行一次 Prisma `db push`，用于初始化或补齐 SQLite 表结构，因此 fresh deploy 不再需要你手工执行数据库初始化命令。
+API 容器首次启动时会自动执行 Prisma `db push`，自动初始化或补齐 SQLite 表结构。
 
-如果你只是想尽快把它跑起来，优先用下面这个脚本：
+建议直接使用安装脚本：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/install.sh | bash
@@ -18,32 +18,17 @@ curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/i
 
 ---
 
-## 0. 本次部署文档更新说明
-
-这版部署文档相对之前做了几处收敛，避免用户还要自己从源码编译：
-
-- 改为以 **GitHub Release 现成产物** 为主，不再把“本地自行编译前端”当默认路径
-- 增加 `install.sh` 一键辅助部署入口，脚本会自动下载所需部署文件
-- 明确区分两种模式：
-  - `api`：只部署后端，前端静态文件由你自己的 Nginx 托管
-  - `full`：前端和后端一起部署，直接使用前端镜像
-- 明确补充了 **反向代理 / SSL** 的实际用法，尤其是 `WEB_ORIGIN` 应该填写用户最终访问的 HTTPS 域名
-
-如果你只是想快速部署给别人试用，建议直接按本文的 `install.sh` 方式走。
-
----
-
 ## 1. 两种部署方式怎么选
 
-如果你没有特别强的“前后端分离部署”需求，**主要推荐 `full` 模式**，因为它更简单方便：
+如果没有前后端分离部署需求，推荐使用**完整部署（full）**：
 
 - 不需要自己准备 `web-dist/`
 - 不需要单独托管前端静态文件
 - 更适合直接 `docker compose pull && up -d` 更新
 
-`api` 模式更适合已经有自己 Nginx / 宝塔 / 静态站点目录的用户。
+**仅后端部署（api）**更适合已经有自己 Nginx / 宝塔 / 静态站点目录的用户。
 
-### 方式 A：API-only
+### 方式 A：仅后端部署
 适合你已经有自己的 Nginx / 宝塔 / 现成网站目录：
 
 - 脚本会下载当前 Release 对应版本的原始部署文件
@@ -60,18 +45,18 @@ curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/i
 2. 把 `subtracker-web-dist.zip` 解压到你自己的 Nginx 网站根目录
 3. 按下面的反代配置把 `/api/`、`/static/logos/` 转给 API
 
-### 方式 B：Full
+### 方式 B：完整部署
 适合你想直接用 Docker Compose 同时跑前端和 API：
 
 - 脚本会下载当前 Release 对应版本的原始部署文件
 - 会为你准备：
-  - `docker-compose.full.yml`
+  - `docker-compose.yml`
   - `.env`
   - `data/`
   - `data/logos/`
   - `SUBTRACKER_WEB_IMAGE` 配置
 
-这种方式不需要你手工准备 `web-dist/`，直接拉前端镜像即可。
+这种方式不需要手工准备 `web-dist/`，直接拉前端镜像即可。
 
 ---
 
@@ -83,23 +68,23 @@ curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/i
 curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/install.sh | bash
 ```
 
-脚本会交互式询问：
+脚本会询问：
 
-- 部署模式：`api` 或 `full`
+- 部署方式：`仅后端部署（api）` 或 `完整部署（full）`
 - 部署目录
-- `WEB_ORIGIN`
-- `api` 模式下会问：**API 对外端口**
-- `full` 模式下会问：**前端对外端口 `WEB_PORT`**
+- `WEB_ORIGIN`（前端访问地址）
+- 仅后端部署会问：**API 对外端口**
+- 完整部署会问：**前端对外端口 `WEB_PORT`**
 
 然后自动下载对应 Release 资产并生成部署目录。
 
-> 如果你外面还会再套一层 Nginx / 宝塔 / HTTPS 证书，`WEB_ORIGIN` 请填写**用户最终访问的地址**，例如：`https://subtracker.example.com`，不要填 `127.0.0.1` 或容器内部地址。
+> 如果外层还有 Nginx / 宝塔 / HTTPS，`WEB_ORIGIN` 请填写用户最终访问地址，例如 `https://subtracker.example.com`。
 
 ---
 
 ### 2.2 指定参数运行
 
-#### API-only
+#### 仅后端部署
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/install.sh | bash -s -- \
@@ -108,7 +93,7 @@ curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/i
   --web-origin https://subtracker.example.com
 ```
 
-#### Full
+#### 完整部署
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/install.sh | bash -s -- \
@@ -123,12 +108,12 @@ curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/i
 ### 2.3 常用参数
 
 ```text
---mode <api|full>        部署模式
+--mode <api|full>        部署方式
 --dir <path>             输出目录，默认 ./subtracker-<mode>
 --release <tag|latest>   下载哪个 Release，默认 latest
 --api-image <image>      API 镜像，默认 ghcr.io/smile-qwq/subtracker-api:latest
---api-port <port>        API 端口；api 模式会对外暴露，full 模式默认内部使用 3001
---web-port <port>        Full 模式前端端口，默认 8080
+--api-port <port>        API 端口；仅后端部署会对外暴露，完整部署默认内部使用 3001
+--web-port <port>        完整部署前端端口，默认 8080
 --web-origin <origin>    WEB_ORIGIN
 --log-level <level>      LOG_LEVEL，默认 warn
 --force                  若目录已存在则覆盖
@@ -139,7 +124,7 @@ curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/i
 
 ## 3. 脚本执行后会得到什么
 
-### 3.1 API-only
+### 3.1 仅后端部署
 
 典型目录：
 
@@ -161,19 +146,19 @@ docker compose pull
 docker compose up -d
 ```
 
-首次启动时，API 容器会自动检查并初始化数据库表结构。
+首次启动时，API 容器会自动初始化数据库表结构。
 
-> 注意：API-only 模式下，前端静态文件需要你自己放到 Nginx。
+> 注意：仅后端部署下，前端静态文件需要你自己放到 Nginx。
 
 ---
 
-### 3.2 Full
+### 3.2 完整部署
 
 典型目录：
 
 ```text
 subtracker-full/
-  ├─ docker-compose.full.yml
+  ├─ docker-compose.yml
   ├─ .env
   ├─ INSTALL-README.md
   ├─ data/
@@ -185,30 +170,28 @@ subtracker-full/
 
 ```bash
 cd subtracker-full
-docker compose -f docker-compose.full.yml pull
-docker compose -f docker-compose.full.yml up -d
+docker compose pull
+docker compose up -d
 ```
 
-首次启动时，API 容器会自动检查并初始化数据库表结构。
+首次启动时，API 容器会自动初始化数据库表结构。
 
 默认访问：
 
 - Web：`http://localhost:8080`
 - API：由前端镜像内置 Nginx 反代到内部 `api:3001`
 
-补充说明：
-
 - `.env` 里的 `WEB_PORT` 代表**宿主机对外暴露的前端端口**
-- `docker-compose.full.yml` 里容器内部仍然是 Nginx 默认监听的 `80`
+- 脚本生成的 `docker-compose.yml` 里容器内部仍然是 Nginx 默认监听的 `80`
 - 也就是说：
   - `WEB_PORT=8080` -> 映射为 `8080:80`
   - `WEB_PORT=9000` -> 映射为 `9000:80`
 
 ---
 
-## 4. API-only 模式下的前端静态文件
+## 4. 仅后端部署下的前端静态文件
 
-如果你选的是 API-only，前端需要你自己放到外部 Nginx。
+如果你选的是仅后端部署，前端需要你自己放到外部 Nginx。
 
 静态文件来源：
 
@@ -258,7 +241,7 @@ server {
 
 ## 5. 核心环境变量
 
-脚本会自动生成 `.env`，常见需要改的主要是这些：
+脚本会自动生成 `.env`，常见需要调整的字段如下：
 
 ```bash
 SUBTRACKER_API_IMAGE=ghcr.io/smile-qwq/subtracker-api:latest
@@ -269,7 +252,7 @@ WEB_ORIGIN=https://subtracker.example.com
 LOG_LEVEL=warn
 ```
 
-Full 模式还会多一个：
+完整部署还会多一个：
 
 ```bash
 WEB_PORT=8080
@@ -277,34 +260,19 @@ WEB_PORT=8080
 
 ### `WEB_ORIGIN` 怎么填
 
-这个值用于浏览器跨域校验（CORS），**应该填写前端最终访问地址**。
+这个值用于浏览器跨域校验（CORS），请填写前端最终访问地址。
 
-常见情况：
-
-- 外层 Nginx + HTTPS 域名：
+例如：
 
 ```bash
 WEB_ORIGIN=https://subtracker.example.com
 ```
 
-- 本机临时测试 Full 模式：
-
-```bash
-WEB_ORIGIN=http://localhost:8080
-```
-
-不要填这些：
-
-- `http://127.0.0.1:3001`
-- `http://api:3001`
-- 容器内部地址
-- 只给后端的监听地址
-
 ---
 
 ## 6. 反向代理 / SSL 说明
 
-生产环境里，通常建议最外层再套一层 Nginx 处理：
+生产环境通常会在最外层再套一层 Nginx 处理：
 
 - HTTPS 证书
 - 域名访问
@@ -312,20 +280,18 @@ WEB_ORIGIN=http://localhost:8080
 
 这时可以按下面理解：
 
-### API-only
+### 仅后端部署
 
 - 前端静态文件：由外部 Nginx 托管
 - API：反代到 `http://127.0.0.1:3001`
 - `WEB_ORIGIN`：填外部 HTTPS 域名，例如 `https://subtracker.example.com`
 
-### Full
+### 完整部署
 
 - 用户访问：`https://subtracker.example.com`
 - 外层 Nginx：反代到内部 `http://127.0.0.1:8080`
-- Full 前端镜像内置 Nginx：再转发给 API 容器
+- 完整部署前端镜像内置 Nginx：再转发给 API 容器
 - `WEB_ORIGIN`：仍然填 `https://subtracker.example.com`
-
-一句话：**`WEB_ORIGIN` 永远填用户浏览器里真正打开的那个地址。**
 
 如果你把 `WEB_PORT` 改成别的值，比如 `9000`，那外层 Nginx 就应该反代到：
 
@@ -337,7 +303,7 @@ http://127.0.0.1:9000
 
 ## 7. 升级
 
-### API-only
+### 仅后端部署
 
 ```bash
 cd /你的部署目录
@@ -346,39 +312,29 @@ docker compose up -d
 ```
 
 同时请把发布页最新的 `subtracker-web-dist.zip` 重新下载并覆盖到你的 Nginx 站点目录。  
-API-only 模式的前端静态文件是独立托管的，**升级时默认需要同时更新后端镜像和前端静态文件**。
+仅后端部署的前端静态文件是独立托管的，升级时需要同时更新后端镜像和前端静态文件。
 
-### Full
+### 完整部署
 
 ```bash
 cd /你的部署目录
-docker compose -f docker-compose.full.yml pull
-docker compose -f docker-compose.full.yml up -d
+docker compose pull
+docker compose up -d
 ```
 
-日常升级通常**不需要**重新运行安装脚本，因为 Full 模式已经直接使用前端镜像；API-only 虽然也不用重跑脚本，但仍需要手动覆盖前端静态文件。
+日常升级通常不需要重新运行安装脚本；完整部署直接更新镜像即可，仅后端部署仍需手动覆盖前端静态文件。
 
-只有在这些场景下，才建议重新运行安装脚本：
+只有在这些场景下，才需要重新运行安装脚本：
 
 - 首次部署
 - 想重建部署目录
-- 想切换部署模式（`api` / `full`）
+- 想切换部署方式（`仅后端部署 / 完整部署`）
 - 部署模板或 `.env` 模板有明显变化
 
-例如你要重建 Full 部署目录时，可以执行：
+例如你要重建完整部署目录时，可以执行：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/install.sh | bash -s -- --mode full --force
 ```
 
-从 `v0.4.6` 开始，Full 模式还包含了前端生产构建分包稳定性修复；如果你此前遇到前端白屏或浏览器控制台报类似 `can't access lexical declaration before initialization`，请直接升级到 `v0.4.6` 或更高版本。
-
 ---
-
-## 8. 说明
-
-- 这套部署流程是基于 **GitHub Release 现成产物**，不是源码编译部署
-- 如果你只是想给别人快速试用，优先推荐：
-  - 有自己 Nginx：用 `api`
-  - 想少折腾：用 `full`
-- 脚本只负责**下载并准备部署目录**，真正启动服务仍然需要你本机/服务器已安装 Docker / Docker Compose
