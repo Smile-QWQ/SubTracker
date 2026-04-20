@@ -22,6 +22,26 @@ type TelegramApiResponse = {
   description?: string
 }
 
+type NotificationSubscriptionItem = {
+  id: string
+  name: string
+  nextRenewalDate: string
+  amount: number
+  currency: string
+  tagNames?: string[]
+  websiteUrl?: string
+  notes?: string
+  daysUntilRenewal?: number
+  daysOverdue?: number
+}
+
+type NotificationSummarySection = {
+  phase: string
+  title: string
+  eventType: WebhookEventType
+  subscriptions: NotificationSubscriptionItem[]
+}
+
 export type PushplusSendResult = {
   accepted: boolean
   code: number
@@ -56,24 +76,131 @@ async function markNotificationSent(
   await setSetting(buildNotificationKey(channel, params), true)
 }
 
+function getMergedSubscriptions(params: NotificationDispatchParams) {
+  const subscriptions = params.payload.subscriptions
+  return Array.isArray(subscriptions) ? (subscriptions as NotificationSubscriptionItem[]) : []
+}
+
+function getMergedSections(params: NotificationDispatchParams) {
+  const sections = params.payload.mergedSections
+  return Array.isArray(sections) ? (sections as NotificationSummarySection[]) : []
+}
+
 function getPhaseLabel(params: NotificationDispatchParams) {
   const phase = String(params.payload.phase ?? '')
   const daysUntilRenewal = Number(params.payload.daysUntilRenewal ?? 0)
   const daysOverdue = Number(params.payload.daysOverdue ?? 0)
+  const mergedSections = getMergedSections(params)
+  const mergedSubscriptions = getMergedSubscriptions(params)
+
+  if (mergedSections.length > 1) {
+    return '订阅提醒汇总'
+  }
 
   if (params.eventType === 'subscription.reminder_due') {
+    if (mergedSubscriptions.length > 0) {
+      return phase === 'due_today' ? '今天到期' : '即将到期'
+    }
     return phase === 'due_today' ? '今天到期' : `还有 ${daysUntilRenewal} 天到期`
   }
 
-  return `已过期第 ${daysOverdue} 天`
+  return mergedSubscriptions.length > 0 ? '过期提醒' : `已过期第 ${daysOverdue} 天`
 }
 
 function buildNotificationTitle(params: NotificationDispatchParams) {
+  const mergedSubscriptions = getMergedSubscriptions(params)
+  const mergedSections = getMergedSections(params)
+
+  if (mergedSubscriptions.length > 0) {
+    const prefix = mergedSections.length > 1 ? '订阅提醒汇总' : getPhaseLabel(params)
+    return `${prefix}：共 ${mergedSubscriptions.length} 项订阅`
+  }
+
   const name = String(params.payload.name ?? '未命名订阅')
   return `${getPhaseLabel(params)}：${name}`
 }
 
+function buildSummarySectionBody(section: NotificationSummarySection) {
+  return [
+    `${section.title}（${section.subscriptions.length} 项）`,
+    ...section.subscriptions.map((subscription, index) => {
+      const amountText = `${subscription.amount} ${subscription.currency}`.trim()
+      const extras = [
+        subscription.daysUntilRenewal !== undefined && subscription.daysUntilRenewal > 0
+          ? `还有 ${subscription.daysUntilRenewal} 天`
+          : null,
+        subscription.daysOverdue !== undefined && subscription.daysOverdue > 0
+          ? `过期 ${subscription.daysOverdue} 天`
+          : null
+      ]
+        .filter(Boolean)
+        .join(' / ')
+
+      return [
+        `${index + 1}. ${subscription.name}`,
+        `   日期：${subscription.nextRenewalDate}`,
+        `   金额：${amountText}`,
+        extras ? `   说明：${extras}` : null
+      ]
+        .filter(Boolean)
+        .join('\n')
+    })
+  ].join('\n')
+}
+
+function buildMergedNotificationBody(params: NotificationDispatchParams) {
+  const mergedSections = getMergedSections(params)
+  const mergedSubscriptions = getMergedSubscriptions(params)
+
+  if (mergedSections.length > 0) {
+    const lines = [
+      `提醒类型：${getPhaseLabel(params)}`,
+      `订阅数量：${mergedSubscriptions.length} 项`,
+      ''
+    ]
+
+    for (const section of mergedSections) {
+      lines.push(buildSummarySectionBody(section), '')
+    }
+
+    return lines.join('\n').trim()
+  }
+
+  return [
+    `提醒类型：${getPhaseLabel(params)}`,
+    `订阅数量：${mergedSubscriptions.length} 项`,
+    '',
+    ...mergedSubscriptions.map((subscription, index) => {
+      const amountText = `${subscription.amount} ${subscription.currency}`.trim()
+      const extras = [
+        subscription.daysUntilRenewal !== undefined && subscription.daysUntilRenewal > 0
+          ? `还有 ${subscription.daysUntilRenewal} 天`
+          : null,
+        subscription.daysOverdue !== undefined && subscription.daysOverdue > 0
+          ? `过期 ${subscription.daysOverdue} 天`
+          : null
+      ]
+        .filter(Boolean)
+        .join(' / ')
+
+      return [
+        `${index + 1}. ${subscription.name}`,
+        `   日期：${subscription.nextRenewalDate}`,
+        `   金额：${amountText}`,
+        extras ? `   说明：${extras}` : null
+      ]
+        .filter(Boolean)
+        .join('\n')
+    })
+  ].join('\n')
+}
+
 function buildNotificationBody(params: NotificationDispatchParams) {
+  const mergedSubscriptions = getMergedSubscriptions(params)
+  if (mergedSubscriptions.length > 0) {
+    return buildMergedNotificationBody(params)
+  }
+
   const lines = [
     `提醒类型：${getPhaseLabel(params)}`,
     `订阅名称：${String(params.payload.name ?? '')}`,
@@ -299,11 +426,8 @@ export async function dispatchNotificationEvent(params: NotificationDispatchPara
   const results: NotificationChannelResult[] = []
 
   try {
-    await dispatchWebhookEvent(params)
-    results.push({
-      channel: 'webhook',
-      status: 'success'
-    })
+    const webhookResult = await dispatchWebhookEvent(params)
+    results.push(webhookResult)
   } catch (error) {
     results.push({
       channel: 'webhook',
@@ -312,25 +436,25 @@ export async function dispatchNotificationEvent(params: NotificationDispatchPara
     })
   }
 
-  const emailResult = await Promise.resolve(sendEmailNotification(params)).catch((error) => ({
+  const emailResult = (await Promise.resolve(sendEmailNotification(params)).catch((error) => ({
     channel: 'email',
     status: 'failed',
     message: error instanceof Error ? error.message : 'email_dispatch_failed'
-  })) as NotificationChannelResult
+  }))) as NotificationChannelResult
   results.push(emailResult)
 
-  const pushplusResult = await Promise.resolve(sendPushplusNotification(params)).catch((error) => ({
+  const pushplusResult = (await Promise.resolve(sendPushplusNotification(params)).catch((error) => ({
     channel: 'pushplus',
     status: 'failed',
     message: error instanceof Error ? error.message : 'pushplus_dispatch_failed'
-  })) as NotificationChannelResult
+  }))) as NotificationChannelResult
   results.push(pushplusResult)
 
-  const telegramResult = await Promise.resolve(sendTelegramNotification(params)).catch((error) => ({
+  const telegramResult = (await Promise.resolve(sendTelegramNotification(params)).catch((error) => ({
     channel: 'telegram',
     status: 'failed',
     message: error instanceof Error ? error.message : 'telegram_dispatch_failed'
-  })) as NotificationChannelResult
+  }))) as NotificationChannelResult
   results.push(telegramResult)
 
   return results

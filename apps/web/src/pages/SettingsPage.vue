@@ -31,8 +31,13 @@
                 </n-form-item>
               </n-grid-item>
               <n-grid-item>
-                <n-form-item label="到期当天提醒">
-                  <n-switch v-model:value="settingsForm.notifyOnDueDay" />
+                <n-form-item label="提醒策略">
+                  <n-space align="center" wrap>
+                    <span class="switch-inline-label">到期当天提醒</span>
+                    <n-switch v-model:value="settingsForm.notifyOnDueDay" />
+                    <span class="switch-inline-label">多订阅合并通知</span>
+                    <n-switch v-model:value="settingsForm.mergeMultiSubscriptionNotifications" />
+                  </n-space>
                 </n-form-item>
               </n-grid-item>
             </n-grid>
@@ -489,6 +494,7 @@ const settingsForm = reactive<Settings>({
   defaultNotifyDays: 3,
   rememberSessionDays: 7,
   notifyOnDueDay: true,
+  mergeMultiSubscriptionNotifications: true,
   monthlyBudgetBase: null,
   yearlyBudgetBase: null,
   enableTagBudgets: false,
@@ -680,6 +686,7 @@ async function saveBasicSettings() {
     defaultNotifyDays: settingsForm.defaultNotifyDays,
     rememberSessionDays: settingsForm.rememberSessionDays,
     notifyOnDueDay: settingsForm.notifyOnDueDay,
+    mergeMultiSubscriptionNotifications: settingsForm.mergeMultiSubscriptionNotifications,
     monthlyBudgetBase: settingsForm.monthlyBudgetBase,
     yearlyBudgetBase: settingsForm.yearlyBudgetBase,
     enableTagBudgets: settingsForm.enableTagBudgets,
@@ -967,6 +974,10 @@ function formatTime(value: string) {
 
 .switch-label {
   margin-left: 10px;
+  color: #475569;
+}
+
+.switch-inline-label {
   color: #475569;
 }
 

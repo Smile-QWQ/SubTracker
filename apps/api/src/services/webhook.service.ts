@@ -226,7 +226,13 @@ export async function dispatchWebhookEvent(params: {
   subscriptionId?: string
 }) {
   const config = normalizeWebhookSettings(await getPrimaryWebhookEndpoint())
-  if (!config.enabled || !config.url) return
+  if (!config.enabled || !config.url) {
+    return {
+      channel: 'webhook' as const,
+      status: 'skipped' as const,
+      message: 'webhook_disabled'
+    }
+  }
 
   const existing = await prisma.webhookDelivery.findUnique({
     where: {
@@ -239,7 +245,11 @@ export async function dispatchWebhookEvent(params: {
   })
 
   if (existing?.status === 'success') {
-    return
+    return {
+      channel: 'webhook' as const,
+      status: 'skipped' as const,
+      message: 'webhook_already_sent'
+    }
   }
 
   const target =
@@ -275,6 +285,14 @@ export async function dispatchWebhookEvent(params: {
         requestMethod: config.requestMethod
       }
     })
+
+    const status: 'success' | 'failed' = result.statusCode >= 400 ? 'failed' : 'success'
+
+    return {
+      channel: 'webhook' as const,
+      status,
+      message: result.statusCode >= 400 ? `webhook_http_${result.statusCode}` : undefined
+    }
   } catch (error) {
     await prisma.webhookDelivery.update({
       where: { id: target.id },
@@ -288,5 +306,11 @@ export async function dispatchWebhookEvent(params: {
         requestMethod: config.requestMethod
       }
     })
+
+    return {
+      channel: 'webhook' as const,
+      status: 'failed' as const,
+      message: error instanceof Error ? error.message : 'webhook_dispatch_failed'
+    }
   }
 }

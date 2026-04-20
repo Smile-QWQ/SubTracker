@@ -21,6 +21,7 @@ export async function getAppSettings(): Promise<SettingsInput> {
   const defaultNotifyDays = await getSetting('defaultNotifyDays', config.defaultNotifyDays)
   const rememberSessionDays = await getSetting('rememberSessionDays', 7)
   const notifyOnDueDay = await getSetting('notifyOnDueDay', true)
+  const mergeMultiSubscriptionNotifications = await getSetting('mergeMultiSubscriptionNotifications', true)
   const monthlyBudgetBase = await getSetting<number | null>('monthlyBudgetBase', null)
   const yearlyBudgetBase = await getSetting<number | null>('yearlyBudgetBase', null)
   const enableTagBudgets = await getSetting('enableTagBudgets', false)
@@ -53,6 +54,7 @@ export async function getAppSettings(): Promise<SettingsInput> {
     defaultNotifyDays,
     rememberSessionDays,
     notifyOnDueDay,
+    mergeMultiSubscriptionNotifications,
     monthlyBudgetBase,
     yearlyBudgetBase,
     enableTagBudgets,

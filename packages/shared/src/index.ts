@@ -165,6 +165,7 @@ export const SettingsSchema = z.object({
   defaultNotifyDays: z.number().int().min(0).max(365).default(3),
   rememberSessionDays: z.number().int().min(1).max(365).default(7),
   notifyOnDueDay: z.boolean().default(true),
+  mergeMultiSubscriptionNotifications: z.boolean().default(true),
   monthlyBudgetBase: OptionalMoneySchema,
   yearlyBudgetBase: OptionalMoneySchema,
   enableTagBudgets: z.boolean().default(false),

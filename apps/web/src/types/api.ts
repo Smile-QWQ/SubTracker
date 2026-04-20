@@ -207,6 +207,7 @@ export interface Settings {
   defaultNotifyDays: number
   rememberSessionDays: number
   notifyOnDueDay: boolean
+  mergeMultiSubscriptionNotifications: boolean
   monthlyBudgetBase?: number | null
   yearlyBudgetBase?: number | null
   enableTagBudgets: boolean

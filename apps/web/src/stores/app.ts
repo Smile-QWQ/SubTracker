@@ -10,6 +10,7 @@ export const useAppStore = defineStore('app', () => {
     defaultNotifyDays: 3,
     rememberSessionDays: 7,
     notifyOnDueDay: true,
+    mergeMultiSubscriptionNotifications: true,
     monthlyBudgetBase: null,
     yearlyBudgetBase: null,
     enableTagBudgets: false,

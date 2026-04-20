@@ -21,6 +21,7 @@ describe('shared schema', () => {
 
     expect(parsed.defaultNotifyDays).toBe(3)
     expect(parsed.notifyOnDueDay).toBe(true)
+    expect(parsed.mergeMultiSubscriptionNotifications).toBe(true)
     expect(parsed.overdueReminderDays).toEqual([1, 2, 3])
     expect(parsed.telegramNotificationsEnabled).toBe(false)
     expect(parsed.telegramConfig).toEqual({

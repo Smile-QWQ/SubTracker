@@ -9,6 +9,7 @@ vi.mock('../../src/services/settings.service', () => ({
     defaultNotifyDays: 3,
     rememberSessionDays: 7,
     notifyOnDueDay: true,
+    mergeMultiSubscriptionNotifications: (store.get('mergeMultiSubscriptionNotifications') as boolean) ?? true,
     monthlyBudgetBase: null,
     yearlyBudgetBase: null,
     enableTagBudgets: false,
