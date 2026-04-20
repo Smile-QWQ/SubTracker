@@ -6,10 +6,6 @@ import { getAppSettings } from './settings.service'
 
 export type ReminderPhase = 'upcoming' | 'due_today' | 'overdue_day_1' | 'overdue_day_2' | 'overdue_day_3'
 
-export type NotificationScanOptions = {
-  debugRunId?: string
-}
-
 export type NotificationScanResult = {
   processedCount: number
   notificationCount: number
@@ -29,7 +25,7 @@ type ReminderRuleSettings = {
   overdueReminderDays: Array<1 | 2 | 3>
 }
 
-type ReminderSubscriptionRow = {
+type ReminderSubscriptionLike = {
   id: string
   name: string
   nextRenewalDate: Date
@@ -133,7 +129,7 @@ export function resolveReminderPhase(
 }
 
 function buildDispatchEntry(
-  sub: ReminderSubscriptionRow,
+  sub: ReminderSubscriptionLike,
   currentDay: Date,
   resolved: NonNullable<ReturnType<typeof resolveReminderPhase>>
 ): ReminderDispatchEntry {
@@ -213,17 +209,12 @@ function buildMergedPayload(entries: ReminderDispatchEntry[]) {
   }
 }
 
-export async function scanRenewalNotifications(
-  today = new Date(),
-  options: NotificationScanOptions = {}
-): Promise<NotificationScanResult> {
+export async function scanRenewalNotifications(today = new Date()): Promise<NotificationScanResult> {
   const appSettings = await getAppSettings()
   const subscriptions = await prisma.subscription.findMany({
     where: {
       status: { in: ['active', 'expired'] },
-      webhookEnabled: true,
-      isDebugCopy: options.debugRunId ? true : false,
-      ...(options.debugRunId ? { debugRunId: options.debugRunId } : {})
+      webhookEnabled: true
     },
     include: {
       tags: {
@@ -253,7 +244,7 @@ export async function scanRenewalNotifications(
     })
     if (!resolved) continue
 
-    dispatchEntries.push(buildDispatchEntry(sub as ReminderSubscriptionRow, currentDay, resolved))
+    dispatchEntries.push(buildDispatchEntry(sub, currentDay, resolved))
   }
 
   if (!appSettings.mergeMultiSubscriptionNotifications || dispatchEntries.length <= 1) {
