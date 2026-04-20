@@ -106,6 +106,11 @@ export const PushPlusConfigSchema = z.object({
   topic: z.string().max(100).default('')
 })
 
+export const TelegramConfigSchema = z.object({
+  botToken: z.string().max(500).default(''),
+  chatId: z.string().max(200).default('')
+})
+
 export const AiProviderPresetSchema = z.enum(['custom', 'aliyun-bailian', 'tencent-hunyuan', 'volcengine-ark'])
 
 export const DEFAULT_AI_CAPABILITIES = {
@@ -167,8 +172,10 @@ export const SettingsSchema = z.object({
   tagBudgets: z.record(z.string(), z.number().nonnegative()).default({}),
   emailNotificationsEnabled: z.boolean().default(false),
   pushplusNotificationsEnabled: z.boolean().default(false),
+  telegramNotificationsEnabled: z.boolean().default(false),
   emailConfig: EmailConfigSchema.default({}),
   pushplusConfig: PushPlusConfigSchema.default({}),
+  telegramConfig: TelegramConfigSchema.default({}),
   aiConfig: AiConfigSchema.default({})
 })
 
@@ -227,6 +234,7 @@ export type LoginInput = z.infer<typeof LoginSchema>
 export type ChangeCredentialsInput = z.infer<typeof ChangeCredentialsSchema>
 export type EmailConfigInput = z.infer<typeof EmailConfigSchema>
 export type PushPlusConfigInput = z.infer<typeof PushPlusConfigSchema>
+export type TelegramConfigInput = z.infer<typeof TelegramConfigSchema>
 export type NotificationWebhookSettingsInput = z.infer<typeof NotificationWebhookSettingsSchema>
 export type AiProviderPreset = z.infer<typeof AiProviderPresetSchema>
 export type AiCapabilitiesInput = z.infer<typeof AiCapabilitiesSchema>

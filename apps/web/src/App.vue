@@ -89,30 +89,63 @@
             </n-layout-content>
           </n-layout>
         </n-layout>
+
+        <n-modal
+          :show="authStore.mustChangePassword"
+          preset="card"
+          title="请先修改默认密码"
+          :mask-closable="false"
+          :closable="false"
+          style="width: min(480px, calc(100vw - 24px))"
+        >
+          <n-space vertical>
+            <n-alert type="warning" :show-icon="false">
+              当前仍在使用默认管理员密码。为了继续使用系统，请先修改密码。
+            </n-alert>
+            <n-form :model="defaultPasswordForm" label-placement="top">
+              <n-form-item label="新密码">
+                <n-input v-model:value="defaultPasswordForm.newPassword" type="password" show-password-on="click" />
+              </n-form-item>
+              <n-form-item label="再次输入新密码">
+                <n-input v-model:value="defaultPasswordForm.confirmPassword" type="password" show-password-on="click" />
+              </n-form-item>
+            </n-form>
+            <n-space justify="end">
+              <n-button @click="logout">退出登录</n-button>
+              <n-button type="primary" :loading="changingDefaultPassword" @click="submitDefaultPasswordChange">确认修改</n-button>
+            </n-space>
+          </n-space>
+        </n-modal>
       </template>
     </n-message-provider>
   </n-config-provider>
 </template>
 
 <script setup lang="ts">
-import { computed, h, ref } from 'vue'
+import { computed, h, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useWindowSize } from '@vueuse/core'
 import { useQuery } from '@tanstack/vue-query'
 import {
+  NAlert,
   NButton,
   NConfigProvider,
   NDrawer,
   NDrawerContent,
+  NForm,
+  NFormItem,
   NIcon,
+  NInput,
   NLayout,
   NLayoutContent,
   NLayoutHeader,
   NLayoutSider,
   NMenu,
   NMessageProvider,
+  NModal,
   NSpace,
   NTag,
+  createDiscreteApi,
   dateZhCN,
   zhCN
 } from 'naive-ui'
@@ -131,14 +164,21 @@ import {
 } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
 import { useAuthStore } from '@/stores/auth'
+import { isRememberedSession } from '@/utils/auth-storage'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const { message } = createDiscreteApi(['message'])
 const appVersion = __APP_VERSION__
 const mobileMenuVisible = ref(false)
 const siderCollapsed = ref(false)
 const { width } = useWindowSize()
+const changingDefaultPassword = ref(false)
+const defaultPasswordForm = reactive({
+  newPassword: '',
+  confirmPassword: ''
+})
 
 const { data: settings } = useQuery({
   queryKey: ['app-menu-settings'],
@@ -171,6 +211,18 @@ const isMobile = computed(() => width.value < 960)
 const isCompact = computed(() => width.value < 640)
 const contentStyle = computed(() => (isMobile.value ? 'padding: 12px;' : 'padding: 20px 24px;'))
 
+onMounted(async () => {
+  if (!authStore.isAuthenticated) {
+    return
+  }
+
+  try {
+    await authStore.refreshCurrentUser()
+  } catch {
+    // handled by axios interceptor
+  }
+})
+
 function handleMenuClick(key: string) {
   router.push(key)
 }
@@ -183,6 +235,46 @@ function handleMobileMenuClick(key: string) {
 async function logout() {
   authStore.clearSession()
   await router.replace('/login')
+}
+
+async function submitDefaultPasswordChange() {
+  if (changingDefaultPassword.value) return
+
+  const newPassword = defaultPasswordForm.newPassword.trim()
+  const confirmPassword = defaultPasswordForm.confirmPassword.trim()
+
+  if (!newPassword) {
+    message.error('请输入新密码')
+    return
+  }
+
+  if (newPassword.length < 4) {
+    message.error('新密码至少 4 位')
+    return
+  }
+
+  if (newPassword !== confirmPassword) {
+    message.error('两次输入的新密码不一致')
+    return
+  }
+
+  changingDefaultPassword.value = true
+  try {
+    const result = await api.changeDefaultPassword(newPassword)
+    authStore.setSession(
+      result.token,
+      result.user.username,
+      isRememberedSession(),
+      result.user.mustChangePassword
+    )
+    defaultPasswordForm.newPassword = ''
+    defaultPasswordForm.confirmPassword = ''
+    message.success('默认密码已修改')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '修改默认密码失败')
+  } finally {
+    changingDefaultPassword.value = false
+  }
 }
 </script>
 

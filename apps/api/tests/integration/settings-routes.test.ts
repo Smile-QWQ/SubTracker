@@ -16,6 +16,7 @@ vi.mock('../../src/services/settings.service', () => ({
     tagBudgets: {},
     emailNotificationsEnabled: (store.get('emailNotificationsEnabled') as boolean) ?? false,
     pushplusNotificationsEnabled: (store.get('pushplusNotificationsEnabled') as boolean) ?? false,
+    telegramNotificationsEnabled: (store.get('telegramNotificationsEnabled') as boolean) ?? false,
     emailConfig: {
       host: '',
       port: 587,
@@ -30,6 +31,11 @@ vi.mock('../../src/services/settings.service', () => ({
       token: '',
       topic: '',
       ...(store.get('pushplusConfig') as Record<string, unknown> | undefined)
+    },
+    telegramConfig: {
+      botToken: '',
+      chatId: '',
+      ...(store.get('telegramConfig') as Record<string, unknown> | undefined)
     },
     aiConfig: {
       enabled: false,

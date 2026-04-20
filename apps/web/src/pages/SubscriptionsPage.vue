@@ -3,7 +3,9 @@
     <n-space justify="space-between" align="start" class="page-top">
       <page-header title="订阅管理" subtitle="管理不同周期、不同币种的订阅" :icon="layersOutline" />
       <n-space>
-        <n-button @click="showWallosImportModal = true">导入 Wallos</n-button>
+        <n-button :type="batchMode ? 'primary' : 'default'" ghost @click="toggleBatchMode">
+          {{ batchMode ? '退出批量管理' : '批量管理' }}
+        </n-button>
         <n-button @click="showTagManageModal = true">
           <template #icon>
             <n-icon><pricetags-outline /></n-icon>
@@ -71,10 +73,29 @@
     <n-card>
       <template #header>订阅列表</template>
       <template #header-extra>
-        <n-button v-if="sortMode === 'custom'" size="small" :type="showDragHandles ? 'primary' : 'default'" ghost @click="toggleDragHandles">
+        <n-button
+          v-if="sortMode === 'custom' && !batchMode"
+          size="small"
+          :type="showDragHandles ? 'primary' : 'default'"
+          ghost
+          @click="toggleDragHandles"
+        >
           {{ showDragHandles ? '完成调整' : '调整顺序' }}
         </n-button>
       </template>
+
+      <n-space v-if="batchMode" justify="space-between" align="center" style="margin-bottom: 12px" wrap>
+        <n-space align="center" wrap>
+          <n-tag type="info">已选 {{ selectedCount }} 项</n-tag>
+          <n-button size="small" :disabled="selectedCount === 0" @click="clearSelectedSubscriptions">清空选择</n-button>
+        </n-space>
+        <n-space wrap>
+          <n-button size="small" type="primary" ghost :disabled="selectedCount === 0" @click="runBatchRenew">批量续订</n-button>
+          <n-button size="small" :disabled="!canBatchPause" @click="runBatchPause">批量暂停</n-button>
+          <n-button size="small" type="warning" ghost :disabled="!canBatchCancel" @click="runBatchCancel">批量取消</n-button>
+          <n-button size="small" type="error" ghost :disabled="!canBatchDelete" @click="runBatchDelete">批量删除</n-button>
+        </n-space>
+      </n-space>
 
       <div v-if="isMobile" class="mobile-list">
         <n-empty v-if="orderedSubscriptions.length === 0" description="暂无订阅" />
@@ -82,6 +103,11 @@
         <n-card v-for="item in orderedSubscriptions" :key="item.id" size="small" class="mobile-subscription-card">
           <div class="mobile-subscription-card__header">
             <div class="mobile-subscription-card__title-wrap">
+              <n-checkbox
+                v-if="batchMode"
+                :checked="selectedSubscriptionIds.includes(item.id)"
+                @update:checked="toggleSelectedSubscription(item.id)"
+              />
               <img v-if="item.logoUrl" :src="resolveLogoUrl(item.logoUrl)" :alt="item.name" class="subscription-logo" />
               <div v-else class="subscription-logo subscription-logo--placeholder">
                 {{ item.name.slice(0, 1).toUpperCase() }}
@@ -128,7 +154,7 @@
             <span class="note-strip__content">{{ item.notes.trim() }}</span>
           </div>
 
-          <n-space wrap style="margin-top: 12px">
+          <n-space v-if="!batchMode" wrap style="margin-top: 12px">
             <n-button size="small" @click="openDetail(item.id)">详情</n-button>
             <n-button size="small" @click="openRecords(item.id)">记录</n-button>
             <n-button size="small" @click="openEdit(item)">编辑</n-button>
@@ -212,8 +238,6 @@
       @delete="deleteTag"
     />
 
-    <wallos-import-modal :show="showWallosImportModal" @close="showWallosImportModal = false" @imported="handleWallosImported" />
-
     <subscription-detail-drawer :show="showDetailDrawer" :detail="detail" @close="showDetailDrawer = false" />
     <subscription-payment-records-drawer :show="showPaymentDrawer" :records="paymentRecords" @close="showPaymentDrawer = false" />
   </div>
@@ -226,6 +250,7 @@ import { useWindowSize } from '@vueuse/core'
 import {
   NButton,
   NCard,
+  NCheckbox,
   NCollapseTransition,
   NDataTable,
   NEmpty,
@@ -252,7 +277,6 @@ import PageHeader from '@/components/PageHeader.vue'
 import SubscriptionDetailDrawer from '@/components/SubscriptionDetailDrawer.vue'
 import SubscriptionFormModal from '@/components/SubscriptionFormModal.vue'
 import SubscriptionPaymentRecordsDrawer from '@/components/SubscriptionPaymentRecordsDrawer.vue'
-import WallosImportModal from '@/components/WallosImportModal.vue'
 import type { PaymentRecord, Settings, Subscription, SubscriptionDetail, Tag } from '@/types/api'
 import { resolveLogoUrl } from '@/utils/logo'
 import {
@@ -286,7 +310,6 @@ const filters = reactive({
 const sortMode = ref<SortMode>('custom')
 const showModal = ref(false)
 const showTagManageModal = ref(false)
-const showWallosImportModal = ref(false)
 const showDetailDrawer = ref(false)
 const showPaymentDrawer = ref(false)
 const showTagFilter = ref(false)
@@ -298,6 +321,8 @@ const savingOrder = ref(false)
 const showDragHandles = ref(false)
 const currentPage = ref(1)
 const desktopPageSize = ref<number>(DEFAULT_SUBSCRIPTION_PAGE_SIZE)
+const batchMode = ref(false)
+const selectedSubscriptionIds = ref<string[]>([])
 
 const statusOptions = [
   { label: '正常', value: 'active' },
@@ -327,13 +352,27 @@ const hasActiveFilters = computed(() => Boolean(filters.q || filters.status || f
 const canDragReorder = computed(
   () =>
     sortMode.value === 'custom' &&
+    !batchMode.value &&
     showDragHandles.value &&
     !hasActiveFilters.value &&
     subscriptions.value.length > 1 &&
     !savingOrder.value &&
     !isMobile.value
 )
-const dragHandleVisible = computed(() => sortMode.value === 'custom' && showDragHandles.value && !isMobile.value)
+const dragHandleVisible = computed(() => sortMode.value === 'custom' && !batchMode.value && showDragHandles.value && !isMobile.value)
+const selectedSubscriptions = computed(() =>
+  subscriptions.value.filter((item) => selectedSubscriptionIds.value.includes(item.id))
+)
+const selectedCount = computed(() => selectedSubscriptionIds.value.length)
+const canBatchPause = computed(
+  () => selectedCount.value > 0 && selectedSubscriptions.value.every((item) => item.status === 'active')
+)
+const canBatchCancel = computed(
+  () => selectedCount.value > 0 && selectedSubscriptions.value.every((item) => item.status === 'active')
+)
+const canBatchDelete = computed(
+  () => selectedCount.value > 0 && selectedSubscriptions.value.every((item) => item.status !== 'active')
+)
 
 const orderedSubscriptions = computed(() => {
   const rows = [...subscriptions.value]
@@ -376,6 +415,21 @@ const dragColumn = {
       },
       [h(NIcon, { size: 18 }, { default: () => h(ReorderThreeOutline) })]
     )
+  }
+}
+
+const selectionColumn = {
+  title: '',
+  key: 'select',
+  width: 52,
+  colSpan: (row: SubscriptionTableRow) => (row.__rowType === 'note' ? 0 : 1),
+  render: (row: SubscriptionTableRow) => {
+    if (row.__rowType === 'note') return null
+
+    return h(NCheckbox, {
+      checked: selectedSubscriptionIds.value.includes(row.id),
+      'onUpdate:checked': () => toggleSelectedSubscription(row.id)
+    })
   }
 }
 
@@ -450,7 +504,8 @@ const mainColumns = [
   {
     title: '名称',
     key: 'name',
-    colSpan: (row: SubscriptionTableRow) => (row.__rowType === 'note' ? (dragHandleVisible.value ? 8 : 7) : 1),
+    colSpan: (row: SubscriptionTableRow) =>
+      row.__rowType === 'note' ? (batchMode.value ? 8 : dragHandleVisible.value ? 8 : 7) : 1,
     render: (row: SubscriptionTableRow) => {
       if (row.__rowType === 'note') {
         return h('div', { style: noteContainerStyle }, [
@@ -566,7 +621,16 @@ const mainColumns = [
   }
 ]
 
-const columns = computed(() => (dragHandleVisible.value ? [dragColumn, ...mainColumns] : mainColumns))
+const columns = computed(() => {
+  const result = [...mainColumns]
+  if (batchMode.value) {
+    return [selectionColumn, ...result]
+  }
+  if (dragHandleVisible.value) {
+    return [dragColumn, ...result]
+  }
+  return result
+})
 const tableRows = computed<SubscriptionTableRow[]>(() => buildSubscriptionTableRows(pagedSubscriptions.value))
 
 onMounted(async () => {
@@ -609,6 +673,8 @@ async function loadSubscriptions() {
     status: filters.status || undefined,
     tagIds: filters.tagIds.length ? filters.tagIds.join(',') : undefined
   })
+  const existingIds = new Set(subscriptions.value.map((item) => item.id))
+  selectedSubscriptionIds.value = selectedSubscriptionIds.value.filter((id) => existingIds.has(id))
 }
 
 async function loadCurrencies() {
@@ -619,11 +685,6 @@ async function loadCurrencies() {
 async function loadSettings() {
   const settings: Settings = await api.getSettings()
   defaultNotifyDays.value = settings.defaultNotifyDays ?? 3
-}
-
-async function handleWallosImported() {
-  showWallosImportModal.value = false
-  await Promise.all([loadTags(), loadSubscriptions()])
 }
 
 function toggleTagFilter(tagId: string) {
@@ -718,6 +779,93 @@ async function deleteTag(tag: Tag) {
   } catch (error) {
     message.error(`标签删除失败：${error instanceof Error ? error.message : 'Unknown'}`)
   }
+}
+
+function toggleBatchMode() {
+  batchMode.value = !batchMode.value
+  if (batchMode.value) {
+    showDragHandles.value = false
+    resetDragState()
+  } else {
+    clearSelectedSubscriptions()
+  }
+}
+
+function toggleSelectedSubscription(id: string) {
+  if (selectedSubscriptionIds.value.includes(id)) {
+    selectedSubscriptionIds.value = selectedSubscriptionIds.value.filter((item) => item !== id)
+  } else {
+    selectedSubscriptionIds.value = [...selectedSubscriptionIds.value, id]
+  }
+}
+
+function clearSelectedSubscriptions() {
+  selectedSubscriptionIds.value = []
+}
+
+function ensureBatchSelection() {
+  if (!selectedCount.value) {
+    message.warning('请先选择订阅')
+    return false
+  }
+  return true
+}
+
+function summarizeBatchResult(label: string, result: { successCount: number; failureCount: number }) {
+  if (result.failureCount === 0) {
+    message.success(`${label}成功，共 ${result.successCount} 项`)
+    return
+  }
+
+  message.warning(`${label}完成：成功 ${result.successCount} 项，失败 ${result.failureCount} 项`)
+}
+
+async function refreshOpenDetailIfNeeded(ids: string[]) {
+  if (detail.value?.id && ids.includes(detail.value.id)) {
+    detail.value = await api.getSubscription(detail.value.id)
+  }
+}
+
+async function runBatchRenew() {
+  if (!ensureBatchSelection()) return
+  const ids = [...selectedSubscriptionIds.value]
+  const result = await api.batchRenewSubscriptions(ids)
+  summarizeBatchResult('批量续订', result)
+  await loadSubscriptions()
+  await refreshOpenDetailIfNeeded(ids)
+}
+
+async function runBatchPause() {
+  if (!ensureBatchSelection() || !canBatchPause.value) return
+  if (!window.confirm(`确认批量暂停已选的 ${selectedCount.value} 项订阅吗？`)) return
+  const ids = [...selectedSubscriptionIds.value]
+  const result = await api.batchPauseSubscriptions(ids)
+  summarizeBatchResult('批量暂停', result)
+  await loadSubscriptions()
+  await refreshOpenDetailIfNeeded(ids)
+}
+
+async function runBatchCancel() {
+  if (!ensureBatchSelection() || !canBatchCancel.value) return
+  if (!window.confirm(`确认批量取消已选的 ${selectedCount.value} 项订阅吗？`)) return
+  const ids = [...selectedSubscriptionIds.value]
+  const result = await api.batchCancelSubscriptions(ids)
+  summarizeBatchResult('批量取消', result)
+  await loadSubscriptions()
+  await refreshOpenDetailIfNeeded(ids)
+}
+
+async function runBatchDelete() {
+  if (!ensureBatchSelection() || !canBatchDelete.value) return
+  if (!window.confirm(`确认批量删除已选的 ${selectedCount.value} 项订阅吗？此操作不可恢复。`)) return
+  const result = await api.batchDeleteSubscriptions(selectedSubscriptionIds.value)
+  summarizeBatchResult('批量删除', result)
+  if (detail.value && selectedSubscriptionIds.value.includes(detail.value.id)) {
+    detail.value = null
+    showDetailDrawer.value = false
+  }
+  clearSelectedSubscriptions()
+  await loadSubscriptions()
 }
 
 async function quickRenew(row: Subscription) {

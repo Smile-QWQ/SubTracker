@@ -17,6 +17,7 @@ export const useAppStore = defineStore('app', () => {
     tagBudgets: {},
     emailNotificationsEnabled: false,
     pushplusNotificationsEnabled: false,
+    telegramNotificationsEnabled: false,
     emailConfig: {
       host: '',
       port: 587,
@@ -29,6 +30,10 @@ export const useAppStore = defineStore('app', () => {
     pushplusConfig: {
       token: '',
       topic: ''
+    },
+    telegramConfig: {
+      botToken: '',
+      chatId: ''
     },
     aiConfig: {
       ...DEFAULT_AI_CONFIG,

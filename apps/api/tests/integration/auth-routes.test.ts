@@ -1,6 +1,12 @@
 import Fastify, { type FastifyInstance } from 'fastify'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const authMocks = vi.hoisted(() => ({
+  loginWithCredentialsMock: vi.fn(),
+  changeCredentialsMock: vi.fn(),
+  changeDefaultPasswordMock: vi.fn()
+}))
+
 vi.mock('../../src/services/settings.service', () => ({
   getAppSettings: vi.fn(async () => ({
     rememberSessionDays: 7
@@ -8,8 +14,9 @@ vi.mock('../../src/services/settings.service', () => ({
 }))
 
 vi.mock('../../src/services/auth.service', () => ({
-  loginWithCredentials: vi.fn(async () => null),
-  changeCredentials: vi.fn(async () => null)
+  loginWithCredentials: authMocks.loginWithCredentialsMock,
+  changeCredentials: authMocks.changeCredentialsMock,
+  changeDefaultPassword: authMocks.changeDefaultPasswordMock
 }))
 
 import { authRoutes } from '../../src/routes/auth'
@@ -20,6 +27,12 @@ describe('auth routes', () => {
   beforeEach(async () => {
     app = Fastify()
     await authRoutes(app)
+    authMocks.loginWithCredentialsMock.mockReset()
+    authMocks.changeCredentialsMock.mockReset()
+    authMocks.changeDefaultPasswordMock.mockReset()
+    authMocks.loginWithCredentialsMock.mockResolvedValue(null)
+    authMocks.changeCredentialsMock.mockResolvedValue(null)
+    authMocks.changeDefaultPasswordMock.mockResolvedValue(null)
   })
 
   afterEach(async () => {
@@ -38,5 +51,48 @@ describe('auth routes', () => {
 
     expect(res.statusCode).toBe(422)
     expect(res.json().error.message).toBe('请输入用户名和密码')
+  })
+
+  it('returns mustChangePassword in login response', async () => {
+    authMocks.loginWithCredentialsMock.mockResolvedValue({
+      token: 'token',
+      user: {
+        username: 'admin',
+        mustChangePassword: true
+      }
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: {
+        username: 'admin',
+        password: 'admin'
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data.user.mustChangePassword).toBe(true)
+  })
+
+  it('allows changing default password with a dedicated endpoint', async () => {
+    authMocks.changeDefaultPasswordMock.mockResolvedValue({
+      token: 'new-token',
+      user: {
+        username: 'admin',
+        mustChangePassword: false
+      }
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/change-default-password',
+      payload: {
+        newPassword: 'new-password'
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data.user.mustChangePassword).toBe(false)
   })
 })

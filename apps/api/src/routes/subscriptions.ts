@@ -31,6 +31,80 @@ const subscriptionInclude = {
   tags: { include: { tag: true } }
 } as const
 
+function parseBatchIds(input: unknown) {
+  return z
+    .object({
+      ids: z.array(z.string()).min(1)
+    })
+    .safeParse(input)
+}
+
+async function runBatchAction(
+  ids: string[],
+  action: (id: string) => Promise<void>,
+  options?: {
+    validate?: (rows: Array<{ id: string; status: string }>) => string | null
+  }
+) {
+  const rows = await prisma.subscription.findMany({
+    where: {
+      id: { in: ids }
+    },
+    select: {
+      id: true,
+      status: true
+    }
+  })
+
+  if (rows.length !== ids.length) {
+    const existing = new Set(rows.map((item) => item.id))
+    const missingId = ids.find((id) => !existing.has(id))
+    return {
+      successCount: 0,
+      failureCount: 1,
+      failures: [
+        {
+          id: missingId ?? 'unknown',
+          message: 'Subscription not found'
+        }
+      ]
+    }
+  }
+
+  const validationError = options?.validate?.(rows)
+  if (validationError) {
+    return {
+      successCount: 0,
+      failureCount: ids.length,
+      failures: ids.map((id) => ({
+        id,
+        message: validationError
+      }))
+    }
+  }
+
+  const failures: Array<{ id: string; message: string }> = []
+  let successCount = 0
+
+  for (const id of ids) {
+    try {
+      await action(id)
+      successCount += 1
+    } catch (error) {
+      failures.push({
+        id,
+        message: error instanceof Error ? error.message : 'Unknown error'
+      })
+    }
+  }
+
+  return {
+    successCount,
+    failureCount: failures.length,
+    failures
+  }
+}
+
 export async function subscriptionRoutes(app: FastifyInstance) {
   app.post('/subscriptions/logo/search', async (request, reply) => {
     const parsed = LogoSearchSchema.safeParse(request.body)
@@ -143,6 +217,92 @@ export async function subscriptionRoutes(app: FastifyInstance) {
 
     await setSubscriptionOrder(parsed.data.ids)
     return sendOk(reply, { success: true })
+  })
+
+  app.post('/subscriptions/batch/renew', async (request, reply) => {
+    const parsed = parseBatchIds(request.body)
+    if (!parsed.success) {
+      return sendError(reply, 422, 'validation_error', 'Invalid batch renew payload', parsed.error.flatten())
+    }
+
+    const result = await runBatchAction(parsed.data.ids, async (id) => {
+      await renewSubscription(id)
+    })
+
+    return sendOk(reply, result)
+  })
+
+  app.post('/subscriptions/batch/pause', async (request, reply) => {
+    const parsed = parseBatchIds(request.body)
+    if (!parsed.success) {
+      return sendError(reply, 422, 'validation_error', 'Invalid batch pause payload', parsed.error.flatten())
+    }
+
+    const result = await runBatchAction(
+      parsed.data.ids,
+      async (id) => {
+        await prisma.subscription.update({
+          where: { id },
+          data: { status: 'paused' }
+        })
+      },
+      {
+        validate: (rows) =>
+          rows.some((row) => row.status !== 'active') ? 'Only active subscriptions can be paused in batch mode' : null
+      }
+    )
+
+    return sendOk(reply, result)
+  })
+
+  app.post('/subscriptions/batch/cancel', async (request, reply) => {
+    const parsed = parseBatchIds(request.body)
+    if (!parsed.success) {
+      return sendError(reply, 422, 'validation_error', 'Invalid batch cancel payload', parsed.error.flatten())
+    }
+
+    const result = await runBatchAction(
+      parsed.data.ids,
+      async (id) => {
+        await prisma.subscription.update({
+          where: { id },
+          data: { status: 'cancelled' }
+        })
+      },
+      {
+        validate: (rows) =>
+          rows.some((row) => row.status !== 'active') ? 'Only active subscriptions can be cancelled in batch mode' : null
+      }
+    )
+
+    return sendOk(reply, result)
+  })
+
+  app.post('/subscriptions/batch/delete', async (request, reply) => {
+    const parsed = parseBatchIds(request.body)
+    if (!parsed.success) {
+      return sendError(reply, 422, 'validation_error', 'Invalid batch delete payload', parsed.error.flatten())
+    }
+
+    const result = await runBatchAction(
+      parsed.data.ids,
+      async (id) => {
+        await prisma.subscription.delete({
+          where: { id }
+        })
+        await removeSubscriptionOrder(id)
+      },
+      {
+        validate: (rows) =>
+          rows.some((row) => row.status === 'active') ? 'Active subscriptions cannot be deleted in batch mode' : null
+      }
+    )
+
+    if (result.failureCount > 0 && result.successCount === 0) {
+      return sendError(reply, 422, 'batch_delete_not_allowed', result.failures[0]?.message ?? 'Batch delete failed', result)
+    }
+
+    return sendOk(reply, result)
   })
 
   app.get('/subscriptions/:id', async (request, reply) => {

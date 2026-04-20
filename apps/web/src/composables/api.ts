@@ -4,6 +4,7 @@ import type {
   AiTestResponse,
   AuthResponse,
   AuthUserResponse,
+  BatchActionResult,
   CalendarEvent,
   BudgetStatistics,
   ChangeCredentialsPayload,
@@ -18,6 +19,7 @@ import type {
   Subscription,
   SubscriptionDetail,
   Tag,
+  TelegramConfig,
   WallosImportCommitResult,
   WallosImportInspectResult
 } from '@/types/api'
@@ -82,6 +84,12 @@ export const api = {
 
   async changeCredentials(payload: ChangeCredentialsPayload) {
     return unwrap<AuthResponse>((await client.post('/auth/change-credentials', payload)) as {
+      data: Envelope<AuthResponse>
+    })
+  },
+
+  async changeDefaultPassword(newPassword: string) {
+    return unwrap<AuthResponse>((await client.post('/auth/change-default-password', { newPassword })) as {
       data: Envelope<AuthResponse>
     })
   },
@@ -154,18 +162,42 @@ export const api = {
     )
   },
 
+  async batchRenewSubscriptions(ids: string[]) {
+    return unwrap<BatchActionResult>((await client.post('/subscriptions/batch/renew', { ids })) as {
+      data: Envelope<BatchActionResult>
+    })
+  },
+
   async pauseSubscription(id: string) {
     return unwrap<Subscription>((await client.post(`/subscriptions/${id}/pause`)) as { data: Envelope<Subscription> })
+  },
+
+  async batchPauseSubscriptions(ids: string[]) {
+    return unwrap<BatchActionResult>((await client.post('/subscriptions/batch/pause', { ids })) as {
+      data: Envelope<BatchActionResult>
+    })
   },
 
   async cancelSubscription(id: string) {
     return unwrap<Subscription>((await client.post(`/subscriptions/${id}/cancel`)) as { data: Envelope<Subscription> })
   },
 
+  async batchCancelSubscriptions(ids: string[]) {
+    return unwrap<BatchActionResult>((await client.post('/subscriptions/batch/cancel', { ids })) as {
+      data: Envelope<BatchActionResult>
+    })
+  },
+
   async deleteSubscription(id: string) {
     return unwrap<{ id: string; deleted: boolean }>(
       (await client.delete(`/subscriptions/${id}`)) as { data: Envelope<{ id: string; deleted: boolean }> }
     )
+  },
+
+  async batchDeleteSubscriptions(ids: string[]) {
+    return unwrap<BatchActionResult>((await client.post('/subscriptions/batch/delete', { ids })) as {
+      data: Envelope<BatchActionResult>
+    })
   },
 
   async recognizeSubscriptionByAi(payload: {
@@ -261,6 +293,12 @@ export const api = {
     })
   },
 
+  async testTelegramNotificationWithPayload(payload: TelegramConfig) {
+    return unwrap<{ success: boolean }>((await client.post('/notifications/test/telegram', payload)) as {
+      data: Envelope<{ success: boolean }>
+    })
+  },
+
   async getNotificationWebhook() {
     return unwrap<NotificationWebhookSettings>((await client.get('/notifications/webhook')) as {
       data: Envelope<NotificationWebhookSettings>
@@ -283,6 +321,20 @@ export const api = {
     return unwrap<{ success: boolean; statusCode: number; responseBody: string }>((await client.post('/notifications/test/webhook', payload)) as {
       data: Envelope<{ success: boolean; statusCode: number; responseBody: string }>
     })
+  },
+
+  async exportSubscriptions(format: 'csv' | 'json') {
+    const response = await client.get(`/settings/export/subscriptions`, {
+      params: { format },
+      responseType: 'blob'
+    })
+    return {
+      blob: response.data as Blob,
+      filename:
+        String(response.headers['content-disposition'] ?? '')
+          .match(/filename="?([^"]+)"?/)?.[1]
+          ?.trim() || `subtracker-subscriptions.${format}`
+    }
   },
 
   async inspectWallosImport(payload: { filename: string; contentType: string; base64: string }) {

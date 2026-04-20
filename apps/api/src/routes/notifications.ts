@@ -1,11 +1,18 @@
 import { FastifyInstance } from 'fastify'
-import { EmailConfigSchema, NotificationWebhookSettingsSchema, PushPlusConfigSchema } from '@subtracker/shared'
+import {
+  EmailConfigSchema,
+  NotificationWebhookSettingsSchema,
+  PushPlusConfigSchema,
+  TelegramConfigSchema
+} from '@subtracker/shared'
 import { sendError, sendOk } from '../http'
 import {
   sendTestEmailNotification,
   sendTestEmailNotificationWithConfig,
   sendTestPushplusNotification,
-  sendTestPushplusNotificationWithConfig
+  sendTestPushplusNotificationWithConfig,
+  sendTestTelegramNotification,
+  sendTestTelegramNotificationWithConfig
 } from '../services/channel-notification.service'
 import {
   getPrimaryWebhookEndpoint,
@@ -77,6 +84,27 @@ export async function notificationRoutes(app: FastifyInstance) {
       return sendOk(reply, result)
     } catch (error) {
       return sendError(reply, 400, 'pushplus_test_failed', error instanceof Error ? error.message : 'PushPlus test failed')
+    }
+  })
+
+  app.post('/notifications/test/telegram', async (request, reply) => {
+    try {
+      if (request.body) {
+        const parsed = TelegramConfigSchema.partial().safeParse(request.body)
+        if (!parsed.success) {
+          return sendError(reply, 422, 'validation_error', 'Invalid Telegram config payload', parsed.error.flatten())
+        }
+        const result = await sendTestTelegramNotificationWithConfig({
+          botToken: parsed.data.botToken ?? '',
+          chatId: parsed.data.chatId ?? ''
+        })
+        return sendOk(reply, result)
+      }
+
+      const result = await sendTestTelegramNotification()
+      return sendOk(reply, result)
+    } catch (error) {
+      return sendError(reply, 400, 'telegram_test_failed', error instanceof Error ? error.message : 'Telegram test failed')
     }
   })
 

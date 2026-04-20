@@ -1,7 +1,8 @@
 import { FastifyInstance } from 'fastify'
 import { ChangeCredentialsSchema, LoginSchema } from '@subtracker/shared'
+import { z } from 'zod'
 import { sendError, sendOk } from '../http'
-import { changeCredentials, loginWithCredentials } from '../services/auth.service'
+import { changeCredentials, changeDefaultPassword, loginWithCredentials } from '../services/auth.service'
 import { getAppSettings } from '../services/settings.service'
 
 function resolveLoginValidationMessage(body: unknown) {
@@ -59,6 +60,25 @@ export async function authRoutes(app: FastifyInstance) {
     const result = await changeCredentials(parsed.data)
     if (!result) {
       return sendError(reply, 401, 'invalid_credentials', '原用户名或原密码错误')
+    }
+
+    return sendOk(reply, result)
+  })
+
+  app.post('/auth/change-default-password', async (request, reply) => {
+    const parsed = z
+      .object({
+        newPassword: z.string().min(4).max(200)
+      })
+      .safeParse(request.body)
+
+    if (!parsed.success) {
+      return sendError(reply, 422, 'validation_error', 'Invalid password payload', parsed.error.flatten())
+    }
+
+    const result = await changeDefaultPassword(parsed.data.newPassword)
+    if (!result) {
+      return sendError(reply, 400, 'default_password_change_not_allowed', 'Default password change is not allowed')
     }
 
     return sendOk(reply, result)

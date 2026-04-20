@@ -2,6 +2,7 @@ export type SubscriptionStatus = 'active' | 'paused' | 'cancelled' | 'expired'
 
 export interface AuthUser {
   username: string
+  mustChangePassword: boolean
 }
 
 export interface AuthResponse {
@@ -170,6 +171,11 @@ export interface PushplusConfig {
   topic: string
 }
 
+export interface TelegramConfig {
+  botToken: string
+  chatId: string
+}
+
 export type AiProviderPreset = 'custom' | 'aliyun-bailian' | 'tencent-hunyuan' | 'volcengine-ark'
 
 export interface AiCapabilities {
@@ -208,8 +214,10 @@ export interface Settings {
   tagBudgets: Record<string, number>
   emailNotificationsEnabled: boolean
   pushplusNotificationsEnabled: boolean
+  telegramNotificationsEnabled: boolean
   emailConfig: EmailConfig
   pushplusConfig: PushplusConfig
+  telegramConfig: TelegramConfig
   aiConfig: AiConfig
 }
 
@@ -330,4 +338,13 @@ export interface PaymentRecord {
   periodStart: string
   periodEnd: string
   createdAt: string
+}
+
+export interface BatchActionResult {
+  successCount: number
+  failureCount: number
+  failures: Array<{
+    id: string
+    message: string
+  }>
 }

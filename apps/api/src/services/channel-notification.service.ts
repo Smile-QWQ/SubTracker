@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer'
-import type { EmailConfigInput, PushPlusConfigInput, WebhookEventType } from '@subtracker/shared'
+import type { EmailConfigInput, PushPlusConfigInput, TelegramConfigInput, WebhookEventType } from '@subtracker/shared'
 import { dispatchWebhookEvent } from './webhook.service'
 import { getAppSettings, getSetting, setSetting } from './settings.service'
 
@@ -17,6 +17,11 @@ type PushplusApiResponse = {
   data?: unknown
 }
 
+type TelegramApiResponse = {
+  ok?: boolean
+  description?: string
+}
+
 export type PushplusSendResult = {
   accepted: boolean
   code: number
@@ -24,15 +29,30 @@ export type PushplusSendResult = {
   shortCode?: string
 }
 
-function buildNotificationKey(channel: 'email' | 'pushplus', params: NotificationDispatchParams) {
+export type NotificationChannelResult = {
+  channel: 'webhook' | 'email' | 'pushplus' | 'telegram'
+  status: 'success' | 'skipped' | 'failed'
+  message?: string
+}
+
+function buildNotificationKey(
+  channel: 'email' | 'pushplus' | 'telegram',
+  params: NotificationDispatchParams
+) {
   return `notification:${channel}:${params.eventType}:${params.resourceKey}:${params.periodKey}`
 }
 
-async function hasNotificationBeenSent(channel: 'email' | 'pushplus', params: NotificationDispatchParams) {
+async function hasNotificationBeenSent(
+  channel: 'email' | 'pushplus' | 'telegram',
+  params: NotificationDispatchParams
+) {
   return getSetting<boolean>(buildNotificationKey(channel, params), false)
 }
 
-async function markNotificationSent(channel: 'email' | 'pushplus', params: NotificationDispatchParams) {
+async function markNotificationSent(
+  channel: 'email' | 'pushplus' | 'telegram',
+  params: NotificationDispatchParams
+) {
   await setSetting(buildNotificationKey(channel, params), true)
 }
 
@@ -58,7 +78,7 @@ function buildNotificationBody(params: NotificationDispatchParams) {
     `提醒类型：${getPhaseLabel(params)}`,
     `订阅名称：${String(params.payload.name ?? '')}`,
     `下次续订：${String(params.payload.nextRenewalDate ?? '')}`,
-    `金额：${String(params.payload.amount ?? '')} ${String(params.payload.currency ?? '')}`.trim(),
+    `金额：${`${String(params.payload.amount ?? '')} ${String(params.payload.currency ?? '')}`.trim()}`,
     `标签：${Array.isArray(params.payload.tagNames) ? params.payload.tagNames.join('、') : ''}`,
     `网址：${String(params.payload.websiteUrl ?? '')}`,
     `备注：${String(params.payload.notes ?? '')}`
@@ -91,16 +111,32 @@ async function sendEmailWithConfig(params: NotificationDispatchParams, config: E
   })
 }
 
-async function sendEmailNotification(params: NotificationDispatchParams) {
+async function sendEmailNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
   const settings = await getAppSettings()
-  if (!settings.emailNotificationsEnabled) return false
+  if (!settings.emailNotificationsEnabled) {
+    return {
+      channel: 'email',
+      status: 'skipped',
+      message: 'email_disabled'
+    }
+  }
 
   const alreadySent = await hasNotificationBeenSent('email', params)
-  if (alreadySent) return false
+  if (alreadySent) {
+    return {
+      channel: 'email',
+      status: 'skipped',
+      message: 'email_already_sent'
+    }
+  }
 
   await sendEmailWithConfig(params, settings.emailConfig)
   await markNotificationSent('email', params)
-  return true
+
+  return {
+    channel: 'email',
+    status: 'success'
+  }
 }
 
 function extractPushplusShortCode(data: unknown): string | undefined {
@@ -169,21 +205,135 @@ async function sendPushplusWithConfig(
   }
 }
 
-async function sendPushplusNotification(params: NotificationDispatchParams) {
+async function sendPushplusNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
   const settings = await getAppSettings()
-  if (!settings.pushplusNotificationsEnabled) return false
+  if (!settings.pushplusNotificationsEnabled) {
+    return {
+      channel: 'pushplus',
+      status: 'skipped',
+      message: 'pushplus_disabled'
+    }
+  }
 
   const alreadySent = await hasNotificationBeenSent('pushplus', params)
-  if (alreadySent) return false
+  if (alreadySent) {
+    return {
+      channel: 'pushplus',
+      status: 'skipped',
+      message: 'pushplus_already_sent'
+    }
+  }
 
   await sendPushplusWithConfig(params, settings.pushplusConfig)
   await markNotificationSent('pushplus', params)
-  return true
+
+  return {
+    channel: 'pushplus',
+    status: 'success'
+  }
+}
+
+async function sendTelegramWithConfig(params: NotificationDispatchParams, config: TelegramConfigInput) {
+  const { botToken, chatId } = config
+  if (!botToken || !chatId) {
+    throw new Error('Telegram 通知未启用或配置不完整')
+  }
+
+  const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: `${buildNotificationTitle(params)}\n\n${buildNotificationBody(params)}`
+    })
+  })
+
+  const rawText = await response.text()
+  if (!response.ok) {
+    throw new Error(`Telegram 请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
+  }
+
+  let parsed: TelegramApiResponse | null = null
+  try {
+    parsed = rawText ? (JSON.parse(rawText) as TelegramApiResponse) : null
+  } catch {
+    throw new Error(`Telegram 返回了无法解析的响应：${rawText || 'empty response'}`)
+  }
+
+  if (!parsed?.ok) {
+    throw new Error(`Telegram 请求被拒绝：${parsed?.description || rawText || 'unknown error'}`)
+  }
+}
+
+async function sendTelegramNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
+  const settings = await getAppSettings()
+  if (!settings.telegramNotificationsEnabled) {
+    return {
+      channel: 'telegram',
+      status: 'skipped',
+      message: 'telegram_disabled'
+    }
+  }
+
+  const alreadySent = await hasNotificationBeenSent('telegram', params)
+  if (alreadySent) {
+    return {
+      channel: 'telegram',
+      status: 'skipped',
+      message: 'telegram_already_sent'
+    }
+  }
+
+  await sendTelegramWithConfig(params, settings.telegramConfig)
+  await markNotificationSent('telegram', params)
+
+  return {
+    channel: 'telegram',
+    status: 'success'
+  }
 }
 
 export async function dispatchNotificationEvent(params: NotificationDispatchParams) {
-  await dispatchWebhookEvent(params)
-  await Promise.allSettled([sendEmailNotification(params), sendPushplusNotification(params)])
+  const results: NotificationChannelResult[] = []
+
+  try {
+    await dispatchWebhookEvent(params)
+    results.push({
+      channel: 'webhook',
+      status: 'success'
+    })
+  } catch (error) {
+    results.push({
+      channel: 'webhook',
+      status: 'failed',
+      message: error instanceof Error ? error.message : 'webhook_dispatch_failed'
+    })
+  }
+
+  const emailResult = await Promise.resolve(sendEmailNotification(params)).catch((error) => ({
+    channel: 'email',
+    status: 'failed',
+    message: error instanceof Error ? error.message : 'email_dispatch_failed'
+  })) as NotificationChannelResult
+  results.push(emailResult)
+
+  const pushplusResult = await Promise.resolve(sendPushplusNotification(params)).catch((error) => ({
+    channel: 'pushplus',
+    status: 'failed',
+    message: error instanceof Error ? error.message : 'pushplus_dispatch_failed'
+  })) as NotificationChannelResult
+  results.push(pushplusResult)
+
+  const telegramResult = await Promise.resolve(sendTelegramNotification(params)).catch((error) => ({
+    channel: 'telegram',
+    status: 'failed',
+    message: error instanceof Error ? error.message : 'telegram_dispatch_failed'
+  })) as NotificationChannelResult
+  results.push(telegramResult)
+
+  return results
 }
 
 function buildTestReminderPayload() {
@@ -202,14 +352,14 @@ function buildTestReminderPayload() {
 }
 
 export async function sendTestEmailNotification() {
-  const success = await sendEmailNotification({
+  const result = await sendEmailNotification({
     eventType: 'subscription.reminder_due',
     resourceKey: 'test:email',
     periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
     payload: buildTestReminderPayload()
   })
 
-  if (!success) {
+  if (result.status !== 'success') {
     throw new Error('邮箱通知未启用或配置不完整')
   }
 }
@@ -227,20 +377,20 @@ export async function sendTestEmailNotificationWithConfig(config: EmailConfigInp
 }
 
 export async function sendTestPushplusNotification() {
-  const success = await sendPushplusNotification({
+  const result = await sendPushplusNotification({
     eventType: 'subscription.reminder_due',
     resourceKey: 'test:pushplus',
     periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
     payload: buildTestReminderPayload()
   })
 
-  if (!success) {
+  if (result.status !== 'success') {
     throw new Error('PushPlus 通知未启用或配置不完整')
   }
 
   return {
     accepted: true,
-    message: 'PushPlus 使用已保存配置提交了测试请求'
+    message: 'PushPlus 已使用保存的配置发送测试请求'
   }
 }
 
@@ -254,4 +404,33 @@ export async function sendTestPushplusNotificationWithConfig(config: PushPlusCon
     },
     config
   )
+}
+
+export async function sendTestTelegramNotification() {
+  const result = await sendTelegramNotification({
+    eventType: 'subscription.reminder_due',
+    resourceKey: 'test:telegram',
+    periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
+    payload: buildTestReminderPayload()
+  })
+
+  if (result.status !== 'success') {
+    throw new Error('Telegram 通知未启用或配置不完整')
+  }
+
+  return { success: true }
+}
+
+export async function sendTestTelegramNotificationWithConfig(config: TelegramConfigInput) {
+  await sendTelegramWithConfig(
+    {
+      eventType: 'subscription.reminder_due',
+      resourceKey: 'test:telegram',
+      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
+      payload: buildTestReminderPayload()
+    },
+    config
+  )
+
+  return { success: true }
 }

@@ -28,6 +28,7 @@ export async function getAppSettings(): Promise<SettingsInput> {
   const tagBudgets = await getSetting<Record<string, number>>('tagBudgets', {})
   const emailNotificationsEnabled = await getSetting('emailNotificationsEnabled', false)
   const pushplusNotificationsEnabled = await getSetting('pushplusNotificationsEnabled', false)
+  const telegramNotificationsEnabled = await getSetting('telegramNotificationsEnabled', false)
   const emailConfig = await getSetting<SettingsInput['emailConfig']>('emailConfig', {
     host: '',
     port: 587,
@@ -40,6 +41,10 @@ export async function getAppSettings(): Promise<SettingsInput> {
   const pushplusConfig = await getSetting<SettingsInput['pushplusConfig']>('pushplusConfig', {
     token: '',
     topic: ''
+  })
+  const telegramConfig = await getSetting<SettingsInput['telegramConfig']>('telegramConfig', {
+    botToken: '',
+    chatId: ''
   })
   const aiConfig = AiConfigSchema.parse(await getSetting<unknown>('aiConfig', DEFAULT_AI_CONFIG))
 
@@ -55,8 +60,10 @@ export async function getAppSettings(): Promise<SettingsInput> {
     tagBudgets,
     emailNotificationsEnabled,
     pushplusNotificationsEnabled,
+    telegramNotificationsEnabled,
     emailConfig,
     pushplusConfig,
+    telegramConfig,
     aiConfig
   })
 }

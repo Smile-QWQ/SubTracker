@@ -217,6 +217,27 @@
             <n-grid-item>
               <div class="channel-card">
                 <div class="channel-card__header">
+                  <span>Telegram Bot</span>
+                  <n-switch v-model:value="settingsForm.telegramNotificationsEnabled" />
+                </div>
+                <n-form label-placement="top">
+                  <n-form-item label="Bot Token">
+                    <n-input v-model:value="settingsForm.telegramConfig.botToken" type="password" show-password-on="click" />
+                  </n-form-item>
+                  <n-form-item label="Chat ID">
+                    <n-input v-model:value="settingsForm.telegramConfig.chatId" placeholder="例如：123456789 或 -100xxxxxxxxxx" />
+                  </n-form-item>
+                  <n-space>
+                    <n-button @click="saveTelegramSettings">保存</n-button>
+                    <n-button type="primary" @click="testTelegram">测试</n-button>
+                  </n-space>
+                </n-form>
+              </div>
+            </n-grid-item>
+
+            <n-grid-item>
+              <div class="channel-card">
+                <div class="channel-card__header">
                   <span>Webhook</span>
                   <n-switch v-model:value="webhookForm.enabled" />
                 </div>
@@ -365,7 +386,24 @@
           </n-form>
         </n-card>
       </n-grid-item>
+
+      <n-grid-item>
+        <n-card title="导出和导入" class="settings-card">
+          <n-space vertical style="width: 100%">
+            <n-alert type="info" :show-icon="false">
+              可导出全部订阅为 CSV / JSON，也可在这里导入 Wallos 数据。
+            </n-alert>
+            <n-space wrap>
+              <n-button type="success" @click="showWallosImportModal = true">导入 Wallos</n-button>
+              <n-button @click="exportSubscriptions('csv')">导出 CSV</n-button>
+              <n-button @click="exportSubscriptions('json')">导出 JSON</n-button>
+            </n-space>
+          </n-space>
+        </n-card>
+      </n-grid-item>
     </n-grid>
+
+    <wallos-import-modal :show="showWallosImportModal" @close="showWallosImportModal = false" @imported="handleWallosImported" />
   </div>
 </template>
 
@@ -402,7 +440,9 @@ import {
 import { RefreshOutline, SaveOutline, SettingsOutline } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
 import PageHeader from '@/components/PageHeader.vue'
+import WallosImportModal from '@/components/WallosImportModal.vue'
 import { useAuthStore } from '@/stores/auth'
+import { isRememberedSession } from '@/utils/auth-storage'
 import { buildCurrencyOptions } from '@/utils/currency'
 import type { AiProviderPreset, ChangeCredentialsPayload, ExchangeRateSnapshot, NotificationWebhookSettings, Settings } from '@/types/api'
 
@@ -456,6 +496,7 @@ const settingsForm = reactive<Settings>({
   tagBudgets: {},
   emailNotificationsEnabled: false,
   pushplusNotificationsEnabled: false,
+  telegramNotificationsEnabled: false,
   emailConfig: {
     host: '',
     port: 587,
@@ -468,6 +509,10 @@ const settingsForm = reactive<Settings>({
   pushplusConfig: {
     token: '',
     topic: ''
+  },
+  telegramConfig: {
+    botToken: '',
+    chatId: ''
   },
   aiConfig: {
     ...DEFAULT_AI_CONFIG,
@@ -498,11 +543,12 @@ const aiPromptInput = ref(DEFAULT_AI_SUBSCRIPTION_PROMPT)
 const sourceCurrency = ref('USD')
 const targetCurrency = ref('CNY')
 const converterAmount = ref(1)
+const showWallosImportModal = ref(false)
 
 const isMobile = computed(() => width.value < 960)
 const formCols = computed(() => (width.value < 640 ? 1 : 2))
 const gridCols = computed(() => (isMobile.value ? 1 : 2))
-const notificationGridCols = computed(() => (isMobile.value ? 1 : 3))
+const notificationGridCols = computed(() => (isMobile.value ? 1 : 2))
 const gridSpanFull = computed(() => (isMobile.value ? 1 : 2))
 const watchedCurrencies = ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'HKD']
 const webhookMethodOptions = [
@@ -561,6 +607,20 @@ function validatePushplusSettings(action: 'save' | 'test') {
   const missing = getMissingRequiredFields([['Token', settingsForm.pushplusConfig.token]])
   if (!missing.length) return true
   message.error(`PushPlus 缺少必填项：${missing.join('、')}`)
+  return false
+}
+
+function validateTelegramSettings(action: 'save' | 'test') {
+  if (action === 'save' && !settingsForm.telegramNotificationsEnabled) {
+    return true
+  }
+
+  const missing = getMissingRequiredFields([
+    ['Bot Token', settingsForm.telegramConfig.botToken],
+    ['Chat ID', settingsForm.telegramConfig.chatId]
+  ])
+  if (!missing.length) return true
+  message.error(`Telegram 缺少必填项：${missing.join('、')}`)
   return false
 }
 
@@ -656,6 +716,15 @@ async function savePushplusSettings() {
   message.success(settingsForm.pushplusNotificationsEnabled ? 'PushPlus 配置已保存' : 'PushPlus 已关闭')
 }
 
+async function saveTelegramSettings() {
+  if (!validateTelegramSettings('save')) return
+  await api.updateSettings({
+    telegramNotificationsEnabled: settingsForm.telegramNotificationsEnabled,
+    telegramConfig: settingsForm.telegramConfig
+  })
+  message.success(settingsForm.telegramNotificationsEnabled ? 'Telegram 配置已保存' : 'Telegram 已关闭')
+}
+
 async function saveAiSettings() {
   if (!validateAiSettings('save')) return
   const promptTemplate = normalizeAiPrompt(aiPromptInput.value)
@@ -736,7 +805,7 @@ async function refreshRates() {
 
 async function submitCredentialsChange() {
   const result = await api.changeCredentials(credentialsForm)
-  authStore.setSession(result.token, result.user.username)
+  authStore.setSession(result.token, result.user.username, isRememberedSession(), result.user.mustChangePassword)
   credentialsForm.oldPassword = ''
   credentialsForm.newPassword = ''
   credentialsForm.oldUsername = result.user.username
@@ -766,6 +835,36 @@ async function testPushplus() {
   } catch (error) {
     message.error(error instanceof Error ? error.message : 'PushPlus 测试失败')
   }
+}
+
+async function testTelegram() {
+  if (!validateTelegramSettings('test')) return
+  try {
+    await api.testTelegramNotificationWithPayload(settingsForm.telegramConfig)
+    message.success('Telegram 测试消息已发送')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : 'Telegram 测试失败')
+  }
+}
+
+async function exportSubscriptions(format: 'csv' | 'json') {
+  try {
+    const result = await api.exportSubscriptions(format)
+    const url = window.URL.createObjectURL(result.blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = result.filename
+    link.click()
+    window.URL.revokeObjectURL(url)
+    message.success(`${format.toUpperCase()} 导出已开始`)
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '导出失败')
+  }
+}
+
+function handleWallosImported() {
+  showWallosImportModal.value = false
+  message.success('Wallos 数据已导入')
 }
 
 async function saveWebhook() {

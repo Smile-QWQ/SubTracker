@@ -22,6 +22,7 @@ type SessionPayload = {
 
 export type AuthUser = {
   username: string
+  mustChangePassword: boolean
 }
 
 function hashPassword(password: string, salt: string) {
@@ -79,6 +80,18 @@ function verifyPassword(password: string, record: StoredCredentials) {
   return timingSafeEqual(actual, expected)
 }
 
+async function isUsingDefaultCredentials() {
+  const credentials = await getStoredCredentials()
+  return credentials.username === DEFAULT_USERNAME && verifyPassword(DEFAULT_PASSWORD, credentials)
+}
+
+async function buildAuthUser(username: string): Promise<AuthUser> {
+  return {
+    username,
+    mustChangePassword: await isUsingDefaultCredentials()
+  }
+}
+
 async function signPayload(payload: SessionPayload) {
   const secret = await getSessionSecret()
   const body = encodeBase64Url(JSON.stringify(payload))
@@ -116,9 +129,7 @@ export async function verifyToken(token?: string) {
       return null
     }
 
-    return {
-      username: payload.sub
-    } satisfies AuthUser
+    return await buildAuthUser(payload.sub)
   } catch {
     return null
   }
@@ -142,9 +153,7 @@ export async function loginWithCredentials(
 
   return {
     token: await issueToken(credentials.username, ttlMs),
-    user: {
-      username: credentials.username
-    } satisfies AuthUser
+    user: await buildAuthUser(credentials.username)
   }
 }
 
@@ -169,8 +178,29 @@ export async function changeCredentials(input: {
 
   return {
     token: await issueToken(input.newUsername),
-    user: {
-      username: input.newUsername
-    } satisfies AuthUser
+    user: await buildAuthUser(input.newUsername)
+  }
+}
+
+export async function changeDefaultPassword(newPassword: string) {
+  const credentials = await getStoredCredentials()
+  const usingDefaultCredentials =
+    credentials.username === DEFAULT_USERNAME && verifyPassword(DEFAULT_PASSWORD, credentials)
+
+  if (!usingDefaultCredentials) {
+    return null
+  }
+
+  const nextPassword = createPasswordRecord(newPassword)
+  const nextCredentials: StoredCredentials = {
+    username: DEFAULT_USERNAME,
+    ...nextPassword
+  }
+
+  await setSetting(CREDENTIALS_KEY, nextCredentials)
+
+  return {
+    token: await issueToken(DEFAULT_USERNAME),
+    user: await buildAuthUser(DEFAULT_USERNAME)
   }
 }

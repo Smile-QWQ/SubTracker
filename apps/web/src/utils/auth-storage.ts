@@ -14,6 +14,11 @@ export function getStoredUsername() {
   return readFromStorage(USERNAME_KEY)
 }
 
+export function isRememberedSession() {
+  if (typeof window === 'undefined') return false
+  return Boolean(window.localStorage.getItem(TOKEN_KEY))
+}
+
 export function saveAuthSession(token: string, username: string, remember = false) {
   if (typeof window === 'undefined') return
 
