@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify'
+﻿import { FastifyInstance } from 'fastify'
 import { ChangeCredentialsSchema, LoginSchema } from '@subtracker/shared'
 import { z } from 'zod'
 import { sendError, sendOk } from '../http'
@@ -24,22 +24,33 @@ export async function authRoutes(app: FastifyInstance) {
     })
   })
 
-  app.post('/auth/login', async (request, reply) => {
-    const parsed = LoginSchema.safeParse(request.body)
-    if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', resolveLoginValidationMessage(request.body), parsed.error.flatten())
-    }
+  app.post(
+    '/auth/login',
+    {
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: 10 * 60 * 1000
+        }
+      }
+    },
+    async (request, reply) => {
+      const parsed = LoginSchema.safeParse(request.body)
+      if (!parsed.success) {
+        return sendError(reply, 422, 'validation_error', resolveLoginValidationMessage(request.body), parsed.error.flatten())
+      }
 
-    const result = await loginWithCredentials(parsed.data.username, parsed.data.password, {
-      rememberMe: parsed.data.rememberMe,
-      rememberDays: parsed.data.rememberDays
-    })
-    if (!result) {
-      return sendError(reply, 401, 'invalid_credentials', '用户名或密码错误')
-    }
+      const result = await loginWithCredentials(parsed.data.username, parsed.data.password, {
+        rememberMe: parsed.data.rememberMe,
+        rememberDays: parsed.data.rememberDays
+      })
+      if (!result) {
+        return sendError(reply, 401, 'invalid_credentials', '用户名或密码错误')
+      }
 
-    return sendOk(reply, result)
-  })
+      return sendOk(reply, result)
+    }
+  )
 
   app.get('/auth/me', async (request, reply) => {
     if (!request.auth) {

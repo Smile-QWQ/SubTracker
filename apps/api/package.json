@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",
+    "@fastify/rate-limit": "^10.0.0",
     "@prisma/client": "^6.6.0",
     "@subtracker/shared": "0.0.1",
     "adm-zip": "^0.5.17",

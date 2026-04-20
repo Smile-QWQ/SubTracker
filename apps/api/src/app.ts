@@ -1,5 +1,6 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
+import rateLimit from '@fastify/rate-limit'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { config } from './config'
@@ -25,6 +26,20 @@ export async function buildApp() {
 
   await app.register(cors, {
     origin: config.webOrigin
+  })
+
+  await app.register(rateLimit, {
+    global: false,
+    errorResponseBuilder: (_request, context) => ({
+      statusCode: 429,
+      error: {
+        code: 'too_many_attempts',
+        message: '登录失败次数过多，请稍后再试',
+        details: {
+          retryAfterSeconds: Math.max(1, Math.ceil(context.ttl / 1000))
+        }
+      }
+    })
   })
 
   app.get('/health', async () => ({ ok: true, timestamp: new Date().toISOString() }))

@@ -1,3 +1,4 @@
+import dayjs from 'dayjs'
 import nodemailer from 'nodemailer'
 import type { EmailConfigInput, PushPlusConfigInput, TelegramConfigInput, WebhookEventType } from '@subtracker/shared'
 import { dispatchWebhookEvent } from './webhook.service'
@@ -86,6 +87,16 @@ function getMergedSections(params: NotificationDispatchParams) {
   return Array.isArray(sections) ? (sections as NotificationSummarySection[]) : []
 }
 
+export function formatNotificationDate(value: string | undefined) {
+  if (!value) return ''
+  const isoDateMatch = value.match(/^(\d{4}-\d{2}-\d{2})T/)
+  if (isoDateMatch) {
+    return isoDateMatch[1]
+  }
+  const parsed = dayjs(value)
+  return parsed.isValid() ? parsed.format('YYYY-MM-DD') : value
+}
+
 function getPhaseLabel(params: NotificationDispatchParams) {
   const phase = String(params.payload.phase ?? '')
   const daysUntilRenewal = Number(params.payload.daysUntilRenewal ?? 0)
@@ -138,7 +149,7 @@ function buildSummarySectionBody(section: NotificationSummarySection) {
 
       return [
         `${index + 1}. ${subscription.name}`,
-        `   日期：${subscription.nextRenewalDate}`,
+        `   日期：${formatNotificationDate(subscription.nextRenewalDate)}`,
         `   金额：${amountText}`,
         extras ? `   说明：${extras}` : null
       ]
@@ -185,7 +196,7 @@ function buildMergedNotificationBody(params: NotificationDispatchParams) {
 
       return [
         `${index + 1}. ${subscription.name}`,
-        `   日期：${subscription.nextRenewalDate}`,
+        `   日期：${formatNotificationDate(subscription.nextRenewalDate)}`,
         `   金额：${amountText}`,
         extras ? `   说明：${extras}` : null
       ]
@@ -204,7 +215,7 @@ function buildNotificationBody(params: NotificationDispatchParams) {
   const lines = [
     `提醒类型：${getPhaseLabel(params)}`,
     `订阅名称：${String(params.payload.name ?? '')}`,
-    `下次续订：${String(params.payload.nextRenewalDate ?? '')}`,
+    `下次续订：${formatNotificationDate(String(params.payload.nextRenewalDate ?? ''))}`,
     `金额：${`${String(params.payload.amount ?? '')} ${String(params.payload.currency ?? '')}`.trim()}`,
     `标签：${Array.isArray(params.payload.tagNames) ? params.payload.tagNames.join('、') : ''}`,
     `网址：${String(params.payload.websiteUrl ?? '')}`,
