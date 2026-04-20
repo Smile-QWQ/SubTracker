@@ -389,6 +389,13 @@ EOF
     ${pull_cmd}
     ${up_cmd}
 
+## 默认登录
+
+- 用户名：admin
+- 密码：admin
+
+首次登录后建议立即修改默认密码；系统会在登录后提示修改默认密码。
+
 ## 查看日志
 
     cd ${INSTALL_DIR}
@@ -438,6 +445,10 @@ show_summary() {
   printf '   %s pull\n' "$compose_cmd"
   printf '   %s up -d\n' "$compose_cmd"
   printf '   首次启动时，API 容器会自动初始化 SQLite 数据库表结构\n'
+
+  printf '\n'
+  printf '   默认登录账号：admin / admin\n'
+  printf '   首次登录后建议立即修改默认密码\n'
 
   printf '\n'
   printf '3) 查看日志\n'
