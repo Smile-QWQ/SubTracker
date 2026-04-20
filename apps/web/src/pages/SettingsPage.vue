@@ -18,26 +18,8 @@
                 </n-form-item>
               </n-grid-item>
               <n-grid-item>
-                <n-form-item label="默认提前提醒天数">
-                  <n-input-number v-model:value="settingsForm.defaultNotifyDays" :min="0" :max="365" style="width: 100%" />
-                </n-form-item>
-              </n-grid-item>
-            </n-grid>
-
-            <n-grid :cols="formCols" :x-gap="12">
-              <n-grid-item>
                 <n-form-item label="记住登录天数">
                   <n-input-number v-model:value="settingsForm.rememberSessionDays" :min="1" :max="365" style="width: 100%" />
-                </n-form-item>
-              </n-grid-item>
-              <n-grid-item>
-                <n-form-item label="提醒策略">
-                  <n-space align="center" wrap>
-                    <span class="switch-inline-label">到期当天提醒</span>
-                    <n-switch v-model:value="settingsForm.notifyOnDueDay" />
-                    <span class="switch-inline-label">多订阅合并通知</span>
-                    <n-switch v-model:value="settingsForm.mergeMultiSubscriptionNotifications" />
-                  </n-space>
                 </n-form-item>
               </n-grid-item>
             </n-grid>
@@ -57,9 +39,8 @@
 
             <n-grid :cols="formCols" :x-gap="12">
               <n-grid-item>
-                <n-form-item>
-                  <n-switch v-model:value="settingsForm.enableTagBudgets" />
-                  <span class="switch-label">启用标签月预算</span>
+                <n-form-item label="默认提前提醒天数">
+                  <n-input-number v-model:value="settingsForm.defaultNotifyDays" :min="0" :max="365" style="width: 100%" />
                 </n-form-item>
               </n-grid-item>
               <n-grid-item>
@@ -71,6 +52,33 @@
                       </n-checkbox>
                     </n-space>
                   </n-checkbox-group>
+                </n-form-item>
+              </n-grid-item>
+            </n-grid>
+
+            <n-grid :cols="formCols" :x-gap="12">
+              <n-grid-item>
+                <n-form-item label="提醒策略">
+                  <div class="switch-group">
+                    <div class="switch-group__item">
+                      <span class="switch-inline-label">到期当天提醒</span>
+                      <n-switch v-model:value="settingsForm.notifyOnDueDay" />
+                    </div>
+                    <div class="switch-group__item">
+                      <span class="switch-inline-label">多订阅合并通知</span>
+                      <n-switch v-model:value="settingsForm.mergeMultiSubscriptionNotifications" />
+                    </div>
+                  </div>
+                </n-form-item>
+              </n-grid-item>
+              <n-grid-item>
+                <n-form-item label="其他">
+                  <div class="switch-group switch-group--single">
+                    <div class="switch-group__item">
+                      <n-switch v-model:value="settingsForm.enableTagBudgets" />
+                      <span class="switch-label">启用标签月预算</span>
+                    </div>
+                  </div>
                 </n-form-item>
               </n-grid-item>
             </n-grid>
@@ -979,6 +987,24 @@ function formatTime(value: string) {
 
 .switch-inline-label {
   color: #475569;
+}
+
+.switch-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  align-items: center;
+}
+
+.switch-group--single {
+  min-height: 34px;
+}
+
+.switch-group__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
 }
 
 .tag-budget-grid {
