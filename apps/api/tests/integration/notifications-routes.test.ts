@@ -56,4 +56,5 @@ describe('notification routes', () => {
     expect(res.statusCode).toBe(200)
     expect(notificationMocks.sendTestTelegramNotificationMock).toHaveBeenCalled()
   })
+
 })

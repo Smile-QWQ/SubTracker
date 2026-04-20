@@ -1,8 +1,20 @@
 import { FastifyInstance } from 'fastify'
-import { SettingsSchema } from '@subtracker/shared'
+import {
+  DEFAULT_ADVANCE_REMINDER_RULES,
+  DEFAULT_OVERDUE_REMINDER_RULES,
+  SettingsSchema
+} from '@subtracker/shared'
 import { prisma } from '../db'
 import { sendError, sendOk } from '../http'
 import { getAppSettings, setSetting } from '../services/settings.service'
+import {
+  buildAdvanceReminderRulesFromLegacy,
+  buildOverdueReminderRules,
+  deriveNotifyDaysBeforeFromAdvanceRules,
+  deriveNotifyOnDueDayFromAdvanceRules,
+  deriveOverdueReminderDaysFromRules,
+  normalizeReminderRules
+} from '../services/reminder-rules.service'
 
 function validateSettingsPayload(settings: Awaited<ReturnType<typeof getAppSettings>>) {
   const missingEmailFields = [
@@ -49,6 +61,36 @@ function validateSettingsPayload(settings: Awaited<ReturnType<typeof getAppSetti
   }
 }
 
+function normalizeReminderSettingsPayload(
+  payload: Partial<Awaited<ReturnType<typeof getAppSettings>>>,
+  currentSettings: Awaited<ReturnType<typeof getAppSettings>>
+) {
+  const nextSettings = {
+    defaultAdvanceReminderRules:
+      payload.defaultAdvanceReminderRules !== undefined
+        ? normalizeReminderRules(payload.defaultAdvanceReminderRules, 'advance')
+        : payload.defaultNotifyDays !== undefined || payload.notifyOnDueDay !== undefined
+          ? buildAdvanceReminderRulesFromLegacy(
+              payload.defaultNotifyDays ?? currentSettings.defaultNotifyDays,
+              payload.notifyOnDueDay ?? currentSettings.notifyOnDueDay
+            ) || DEFAULT_ADVANCE_REMINDER_RULES
+          : currentSettings.defaultAdvanceReminderRules,
+    defaultOverdueReminderRules:
+      payload.defaultOverdueReminderRules !== undefined
+        ? normalizeReminderRules(payload.defaultOverdueReminderRules, 'overdue')
+        : payload.overdueReminderDays !== undefined
+          ? buildOverdueReminderRules(payload.overdueReminderDays) || DEFAULT_OVERDUE_REMINDER_RULES
+          : currentSettings.defaultOverdueReminderRules
+  }
+
+  return {
+    ...nextSettings,
+    defaultNotifyDays: deriveNotifyDaysBeforeFromAdvanceRules(nextSettings.defaultAdvanceReminderRules),
+    notifyOnDueDay: deriveNotifyOnDueDayFromAdvanceRules(nextSettings.defaultAdvanceReminderRules),
+    overdueReminderDays: deriveOverdueReminderDaysFromRules(nextSettings.defaultOverdueReminderRules)
+  }
+}
+
 export async function settingsRoutes(app: FastifyInstance) {
   app.get('/settings/export/subscriptions', async (request, reply) => {
     const formatValue = (request.query as { format?: string } | undefined)?.format
@@ -85,6 +127,8 @@ export async function settingsRoutes(app: FastifyInstance) {
       startDate: subscription.startDate.toISOString().slice(0, 10),
       nextRenewalDate: subscription.nextRenewalDate.toISOString().slice(0, 10),
       notifyDaysBefore: subscription.notifyDaysBefore,
+      advanceReminderRules: subscription.advanceReminderRules ?? '',
+      overdueReminderRules: subscription.overdueReminderRules ?? '',
       webhookEnabled: subscription.webhookEnabled,
       notes: subscription.notes,
       tags: subscription.tags
@@ -128,6 +172,8 @@ export async function settingsRoutes(app: FastifyInstance) {
       'startDate',
       'nextRenewalDate',
       'notifyDaysBefore',
+      'advanceReminderRules',
+      'overdueReminderRules',
       'webhookEnabled',
       'notes',
       'tags',
@@ -154,6 +200,8 @@ export async function settingsRoutes(app: FastifyInstance) {
           row.startDate,
           row.nextRenewalDate,
           row.notifyDaysBefore,
+          row.advanceReminderRules,
+          row.overdueReminderRules,
           row.webhookEnabled,
           row.notes,
           row.tags.map((tag) => tag.name).join(', '),
@@ -182,9 +230,18 @@ export async function settingsRoutes(app: FastifyInstance) {
     }
 
     const currentSettings = await getAppSettings()
+    let normalizedReminderSettings: ReturnType<typeof normalizeReminderSettingsPayload>
+
+    try {
+      normalizedReminderSettings = normalizeReminderSettingsPayload(parsed.data, currentSettings)
+    } catch (error) {
+      return sendError(reply, 422, 'validation_error', error instanceof Error ? error.message : 'Invalid reminder rules')
+    }
+
     const nextSettings = {
       ...currentSettings,
       ...parsed.data,
+      ...normalizedReminderSettings,
       emailConfig: parsed.data.emailConfig ? { ...currentSettings.emailConfig, ...parsed.data.emailConfig } : currentSettings.emailConfig,
       pushplusConfig: parsed.data.pushplusConfig ? { ...currentSettings.pushplusConfig, ...parsed.data.pushplusConfig } : currentSettings.pushplusConfig,
       telegramConfig: parsed.data.telegramConfig
@@ -208,11 +265,25 @@ export async function settingsRoutes(app: FastifyInstance) {
       return sendError(reply, 422, 'validation_error', error instanceof Error ? error.message : 'Invalid settings payload')
     }
 
-    await Promise.all(
-      Object.entries(parsed.data).map(([key, value]) => {
-        return value === undefined ? Promise.resolve() : setSetting(key, value)
-      })
+    const settingsToPersist: Array<[string, unknown]> = Object.entries(parsed.data).filter(([, value]) => value !== undefined)
+    const reminderRelatedKeys = new Set([
+      'defaultNotifyDays',
+      'notifyOnDueDay',
+      'overdueReminderDays',
+      'defaultAdvanceReminderRules',
+      'defaultOverdueReminderRules'
+    ])
+
+    const filteredEntries = settingsToPersist.filter(([key]) => !reminderRelatedKeys.has(key))
+    filteredEntries.push(
+      ['defaultAdvanceReminderRules', normalizedReminderSettings.defaultAdvanceReminderRules],
+      ['defaultOverdueReminderRules', normalizedReminderSettings.defaultOverdueReminderRules],
+      ['defaultNotifyDays', normalizedReminderSettings.defaultNotifyDays],
+      ['notifyOnDueDay', normalizedReminderSettings.notifyOnDueDay],
+      ['overdueReminderDays', normalizedReminderSettings.overdueReminderDays]
     )
+
+    await Promise.all(filteredEntries.map(([key, value]) => setSetting(key, value)))
 
     const settings = await getAppSettings()
     return sendOk(reply, settings)

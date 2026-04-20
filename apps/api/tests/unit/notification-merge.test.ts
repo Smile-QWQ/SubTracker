@@ -8,6 +8,9 @@ const notificationState = vi.hoisted(() => ({
 
 vi.mock('../../src/services/settings.service', () => ({
   getAppSettings: vi.fn(async () => ({
+    defaultAdvanceReminderRules: '3&09:30;0&09:30;',
+    defaultOverdueReminderRules: '1&09:30;2&09:30;3&09:30;',
+    defaultNotifyDays: 3,
     notifyOnDueDay: true,
     mergeMultiSubscriptionNotifications: notificationState.mergeMultiSubscriptionNotifications,
     overdueReminderDays: [1, 2, 3]
@@ -25,8 +28,10 @@ vi.mock('../../src/db', () => ({
         {
           id: 'sub-1',
           name: 'Netflix',
-          nextRenewalDate: new Date('2026-04-23T00:00:00.000Z'),
+          nextRenewalDate: new Date('2026-04-23T00:00:00'),
           notifyDaysBefore: 3,
+          advanceReminderRules: '',
+          overdueReminderRules: '',
           amount: 9.9,
           currency: 'USD',
           status: 'active',
@@ -37,14 +42,30 @@ vi.mock('../../src/db', () => ({
         {
           id: 'sub-2',
           name: 'Spotify',
-          nextRenewalDate: new Date('2026-04-22T00:00:00.000Z'),
+          nextRenewalDate: new Date('2026-04-22T00:00:00'),
           notifyDaysBefore: 5,
+          advanceReminderRules: '',
+          overdueReminderRules: '',
           amount: 12.9,
           currency: 'USD',
           status: 'active',
           websiteUrl: 'https://spotify.com',
           notes: 'music',
           tags: [{ tag: { name: '音乐' } }]
+        },
+        {
+          id: 'sub-3',
+          name: 'Notion',
+          nextRenewalDate: new Date('2026-04-26T00:00:00'),
+          notifyDaysBefore: 3,
+          advanceReminderRules: '',
+          overdueReminderRules: '',
+          amount: 8.8,
+          currency: 'USD',
+          status: 'active',
+          websiteUrl: 'https://notion.so',
+          notes: 'workspace',
+          tags: [{ tag: { name: '办公' } }]
         }
       ]),
       update: notificationState.updateMock
@@ -63,23 +84,23 @@ describe('scanRenewalNotifications merge behavior', () => {
   it('merges all reminders from the same scan into a single summary notification by default', async () => {
     notificationState.mergeMultiSubscriptionNotifications = true
 
-    await scanRenewalNotifications(new Date('2026-04-23T10:00:00.000Z'))
+    await scanRenewalNotifications(new Date('2026-04-23T09:30:00'))
 
     expect(notificationState.dispatchMock).toHaveBeenCalledTimes(1)
     const payload = notificationState.dispatchMock.mock.calls[0][0].payload
     expect(payload.merged).toBe(true)
-    expect(payload.mergedCount).toBe(2)
-    expect(payload.subscriptions).toHaveLength(2)
-    expect(payload.mergedSections).toHaveLength(2)
-    expect(payload.mergedSections.map((section: { title: string }) => section.title)).toEqual(['今天到期', '已过期第 1 天'])
+    expect(payload.mergedCount).toBe(3)
+    expect(payload.subscriptions).toHaveLength(3)
+    expect(payload.mergedSections).toHaveLength(3)
+    expect(payload.mergedSections.map((section: { title: string }) => section.title)).toEqual(['即将到期', '今天到期', '已过期第 1 天'])
   })
 
   it('sends notifications separately when merging is disabled', async () => {
     notificationState.mergeMultiSubscriptionNotifications = false
 
-    await scanRenewalNotifications(new Date('2026-04-23T10:00:00.000Z'))
+    await scanRenewalNotifications(new Date('2026-04-23T09:30:00'))
 
-    expect(notificationState.dispatchMock).toHaveBeenCalledTimes(2)
+    expect(notificationState.dispatchMock).toHaveBeenCalledTimes(3)
     for (const call of notificationState.dispatchMock.mock.calls) {
       expect(call[0].payload.merged).not.toBe(true)
     }

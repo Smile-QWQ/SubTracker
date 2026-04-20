@@ -223,7 +223,8 @@
       :model="editing"
       :tags="tags"
       :currencies="currencies"
-      :default-notify-days="defaultNotifyDays"
+      :default-advance-reminder-rules="defaultAdvanceReminderRules"
+      :default-overdue-reminder-rules="defaultOverdueReminderRules"
       @close="closeModal"
       @submit="submitSubscription"
     />
@@ -299,7 +300,8 @@ const tags = ref<Tag[]>([])
 const detail = ref<SubscriptionDetail | null>(null)
 const paymentRecords = ref<PaymentRecord[]>([])
 const currencies = ref<string[]>(['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'HKD'])
-const defaultNotifyDays = ref(3)
+const defaultAdvanceReminderRules = ref('3&09:30;0&09:30;')
+const defaultOverdueReminderRules = ref('1&09:30;2&09:30;3&09:30;')
 
 const filters = reactive({
   q: '',
@@ -684,7 +686,8 @@ async function loadCurrencies() {
 
 async function loadSettings() {
   const settings: Settings = await api.getSettings()
-  defaultNotifyDays.value = settings.defaultNotifyDays ?? 3
+  defaultAdvanceReminderRules.value = settings.defaultAdvanceReminderRules
+  defaultOverdueReminderRules.value = settings.defaultOverdueReminderRules
 }
 
 function toggleTagFilter(tagId: string) {

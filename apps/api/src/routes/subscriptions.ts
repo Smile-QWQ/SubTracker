@@ -26,10 +26,47 @@ import {
   saveUploadedLogo,
   searchSubscriptionLogos
 } from '../services/logo.service'
+import {
+  buildAdvanceReminderRulesFromLegacyWithDefault,
+  deriveNotifyDaysBeforeFromAdvanceRules,
+  normalizeOptionalReminderRules
+} from '../services/reminder-rules.service'
+import { getAppSettings } from '../services/settings.service'
 
 const subscriptionInclude = {
   tags: { include: { tag: true } }
 } as const
+
+async function resolveSubscriptionReminderFields(payload: {
+  advanceReminderRules?: string | null
+  overdueReminderRules?: string | null
+  notifyDaysBefore?: number
+}) {
+  const settings = await getAppSettings()
+
+  const normalizedAdvanceReminderRules =
+    payload.advanceReminderRules !== undefined
+      ? normalizeOptionalReminderRules(payload.advanceReminderRules, 'advance')
+      : payload.notifyDaysBefore !== undefined
+        ? buildAdvanceReminderRulesFromLegacyWithDefault(payload.notifyDaysBefore, settings.defaultAdvanceReminderRules)
+        : undefined
+
+  const normalizedOverdueReminderRules =
+    payload.overdueReminderRules !== undefined
+      ? normalizeOptionalReminderRules(payload.overdueReminderRules, 'overdue')
+      : undefined
+
+  const derivedNotifyDaysBefore =
+    normalizedAdvanceReminderRules !== undefined
+      ? deriveNotifyDaysBeforeFromAdvanceRules(normalizedAdvanceReminderRules || settings.defaultAdvanceReminderRules)
+      : payload.notifyDaysBefore
+
+  return {
+    advanceReminderRules: normalizedAdvanceReminderRules,
+    overdueReminderRules: normalizedOverdueReminderRules,
+    notifyDaysBefore: derivedNotifyDaysBefore
+  }
+}
 
 function parseBatchIds(input: unknown) {
   return z
@@ -354,6 +391,13 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     }
 
     const tagIds = normalizeTagIds(parsed.data.tagIds)
+    let reminderFields: Awaited<ReturnType<typeof resolveSubscriptionReminderFields>>
+
+    try {
+      reminderFields = await resolveSubscriptionReminderFields(parsed.data)
+    } catch (error) {
+      return sendError(reply, 422, 'validation_error', error instanceof Error ? error.message : 'Invalid reminder rules')
+    }
 
     const created = await prisma.$transaction(async (tx) => {
       const subscription = await tx.subscription.create({
@@ -367,7 +411,13 @@ export async function subscriptionRoutes(app: FastifyInstance) {
           autoRenew: parsed.data.autoRenew,
           startDate: dayjs(parsed.data.startDate).toDate(),
           nextRenewalDate: dayjs(parsed.data.nextRenewalDate).toDate(),
-          notifyDaysBefore: parsed.data.notifyDaysBefore,
+          notifyDaysBefore: reminderFields.notifyDaysBefore ?? parsed.data.notifyDaysBefore,
+          ...(reminderFields.advanceReminderRules !== undefined
+            ? { advanceReminderRules: reminderFields.advanceReminderRules }
+            : {}),
+          ...(reminderFields.overdueReminderRules !== undefined
+            ? { overdueReminderRules: reminderFields.overdueReminderRules }
+            : {}),
           webhookEnabled: parsed.data.webhookEnabled,
           notes: parsed.data.notes,
           websiteUrl: parsed.data.websiteUrl ?? null,
@@ -402,6 +452,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     const payload = parsed.data
 
     try {
+      const reminderFields = await resolveSubscriptionReminderFields(payload)
       const normalizedLogo =
         payload.logoUrl !== undefined || payload.logoSource !== undefined
           ? await normalizeLogoForStorage({
@@ -426,7 +477,13 @@ export async function subscriptionRoutes(app: FastifyInstance) {
             ...(payload.autoRenew !== undefined ? { autoRenew: payload.autoRenew } : {}),
             ...(payload.startDate !== undefined ? { startDate: dayjs(payload.startDate).toDate() } : {}),
             ...(payload.nextRenewalDate !== undefined ? { nextRenewalDate: dayjs(payload.nextRenewalDate).toDate() } : {}),
-            ...(payload.notifyDaysBefore !== undefined ? { notifyDaysBefore: payload.notifyDaysBefore } : {}),
+            ...(reminderFields.notifyDaysBefore !== undefined ? { notifyDaysBefore: reminderFields.notifyDaysBefore } : {}),
+            ...(reminderFields.advanceReminderRules !== undefined
+              ? { advanceReminderRules: reminderFields.advanceReminderRules }
+              : {}),
+            ...(reminderFields.overdueReminderRules !== undefined
+              ? { overdueReminderRules: reminderFields.overdueReminderRules }
+              : {}),
             ...(payload.webhookEnabled !== undefined ? { webhookEnabled: payload.webhookEnabled } : {}),
             ...(payload.notes !== undefined ? { notes: payload.notes } : {}),
             ...(payload.websiteUrl !== undefined ? { websiteUrl: payload.websiteUrl } : {}),

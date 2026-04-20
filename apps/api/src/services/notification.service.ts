@@ -1,10 +1,15 @@
-import dayjs from 'dayjs'
+﻿import dayjs from 'dayjs'
 import { prisma } from '../db'
 import { toIsoDate } from '../utils/date'
 import { dispatchNotificationEvent, type NotificationChannelResult } from './channel-notification.service'
+import {
+  buildAdvanceReminderRulesFromLegacyWithDefault,
+  parseReminderRules,
+  type ReminderRule
+} from './reminder-rules.service'
 import { getAppSettings } from './settings.service'
 
-export type ReminderPhase = 'upcoming' | 'due_today' | 'overdue_day_1' | 'overdue_day_2' | 'overdue_day_3'
+export type ReminderPhase = 'upcoming' | 'due_today' | `overdue_day_${number}`
 
 export type NotificationScanResult = {
   processedCount: number
@@ -20,16 +25,17 @@ export type NotificationScanResult = {
   }>
 }
 
-type ReminderRuleSettings = {
-  notifyOnDueDay: boolean
-  overdueReminderDays: Array<1 | 2 | 3>
-}
+export type NotificationScanOverrides = Partial<
+  Pick<Awaited<ReturnType<typeof getAppSettings>>, 'defaultAdvanceReminderRules' | 'defaultOverdueReminderRules' | 'mergeMultiSubscriptionNotifications'>
+>
 
 type ReminderSubscriptionLike = {
   id: string
   name: string
   nextRenewalDate: Date
   notifyDaysBefore: number
+  advanceReminderRules: string | null
+  overdueReminderRules: string | null
   amount: number
   currency: string
   status: string
@@ -53,14 +59,17 @@ type ReminderEntryPayload = {
   tagNames: string[]
   websiteUrl: string
   notes: string
-  phase: 'upcoming' | 'due_today' | 'overdue'
+  phase: 'upcoming' | 'due_today' | 'overdue' | 'summary'
   daysUntilRenewal: number
   daysOverdue: number
+  reminderRuleTime: string
+  reminderRuleDays: number
 }
 
 type ReminderDispatchEntry = {
   eventType: 'subscription.reminder_due' | 'subscription.overdue'
   phase: ReminderPhase
+  title: string
   resourceKey: string
   periodKey: string
   subscriptionId: string
@@ -74,73 +83,136 @@ type ReminderSummarySection = {
   subscriptions: ReminderEntryPayload[]
 }
 
+type ReminderMatch = {
+  eventType: 'subscription.reminder_due' | 'subscription.overdue'
+  phase: ReminderPhase
+  title: string
+  daysUntilRenewal: number
+  daysOverdue: number
+  ruleTime: string
+  ruleKey: string
+}
+
+function getOverduePhase(daysOverdue: number): ReminderPhase {
+  return `overdue_day_${daysOverdue}`
+}
+
+function buildReminderTitle(eventType: 'subscription.reminder_due' | 'subscription.overdue', days: number) {
+  if (eventType === 'subscription.reminder_due') {
+    return days === 0 ? '今天到期' : `还有 ${days} 天到期`
+  }
+
+  return `已过期第 ${days} 天`
+}
+
 function getSummaryPhaseTitle(phase: ReminderPhase) {
-  switch (phase) {
-    case 'upcoming':
-      return '即将到期'
-    case 'due_today':
-      return '今天到期'
-    case 'overdue_day_1':
-      return '已过期第 1 天'
-    case 'overdue_day_2':
-      return '已过期第 2 天'
-    case 'overdue_day_3':
-      return '已过期第 3 天'
-    default:
-      return phase
+  if (phase === 'upcoming') return '即将到期'
+  if (phase === 'due_today') return '今天到期'
+
+  const overdueMatch = phase.match(/^overdue_day_(\d+)$/)
+  if (overdueMatch) {
+    return `已过期第 ${overdueMatch[1]} 天`
   }
+
+  return phase
 }
 
-export function resolveReminderPhase(
-  today: Date,
+function resolveAdvanceRules(sub: ReminderSubscriptionLike, defaultAdvanceReminderRules: string) {
+  if (sub.advanceReminderRules === '') {
+    return parseReminderRules(defaultAdvanceReminderRules, 'advance')
+  }
+
+  if (sub.advanceReminderRules?.trim()) {
+    return parseReminderRules(sub.advanceReminderRules, 'advance')
+  }
+
+  const legacyRules = buildAdvanceReminderRulesFromLegacyWithDefault(sub.notifyDaysBefore, defaultAdvanceReminderRules)
+  return parseReminderRules(legacyRules || defaultAdvanceReminderRules, 'advance')
+}
+
+function resolveOverdueRules(sub: ReminderSubscriptionLike, defaultOverdueReminderRules: string) {
+  if (sub.overdueReminderRules === '') {
+    return parseReminderRules(defaultOverdueReminderRules, 'overdue')
+  }
+
+  if (sub.overdueReminderRules?.trim()) {
+    return parseReminderRules(sub.overdueReminderRules, 'overdue')
+  }
+
+  return parseReminderRules(defaultOverdueReminderRules, 'overdue')
+}
+
+function resolveRuleTriggerMoment(nextRenewalDate: Date, rule: ReminderRule, direction: 'advance' | 'overdue') {
+  const renewalDay = dayjs(nextRenewalDate).startOf('day')
+  const base = direction === 'advance' ? renewalDay.subtract(rule.days, 'day') : renewalDay.add(rule.days, 'day')
+  return base.hour(rule.hour).minute(rule.minute).second(0).millisecond(0)
+}
+
+function matchReminderRule(
+  now: dayjs.Dayjs,
   nextRenewalDate: Date,
-  notifyDaysBefore: number,
-  settings: ReminderRuleSettings = {
-    notifyOnDueDay: true,
-    overdueReminderDays: [1, 2, 3]
+  rule: ReminderRule,
+  direction: 'advance' | 'overdue'
+): ReminderMatch | null {
+  const trigger = resolveRuleTriggerMoment(nextRenewalDate, rule, direction)
+  if (!now.isSame(trigger, 'minute')) {
+    return null
   }
-): { eventType: 'subscription.reminder_due' | 'subscription.overdue'; phase: ReminderPhase } | null {
-  const todayStart = dayjs(today).startOf('day')
-  const renewalStart = dayjs(nextRenewalDate).startOf('day')
-  const diffDays = todayStart.diff(renewalStart, 'day')
 
-  if (diffDays === 0 && settings.notifyOnDueDay) {
+  if (direction === 'advance') {
     return {
       eventType: 'subscription.reminder_due',
-      phase: 'due_today'
+      phase: rule.days === 0 ? 'due_today' : 'upcoming',
+      title: buildReminderTitle('subscription.reminder_due', rule.days),
+      daysUntilRenewal: rule.days,
+      daysOverdue: 0,
+      ruleTime: rule.time,
+      ruleKey: `advance-${rule.days}@${rule.time}`
     }
   }
 
-  if (notifyDaysBefore > 0 && diffDays === -Math.max(notifyDaysBefore, 0)) {
-    return {
-      eventType: 'subscription.reminder_due',
-      phase: 'upcoming'
-    }
+  return {
+    eventType: 'subscription.overdue',
+    phase: getOverduePhase(rule.days),
+    title: buildReminderTitle('subscription.overdue', rule.days),
+    daysUntilRenewal: 0,
+    daysOverdue: rule.days,
+    ruleTime: rule.time,
+    ruleKey: `overdue-${rule.days}@${rule.time}`
   }
-
-  if (diffDays >= 1 && diffDays <= 3 && settings.overdueReminderDays.includes(diffDays as 1 | 2 | 3)) {
-    return {
-      eventType: 'subscription.overdue',
-      phase: `overdue_day_${diffDays}` as ReminderPhase
-    }
-  }
-
-  return null
 }
 
-function buildDispatchEntry(
+function resolveReminderMatches(
+  now: dayjs.Dayjs,
   sub: ReminderSubscriptionLike,
-  currentDay: Date,
-  resolved: NonNullable<ReturnType<typeof resolveReminderPhase>>
-): ReminderDispatchEntry {
-  const daysOverdue = Math.max(dayjs(currentDay).diff(dayjs(sub.nextRenewalDate).startOf('day'), 'day'), 0)
-  const daysUntilRenewal = Math.max(dayjs(sub.nextRenewalDate).startOf('day').diff(dayjs(currentDay), 'day'), 0)
+  settings: Awaited<ReturnType<typeof getAppSettings>>
+) {
+  const matches: ReminderMatch[] = []
 
+  for (const rule of resolveAdvanceRules(sub, settings.defaultAdvanceReminderRules)) {
+    const match = matchReminderRule(now, sub.nextRenewalDate, rule, 'advance')
+    if (match) {
+      matches.push(match)
+    }
+  }
+
+  for (const rule of resolveOverdueRules(sub, settings.defaultOverdueReminderRules)) {
+    const match = matchReminderRule(now, sub.nextRenewalDate, rule, 'overdue')
+    if (match) {
+      matches.push(match)
+    }
+  }
+
+  return matches
+}
+
+function buildDispatchEntry(sub: ReminderSubscriptionLike, resolved: ReminderMatch): ReminderDispatchEntry {
   return {
     eventType: resolved.eventType,
     phase: resolved.phase,
+    title: resolved.title,
     resourceKey: `subscription:${sub.id}`,
-    periodKey: `${toIsoDate(sub.nextRenewalDate)}:${resolved.phase}`,
+    periodKey: `${toIsoDate(sub.nextRenewalDate)}:${resolved.phase}:${resolved.ruleKey}`,
     subscriptionId: sub.id,
     payload: {
       id: sub.id,
@@ -149,13 +221,15 @@ function buildDispatchEntry(
       notifyDaysBefore: sub.notifyDaysBefore,
       amount: sub.amount,
       currency: sub.currency,
-      status: daysOverdue > 0 ? 'expired' : sub.status,
+      status: resolved.daysOverdue > 0 ? 'expired' : sub.status,
       tagNames: sub.tags.map((item) => item.tag.name),
       websiteUrl: sub.websiteUrl ?? '',
       notes: sub.notes ?? '',
-      phase: resolved.phase === 'upcoming' ? 'upcoming' : resolved.phase === 'due_today' ? 'due_today' : 'overdue',
-      daysUntilRenewal,
-      daysOverdue
+      phase: resolved.eventType === 'subscription.overdue' ? 'overdue' : resolved.phase === 'due_today' ? 'due_today' : 'upcoming',
+      daysUntilRenewal: resolved.daysUntilRenewal,
+      daysOverdue: resolved.daysOverdue,
+      reminderRuleTime: resolved.ruleTime,
+      reminderRuleDays: resolved.eventType === 'subscription.overdue' ? resolved.daysOverdue : resolved.daysUntilRenewal
     }
   }
 }
@@ -179,8 +253,15 @@ function buildMergedSummarySections(entries: ReminderDispatchEntry[]): ReminderS
   }
 
   return Array.from(groups.values()).sort((a, b) => {
-    const order: ReminderPhase[] = ['upcoming', 'due_today', 'overdue_day_1', 'overdue_day_2', 'overdue_day_3']
-    return order.indexOf(a.phase) - order.indexOf(b.phase)
+    const phaseWeight = (phase: ReminderPhase) => {
+      if (phase === 'upcoming') return 1
+      if (phase === 'due_today') return 2
+      const overdueMatch = phase.match(/^overdue_day_(\d+)$/)
+      if (overdueMatch) return 100 + Number(overdueMatch[1])
+      return 999
+    }
+
+    return phaseWeight(a.phase) - phaseWeight(b.phase)
   })
 }
 
@@ -205,12 +286,20 @@ function buildMergedPayload(entries: ReminderDispatchEntry[]) {
     phase: 'summary',
     daysUntilRenewal: Math.min(...flattenedSubscriptions.map((item) => item.daysUntilRenewal)),
     daysOverdue: Math.max(...flattenedSubscriptions.map((item) => item.daysOverdue)),
+    reminderRuleTime: flattenedSubscriptions[0]?.reminderRuleTime ?? '00:00',
+    reminderRuleDays: flattenedSubscriptions[0]?.reminderRuleDays ?? 0,
     subscriptions: flattenedSubscriptions
   }
 }
 
-export async function scanRenewalNotifications(today = new Date()): Promise<NotificationScanResult> {
-  const appSettings = await getAppSettings()
+export async function scanRenewalNotifications(
+  today = new Date(),
+  overrides: NotificationScanOverrides = {}
+): Promise<NotificationScanResult> {
+  const appSettings = {
+    ...(await getAppSettings()),
+    ...overrides
+  }
   const subscriptions = await prisma.subscription.findMany({
     where: {
       status: { in: ['active', 'expired'] },
@@ -225,12 +314,13 @@ export async function scanRenewalNotifications(today = new Date()): Promise<Noti
     }
   })
 
-  const currentDay = dayjs(today).startOf('day').toDate()
+  const now = dayjs(today).second(0).millisecond(0)
+  const currentDay = now.startOf('day')
   const dispatchEntries: ReminderDispatchEntry[] = []
   const notifications: NotificationScanResult['notifications'] = []
 
   for (const sub of subscriptions) {
-    const daysOverdue = Math.max(dayjs(currentDay).diff(dayjs(sub.nextRenewalDate).startOf('day'), 'day'), 0)
+    const daysOverdue = Math.max(currentDay.diff(dayjs(sub.nextRenewalDate).startOf('day'), 'day'), 0)
     if (daysOverdue >= 1 && sub.status !== 'expired') {
       await prisma.subscription.update({
         where: { id: sub.id },
@@ -238,13 +328,10 @@ export async function scanRenewalNotifications(today = new Date()): Promise<Noti
       })
     }
 
-    const resolved = resolveReminderPhase(currentDay, sub.nextRenewalDate, sub.notifyDaysBefore, {
-      notifyOnDueDay: appSettings.notifyOnDueDay,
-      overdueReminderDays: appSettings.overdueReminderDays
-    })
-    if (!resolved) continue
-
-    dispatchEntries.push(buildDispatchEntry(sub, currentDay, resolved))
+    const matches = resolveReminderMatches(now, sub, appSettings)
+    for (const match of matches) {
+      dispatchEntries.push(buildDispatchEntry(sub, match))
+    }
   }
 
   if (!appSettings.mergeMultiSubscriptionNotifications || dispatchEntries.length <= 1) {
@@ -282,7 +369,7 @@ export async function scanRenewalNotifications(today = new Date()): Promise<Noti
   const channelResults = await dispatchNotificationEvent({
     eventType: mergedEventType,
     resourceKey: 'subscriptions:scan-summary',
-    periodKey: `${toIsoDate(currentDay)}:summary`,
+    periodKey: `${toIsoDate(now.toDate())}:summary:${now.format('HH:mm')}`,
     payload: mergedPayload
   })
 

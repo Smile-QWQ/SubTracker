@@ -54,6 +54,8 @@ model Subscription {
   startDate            DateTime
   nextRenewalDate      DateTime
   notifyDaysBefore     Int                @default(3)
+  advanceReminderRules String?
+  overdueReminderRules String?
   webhookEnabled       Boolean            @default(true)
   notes                String             @default("")
   tags                 SubscriptionTag[]

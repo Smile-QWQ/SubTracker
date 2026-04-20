@@ -39,47 +39,65 @@
 
             <n-grid :cols="formCols" :x-gap="12">
               <n-grid-item>
-                <n-form-item label="默认提前提醒天数">
-                  <n-input-number v-model:value="settingsForm.defaultNotifyDays" :min="0" :max="365" style="width: 100%" />
+                <n-form-item>
+                  <template #label>
+                    <span class="label-with-tip">
+                      <span>到期前提醒规则</span>
+                      <n-tooltip trigger="hover">
+                        <template #trigger>
+                          <n-icon class="label-with-tip__icon" :component="helpCircleOutline" />
+                        </template>
+                        <span>格式说明：天数&时间;，例如 3&09:30; 表示提前 3 天在 09:30 提醒，0&09:30; 表示到期当天提醒；多条规则用 ; 分隔</span>
+                      </n-tooltip>
+                    </span>
+                  </template>
+                  <n-input
+                    v-model:value="settingsForm.defaultAdvanceReminderRules"
+                    placeholder="例如：3&09:30;0&09:30;"
+                  />
                 </n-form-item>
               </n-grid-item>
               <n-grid-item>
-                <n-form-item label="过期提醒">
-                  <n-checkbox-group v-model:value="settingsForm.overdueReminderDays">
-                    <n-space :wrap="true" size="small">
-                      <n-checkbox v-for="option in overdueReminderOptions" :key="option.value" :value="option.value">
-                        {{ option.label }}
-                      </n-checkbox>
-                    </n-space>
-                  </n-checkbox-group>
+                <n-form-item>
+                  <template #label>
+                    <span class="label-with-tip">
+                      <span>过期提醒规则</span>
+                      <n-tooltip trigger="hover">
+                        <template #trigger>
+                          <n-icon class="label-with-tip__icon" :component="helpCircleOutline" />
+                        </template>
+                        <span>格式说明：天数&时间;，例如 1&09:30; 表示过期 1 天后在 09:30 提醒；多条规则用 ; 分隔</span>
+                      </n-tooltip>
+                    </span>
+                  </template>
+                  <n-input
+                    v-model:value="settingsForm.defaultOverdueReminderRules"
+                    placeholder="例如：1&09:30;2&09:30;3&09:30;"
+                  />
                 </n-form-item>
               </n-grid-item>
             </n-grid>
 
             <n-grid :cols="formCols" :x-gap="12">
               <n-grid-item>
-                <n-form-item label="提醒策略">
+                <div class="switch-row">
                   <div class="switch-group">
-                    <div class="switch-group__item">
-                      <span class="switch-inline-label">到期当天提醒</span>
-                      <n-switch v-model:value="settingsForm.notifyOnDueDay" />
-                    </div>
                     <div class="switch-group__item">
                       <span class="switch-inline-label">多订阅合并通知</span>
                       <n-switch v-model:value="settingsForm.mergeMultiSubscriptionNotifications" />
                     </div>
                   </div>
-                </n-form-item>
+                </div>
               </n-grid-item>
               <n-grid-item>
-                <n-form-item label="其他">
+                <div class="switch-row">
                   <div class="switch-group switch-group--single">
                     <div class="switch-group__item">
                       <n-switch v-model:value="settingsForm.enableTagBudgets" />
                       <span class="switch-label">启用标签月预算</span>
                     </div>
                   </div>
-                </n-form-item>
+                </div>
               </n-grid-item>
             </n-grid>
 
@@ -425,13 +443,17 @@ import dayjs from 'dayjs'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { useQueryClient } from '@tanstack/vue-query'
-import { DEFAULT_AI_CONFIG, DEFAULT_AI_SUBSCRIPTION_PROMPT, DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE } from '@subtracker/shared'
+import {
+  DEFAULT_ADVANCE_REMINDER_RULES,
+  DEFAULT_AI_CONFIG,
+  DEFAULT_AI_SUBSCRIPTION_PROMPT,
+  DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
+  DEFAULT_OVERDUE_REMINDER_RULES
+} from '@subtracker/shared'
 import {
   NAlert,
   NButton,
   NCard,
-  NCheckbox,
-  NCheckboxGroup,
   NCollapse,
   NCollapseItem,
   NDataTable,
@@ -448,9 +470,10 @@ import {
   NSpace,
   NSwitch,
   NTag,
+  NTooltip,
   useMessage
 } from 'naive-ui'
-import { RefreshOutline, SaveOutline, SettingsOutline } from '@vicons/ionicons5'
+import { HelpCircleOutline, RefreshOutline, SaveOutline, SettingsOutline } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
 import PageHeader from '@/components/PageHeader.vue'
 import WallosImportModal from '@/components/WallosImportModal.vue'
@@ -463,6 +486,7 @@ const message = useMessage()
 const authStore = useAuthStore()
 const queryClient = useQueryClient()
 const { width } = useWindowSize()
+const helpCircleOutline = HelpCircleOutline
 const settingsOutline = SettingsOutline
 const AI_PROVIDER_PRESETS: Record<
   Exclude<AiProviderPreset, 'custom'>,
@@ -500,6 +524,7 @@ const AI_PROVIDER_PRESETS: Record<
 const settingsForm = reactive<Settings>({
   baseCurrency: 'CNY',
   defaultNotifyDays: 3,
+  defaultAdvanceReminderRules: DEFAULT_ADVANCE_REMINDER_RULES,
   rememberSessionDays: 7,
   notifyOnDueDay: true,
   mergeMultiSubscriptionNotifications: true,
@@ -507,6 +532,7 @@ const settingsForm = reactive<Settings>({
   yearlyBudgetBase: null,
   enableTagBudgets: false,
   overdueReminderDays: [1, 2, 3],
+  defaultOverdueReminderRules: DEFAULT_OVERDUE_REMINDER_RULES,
   tagBudgets: {},
   emailNotificationsEnabled: false,
   pushplusNotificationsEnabled: false,
@@ -558,7 +584,6 @@ const sourceCurrency = ref('USD')
 const targetCurrency = ref('CNY')
 const converterAmount = ref(1)
 const showWallosImportModal = ref(false)
-
 const isMobile = computed(() => width.value < 960)
 const formCols = computed(() => (width.value < 640 ? 1 : 2))
 const gridCols = computed(() => (isMobile.value ? 1 : 2))
@@ -579,12 +604,6 @@ const aiProviderPresetOptions = [
   { label: '腾讯混元', value: 'tencent-hunyuan' },
   { label: '火山方舟', value: 'volcengine-ark' }
 ] satisfies Array<{ label: string; value: AiProviderPreset }>
-const overdueReminderOptions = [
-  { label: '过期第 1 天', value: 1 },
-  { label: '过期第 2 天', value: 2 },
-  { label: '过期第 3 天', value: 3 }
-] as const
-
 function getMissingRequiredFields(fields: Array<[string, unknown]>) {
   return fields
     .filter(([, value]) => {
@@ -689,28 +708,32 @@ async function loadWebhook() {
 }
 
 async function saveBasicSettings() {
-  await api.updateSettings({
-    baseCurrency: settingsForm.baseCurrency.toUpperCase(),
-    defaultNotifyDays: settingsForm.defaultNotifyDays,
-    rememberSessionDays: settingsForm.rememberSessionDays,
-    notifyOnDueDay: settingsForm.notifyOnDueDay,
-    mergeMultiSubscriptionNotifications: settingsForm.mergeMultiSubscriptionNotifications,
-    monthlyBudgetBase: settingsForm.monthlyBudgetBase,
-    yearlyBudgetBase: settingsForm.yearlyBudgetBase,
-    enableTagBudgets: settingsForm.enableTagBudgets,
-    overdueReminderDays: [...settingsForm.overdueReminderDays].sort((a, b) => a - b) as Array<1 | 2 | 3>,
-    tagBudgets: settingsForm.tagBudgets
-  })
-  message.success('基础设置已保存')
-  targetCurrency.value = settingsForm.baseCurrency.toUpperCase()
-  await Promise.all([
-    queryClient.invalidateQueries({ queryKey: ['settings'] }),
-    queryClient.invalidateQueries({ queryKey: ['settings-budget-page'] }),
-    queryClient.invalidateQueries({ queryKey: ['app-menu-settings'] }),
-    queryClient.invalidateQueries({ queryKey: ['statistics-overview'] }),
-    queryClient.invalidateQueries({ queryKey: ['statistics-budgets'] })
-  ])
-  await loadSnapshot()
+  try {
+    const result = await api.updateSettings({
+      baseCurrency: settingsForm.baseCurrency.toUpperCase(),
+      defaultAdvanceReminderRules: settingsForm.defaultAdvanceReminderRules,
+      rememberSessionDays: settingsForm.rememberSessionDays,
+      mergeMultiSubscriptionNotifications: settingsForm.mergeMultiSubscriptionNotifications,
+      monthlyBudgetBase: settingsForm.monthlyBudgetBase,
+      yearlyBudgetBase: settingsForm.yearlyBudgetBase,
+      enableTagBudgets: settingsForm.enableTagBudgets,
+      defaultOverdueReminderRules: settingsForm.defaultOverdueReminderRules,
+      tagBudgets: settingsForm.tagBudgets
+    })
+    Object.assign(settingsForm, result)
+    message.success('基础设置已保存')
+    targetCurrency.value = settingsForm.baseCurrency.toUpperCase()
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['settings'] }),
+      queryClient.invalidateQueries({ queryKey: ['settings-budget-page'] }),
+      queryClient.invalidateQueries({ queryKey: ['app-menu-settings'] }),
+      queryClient.invalidateQueries({ queryKey: ['statistics-overview'] }),
+      queryClient.invalidateQueries({ queryKey: ['statistics-budgets'] })
+    ])
+    await loadSnapshot()
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '基础设置保存失败')
+  }
 }
 
 async function saveEmailSettings() {
@@ -985,6 +1008,10 @@ function formatTime(value: string) {
   color: #475569;
 }
 
+.switch-row {
+  padding-top: 6px;
+}
+
 .switch-inline-label {
   color: #475569;
 }
@@ -1005,6 +1032,18 @@ function formatTime(value: string) {
   align-items: center;
   gap: 10px;
   min-height: 34px;
+}
+
+.label-with-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.label-with-tip__icon {
+  color: #94a3b8;
+  font-size: 15px;
+  cursor: help;
 }
 
 .tag-budget-grid {

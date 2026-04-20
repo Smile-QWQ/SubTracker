@@ -160,8 +160,35 @@
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
-          <n-form-item label="提醒天数">
-            <n-select v-model:value="form.notifyDaysBefore" :options="notifyDayOptions" placeholder="选择提醒天数" />
+          <n-form-item>
+            <template #label>
+              <span class="label-with-tip">
+                <span>到期前提醒规则</span>
+                <n-tooltip trigger="hover">
+                  <template #trigger>
+                    <n-icon class="label-with-tip__icon" :component="helpCircleOutline" />
+                  </template>
+                  <span>格式说明：天数&时间;，例如 3&09:30; 表示提前 3 天在 09:30 提醒，0&09:30; 表示到期当天提醒；多条规则用 ; 分隔，留空则沿用系统默认</span>
+                </n-tooltip>
+              </span>
+            </template>
+            <n-input v-model:value="form.advanceReminderRules" placeholder="留空则沿用系统默认，例如：3&09:30;0&09:30;" />
+          </n-form-item>
+        </n-grid-item>
+        <n-grid-item>
+          <n-form-item>
+            <template #label>
+              <span class="label-with-tip">
+                <span>过期提醒规则</span>
+                <n-tooltip trigger="hover">
+                  <template #trigger>
+                    <n-icon class="label-with-tip__icon" :component="helpCircleOutline" />
+                  </template>
+                  <span>格式说明：天数&时间;，例如 1&09:30; 表示过期 1 天后在 09:30 提醒；多条规则用 ; 分隔，留空则沿用系统默认</span>
+                </n-tooltip>
+              </span>
+            </template>
+            <n-input v-model:value="form.overdueReminderRules" placeholder="留空则沿用系统默认，例如：1&09:30;2&09:30;" />
           </n-form-item>
         </n-grid-item>
       </n-grid>
@@ -217,9 +244,10 @@ import {
   NSwitch,
   NTabPane,
   NTabs,
+  NTooltip,
   useMessage
 } from 'naive-ui'
-import { CloseOutline, SearchOutline } from '@vicons/ionicons5'
+import { CloseOutline, HelpCircleOutline, SearchOutline } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
 import SubscriptionAiModal from '@/components/SubscriptionAiModal.vue'
 import { buildCurrencyOptions } from '@/utils/currency'
@@ -234,7 +262,8 @@ const props = defineProps<{
   model?: Subscription | null
   tags: Tag[]
   currencies?: string[]
-  defaultNotifyDays?: number
+  defaultAdvanceReminderRules?: string
+  defaultOverdueReminderRules?: string
 }>()
 
 const emit = defineEmits<{
@@ -244,6 +273,7 @@ const emit = defineEmits<{
 
 const { width } = useWindowSize()
 const message = useMessage()
+const helpCircleOutline = HelpCircleOutline
 const showAiModal = ref(false)
 const showLogoPanel = ref(false)
 const logoPanelTab = ref<string>(LOGO_TAB_WEB)
@@ -257,7 +287,7 @@ const syncingNextRenewal = ref(false)
 
 const layoutCols = computed(() => (width.value < 700 ? 1 : 2))
 const moneyCols = computed(() => (width.value < 900 ? 2 : 4))
-const dateCols = computed(() => (width.value < 900 ? 1 : 3))
+const dateCols = computed(() => (width.value < 900 ? 1 : 2))
 
 const intervalOptions = [
   { label: '天', value: 'day' },
@@ -270,11 +300,6 @@ const intervalOptions = [
 const frequencyOptions = Array.from({ length: 12 }, (_, index) => ({
   label: `${index + 1}`,
   value: index + 1
-}))
-
-const notifyDayOptions = [0, 1, 3, 5, 7, 10, 14, 30].map((day) => ({
-  label: day === 0 ? '到期当天' : `提前 ${day} 天`,
-  value: day
 }))
 
 const tagOptions = computed(() =>
@@ -299,7 +324,8 @@ const form = reactive({
   autoRenew: false,
   startDateTs: dayjs().valueOf(),
   nextRenewalDateTs: dayjs().add(1, 'month').valueOf(),
-  notifyDaysBefore: props.defaultNotifyDays ?? 3,
+  advanceReminderRules: '',
+  overdueReminderRules: '',
   webhookEnabled: true,
   notes: '',
   websiteUrl: '',
@@ -319,15 +345,6 @@ watch(
     hydrateFromModel(model)
   },
   { immediate: true }
-)
-
-watch(
-  () => props.defaultNotifyDays,
-  (value) => {
-    if (!props.model) {
-      form.notifyDaysBefore = value ?? 3
-    }
-  }
 )
 
 watch(
@@ -366,7 +383,8 @@ function resetForm() {
   form.autoRenew = false
   form.startDateTs = dayjs().valueOf()
   form.nextRenewalDateTs = dayjs().add(1, 'month').valueOf()
-  form.notifyDaysBefore = props.defaultNotifyDays ?? 3
+  form.advanceReminderRules = ''
+  form.overdueReminderRules = ''
   form.webhookEnabled = true
   form.notes = ''
   form.websiteUrl = ''
@@ -389,7 +407,8 @@ function hydrateFromModel(model: Subscription) {
   form.startDateTs = dayjs(model.startDate).valueOf()
   form.nextRenewalDateTs = dayjs(model.nextRenewalDate).valueOf()
   nextRenewalDirty.value = true
-  form.notifyDaysBefore = model.notifyDaysBefore
+  form.advanceReminderRules = model.advanceReminderRules ?? ''
+  form.overdueReminderRules = model.overdueReminderRules ?? ''
   form.webhookEnabled = model.webhookEnabled
   form.notes = model.notes
   form.websiteUrl = model.websiteUrl ?? ''
@@ -582,7 +601,11 @@ function applyAiResult(result: AiRecognitionResult) {
     form.nextRenewalDateTs = dayjs(result.nextRenewalDate).valueOf()
     nextRenewalDirty.value = true
   }
-  if (result.notifyDaysBefore !== undefined) form.notifyDaysBefore = result.notifyDaysBefore
+  if (result.notifyDaysBefore !== undefined) {
+    form.advanceReminderRules = `${result.notifyDaysBefore}&09:30;`
+  }
+  if (result.advanceReminderRules) form.advanceReminderRules = result.advanceReminderRules
+  if (result.overdueReminderRules) form.overdueReminderRules = result.overdueReminderRules
   if (result.websiteUrl) form.websiteUrl = result.websiteUrl
   if (result.notes) form.notes = result.notes
 }
@@ -610,7 +633,8 @@ function submit() {
       autoRenew: form.autoRenew,
       startDate: dayjs(form.startDateTs).format('YYYY-MM-DD'),
       nextRenewalDate: dayjs(form.nextRenewalDateTs).format('YYYY-MM-DD'),
-      notifyDaysBefore: Number(form.notifyDaysBefore),
+      advanceReminderRules: form.advanceReminderRules.trim() || '',
+      overdueReminderRules: form.overdueReminderRules.trim() || '',
       webhookEnabled: form.webhookEnabled,
       notes: form.notes,
       websiteUrl: form.websiteUrl || null,
@@ -884,6 +908,18 @@ function formatLogoSource(source: string) {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.label-with-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.label-with-tip__icon {
+  color: #94a3b8;
+  font-size: 15px;
+  cursor: help;
 }
 
 @media (max-width: 900px) {

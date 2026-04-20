@@ -1,6 +1,18 @@
-import { AiConfigSchema, DEFAULT_AI_CONFIG, SettingsSchema, type SettingsInput } from '@subtracker/shared'
+import {
+  AiConfigSchema,
+  DEFAULT_AI_CONFIG,
+  SettingsSchema,
+  type SettingsInput
+} from '@subtracker/shared'
 import { prisma } from '../db'
 import { config } from '../config'
+import {
+  deriveNotifyDaysBeforeFromAdvanceRules,
+  deriveNotifyOnDueDayFromAdvanceRules,
+  deriveOverdueReminderDaysFromRules,
+  resolveDefaultAdvanceReminderRules,
+  resolveDefaultOverdueReminderRules
+} from './reminder-rules.service'
 
 export async function getSetting<T>(key: string, fallback: T): Promise<T> {
   const row = await prisma.setting.findUnique({ where: { key } })
@@ -19,13 +31,22 @@ export async function setSetting<T>(key: string, value: T): Promise<void> {
 export async function getAppSettings(): Promise<SettingsInput> {
   const baseCurrency = await getSetting('baseCurrency', config.baseCurrency)
   const defaultNotifyDays = await getSetting('defaultNotifyDays', config.defaultNotifyDays)
+  const defaultAdvanceReminderRules = resolveDefaultAdvanceReminderRules(
+    await getSetting<string | null>('defaultAdvanceReminderRules', null),
+    defaultNotifyDays,
+    await getSetting('notifyOnDueDay', true)
+  )
   const rememberSessionDays = await getSetting('rememberSessionDays', 7)
-  const notifyOnDueDay = await getSetting('notifyOnDueDay', true)
+  const notifyOnDueDay = deriveNotifyOnDueDayFromAdvanceRules(defaultAdvanceReminderRules)
   const mergeMultiSubscriptionNotifications = await getSetting('mergeMultiSubscriptionNotifications', true)
   const monthlyBudgetBase = await getSetting<number | null>('monthlyBudgetBase', null)
   const yearlyBudgetBase = await getSetting<number | null>('yearlyBudgetBase', null)
   const enableTagBudgets = await getSetting('enableTagBudgets', false)
-  const overdueReminderDays = await getSetting<Array<1 | 2 | 3>>('overdueReminderDays', [1, 2, 3])
+  const defaultOverdueReminderRules = resolveDefaultOverdueReminderRules(
+    await getSetting<string | null>('defaultOverdueReminderRules', null),
+    await getSetting<Array<1 | 2 | 3>>('overdueReminderDays', [1, 2, 3])
+  )
+  const overdueReminderDays = deriveOverdueReminderDaysFromRules(defaultOverdueReminderRules)
   const tagBudgets = await getSetting<Record<string, number>>('tagBudgets', {})
   const emailNotificationsEnabled = await getSetting('emailNotificationsEnabled', false)
   const pushplusNotificationsEnabled = await getSetting('pushplusNotificationsEnabled', false)
@@ -51,7 +72,8 @@ export async function getAppSettings(): Promise<SettingsInput> {
 
   return SettingsSchema.parse({
     baseCurrency,
-    defaultNotifyDays,
+    defaultNotifyDays: deriveNotifyDaysBeforeFromAdvanceRules(defaultAdvanceReminderRules) || defaultNotifyDays,
+    defaultAdvanceReminderRules,
     rememberSessionDays,
     notifyOnDueDay,
     mergeMultiSubscriptionNotifications,
@@ -59,6 +81,7 @@ export async function getAppSettings(): Promise<SettingsInput> {
     yearlyBudgetBase,
     enableTagBudgets,
     overdueReminderDays,
+    defaultOverdueReminderRules,
     tagBudgets,
     emailNotificationsEnabled,
     pushplusNotificationsEnabled,

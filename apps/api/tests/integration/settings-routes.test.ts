@@ -7,6 +7,7 @@ vi.mock('../../src/services/settings.service', () => ({
   getAppSettings: vi.fn(async () => ({
     baseCurrency: 'CNY',
     defaultNotifyDays: 3,
+    defaultAdvanceReminderRules: '3&09:30;0&09:30;',
     rememberSessionDays: 7,
     notifyOnDueDay: true,
     mergeMultiSubscriptionNotifications: (store.get('mergeMultiSubscriptionNotifications') as boolean) ?? true,
@@ -14,6 +15,7 @@ vi.mock('../../src/services/settings.service', () => ({
     yearlyBudgetBase: null,
     enableTagBudgets: false,
     overdueReminderDays: [1, 2, 3],
+    defaultOverdueReminderRules: '1&09:30;2&09:30;3&09:30;',
     tagBudgets: {},
     emailNotificationsEnabled: (store.get('emailNotificationsEnabled') as boolean) ?? false,
     pushplusNotificationsEnabled: (store.get('pushplusNotificationsEnabled') as boolean) ?? false,
@@ -120,5 +122,18 @@ describe('settings routes validation', () => {
 
     expect(res.statusCode).toBe(422)
     expect(res.json().error.message).toContain('启用邮箱通知时必须填写')
+  })
+
+  it('rejects invalid reminder rules', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      payload: {
+        defaultAdvanceReminderRules: '3&25:99;'
+      }
+    })
+
+    expect(res.statusCode).toBe(422)
+    expect(res.json().error.message).toContain('时间必须为 HH:mm')
   })
 })

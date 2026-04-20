@@ -1,4 +1,5 @@
 ﻿import { PrismaClient } from '@prisma/client'
+import { DEFAULT_ADVANCE_REMINDER_RULES, DEFAULT_OVERDUE_REMINDER_RULES } from '@subtracker/shared'
 
 const prisma = new PrismaClient()
 
@@ -16,6 +17,12 @@ async function main() {
   })
 
   await prisma.setting.upsert({
+    where: { key: 'defaultAdvanceReminderRules' },
+    update: { valueJson: DEFAULT_ADVANCE_REMINDER_RULES },
+    create: { key: 'defaultAdvanceReminderRules', valueJson: DEFAULT_ADVANCE_REMINDER_RULES }
+  })
+
+  await prisma.setting.upsert({
     where: { key: 'notifyOnDueDay' },
     update: { valueJson: true },
     create: { key: 'notifyOnDueDay', valueJson: true }
@@ -25,6 +32,12 @@ async function main() {
     where: { key: 'overdueReminderDays' },
     update: { valueJson: [1, 2, 3] },
     create: { key: 'overdueReminderDays', valueJson: [1, 2, 3] }
+  })
+
+  await prisma.setting.upsert({
+    where: { key: 'defaultOverdueReminderRules' },
+    update: { valueJson: DEFAULT_OVERDUE_REMINDER_RULES },
+    create: { key: 'defaultOverdueReminderRules', valueJson: DEFAULT_OVERDUE_REMINDER_RULES }
   })
 
   const defaults = [

@@ -47,6 +47,10 @@ export const DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE = `{
   }
 }`
 
+export const DEFAULT_REMINDER_RULE_TIME = '09:30'
+export const DEFAULT_ADVANCE_REMINDER_RULES = `3&${DEFAULT_REMINDER_RULE_TIME};0&${DEFAULT_REMINDER_RULE_TIME};`
+export const DEFAULT_OVERDUE_REMINDER_RULES = `1&${DEFAULT_REMINDER_RULE_TIME};2&${DEFAULT_REMINDER_RULE_TIME};3&${DEFAULT_REMINDER_RULE_TIME};`
+
 export const TagSchema = z.object({
   id: z.string().cuid().optional(),
   name: z.string().min(1).max(100),
@@ -76,6 +80,8 @@ export const CreateSubscriptionSchema = z
     startDate: z.string().date(),
     nextRenewalDate: z.string().date(),
     notifyDaysBefore: z.number().int().min(0).max(365).default(3),
+    advanceReminderRules: z.string().max(500).optional(),
+    overdueReminderRules: z.string().max(500).optional(),
     webhookEnabled: z.boolean().default(true),
     notes: z.string().max(1000).default('')
   })
@@ -163,6 +169,7 @@ export const AiConfigSchema = z.object({
 export const SettingsSchema = z.object({
   baseCurrency: z.string().length(3).default('CNY').transform((v) => v.toUpperCase()),
   defaultNotifyDays: z.number().int().min(0).max(365).default(3),
+  defaultAdvanceReminderRules: z.string().max(500).default(DEFAULT_ADVANCE_REMINDER_RULES),
   rememberSessionDays: z.number().int().min(1).max(365).default(7),
   notifyOnDueDay: z.boolean().default(true),
   mergeMultiSubscriptionNotifications: z.boolean().default(true),
@@ -170,6 +177,7 @@ export const SettingsSchema = z.object({
   yearlyBudgetBase: OptionalMoneySchema,
   enableTagBudgets: z.boolean().default(false),
   overdueReminderDays: z.array(z.union([z.literal(1), z.literal(2), z.literal(3)])).default([1, 2, 3]),
+  defaultOverdueReminderRules: z.string().max(500).default(DEFAULT_OVERDUE_REMINDER_RULES),
   tagBudgets: z.record(z.string(), z.number().nonnegative()).default({}),
   emailNotificationsEnabled: z.boolean().default(false),
   pushplusNotificationsEnabled: z.boolean().default(false),
@@ -283,6 +291,8 @@ export interface AiRecognitionResultDto {
   startDate?: string
   nextRenewalDate?: string
   notifyDaysBefore?: number
+  advanceReminderRules?: string
+  overdueReminderRules?: string
   websiteUrl?: string
   notes?: string
   confidence?: number
@@ -416,6 +426,8 @@ export interface WallosImportSubscriptionPreviewDto {
   startDate: string
   nextRenewalDate: string
   notifyDaysBefore: number
+  advanceReminderRules?: string | null
+  overdueReminderRules?: string | null
   webhookEnabled: boolean
   notes: string
   description: string

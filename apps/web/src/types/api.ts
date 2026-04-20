@@ -58,6 +58,8 @@ export interface Subscription {
   startDate: string
   nextRenewalDate: string
   notifyDaysBefore: number
+  advanceReminderRules?: string | null
+  overdueReminderRules?: string | null
   webhookEnabled: boolean
   notes: string
   createdAt: string
@@ -205,6 +207,7 @@ export interface AiTestResponse {
 export interface Settings {
   baseCurrency: string
   defaultNotifyDays: number
+  defaultAdvanceReminderRules: string
   rememberSessionDays: number
   notifyOnDueDay: boolean
   mergeMultiSubscriptionNotifications: boolean
@@ -212,6 +215,7 @@ export interface Settings {
   yearlyBudgetBase?: number | null
   enableTagBudgets: boolean
   overdueReminderDays: Array<1 | 2 | 3>
+  defaultOverdueReminderRules: string
   tagBudgets: Record<string, number>
   emailNotificationsEnabled: boolean
   pushplusNotificationsEnabled: boolean
@@ -263,6 +267,8 @@ export interface AiRecognitionResult {
   startDate?: string
   nextRenewalDate?: string
   notifyDaysBefore?: number
+  advanceReminderRules?: string
+  overdueReminderRules?: string
   websiteUrl?: string
   notes?: string
   confidence?: number

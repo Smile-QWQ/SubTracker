@@ -125,4 +125,5 @@ export async function notificationRoutes(app: FastifyInstance) {
       return sendError(reply, 400, 'webhook_test_failed', error instanceof Error ? error.message : 'Webhook test failed')
     }
   })
+
 }

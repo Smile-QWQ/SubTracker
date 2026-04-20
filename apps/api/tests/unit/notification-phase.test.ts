@@ -1,71 +1,44 @@
 import { describe, expect, it } from 'vitest'
-import { resolveReminderPhase } from '../../src/services/notification.service'
+import {
+  buildAdvanceReminderRulesFromLegacy,
+  buildAdvanceReminderRulesFromLegacyWithDefault,
+  buildOverdueReminderRules,
+  deriveNotifyDaysBeforeFromAdvanceRules,
+  deriveNotifyOnDueDayFromAdvanceRules,
+  deriveOverdueReminderDaysFromRules,
+  normalizeReminderRules,
+  parseReminderRules
+} from '../../src/services/reminder-rules.service'
 
-describe('resolveReminderPhase', () => {
-  it('returns upcoming on notify day', () => {
-    expect(resolveReminderPhase(new Date('2026-04-20'), new Date('2026-04-23'), 3)).toEqual({
-      eventType: 'subscription.reminder_due',
-      phase: 'upcoming'
-    })
+describe('reminder rules helpers', () => {
+  it('parses and normalizes advance rules', () => {
+    expect(parseReminderRules('0&09:30;3&10:00;', 'advance')).toEqual([
+      { days: 3, time: '10:00', hour: 10, minute: 0 },
+      { days: 0, time: '09:30', hour: 9, minute: 30 }
+    ])
+
+    expect(normalizeReminderRules(' 0&09:30 ; 3&10:00; ', 'advance')).toBe('3&10:00;0&09:30;')
   })
 
-  it('returns due_today on renewal date', () => {
-    expect(resolveReminderPhase(new Date('2026-04-23'), new Date('2026-04-23'), 3)).toEqual({
-      eventType: 'subscription.reminder_due',
-      phase: 'due_today'
-    })
+  it('parses and normalizes overdue rules', () => {
+    expect(normalizeReminderRules('3&09:30;1&08:00;2&09:30;', 'overdue')).toBe('1&08:00;2&09:30;3&09:30;')
   })
 
-  it('can disable due_today reminder', () => {
-    expect(
-      resolveReminderPhase(new Date('2026-04-23'), new Date('2026-04-23'), 3, {
-        notifyOnDueDay: false,
-        overdueReminderDays: [1, 2, 3]
-      })
-    ).toBeNull()
+  it('rejects invalid reminder rule input', () => {
+    expect(() => parseReminderRules('abc', 'advance')).toThrow('格式无效')
+    expect(() => parseReminderRules('0&09:30;', 'overdue')).toThrow('必须大于等于 1')
+    expect(() => parseReminderRules('3&25:00;', 'advance')).toThrow('时间必须为 HH:mm')
   })
 
-  it('returns overdue phases for first three overdue days only', () => {
-    expect(resolveReminderPhase(new Date('2026-04-24'), new Date('2026-04-23'), 3)).toEqual({
-      eventType: 'subscription.overdue',
-      phase: 'overdue_day_1'
-    })
-    expect(resolveReminderPhase(new Date('2026-04-25'), new Date('2026-04-23'), 3)).toEqual({
-      eventType: 'subscription.overdue',
-      phase: 'overdue_day_2'
-    })
-    expect(resolveReminderPhase(new Date('2026-04-26'), new Date('2026-04-23'), 3)).toEqual({
-      eventType: 'subscription.overdue',
-      phase: 'overdue_day_3'
-    })
-    expect(resolveReminderPhase(new Date('2026-04-27'), new Date('2026-04-23'), 3)).toBeNull()
+  it('derives legacy-compatible values from rules', () => {
+    expect(deriveNotifyDaysBeforeFromAdvanceRules('3&09:30;0&09:30;')).toBe(3)
+    expect(deriveNotifyOnDueDayFromAdvanceRules('3&09:30;0&09:30;')).toBe(true)
+    expect(deriveOverdueReminderDaysFromRules('1&09:30;2&09:30;5&09:30;')).toEqual([1, 2])
   })
 
-  it('only returns configured overdue reminder days', () => {
-    expect(
-      resolveReminderPhase(new Date('2026-04-24'), new Date('2026-04-23'), 3, {
-        notifyOnDueDay: true,
-        overdueReminderDays: [2, 3]
-      })
-    ).toBeNull()
-
-    expect(
-      resolveReminderPhase(new Date('2026-04-25'), new Date('2026-04-23'), 3, {
-        notifyOnDueDay: true,
-        overdueReminderDays: [2, 3]
-      })
-    ).toEqual({
-      eventType: 'subscription.overdue',
-      phase: 'overdue_day_2'
-    })
-  })
-
-  it('does not treat notifyDaysBefore = 0 as an upcoming reminder on due date', () => {
-    expect(
-      resolveReminderPhase(new Date('2026-04-23'), new Date('2026-04-23'), 0, {
-        notifyOnDueDay: false,
-        overdueReminderDays: [1, 2, 3]
-      })
-    ).toBeNull()
+  it('builds rules from legacy values', () => {
+    expect(buildAdvanceReminderRulesFromLegacy(3, true)).toBe('3&09:30;0&09:30;')
+    expect(buildAdvanceReminderRulesFromLegacyWithDefault(5, '3&09:30;0&09:30;')).toBe('5&09:30;0&09:30;')
+    expect(buildOverdueReminderRules([1, 3])).toBe('1&09:30;3&09:30;')
   })
 })

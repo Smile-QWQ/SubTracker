@@ -39,7 +39,12 @@
             <n-descriptions-item label="开始日期">{{ formatDate(detail.startDate) }}</n-descriptions-item>
             <n-descriptions-item label="下次续订">{{ formatDate(detail.nextRenewalDate) }}</n-descriptions-item>
             <n-descriptions-item label="原始金额">{{ formatMoney(detail.amount, detail.currency) }}</n-descriptions-item>
-            <n-descriptions-item label="提醒天数">{{ detail.notifyDaysBefore }} 天</n-descriptions-item>
+            <n-descriptions-item label="到期前提醒">
+              {{ formatReminderRulesText(detail.advanceReminderRules, 'advance') }}
+            </n-descriptions-item>
+            <n-descriptions-item label="过期提醒">
+              {{ formatReminderRulesText(detail.overdueReminderRules, 'overdue') }}
+            </n-descriptions-item>
             <n-descriptions-item label="提醒通知">{{ detail.webhookEnabled ? '已启用' : '未启用' }}</n-descriptions-item>
             <n-descriptions-item label="创建时间">{{ formatDateTime(detail.createdAt) }}</n-descriptions-item>
           </n-descriptions>
@@ -63,8 +68,9 @@ import { computed } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { NCard, NDescriptions, NDescriptionsItem, NDrawer, NDrawerContent, NEmpty, NSpace, NTag } from 'naive-ui'
 import type { SubscriptionDetail } from '@/types/api'
-import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils/subscription-status'
 import { resolveLogoUrl } from '@/utils/logo'
+import { formatReminderRulesText } from '@/utils/reminder-rules'
+import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils/subscription-status'
 
 const emit = defineEmits<{ close: [] }>()
 
