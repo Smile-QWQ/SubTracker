@@ -8,6 +8,22 @@
 
 本项目目前提供的部署方式为 **Docker / Docker Compose**。
 
+## 界面预览
+
+### 仪表盘
+
+![仪表盘](./screenshot/仪表盘.png)
+
+### 更多截图
+
+| 订阅管理 | 费用统计 |
+| --- | --- |
+| ![订阅管理](./screenshot/订阅管理.png) | ![费用统计](./screenshot/费用统计.png) |
+
+| AI 识别 | Wallos 导入 |
+| --- | --- |
+| ![AI识别](./screenshot/AI识别.png) | ![导入Wallos](./screenshot/导入Wallos.png) |
+
 ## 功能亮点
 
 - **订阅管理**：新增、编辑、续订、暂停、停用、记录查看、自定义排序
