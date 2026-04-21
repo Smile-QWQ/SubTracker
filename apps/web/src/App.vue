@@ -8,8 +8,11 @@
             <n-drawer-content closable body-content-style="padding: 8px 0;">
               <template #header>
                 <div class="logo__stack">
-                  <span class="logo__text">SubTracker</span>
-                  <span class="logo__version">{{ appVersion }}</span>
+                  <span class="logo__text">{{ appDisplayName }}</span>
+                  <span class="logo__meta">
+                    <span class="logo__version">{{ appVersion }}</span>
+                    <span class="logo__variant">{{ appVariant }}</span>
+                  </span>
                 </div>
               </template>
               <n-menu :options="menuOptions" :value="activeKey" @update:value="handleMobileMenuClick" />
@@ -33,8 +36,11 @@
                     </n-icon>
                   </div>
                   <div class="logo__stack">
-                    <span class="logo__text">SubTracker</span>
-                    <span class="logo__version">{{ appVersion }}</span>
+                    <span class="logo__text">{{ appDisplayName }}</span>
+                    <span class="logo__meta">
+                      <span class="logo__version">{{ appVersion }}</span>
+                      <span class="logo__variant">{{ appVariant }}</span>
+                    </span>
                   </div>
                 </div>
                 <n-button quaternary circle class="logo__toggle" @click="siderCollapsed = !siderCollapsed">
@@ -170,7 +176,9 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const { message } = createDiscreteApi(['message'])
+const appDisplayName = 'SubTracker'
 const appVersion = __APP_VERSION__
+const appVariant = 'Lite'
 const mobileMenuVisible = ref(false)
 const siderCollapsed = ref(false)
 const { width } = useWindowSize()
@@ -329,14 +337,43 @@ async function submitDefaultPasswordChange() {
 .logo__text {
   min-width: 0;
   white-space: nowrap;
+  color: #0f172a;
 }
 
 .logo__version {
-  margin-top: 2px;
   font-size: 11px;
   font-weight: 500;
   color: #64748b;
   white-space: nowrap;
+}
+
+.logo__meta {
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+
+.logo__variant {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 16px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(79, 70, 229, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.14);
+  font-size: 9px;
+  font-weight: 600;
+  color: #6366f1;
+  white-space: nowrap;
+  margin-left: auto;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .logo__toggle {

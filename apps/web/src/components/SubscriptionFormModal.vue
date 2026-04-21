@@ -12,7 +12,7 @@
               <button type="button" class="logo-dock__preview" @click="pickLogoFile">
                 <img v-if="resolvedLogoUrl" :src="resolvedLogoUrl" alt="logo" class="logo-dock__image" />
                 <div v-else class="logo-dock__placeholder">
-                  <span>{{ form.name.trim() ? '点击上传' : 'Logo' }}</span>
+                  <span>{{ logoStorageEnabled ? (form.name.trim() ? '点击上传' : 'Logo') : '远程 Logo' }}</span>
                 </div>
               </button>
 
@@ -65,7 +65,7 @@
                 <n-empty v-else description="当前没有可用的网络搜索结果" size="small" class="logo-panel__empty" />
               </n-tab-pane>
 
-              <n-tab-pane :name="LOGO_TAB_LIBRARY" :tab="`本地已保存 (${localLogoLibrary.length})`">
+              <n-tab-pane v-if="logoStorageEnabled" :name="LOGO_TAB_LIBRARY" :tab="`本地已保存 (${localLogoLibrary.length})`">
                 <div v-if="loadingLocalLogoLibrary" class="logo-panel__state">
                   <n-spin size="small" />
                   <span>正在加载本地 Logo...</span>
@@ -264,12 +264,15 @@ const props = defineProps<{
   currencies?: string[]
   defaultAdvanceReminderRules?: string
   defaultOverdueReminderRules?: string
+  logoStorageEnabled?: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
   submit: [payload: Record<string, unknown>, editingId?: string]
 }>()
+
+const logoStorageEnabled = computed(() => props.logoStorageEnabled ?? false)
 
 const { width } = useWindowSize()
 const message = useMessage()
@@ -334,7 +337,6 @@ const form = reactive({
 })
 
 const resolvedLogoUrl = computed(() => (form.logoUrl ? resolveLogoUrl(form.logoUrl) : ''))
-
 watch(
   () => props.model,
   (model) => {
@@ -460,11 +462,13 @@ function handleNextRenewalDateChange(value: number | null) {
 
 async function openLogoPanel() {
   showLogoPanel.value = true
-  await loadLocalLogoLibrary()
+  if (logoStorageEnabled.value) {
+    await loadLocalLogoLibrary()
+  }
 
   if (!form.name.trim() && !form.websiteUrl.trim()) {
-    logoPanelTab.value = LOGO_TAB_LIBRARY
-    message.info('未填写名称或官网时，先为你展示本地已保存 Logo。')
+    logoPanelTab.value = logoStorageEnabled.value ? LOGO_TAB_LIBRARY : LOGO_TAB_WEB
+    message.info(logoStorageEnabled.value ? '未填写名称或官网时，先为你展示本地已保存 Logo。' : '未启用 R2 时仅支持远程 Logo 引用。')
     return
   }
 
@@ -512,6 +516,10 @@ async function loadLocalLogoLibrary(force = false) {
 }
 
 function pickLogoFile() {
+  if (!logoStorageEnabled.value) {
+    message.info('当前未启用 R2，不能上传本地 Logo，请使用网络搜索后的远程引用。')
+    return
+  }
   logoFileInputRef.value?.click()
 }
 
@@ -529,8 +537,12 @@ async function applyRemoteLogoCandidate(item: LogoSearchResult) {
     }
 
     showLogoPanel.value = false
-    await loadLocalLogoLibrary(true)
-    message.success('已保存到本地并应用')
+    if (logoStorageEnabled.value) {
+      await loadLocalLogoLibrary(true)
+      message.success('已保存到本地并应用')
+    } else {
+      message.success('已应用远程 Logo 引用')
+    }
   } catch (error) {
     message.error(error instanceof Error ? error.message : 'Logo 导入失败')
   }
@@ -562,6 +574,14 @@ async function deleteLocalLogo(item: LogoSearchResult) {
 async function handleLogoFileChange(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0]
   if (!file) return
+
+  if (!logoStorageEnabled.value) {
+    message.info('当前未启用 R2，不能上传本地 Logo，请使用网络搜索后的远程引用。')
+    if (logoFileInputRef.value) {
+      logoFileInputRef.value.value = ''
+    }
+    return
+  }
 
   try {
     const base64 = await readFileAsBase64(file)

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { DEFAULT_ADVANCE_REMINDER_RULES, DEFAULT_AI_CONFIG, DEFAULT_OVERDUE_REMINDER_RULES } from '@subtracker/shared'
+import { DEFAULT_ADVANCE_REMINDER_RULES, DEFAULT_AI_CONFIG, DEFAULT_MAILCHANNELS_API_URL, DEFAULT_OVERDUE_REMINDER_RULES } from '@subtracker/shared'
 import { api } from '@/composables/api'
 import type { Settings } from '@/types/api'
 
@@ -22,12 +22,11 @@ export const useAppStore = defineStore('app', () => {
     pushplusNotificationsEnabled: false,
     telegramNotificationsEnabled: false,
     emailConfig: {
-      host: '',
-      port: 587,
-      secure: false,
-      username: '',
-      password: '',
-      from: '',
+      provider: 'mailchannels',
+      apiBaseUrl: DEFAULT_MAILCHANNELS_API_URL,
+      fromEmail: '',
+      fromName: 'SubTracker Lite',
+      replyTo: '',
       to: ''
     },
     pushplusConfig: {
@@ -43,6 +42,13 @@ export const useAppStore = defineStore('app', () => {
       capabilities: {
         ...DEFAULT_AI_CONFIG.capabilities
       }
+    },
+    storageCapabilities: {
+      runtime: 'node',
+      kvEnabled: false,
+      r2Enabled: false,
+      logoStorageEnabled: false,
+      wallosImportMode: 'full'
     }
   })
 

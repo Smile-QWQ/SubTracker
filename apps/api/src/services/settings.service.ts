@@ -1,11 +1,13 @@
 import {
   AiConfigSchema,
   DEFAULT_AI_CONFIG,
+  StorageCapabilitiesSchema,
   SettingsSchema,
   type SettingsInput
 } from '@subtracker/shared'
 import { prisma } from '../db'
 import { config } from '../config'
+import { getWorkerCache, getWorkerLogoBucket, isWorkerRuntime } from '../runtime'
 import {
   deriveNotifyDaysBeforeFromAdvanceRules,
   deriveNotifyOnDueDayFromAdvanceRules,
@@ -52,12 +54,11 @@ export async function getAppSettings(): Promise<SettingsInput> {
   const pushplusNotificationsEnabled = await getSetting('pushplusNotificationsEnabled', false)
   const telegramNotificationsEnabled = await getSetting('telegramNotificationsEnabled', false)
   const emailConfig = await getSetting<SettingsInput['emailConfig']>('emailConfig', {
-    host: '',
-    port: 587,
-    secure: false,
-    username: '',
-    password: '',
-    from: '',
+    provider: 'mailchannels',
+    apiBaseUrl: config.mailchannelsApiUrl,
+    fromEmail: '',
+    fromName: '',
+    replyTo: '',
     to: ''
   })
   const pushplusConfig = await getSetting<SettingsInput['pushplusConfig']>('pushplusConfig', {
@@ -69,6 +70,13 @@ export async function getAppSettings(): Promise<SettingsInput> {
     chatId: ''
   })
   const aiConfig = AiConfigSchema.parse(await getSetting<unknown>('aiConfig', DEFAULT_AI_CONFIG))
+  const storageCapabilities = StorageCapabilitiesSchema.parse({
+    runtime: isWorkerRuntime() ? 'worker-lite' : 'node',
+    kvEnabled: Boolean(getWorkerCache()),
+    r2Enabled: Boolean(getWorkerLogoBucket()),
+    logoStorageEnabled: Boolean(getWorkerLogoBucket()),
+    wallosImportMode: isWorkerRuntime() ? 'json-only' : 'full'
+  })
 
   return SettingsSchema.parse({
     baseCurrency,
@@ -89,6 +97,7 @@ export async function getAppSettings(): Promise<SettingsInput> {
     emailConfig,
     pushplusConfig,
     telegramConfig,
-    aiConfig
+    aiConfig,
+    storageCapabilities
   })
 }

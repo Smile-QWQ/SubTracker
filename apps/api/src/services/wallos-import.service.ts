@@ -1,9 +1,3 @@
-import crypto from 'node:crypto'
-import { createRequire } from 'node:module'
-import path from 'node:path'
-import AdmZip, { type IZipEntry } from 'adm-zip'
-import initSqlJs from 'sql.js'
-import type { Database as SqlJsDatabase, SqlJsStatic } from 'sql.js'
 import type {
   BillingIntervalUnit,
   SubscriptionStatus,
@@ -15,60 +9,14 @@ import type {
   WallosImportTagDto
 } from '@subtracker/shared'
 import { prisma } from '../db'
-import { getAppSettings } from './settings.service'
+import { getWorkerCache } from '../runtime'
+import { getAppSettings, getSetting, setSetting } from './settings.service'
 import { appendSubscriptionOrder } from './subscription-order.service'
 import { replaceSubscriptionTags } from './tag.service'
-import { saveImportedLogoBuffer } from './logo.service'
 
-const REQUIRED_TABLES = ['subscriptions', 'categories', 'currencies', 'cycles', 'frequencies'] as const
-const IMPORT_TOKEN_TTL_MS = 15 * 60 * 1000
-const require = createRequire(import.meta.url)
-
-type SqlDatabase = SqlJsDatabase
-type ImportFileType = 'json' | 'db' | 'zip'
-
-type WallosSubscriptionRow = {
-  id: number
-  name: string
-  logo: string | null
-  price: number | null
-  next_payment: string | null
-  cycle: number | null
-  frequency: number | null
-  notes: string | null
-  notify: number | null
-  url: string | null
-  inactive: number | null
-  notify_days_before: number | null
-  cancellation_date: string | null
-  start_date: string | number | null
-  auto_renew: number | null
-  currency_code: string | null
-  category_id: number | null
-  category_name: string | null
-  cycle_days: number | null
-  frequency_name: number | null
-  category_sort_order: number | null
-}
-
-type WallosJsonRow = Record<string, unknown>
-
-type ZipLogoAsset = {
-  filename: string
-  buffer: Buffer
-  contentType: string
-}
-
-type ImportCacheEntry = {
-  expiresAt: number
-  preview: WallosImportInspectResultDto
-  zipLogos: Map<string, ZipLogoAsset>
-}
-
-const previewCache = new Map<string, ImportCacheEntry>()
-const sqlJsPromise = initSqlJs({
-  locateFile: (file: string) => path.resolve(path.dirname(require.resolve('sql.js/dist/sql-wasm.wasm')), file)
-})
+const IMPORT_TOKEN_TTL_SECONDS = 15 * 60
+const IMPORT_TOKEN_TTL_MS = IMPORT_TOKEN_TTL_SECONDS * 1000
+const IMPORT_PREVIEW_PREFIX = 'wallosImportPreview:'
 const IMPORT_TAG_COLORS = [
   '#3b82f6',
   '#8b5cf6',
@@ -82,13 +30,19 @@ const IMPORT_TAG_COLORS = [
   '#6366f1'
 ]
 
-function cleanupExpiredImports() {
-  const now = Date.now()
-  for (const [token, entry] of previewCache.entries()) {
-    if (entry.expiresAt <= now) {
-      previewCache.delete(token)
-    }
+type WallosJsonRow = Record<string, unknown>
+type StoredPreviewEntry = {
+  expiresAt: number
+  preview: WallosImportInspectResultDto
+}
+
+function decodeBase64(value: string) {
+  const binary = atob(value.trim())
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
   }
+  return new TextDecoder().decode(bytes)
 }
 
 function getImportedTagColor(name: string) {
@@ -99,35 +53,35 @@ function getImportedTagColor(name: string) {
   return IMPORT_TAG_COLORS[hash % IMPORT_TAG_COLORS.length]
 }
 
-function openDatabase(buffer: Buffer) {
-  return sqlJsPromise.then((SQL: SqlJsStatic) => new SQL.Database(new Uint8Array(buffer)))
-}
-
-function queryRows<T extends Record<string, unknown>>(db: SqlDatabase, sql: string): T[] {
-  const statement = db.prepare(sql)
-  const rows: T[] = []
-
-  try {
-    while (statement.step()) {
-      rows.push(statement.getAsObject() as T)
-    }
-    return rows
-  } finally {
-    statement.free()
+async function getStoredPreview(token: string) {
+  const kv = getWorkerCache()
+  if (kv) {
+    return (await kv.get(`${IMPORT_PREVIEW_PREFIX}${token}`, 'json')) as StoredPreviewEntry | null
   }
+
+  return getSetting<StoredPreviewEntry | null>(`${IMPORT_PREVIEW_PREFIX}${token}`, null)
 }
 
-function extractTableNames(db: SqlDatabase) {
-  return queryRows<{ name: string }>(
-    db,
-    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
-  ).map((item) => String(item.name))
+async function setStoredPreview(token: string, entry: StoredPreviewEntry) {
+  const kv = getWorkerCache()
+  if (kv) {
+    await kv.put(`${IMPORT_PREVIEW_PREFIX}${token}`, JSON.stringify(entry), {
+      expirationTtl: IMPORT_TOKEN_TTL_SECONDS
+    })
+    return
+  }
+
+  await setSetting(`${IMPORT_PREVIEW_PREFIX}${token}`, entry)
 }
 
-function extractTableColumnNames(db: SqlDatabase, tableName: string) {
-  return new Set(
-    queryRows<{ name: string }>(db, `PRAGMA table_info(${tableName})`).map((item) => String(item.name))
-  )
+async function deleteStoredPreview(token: string) {
+  const kv = getWorkerCache()
+  if (kv) {
+    await kv.delete(`${IMPORT_PREVIEW_PREFIX}${token}`)
+    return
+  }
+
+  await setSetting(`${IMPORT_PREVIEW_PREFIX}${token}`, null)
 }
 
 function normalizeWallosTagName(name: string | null | undefined) {
@@ -153,25 +107,28 @@ function parseDate(value: unknown) {
   return date.toISOString().slice(0, 10)
 }
 
-function detectImportFileType(input: WallosImportInspectInput, buffer: Buffer): ImportFileType {
-  const filename = input.filename.toLowerCase()
-  const trimmed = buffer.toString('utf8', 0, Math.min(buffer.length, 80)).trimStart()
+function parsePriceString(input: unknown) {
+  const text = String(input ?? '').trim()
+  if (!text) {
+    return { amount: 0, currency: 'CNY', warning: '价格为空，已回退为 0 CNY' }
+  }
 
-  if (filename.endsWith('.zip') || buffer.subarray(0, 2).toString('hex') === '504b') {
-    return 'zip'
-  }
-  if (filename.endsWith('.json') || trimmed.startsWith('[') || trimmed.startsWith('{')) {
-    return 'json'
-  }
-  return 'db'
-}
+  const normalized = text.replace(/,/g, '')
+  const amountMatch = normalized.match(/-?\d+(?:\.\d+)?/)
+  const amount = amountMatch ? Number(amountMatch[0]) : 0
 
-function decodeDatabase(input: WallosImportInspectInput) {
-  const buffer = Buffer.from(input.base64, 'base64')
-  if (!buffer.length) {
-    throw new Error('数据库文件内容为空')
+  let currency = 'CNY'
+  if (/¥|yuan|cny|rmb/i.test(normalized)) currency = 'CNY'
+  else if (/\$|usd|dollar/i.test(normalized)) currency = 'USD'
+  else if (/€|eur/i.test(normalized)) currency = 'EUR'
+  else if (/£|gbp/i.test(normalized)) currency = 'GBP'
+  else if (/jpy|yen|￥/i.test(normalized)) currency = 'JPY'
+
+  return {
+    amount: Number.isFinite(amount) ? amount : 0,
+    currency,
+    warning: amountMatch ? null : `价格 "${text}" 无法完整解析，已回退为 0 ${currency}`
   }
-  return buffer
 }
 
 export function mapWallosBillingInterval(days: number | null | undefined, frequency: number | null | undefined) {
@@ -244,114 +201,6 @@ export function resolveWallosNotifyDays(input: {
   }
 
   return { webhookEnabled: true, notifyDaysBefore: Math.max(input.notifyDaysBefore, 0) }
-}
-
-function buildTagCollection() {
-  const map = new Map<string, WallosImportTagDto>()
-
-  return {
-    add(name: string | null, sourceId?: number | null, sortOrder?: number | null) {
-      const normalized = normalizeWallosTagName(name)
-      if (!normalized || map.has(normalized)) return
-      map.set(normalized, {
-        sourceId: Number(sourceId ?? 0),
-        name: normalized,
-        sortOrder: Number(sortOrder ?? 0)
-      })
-    },
-    toArray() {
-      return Array.from(map.values()).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'zh-CN'))
-    }
-  }
-}
-
-function ensureUniqueWarnings(warnings: string[]) {
-  return Array.from(new Set(warnings))
-}
-
-function inferContentTypeFromFilename(filename: string) {
-  const lower = filename.toLowerCase()
-  if (lower.endsWith('.png')) return 'image/png'
-  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
-  if (lower.endsWith('.webp')) return 'image/webp'
-  if (lower.endsWith('.svg')) return 'image/svg+xml'
-  return ''
-}
-
-function normalizeZipLogoName(filename: string) {
-  return path.basename(filename).toLowerCase()
-}
-
-function scoreZipDatabasePath(entryName: string) {
-  const normalized = entryName.replace(/\\/g, '/').toLowerCase()
-  let score = 0
-
-  if (normalized.endsWith('/wallos.db') || normalized === 'wallos.db') score += 100
-  if (normalized.includes('/db/')) score += 40
-  if (normalized.includes('wallos')) score += 30
-  if (normalized.endsWith('.db')) score += 20
-  if (normalized.endsWith('.sqlite') || normalized.endsWith('.sqlite3')) score += 18
-  if (normalized.includes('__macosx/')) score -= 100
-
-  return score
-}
-
-function extractZipImport(buffer: Buffer) {
-  const zip = new AdmZip(buffer)
-  const entries = zip.getEntries()
-  const dbEntry = entries
-    .filter((entry: IZipEntry) => !entry.isDirectory)
-    .filter((entry: IZipEntry) => /\.(db|sqlite|sqlite3)$/i.test(entry.entryName))
-    .sort((a, b) => scoreZipDatabasePath(b.entryName) - scoreZipDatabasePath(a.entryName))[0]
-
-  if (!dbEntry) {
-    throw new Error('ZIP 中未找到 db/wallos.db')
-  }
-
-  const zipLogos = new Map<string, ZipLogoAsset>()
-
-  for (const entry of entries) {
-    if (entry.isDirectory) continue
-    const filename = path.basename(entry.entryName)
-    const contentType = inferContentTypeFromFilename(filename)
-    if (!contentType) continue
-    if (entry.entryName === dbEntry.entryName) continue
-
-    zipLogos.set(normalizeZipLogoName(filename), {
-      filename,
-      buffer: entry.getData(),
-      contentType
-    })
-  }
-
-  return {
-    dbBuffer: dbEntry.getData(),
-    zipLogos
-  }
-}
-
-function parsePriceString(input: unknown) {
-  const text = String(input ?? '').trim()
-  if (!text) {
-    return { amount: 0, currency: 'CNY', warning: '价格为空，已回退为 0 CNY' }
-  }
-
-  const normalized = text.replace(/,/g, '')
-  const amountMatch = normalized.match(/-?\d+(?:\.\d+)?/)
-  const amount = amountMatch ? Number(amountMatch[0]) : 0
-
-  let currency = 'CNY'
-  if (/¥|yuan|cny|rmb/i.test(normalized)) currency = 'CNY'
-  else if (/\$|usd|dollar/i.test(normalized)) currency = 'USD'
-  else if (/€|eur/i.test(normalized)) currency = 'EUR'
-  else if (/£|gbp/i.test(normalized)) currency = 'GBP'
-  else if (/jpy|yen|￥/i.test(normalized)) currency = 'JPY'
-
-  return {
-    amount: Number.isFinite(amount) ? amount : 0,
-    currency,
-    warning: amountMatch ? null : `价格 "${text}" 无法完整解析，已回退为 0 ${currency}`
-  }
 }
 
 function parsePaymentCycle(input: unknown) {
@@ -435,6 +284,29 @@ function mapJsonAutoRenew(row: WallosJsonRow) {
   return String(row.Renewal ?? '').trim().toLowerCase() === 'automatic'
 }
 
+function buildTagCollection() {
+  const map = new Map<string, WallosImportTagDto>()
+
+  return {
+    add(name: string | null, sourceId?: number | null, sortOrder?: number | null) {
+      const normalized = normalizeWallosTagName(name)
+      if (!normalized || map.has(normalized)) return
+      map.set(normalized, {
+        sourceId: Number(sourceId ?? 0),
+        name: normalized,
+        sortOrder: Number(sortOrder ?? 0)
+      })
+    },
+    toArray() {
+      return Array.from(map.values()).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'zh-CN'))
+    }
+  }
+}
+
+function ensureUniqueWarnings(warnings: string[]) {
+  return Array.from(new Set(warnings))
+}
+
 function buildJsonPreview(
   rows: WallosJsonRow[],
   settings: { defaultNotifyDays: number; baseCurrency: string }
@@ -516,196 +388,14 @@ function buildJsonPreview(
   }
 }
 
-function buildDbPreview(
-  rows: WallosSubscriptionRow[],
-  settings: { defaultNotifyDays: number; baseCurrency: string },
-  globalNotifyDays: number,
-  fileType: ImportFileType,
-  zipLogos = new Map<string, ZipLogoAsset>()
-): Omit<WallosImportInspectResultDto, 'importToken'> {
-  const warnings: string[] = []
-  let skippedSubscriptions = 0
-  let zipLogoMatched = 0
-  let zipLogoMissing = 0
-  const previewSubscriptions: WallosImportSubscriptionPreviewDto[] = []
-  const tags = buildTagCollection()
-
-  for (const row of rows) {
-    if (!row.name || row.price === null || row.price === undefined || !row.next_payment) {
-      skippedSubscriptions += 1
-      warnings.push(`subscription#${row.id} 缺少关键字段，已跳过`)
-      continue
-    }
-
-    const mappedInterval = mapWallosBillingInterval(row.cycle_days, row.frequency_name)
-    const mappedStatus = mapWallosSubscriptionStatus({
-      inactive: row.inactive,
-      cancellationDate: row.cancellation_date,
-      nextPayment: row.next_payment
-    })
-    const notifyConfig = resolveWallosNotifyDays({
-      notify: row.notify,
-      notifyDaysBefore: row.notify_days_before,
-      globalNotifyDays
-    })
-    const normalizedTag = normalizeWallosTagName(row.category_name)
-    const rowWarnings: string[] = []
-
-    if (mappedInterval.warning) {
-      warnings.push(`subscription#${row.id} ${mappedInterval.warning}`)
-      rowWarnings.push(mappedInterval.warning)
-    }
-
-    if (normalizedTag) {
-      tags.add(normalizedTag, row.category_id, row.category_sort_order)
-    }
-
-    let logoImportStatus: WallosImportSubscriptionPreviewDto['logoImportStatus'] = 'none'
-    const effectiveLogoRef = fileType === 'zip' && row.logo ? String(row.logo) : null
-
-    if (fileType === 'zip' && row.logo) {
-      const normalizedLogoName = normalizeZipLogoName(String(row.logo))
-      if (zipLogos.has(normalizedLogoName)) {
-        logoImportStatus = 'ready-from-zip'
-        zipLogoMatched += 1
-      } else {
-        logoImportStatus = 'pending-file-match'
-        zipLogoMissing += 1
-        warnings.push(`subscription#${row.id} 存在 Logo 文件引用，当前包内未匹配到图片`)
-        rowWarnings.push('Logo 文件需后续通过目录或 zip 包补齐')
-      }
-    }
-
-    previewSubscriptions.push({
-      sourceId: Number(row.id),
-      name: String(row.name),
-      amount: Number(row.price),
-      currency: String(row.currency_code || settings.baseCurrency || 'CNY').toUpperCase(),
-      status: mappedStatus,
-      autoRenew: Boolean(row.auto_renew),
-      billingIntervalCount: mappedInterval.billingIntervalCount,
-      billingIntervalUnit: mappedInterval.billingIntervalUnit,
-      startDate: parseDate(row.start_date) ?? parseDate(row.next_payment) ?? new Date().toISOString().slice(0, 10),
-      nextRenewalDate: parseDate(row.next_payment) ?? new Date().toISOString().slice(0, 10),
-      notifyDaysBefore: notifyConfig.notifyDaysBefore,
-      webhookEnabled: notifyConfig.webhookEnabled,
-      notes: String(row.notes || ''),
-      description: '',
-      websiteUrl: row.url ? String(row.url).replace(/&amp;/g, '&') : null,
-      tagNames: normalizedTag ? [normalizedTag] : [],
-      logoRef: effectiveLogoRef,
-      logoImportStatus,
-      warnings: rowWarnings
-    })
+export async function inspectWallosImportFile(input: WallosImportInspectInput): Promise<WallosImportInspectResultDto> {
+  if (!/\.json$/i.test(input.filename) && !String(input.contentType || '').includes('json')) {
+    throw new Error('Cloudflare Worker 版本目前仅支持 Wallos JSON 导入')
   }
 
-  const usedTags = tags.toArray()
-
-  return {
-    isWallos: true,
-    summary: {
-      fileType,
-      subscriptionsTotal: rows.length,
-      tagsTotal: usedTags.length,
-      usedTagsTotal: usedTags.length,
-      supportedSubscriptions: previewSubscriptions.length,
-      skippedSubscriptions,
-      globalNotifyDays,
-      zipLogoMatched,
-      zipLogoMissing
-    },
-    tags: usedTags,
-    usedTags,
-    subscriptionsPreview: previewSubscriptions,
-    warnings: ensureUniqueWarnings(warnings)
-  }
-}
-
-async function buildDbPreviewFromBuffer(
-  buffer: Buffer,
-  fileType: ImportFileType,
-  zipLogos: Map<string, ZipLogoAsset>,
-  options?: {
-    defaultNotifyDays?: number
-    baseCurrency?: string
-  }
-) {
-  const settings =
-    options?.defaultNotifyDays !== undefined || options?.baseCurrency
-      ? {
-          defaultNotifyDays: options?.defaultNotifyDays ?? 3,
-          baseCurrency: options?.baseCurrency ?? 'CNY'
-        }
-      : await getAppSettings()
-
-  const db = await openDatabase(buffer)
-
-  try {
-    const tables = new Set(extractTableNames(db))
-    const missingTables = REQUIRED_TABLES.filter((table) => !tables.has(table))
-    if (missingTables.length > 0) {
-      throw new Error(`缺少 Wallos 关键表：${missingTables.join(', ')}`)
-    }
-
-    const globalNotifyRow = queryRows<{ days: number | null }>(db, 'SELECT days FROM notification_settings LIMIT 1')[0]
-    const globalNotifyDays = globalNotifyRow?.days ?? settings.defaultNotifyDays ?? 3
-    const subscriptionColumns = extractTableColumnNames(db, 'subscriptions')
-    const selectSubscriptionColumn = (columnName: string, fallbackSql = 'NULL') =>
-      subscriptionColumns.has(columnName) ? `s.${columnName}` : `${fallbackSql} AS ${columnName}`
-
-    const rows = queryRows<WallosSubscriptionRow>(
-      db,
-      `
-      SELECT
-        s.id,
-        s.name,
-        s.logo,
-        s.price,
-        s.next_payment,
-        s.cycle,
-        s.frequency,
-        s.notes,
-        s.notify,
-        s.url,
-        s.inactive,
-        ${selectSubscriptionColumn('notify_days_before', '0')},
-        ${selectSubscriptionColumn('cancellation_date')},
-        ${selectSubscriptionColumn('start_date')},
-        ${selectSubscriptionColumn('auto_renew', '1')},
-        c.code AS currency_code,
-        cat.id AS category_id,
-        cat.name AS category_name,
-        cy.days AS cycle_days,
-        f.name AS frequency_name,
-        cat."order" AS category_sort_order
-      FROM subscriptions s
-      LEFT JOIN currencies c ON c.id = s.currency_id
-      LEFT JOIN categories cat ON cat.id = s.category_id
-      LEFT JOIN cycles cy ON cy.id = s.cycle
-      LEFT JOIN frequencies f ON f.id = s.frequency
-      ORDER BY s.id
-      `
-    )
-
-    return buildDbPreview(rows, settings, globalNotifyDays, fileType, zipLogos)
-  } finally {
-    db.close()
-  }
-}
-
-async function inspectZipImport(buffer: Buffer) {
-  const extracted = extractZipImport(buffer)
-  const preview = await buildDbPreviewFromBuffer(extracted.dbBuffer, 'zip', extracted.zipLogos)
-  return {
-    preview,
-    zipLogos: extracted.zipLogos
-  }
-}
-
-async function inspectJsonImport(buffer: Buffer) {
   let parsed: unknown
   try {
-    parsed = JSON.parse(buffer.toString('utf8'))
+    parsed = JSON.parse(decodeBase64(input.base64))
   } catch {
     throw new Error('JSON 解析失败')
   }
@@ -715,66 +405,29 @@ async function inspectJsonImport(buffer: Buffer) {
   }
 
   const settings = await getAppSettings()
-  return {
-    preview: buildJsonPreview(parsed as WallosJsonRow[], settings),
-    zipLogos: new Map<string, ZipLogoAsset>()
-  }
-}
-
-async function inspectDbImport(buffer: Buffer, options?: { defaultNotifyDays?: number; baseCurrency?: string }) {
-  const preview = await buildDbPreviewFromBuffer(buffer, 'db', new Map<string, ZipLogoAsset>(), options)
-  return {
-    preview,
-    zipLogos: new Map<string, ZipLogoAsset>()
-  }
-}
-
-async function inspectImportBuffer(input: WallosImportInspectInput, options?: { defaultNotifyDays?: number; baseCurrency?: string }) {
-  const buffer = decodeDatabase(input)
-  const fileType = detectImportFileType(input, buffer)
-
-  switch (fileType) {
-    case 'json':
-      return inspectJsonImport(buffer)
-    case 'zip':
-      return inspectZipImport(buffer)
-    case 'db':
-    default:
-      return inspectDbImport(buffer, options)
-  }
-}
-
-export async function inspectWallosImportFile(input: WallosImportInspectInput): Promise<WallosImportInspectResultDto> {
-  cleanupExpiredImports()
-
-  const { preview, zipLogos } = await inspectImportBuffer(input)
-  const importToken = crypto.randomBytes(24).toString('hex')
-  const cachedPreview: WallosImportInspectResultDto = {
-    ...preview,
-    importToken
+  const token = crypto.randomUUID().replaceAll('-', '')
+  const preview: WallosImportInspectResultDto = {
+    ...buildJsonPreview(parsed as WallosJsonRow[], settings),
+    importToken: token
   }
 
-  previewCache.set(importToken, {
+  await setStoredPreview(token, {
     expiresAt: Date.now() + IMPORT_TOKEN_TTL_MS,
-    preview: cachedPreview,
-    zipLogos
+    preview
   })
 
-  return cachedPreview
+  return preview
 }
 
 export async function commitWallosImport(input: WallosImportCommitInput): Promise<WallosImportCommitResultDto> {
-  cleanupExpiredImports()
-
-  const entry = previewCache.get(input.importToken)
+  const entry = await getStoredPreview(input.importToken)
   if (!entry || entry.expiresAt <= Date.now()) {
-    previewCache.delete(input.importToken)
+    await deleteStoredPreview(input.importToken)
     throw new Error('导入令牌不存在或已失效，请重新生成预览')
   }
 
   const preview = entry.preview
-  const zipLogos = entry.zipLogos
-  previewCache.delete(input.importToken)
+  await deleteStoredPreview(input.importToken)
 
   const existingTags = await prisma.tag.findMany({
     where: {
@@ -787,7 +440,6 @@ export async function commitWallosImport(input: WallosImportCommitInput): Promis
   const tagIdByName = new Map(existingTags.map((item) => [item.name, item.id]))
   let importedTags = 0
   let importedSubscriptions = 0
-  let importedLogos = 0
 
   for (const tag of preview.usedTags) {
     if (tagIdByName.has(tag.name)) continue
@@ -808,28 +460,13 @@ export async function commitWallosImport(input: WallosImportCommitInput): Promis
       .map((name) => tagIdByName.get(name))
       .filter((value): value is string => Boolean(value))
 
-    let logoUrl: string | null = null
-    let logoSource: string | null = null
-    let logoFetchedAt: Date | null = null
-
-    if (item.logoRef) {
-      const asset = zipLogos.get(normalizeZipLogoName(item.logoRef))
-      if (asset) {
-        const imported = await saveImportedLogoBuffer(asset.buffer, asset.contentType, 'wallos-zip')
-        logoUrl = imported.logoUrl
-        logoSource = imported.logoSource
-        logoFetchedAt = new Date()
-        importedLogos += 1
-      }
-    }
-
     const created = await prisma.$transaction(async (tx) => {
-        const subscription = await tx.subscription.create({
-          data: {
-            name: item.name,
-            description: item.description,
-            amount: item.amount,
-            currency: item.currency,
+      const subscription = await tx.subscription.create({
+        data: {
+          name: item.name,
+          description: item.description,
+          amount: item.amount,
+          currency: item.currency,
           billingIntervalCount: item.billingIntervalCount,
           billingIntervalUnit: item.billingIntervalUnit,
           autoRenew: item.autoRenew,
@@ -839,9 +476,6 @@ export async function commitWallosImport(input: WallosImportCommitInput): Promis
           webhookEnabled: item.webhookEnabled,
           notes: item.notes,
           websiteUrl: item.websiteUrl ?? null,
-          logoUrl,
-          logoSource,
-          logoFetchedAt,
           status: item.status
         }
       })
@@ -858,14 +492,18 @@ export async function commitWallosImport(input: WallosImportCommitInput): Promis
     importedTags,
     importedSubscriptions,
     skippedSubscriptions: preview.summary.skippedSubscriptions,
-    importedLogos,
+    importedLogos: 0,
     warnings: preview.warnings
   }
 }
 
 export async function previewWallosImportFromBase64(input: WallosImportInspectInput) {
-  const result = await inspectImportBuffer(input)
-  return result.preview
+  const settings = await getAppSettings()
+  const parsed = JSON.parse(decodeBase64(input.base64))
+  if (!Array.isArray(parsed)) {
+    throw new Error('Wallos JSON 导出内容必须是数组')
+  }
+  return buildJsonPreview(parsed as WallosJsonRow[], settings)
 }
 
 export async function previewWallosImportFromBase64ForTest(
@@ -875,6 +513,12 @@ export async function previewWallosImportFromBase64ForTest(
     baseCurrency?: string
   }
 ) {
-  const result = await inspectImportBuffer(input, options)
-  return result.preview
+  const parsed = JSON.parse(decodeBase64(input.base64))
+  if (!Array.isArray(parsed)) {
+    throw new Error('Wallos JSON 导出内容必须是数组')
+  }
+  return buildJsonPreview(parsed as WallosJsonRow[], {
+    defaultNotifyDays: options?.defaultNotifyDays ?? 3,
+    baseCurrency: options?.baseCurrency ?? 'CNY'
+  })
 }

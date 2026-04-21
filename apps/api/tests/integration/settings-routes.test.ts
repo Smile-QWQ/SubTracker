@@ -21,12 +21,11 @@ vi.mock('../../src/services/settings.service', () => ({
     pushplusNotificationsEnabled: (store.get('pushplusNotificationsEnabled') as boolean) ?? false,
     telegramNotificationsEnabled: (store.get('telegramNotificationsEnabled') as boolean) ?? false,
     emailConfig: {
-      host: '',
-      port: 587,
-      secure: false,
-      username: '',
-      password: '',
-      from: '',
+      provider: 'mailchannels',
+      apiBaseUrl: 'https://api.mailchannels.net/tx/v1/send',
+      fromEmail: '',
+      fromName: 'SubTracker Lite',
+      replyTo: '',
       to: '',
       ...(store.get('emailConfig') as Record<string, unknown> | undefined)
     },
@@ -54,6 +53,13 @@ vi.mock('../../src/services/settings.service', () => ({
         structuredOutput: true
       },
       ...(store.get('aiConfig') as Record<string, unknown> | undefined)
+    },
+    storageCapabilities: {
+      runtime: 'worker-lite',
+      kvEnabled: true,
+      r2Enabled: false,
+      logoStorageEnabled: false,
+      wallosImportMode: 'json-only'
     }
   })),
   setSetting: vi.fn(async (key: string, value: unknown) => {
@@ -109,12 +115,11 @@ describe('settings routes validation', () => {
       payload: {
         emailNotificationsEnabled: true,
         emailConfig: {
-          host: '',
-          port: 587,
-          secure: false,
-          username: '',
-          password: '',
-          from: '',
+          provider: 'mailchannels',
+          apiBaseUrl: 'https://api.mailchannels.net/tx/v1/send',
+          fromEmail: '',
+          fromName: 'SubTracker Lite',
+          replyTo: '',
           to: ''
         }
       }

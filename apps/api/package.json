@@ -17,11 +17,13 @@
   "dependencies": {
     "@fastify/cors": "^10.0.2",
     "@fastify/rate-limit": "^10.0.0",
+    "@prisma/adapter-d1": "^6.6.0",
     "@prisma/client": "^6.6.0",
     "@subtracker/shared": "0.0.1",
     "adm-zip": "^0.5.17",
     "dayjs": "^1.11.13",
     "fastify": "^5.2.2",
+    "hono": "^4.7.7",
     "node-cron": "^4.0.5",
     "nodemailer": "^8.0.5",
     "prisma": "^6.6.0",

@@ -1,5 +1,3 @@
-import http from 'node:http'
-import https from 'node:https'
 import { Prisma } from '@prisma/client'
 import {
   DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
@@ -39,7 +37,8 @@ function normalizeWebhookSettings(input: Partial<NotificationWebhookSettingsInpu
     ...input,
     url: input.url?.trim() ?? '',
     headers: input.headers?.trim() || 'Content-Type: application/json',
-    payloadTemplate: input.payloadTemplate?.trim() || DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE
+    payloadTemplate: input.payloadTemplate?.trim() || DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
+    ignoreSsl: false
   })
 }
 
@@ -133,36 +132,18 @@ async function sendWebhookRequest(
   const target = validateWebhookUrl(input.url.trim())
   const headers = parseHeaders(input.headers)
   const requestBody = applyPayloadTemplate(input.payloadTemplate, params)
-  const isHttps = target.protocol === 'https:'
-  const transport = isHttps ? https : http
 
-  return new Promise<{ statusCode: number; responseBody: string }>((resolve, reject) => {
-    const req = transport.request(
-      target,
-      {
-        method: input.requestMethod,
-        headers: {
-          ...headers,
-          'Content-Length': Buffer.byteLength(requestBody).toString()
-        },
-        ...(isHttps ? { agent: new https.Agent({ rejectUnauthorized: !input.ignoreSsl }) } : {})
-      },
-      (res) => {
-        const chunks: Buffer[] = []
-        res.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)))
-        res.on('end', () => {
-          resolve({
-            statusCode: res.statusCode ?? 0,
-            responseBody: Buffer.concat(chunks).toString('utf8')
-          })
-        })
-      }
-    )
-
-    req.on('error', reject)
-    req.write(requestBody)
-    req.end()
+  const response = await fetch(target.toString(), {
+    method: input.requestMethod,
+    headers,
+    body: requestBody
   })
+
+  const responseBody = await response.text()
+  return {
+    statusCode: response.status,
+    responseBody
+  }
 }
 
 export async function getPrimaryWebhookEndpoint() {
@@ -222,95 +203,66 @@ export async function dispatchWebhookEvent(params: {
   eventType: WebhookEventType
   resourceKey: string
   periodKey: string
-  payload: DeliveryPayload
   subscriptionId?: string
+  payload: DeliveryPayload
 }) {
-  const config = normalizeWebhookSettings(await getPrimaryWebhookEndpoint())
-  if (!config.enabled || !config.url) {
+  const endpoint = await getPrimaryWebhookEndpoint()
+  if (!endpoint.enabled || !endpoint.url.trim()) {
     return {
-      channel: 'webhook' as const,
-      status: 'skipped' as const,
-      message: 'webhook_disabled'
-    }
+      channel: 'webhook',
+      status: 'skipped',
+      reason: 'webhook_disabled'
+    } as const
   }
 
-  const existing = await prisma.webhookDelivery.findUnique({
+  const result = await sendWebhookRequest(endpoint, {
+    eventType: params.eventType,
+    payload: params.payload
+  })
+
+  await prisma.webhookDelivery.upsert({
     where: {
       eventType_resourceKey_periodKey: {
         eventType: params.eventType,
         resourceKey: params.resourceKey,
         periodKey: params.periodKey
       }
+    },
+    update: {
+      subscriptionId: params.subscriptionId ?? null,
+      targetUrl: endpoint.url,
+      requestMethod: endpoint.requestMethod,
+      payloadJson: params.payload as Prisma.InputJsonValue,
+      status: result.statusCode >= 400 ? 'failed' : 'success',
+      responseCode: result.statusCode,
+      responseBody: result.responseBody,
+      attemptCount: {
+        increment: 1
+      },
+      lastAttemptAt: new Date()
+    },
+    create: {
+      subscriptionId: params.subscriptionId ?? null,
+      eventType: params.eventType,
+      resourceKey: params.resourceKey,
+      periodKey: params.periodKey,
+      targetUrl: endpoint.url,
+      requestMethod: endpoint.requestMethod,
+      payloadJson: params.payload as Prisma.InputJsonValue,
+      status: result.statusCode >= 400 ? 'failed' : 'success',
+      responseCode: result.statusCode,
+      responseBody: result.responseBody,
+      attemptCount: 1,
+      lastAttemptAt: new Date()
     }
   })
 
-  if (existing?.status === 'success') {
-    return {
-      channel: 'webhook' as const,
-      status: 'skipped' as const,
-      message: 'webhook_already_sent'
-    }
+  if (result.statusCode >= 400) {
+    throw new Error(`Webhook dispatch failed: HTTP ${result.statusCode}`)
   }
 
-  const target =
-    existing ??
-    (await prisma.webhookDelivery.create({
-      data: {
-        eventType: params.eventType,
-        resourceKey: params.resourceKey,
-        periodKey: params.periodKey,
-        subscriptionId: params.subscriptionId,
-        targetUrl: config.url,
-        requestMethod: config.requestMethod,
-        payloadJson: params.payload as Prisma.InputJsonValue,
-        status: 'pending'
-      }
-    }))
-
-  try {
-    const result = await sendWebhookRequest(config, {
-      eventType: params.eventType,
-      payload: params.payload
-    })
-
-    await prisma.webhookDelivery.update({
-      where: { id: target.id },
-      data: {
-        status: result.statusCode >= 400 ? 'failed' : 'success',
-        responseCode: result.statusCode,
-        responseBody: result.responseBody,
-        attemptCount: { increment: 1 },
-        lastAttemptAt: new Date(),
-        targetUrl: config.url,
-        requestMethod: config.requestMethod
-      }
-    })
-
-    const status: 'success' | 'failed' = result.statusCode >= 400 ? 'failed' : 'success'
-
-    return {
-      channel: 'webhook' as const,
-      status,
-      message: result.statusCode >= 400 ? `webhook_http_${result.statusCode}` : undefined
-    }
-  } catch (error) {
-    await prisma.webhookDelivery.update({
-      where: { id: target.id },
-      data: {
-        status: 'failed',
-        responseCode: 0,
-        responseBody: error instanceof Error ? error.message : 'Unknown error',
-        attemptCount: { increment: 1 },
-        lastAttemptAt: new Date(),
-        targetUrl: config.url,
-        requestMethod: config.requestMethod
-      }
-    })
-
-    return {
-      channel: 'webhook' as const,
-      status: 'failed' as const,
-      message: error instanceof Error ? error.message : 'webhook_dispatch_failed'
-    }
-  }
+  return {
+    channel: 'webhook',
+    status: 'success'
+  } as const
 }

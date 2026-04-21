@@ -1,0 +1,53 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "subtracker",
+	"main": "apps/api/src/worker/index.ts",
+	"compatibility_date": "2026-04-21",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"observability": {
+		"enabled": true
+	},
+	"vars": {
+		"WEB_ORIGIN": "http://127.0.0.1:8787",
+		"BASE_CURRENCY": "CNY",
+		"DEFAULT_NOTIFY_DAYS": "3",
+		"EXCHANGE_RATE_PROVIDER": "er-api",
+		"EXCHANGE_RATE_URL": "https://open.er-api.com/v6/latest",
+		"CRON_SCAN": "* * * * *",
+		"CRON_REFRESH_RATES": "0 2 * * *",
+		"MAILCHANNELS_API_URL": "https://api.mailchannels.net/tx/v1/send"
+	},
+	"assets": {
+		"directory": "./apps/web/dist",
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": [
+			"/*",
+			"!/assets/*"
+		]
+	},
+	"triggers": {
+		"crons": [
+			"* * * * *",
+			"0 2 * * *"
+		]
+	},
+	"d1_databases": [
+		{
+			"binding": "DB"
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "SUBTRACKER_CACHE"
+		}
+	],
+	"r2_buckets": [
+		{
+			"bucket_name": "subtracker-subtracker-logos",
+			"binding": "subtracker_subtracker_logos"
+		}
+	]
+}

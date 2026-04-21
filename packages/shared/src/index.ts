@@ -97,13 +97,14 @@ export const RenewSubscriptionSchema = z.object({
   currency: z.string().length(3).optional()
 })
 
+export const DEFAULT_MAILCHANNELS_API_URL = 'https://api.mailchannels.net/tx/v1/send'
+
 export const EmailConfigSchema = z.object({
-  host: z.string().max(200).default(''),
-  port: z.number().int().min(1).max(65535).default(587),
-  secure: z.boolean().default(false),
-  username: z.string().max(200).default(''),
-  password: z.string().max(500).default(''),
-  from: z.string().max(200).default(''),
+  provider: z.literal('mailchannels').default('mailchannels'),
+  apiBaseUrl: z.string().url().default(DEFAULT_MAILCHANNELS_API_URL),
+  fromEmail: z.string().max(200).default(''),
+  fromName: z.string().max(200).default(''),
+  replyTo: z.string().max(200).default(''),
   to: z.string().max(500).default('')
 })
 
@@ -166,6 +167,14 @@ export const AiConfigSchema = z.object({
   })
 })
 
+export const StorageCapabilitiesSchema = z.object({
+  runtime: z.enum(['node', 'worker-lite']).default('node'),
+  kvEnabled: z.boolean().default(false),
+  r2Enabled: z.boolean().default(false),
+  logoStorageEnabled: z.boolean().default(false),
+  wallosImportMode: z.enum(['full', 'json-only']).default('full')
+})
+
 export const SettingsSchema = z.object({
   baseCurrency: z.string().length(3).default('CNY').transform((v) => v.toUpperCase()),
   defaultNotifyDays: z.number().int().min(0).max(365).default(3),
@@ -185,7 +194,8 @@ export const SettingsSchema = z.object({
   emailConfig: EmailConfigSchema.default({}),
   pushplusConfig: PushPlusConfigSchema.default({}),
   telegramConfig: TelegramConfigSchema.default({}),
-  aiConfig: AiConfigSchema.default({})
+  aiConfig: AiConfigSchema.default({}),
+  storageCapabilities: StorageCapabilitiesSchema.default({})
 })
 
 export const LoginSchema = z.object({
@@ -248,6 +258,7 @@ export type NotificationWebhookSettingsInput = z.infer<typeof NotificationWebhoo
 export type AiProviderPreset = z.infer<typeof AiProviderPresetSchema>
 export type AiCapabilitiesInput = z.infer<typeof AiCapabilitiesSchema>
 export type AiConfigInput = z.infer<typeof AiConfigSchema>
+export type StorageCapabilitiesInput = z.infer<typeof StorageCapabilitiesSchema>
 export type LogoSearchInput = z.infer<typeof LogoSearchSchema>
 export type LogoUploadInput = z.infer<typeof LogoUploadSchema>
 export type AiRecognizeSubscriptionInput = z.infer<typeof AiRecognizeSubscriptionSchema>

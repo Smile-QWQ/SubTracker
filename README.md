@@ -1,4 +1,4 @@
-# SubTracker
+# SubTracker Lite
 
 [![GitHub release](https://img.shields.io/github/v/release/Smile-QWQ/SubTracker?style=flat-square)](https://github.com/Smile-QWQ/SubTracker/releases)
 [![GitHub stars](https://img.shields.io/github/stars/Smile-QWQ/SubTracker?style=flat-square)](https://github.com/Smile-QWQ/SubTracker/stargazers)
@@ -6,7 +6,9 @@
 
 一个现代化的自托管订阅管理工具，用来统一管理多币种订阅、续订提醒、预算分析、Logo 资源，以及 Wallos 数据迁移。
 
-本项目目前提供的部署方式为 **Docker / Docker Compose**。
+本分支当前只保留 **Cloudflare Worker** 部署路线，详见：
+
+- [`DEPLOYMENT.md`](./DEPLOYMENT.md)
 
 ## 界面预览
 
@@ -32,16 +34,16 @@
 - **预算能力**：总月预算、总年预算、标签月预算、独立的预算统计页
 - **统计分析**：未来 12 个月支付趋势、标签支出占比、状态分布、自动续订占比、未来 30 天续订分布
 - **多币种支持**：基准货币换算、汇率快照、货币转换器
-- **通知能力**：Webhook、SMTP 邮件、PushPlus、Telegram Bot
-- **Logo 能力**：上传、本地复用、网络搜索、Wallos ZIP 导入匹配
+- **通知能力**：Webhook、MailChannels 邮件、PushPlus、Telegram Bot
+- **Logo 能力**：上传（R2）、远程引用、网络搜索
 - **AI 识别**：支持文本 / 图片识别后自动填充订阅信息
-- **Wallos 导入**：兼容 JSON、SQLite、ZIP
+- **Wallos 导入**：当前分支支持 JSON 导入
 - **登录体验**：支持“记住我”、可配置的登录保留时长、默认密码修改提醒，以及登录失败限流保护
 
 ## 技术栈
 
 - **前端**：Vue 3、Vite、TypeScript、Naive UI、Pinia、TanStack Query、ECharts
-- **后端**：Fastify、Prisma、SQLite、Zod、node-cron
+- **后端**：Cloudflare Worker、Hono、Prisma D1 Adapter、D1、KV、可选 R2
 
 ## 本地开发
 
@@ -51,30 +53,13 @@
 npm install
 ```
 
-### 2. 复制开发环境变量
+### 2. 启动本地 Worker
 
 ```bash
-cp apps/api/.env.example apps/api/.env
+npm run dev:worker
 ```
 
-### 3. 初始化数据库
-
-```bash
-npm run prisma:generate
-npm run prisma:push
-npm run prisma:seed
-```
-
-### 4. 启动开发环境
-
-```bash
-npm run dev
-```
-
-默认地址：
-
-- Web：`http://127.0.0.1:5173`
-- API：`http://127.0.0.1:3001`
+默认地址：`http://127.0.0.1:8787`
 
 默认账户：
 
@@ -86,7 +71,7 @@ npm run dev
 ## 常用命令
 
 ```bash
-npm run dev
+npm run dev:worker
 npm run build
 npm run lint
 npm test
@@ -94,57 +79,33 @@ npm test
 
 ## 部署
 
-直接使用安装脚本即可：
+当前推荐通过 **GitHub Actions + Cloudflare** 部署。
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/install.sh | bash
-```
+### fork 后首次部署
 
-脚本会按你选择的方式自动下载 Release 产物并生成部署目录：
+1. 在你自己的 fork 仓库中配置 Secrets：
+   - `CLOUDFLARE_API_TOKEN`
+   - `CLOUDFLARE_ACCOUNT_ID`
+2. 可选配置 Actions Variables：
+   - `WORKER_NAME_PREFIX`：默认 `subtracker`
+   - `ENABLE_R2`：填 `true` 时，后续自动部署也会持续启用 R2
+3. 打开 Actions 页面
+4. 选择 **Deploy to Cloudflare**
+5. 点击 **Run workflow**
 
-- **完整部署（full）**：前端 + 后端一起部署，直接使用前端镜像
-- **仅后端部署（api）**：只部署后端 API，前端静态文件由你自己的 Nginx 托管
+### 后续更新
 
-推荐使用**完整部署**，步骤更少。
+后续直接使用 GitHub 的 **Sync fork** 同步上游代码。  
+同步后会触发 `Deploy to Cloudflare` workflow，自动部署新代码。
 
-API 容器首次启动时会自动初始化 SQLite 数据库表结构。
-
-### 升级
-
-日常升级直接拉取新镜像并重启：
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-仅后端部署升级时，还需要重新下载并覆盖 `subtracker-web-dist.zip` 解压后的前端静态文件目录。
-
-只有在这些场景下，才需要重新运行安装脚本：
-
-- 首次部署
-- 想重建部署目录
-- 想切换部署方式（`仅后端部署 / 完整部署`）
-- 部署模板或 `.env` 模板有明显变化
-
-详细部署说明见：
+完整说明见：
 
 - [DEPLOYMENT.md](./DEPLOYMENT.md)
 
-当前提供两种方式：
+## 工作流
 
-1. **推荐**：完整部署，脚本准备部署目录后直接 `docker compose up -d`
-2. **可选**：仅后端部署，外部 Nginx 托管前端静态文件，Docker 仅部署 API
-
-## Release 产物
-
-仓库的 `Build and Release` workflow 会在打 tag 时自动发布：
-
-- `subtracker-web-dist.zip`：前端静态文件
-- `ghcr.io/smile-qwq/subtracker-api`：API Docker 镜像
-- `ghcr.io/smile-qwq/subtracker-web`：完整部署使用的前端 Docker 镜像
-
-适合直接用于服务器部署。
+- `CF Worker CI`：负责 lint / test / build
+- `Deploy to Cloudflare`：首次 fork 后手动运行一次，后续 sync fork 自动部署
 
 ## 许可证
 

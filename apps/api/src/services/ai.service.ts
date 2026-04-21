@@ -1,6 +1,3 @@
-import { mkdir } from 'node:fs/promises'
-import path from 'node:path'
-import { createWorker, type Worker } from 'tesseract.js'
 import { AiRecognizeSubscriptionSchema, DEFAULT_AI_SUBSCRIPTION_PROMPT } from '@subtracker/shared'
 import type { AiRecognitionResultDto } from '@subtracker/shared'
 import { getAppSettings } from './settings.service'
@@ -20,11 +17,9 @@ type ChatCompletionPayload = {
   }>
 }
 
-const ocrCachePath = path.resolve(process.cwd(), 'apps/api/storage/tesseract-cache')
 const visionTestImageBase64 =
   'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAKUlEQVR4nO3OIQEAAAACIP+f1hkWWEB6FgEBAQEBAQEBAQEBAQEBgXdgl/rw4unIZ5cAAAAASUVORK5CYII='
 const jsonOnlySuffix = '必须只返回合法 JSON 对象，不要返回 Markdown、代码块或额外解释。'
-let ocrWorkerPromise: Promise<Worker> | null = null
 
 function ensureAiConfig(aiConfig: AiSettings, options?: { requireEnabled?: boolean }) {
   if (options?.requireEnabled !== false && !aiConfig.enabled) {
@@ -84,27 +79,6 @@ export function extractChatCompletionText(payload: ChatCompletionPayload) {
   }
 
   throw new Error('AI 未返回有效内容')
-}
-
-async function getOcrWorker() {
-  if (!ocrWorkerPromise) {
-    ocrWorkerPromise = (async () => {
-      await mkdir(ocrCachePath, { recursive: true })
-      return createWorker(['eng', 'chi_sim'], 1, {
-        cachePath: ocrCachePath,
-        logger: () => {}
-      })
-    })()
-  }
-
-  return ocrWorkerPromise
-}
-
-async function extractTextFromImageWithOcr(imageBase64: string) {
-  const worker = await getOcrWorker()
-  const imageBuffer = Buffer.from(imageBase64, 'base64')
-  const result = await worker.recognize(imageBuffer)
-  return (result.data.text || '').trim()
 }
 
 function buildRecognitionSystemPrompt(aiConfig: AiSettings, forceJsonPromptOnly = false) {
@@ -192,32 +166,13 @@ async function requestStructuredJsonCompletion(params: {
   }
 }
 
-function buildTextOnlyUserContent(input: { text?: string; ocrText?: string }) {
-  const parts = [
-    input.text?.trim() ? `原始文本：\n${input.text.trim()}` : '',
-    input.ocrText?.trim() ? `OCR 提取文本：\n${input.ocrText.trim()}` : ''
-  ].filter(Boolean)
-
-  return parts.join('\n\n').trim()
-}
-
 async function recognizeByTextOnly(params: {
   aiConfig: AiSettings
-  text?: string
-  ocrText?: string
+  text: string
 }) {
-  const userText = buildTextOnlyUserContent({
-    text: params.text,
-    ocrText: params.ocrText
-  })
-
-  if (!userText) {
-    throw new Error('未获取到可用于识别的文本内容')
-  }
-
   const raw = await requestStructuredJsonCompletion({
     aiConfig: params.aiConfig,
-    userContent: userText
+    userContent: params.text.trim()
   })
 
   return JSON.parse(raw) as AiRecognitionResultDto
@@ -259,20 +214,26 @@ export async function recognizeSubscriptionByAi(input: unknown): Promise<AiRecog
     throw new Error('AI 识别输入不合法')
   }
 
-  const settings = await getAppSettings()
-  const { aiConfig } = settings
-
+  const aiConfig = (await getAppSettings()).aiConfig
   const text = parsed.data.text?.trim()
-  const imageBase64 = parsed.data.imageBase64
+  const imageBase64 = parsed.data.imageBase64?.trim()
 
-  if (!imageBase64) {
-    return recognizeByTextOnly({
-      aiConfig,
-      text
-    })
+  if (!text && !imageBase64) {
+    throw new Error('请至少提供文本或图片')
   }
 
-  if (aiConfig.capabilities.vision) {
+  if (imageBase64) {
+    if (!aiConfig.capabilities.vision) {
+      if (text) {
+        return recognizeByTextOnly({
+          aiConfig,
+          text
+        })
+      }
+
+      throw new Error('当前模型未开启视觉输入，Cloudflare Worker 版本已移除本地 OCR')
+    }
+
     try {
       return await recognizeByVision({
         aiConfig,
@@ -285,35 +246,37 @@ export async function recognizeSubscriptionByAi(input: unknown): Promise<AiRecog
       if (!looksLikeImageFormatUnsupported(message)) {
         throw error
       }
-    }
-  }
 
-  const ocrText = await extractTextFromImageWithOcr(imageBase64)
-  if (!ocrText) {
-    throw new Error('图片 OCR 未识别出有效文本，请改为手动输入文本内容')
+      if (text) {
+        return recognizeByTextOnly({
+          aiConfig,
+          text
+        })
+      }
+
+      throw new Error('当前模型不支持视觉输入，且 Cloudflare Worker 版本不提供本地 OCR 回退')
+    }
   }
 
   return recognizeByTextOnly({
     aiConfig,
-    text,
-    ocrText
+    text: text ?? ''
   })
 }
 
 export async function testAiConnection(overrideConfig?: AiSettings) {
   const aiConfig = overrideConfig ?? (await getAppSettings()).aiConfig
-
-  const raw = await requestAiChatCompletion({
+  const response = await requestAiChatCompletion({
     aiConfig,
-    requireEnabled: false,
+    requireEnabled: overrideConfig ? false : true,
     messages: [
       {
         role: 'system',
-        content: '请只返回 OK'
+        content: '你是一个连接测试助手。'
       },
       {
         role: 'user',
-        content: 'ping'
+        content: '请只回复：连接成功'
       }
     ]
   })
@@ -322,30 +285,30 @@ export async function testAiConnection(overrideConfig?: AiSettings) {
     success: true,
     providerName: aiConfig.providerName,
     model: aiConfig.model,
-    response: raw.trim()
+    response
   }
 }
 
 export async function testAiVisionConnection(overrideConfig?: AiSettings) {
   const aiConfig = overrideConfig ?? (await getAppSettings()).aiConfig
   if (!aiConfig.capabilities.vision) {
-    throw new Error('当前 Provider 未启用视觉输入能力')
+    throw new Error('当前模型未开启视觉能力')
   }
 
-  const raw = await requestAiChatCompletion({
+  const response = await requestAiChatCompletion({
     aiConfig,
-    requireEnabled: false,
+    requireEnabled: overrideConfig ? false : true,
     messages: [
       {
         role: 'system',
-        content: '请根据用户发送的图片进行响应，只返回一句简短确认。'
+        content: '你是一个视觉连接测试助手。'
       },
       {
         role: 'user',
         content: [
           {
             type: 'text',
-            text: '请确认你已成功接收到这张测试图片。'
+            text: '请回答：这是一个纯色测试图'
           },
           {
             type: 'image_url',
@@ -362,6 +325,6 @@ export async function testAiVisionConnection(overrideConfig?: AiSettings) {
     success: true,
     providerName: aiConfig.providerName,
     model: aiConfig.model,
-    response: raw.trim()
+    response
   }
 }

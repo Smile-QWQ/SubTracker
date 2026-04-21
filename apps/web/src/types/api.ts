@@ -159,12 +159,11 @@ export interface CalendarEvent {
 }
 
 export interface EmailConfig {
-  host: string
-  port: number
-  secure: boolean
-  username: string
-  password: string
-  from: string
+  provider: 'mailchannels'
+  apiBaseUrl: string
+  fromEmail: string
+  fromName: string
+  replyTo: string
   to: string
 }
 
@@ -204,6 +203,14 @@ export interface AiTestResponse {
   response: string
 }
 
+export interface StorageCapabilities {
+  runtime: 'node' | 'worker-lite'
+  kvEnabled: boolean
+  r2Enabled: boolean
+  logoStorageEnabled: boolean
+  wallosImportMode: 'full' | 'json-only'
+}
+
 export interface Settings {
   baseCurrency: string
   defaultNotifyDays: number
@@ -224,6 +231,7 @@ export interface Settings {
   pushplusConfig: PushplusConfig
   telegramConfig: TelegramConfig
   aiConfig: AiConfig
+  storageCapabilities: StorageCapabilities
 }
 
 export interface NotificationWebhookSettings {

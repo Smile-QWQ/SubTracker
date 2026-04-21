@@ -225,6 +225,7 @@
       :currencies="currencies"
       :default-advance-reminder-rules="defaultAdvanceReminderRules"
       :default-overdue-reminder-rules="defaultOverdueReminderRules"
+      :logo-storage-enabled="settings?.storageCapabilities?.logoStorageEnabled ?? false"
       @close="closeModal"
       @submit="submitSubscription"
     />
@@ -297,6 +298,7 @@ const isMobile = computed(() => width.value < 960)
 
 const subscriptions = ref<Subscription[]>([])
 const tags = ref<Tag[]>([])
+const settings = ref<Settings | null>(null)
 const detail = ref<SubscriptionDetail | null>(null)
 const paymentRecords = ref<PaymentRecord[]>([])
 const currencies = ref<string[]>(['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'HKD'])
@@ -685,9 +687,9 @@ async function loadCurrencies() {
 }
 
 async function loadSettings() {
-  const settings: Settings = await api.getSettings()
-  defaultAdvanceReminderRules.value = settings.defaultAdvanceReminderRules
-  defaultOverdueReminderRules.value = settings.defaultOverdueReminderRules
+  settings.value = await api.getSettings()
+  defaultAdvanceReminderRules.value = settings.value.defaultAdvanceReminderRules
+  defaultOverdueReminderRules.value = settings.value.defaultOverdueReminderRules
 }
 
 function toggleTagFilter(tagId: string) {

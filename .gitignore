@@ -1,6 +1,8 @@
 node_modules
 dist
 coverage
+.wrangler
+.tmp
 .env
 .env.local
 *.log
@@ -8,4 +10,6 @@ apps/api/prisma/dev.db
 apps/api/prisma/dev.db-journal
 apps/api/prisma/test.db
 apps/api/prisma/test.db-journal
+apps/api/dev.db
+apps/api/dev.db-journal
 apps/api/apps/api/storage/

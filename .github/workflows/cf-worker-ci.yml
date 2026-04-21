@@ -1,0 +1,41 @@
+name: CF Worker CI
+
+on:
+  push:
+    branches:
+      - feat/cf-worker
+  pull_request:
+    branches:
+      - feat/cf-worker
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma generate
+        run: npm run prisma:generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        env:
+          VITE_APP_VERSION: ${{ github.ref_name }}
+        run: npm run build

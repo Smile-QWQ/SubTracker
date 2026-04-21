@@ -2,11 +2,11 @@
   <n-modal :show="show" preset="card" title="导入 Wallos 数据" style="width: min(1080px, calc(100vw - 24px))" @update:show="handleShowUpdate">
     <n-space vertical :size="16" style="width: 100%">
       <n-alert type="info" :show-icon="false">
-        支持上传 Wallos 的 JSON、SQLite 数据库或 ZIP 包。当前只导入实际被订阅使用到的标签。
+        Cloudflare Worker 版本当前仅支持上传 Wallos 的 JSON 导出文件，仍会只导入实际被订阅使用到的标签。
       </n-alert>
 
       <n-space align="center" wrap>
-        <input ref="fileInputRef" type="file" accept=".json,.db,.sqlite,.sqlite3,.zip,application/octet-stream,application/json,application/zip" class="hidden-input" @change="handleFileChange" />
+        <input ref="fileInputRef" type="file" accept=".json,application/json" class="hidden-input" @change="handleFileChange" />
         <n-button @click="pickFile">选择文件</n-button>
         <span class="file-name">{{ selectedFileName || '未选择文件' }}</span>
         <n-button type="primary" :disabled="!selectedFile" :loading="inspecting" @click="inspectFile">生成预览</n-button>
@@ -34,8 +34,8 @@
           </n-grid-item>
           <n-grid-item>
             <n-card size="small">
-              <div class="summary-label">ZIP Logo 匹配</div>
-              <div class="summary-value">{{ preview.summary.zipLogoMatched }}/{{ preview.summary.zipLogoMatched + preview.summary.zipLogoMissing }}</div>
+              <div class="summary-label">Logo 导入</div>
+              <div class="summary-value">Cloudflare Worker 不支持</div>
             </n-card>
           </n-grid-item>
         </n-grid>
@@ -143,8 +143,8 @@ const subscriptionColumns = [
     render: (row: WallosImportSubscriptionPreview) =>
       ({
         none: '无',
-        'pending-file-match': '待匹配',
-        'ready-from-zip': 'ZIP 可导入'
+        'pending-file-match': '不支持',
+        'ready-from-zip': '不支持'
       })[row.logoImportStatus]
   }
 ]
@@ -231,8 +231,8 @@ function unitText(unit: WallosImportSubscriptionPreview['billingIntervalUnit']) 
 function fileTypeText(type: WallosImportInspectResult['summary']['fileType']) {
   return {
     json: 'JSON',
-    db: 'SQLite',
-    zip: 'ZIP'
+    db: '已停用',
+    zip: '已停用'
   }[type]
 }
 </script>

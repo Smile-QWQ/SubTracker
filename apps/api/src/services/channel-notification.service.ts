@@ -1,6 +1,7 @@
 import dayjs from 'dayjs'
-import nodemailer from 'nodemailer'
 import type { EmailConfigInput, PushPlusConfigInput, TelegramConfigInput, WebhookEventType } from '@subtracker/shared'
+import { config } from '../config'
+import { getWorkerCache } from '../runtime'
 import { dispatchWebhookEvent } from './webhook.service'
 import { getAppSettings, getSetting, setSetting } from './settings.service'
 
@@ -67,14 +68,29 @@ async function hasNotificationBeenSent(
   channel: 'email' | 'pushplus' | 'telegram',
   params: NotificationDispatchParams
 ) {
-  return getSetting<boolean>(buildNotificationKey(channel, params), false)
+  const key = buildNotificationKey(channel, params)
+  const cache = getWorkerCache()
+  if (cache) {
+    return Boolean(await cache.get(key))
+  }
+
+  return getSetting<boolean>(key, false)
 }
 
 async function markNotificationSent(
   channel: 'email' | 'pushplus' | 'telegram',
   params: NotificationDispatchParams
 ) {
-  await setSetting(buildNotificationKey(channel, params), true)
+  const key = buildNotificationKey(channel, params)
+  const cache = getWorkerCache()
+  if (cache) {
+    await cache.put(key, '1', {
+      expirationTtl: 60 * 60 * 24 * 14
+    })
+    return
+  }
+
+  await setSetting(key, true)
 }
 
 function getMergedSubscriptions(params: NotificationDispatchParams) {
@@ -225,28 +241,49 @@ function buildNotificationBody(params: NotificationDispatchParams) {
   return lines.filter((line) => !line.endsWith('：')).join('\n')
 }
 
-async function sendEmailWithConfig(params: NotificationDispatchParams, config: EmailConfigInput) {
-  const { host, port, secure, username, password, from, to } = config
-  if (!host || !port || !username || !password || !from || !to) {
+async function sendEmailWithConfig(params: NotificationDispatchParams, emailConfig: EmailConfigInput) {
+  const apiBaseUrl = emailConfig.apiBaseUrl?.trim() || config.mailchannelsApiUrl
+  const fromEmail = emailConfig.fromEmail?.trim()
+  const to = emailConfig.to?.trim()
+
+  if (!apiBaseUrl || !fromEmail || !to) {
     throw new Error('邮箱通知未启用或配置不完整')
   }
 
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: {
-      user: username,
-      pass: password
-    }
+  const response = await fetch(apiBaseUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      personalizations: [
+        {
+          to: to
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean)
+            .map((email) => ({ email }))
+        }
+      ],
+      from: {
+        email: fromEmail,
+        name: emailConfig.fromName?.trim() || 'SubTracker Lite'
+      },
+      reply_to: emailConfig.replyTo?.trim() ? { email: emailConfig.replyTo.trim() } : undefined,
+      subject: buildNotificationTitle(params),
+      content: [
+        {
+          type: 'text/plain',
+          value: buildNotificationBody(params)
+        }
+      ]
+    })
   })
 
-  await transporter.sendMail({
-    from,
-    to,
-    subject: buildNotificationTitle(params),
-    text: buildNotificationBody(params)
-  })
+  const rawText = await response.text()
+  if (!response.ok) {
+    throw new Error(`MailChannels 请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
+  }
 }
 
 async function sendEmailNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {

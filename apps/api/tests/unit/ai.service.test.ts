@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_AI_CONFIG } from '@subtracker/shared'
+import { DEFAULT_AI_CONFIG, type AiConfigInput } from '@subtracker/shared'
 
-const mockedSettings = {
+const mockedSettings: {
+  aiConfig: AiConfigInput
+} = {
   aiConfig: {
     ...DEFAULT_AI_CONFIG,
     enabled: true,
@@ -12,20 +14,8 @@ const mockedSettings = {
   }
 }
 
-const recognizeMock = vi.fn(async () => ({
-  data: {
-    text: 'OCR invoice text'
-  }
-}))
-
 vi.mock('../../src/services/settings.service', () => ({
   getAppSettings: vi.fn(async () => mockedSettings)
-}))
-
-vi.mock('tesseract.js', () => ({
-  createWorker: vi.fn(async () => ({
-    recognize: recognizeMock
-  }))
 }))
 
 import { recognizeSubscriptionByAi, testAiConnection } from '../../src/services/ai.service'
@@ -49,7 +39,6 @@ describe('ai service', () => {
         ...DEFAULT_AI_CONFIG.capabilities
       }
     }
-    recognizeMock.mockClear()
     vi.restoreAllMocks()
   })
 
@@ -118,38 +107,52 @@ describe('ai service', () => {
 
     expect(result.name).toBe('Netflix')
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    const firstBody = JSON.parse(String((((fetchMock.mock.calls[0] as unknown) as [unknown, RequestInit])[1])?.body))
-    const secondBody = JSON.parse(String((((fetchMock.mock.calls[1] as unknown) as [unknown, RequestInit])[1])?.body))
-    expect(firstBody.response_format).toEqual({ type: 'json_object' })
-    expect(secondBody.response_format).toBeUndefined()
-    expect(secondBody.messages[0].content).toContain('合法 JSON 对象')
   })
 
-  it('uses OCR text path when vision capability is disabled', async () => {
+  it('returns a clear error when image-only recognition is requested without vision support', async () => {
     mockedSettings.aiConfig.capabilities.vision = false
 
-    const fetchMock = vi.fn(async () =>
-      jsonResponse({
-        choices: [
-          {
-            message: {
-              content: '{"name":"OCR Result"}'
-            }
-          }
-        ]
+    await expect(
+      recognizeSubscriptionByAi({
+        imageBase64: 'dGVzdA==',
+        mimeType: 'image/png'
       })
-    )
+    ).rejects.toThrow('当前模型未开启视觉输入，Cloudflare Worker 版本已移除本地 OCR')
+  })
+
+  it('falls back to text-only recognition when vision API is unsupported but text exists', async () => {
+    mockedSettings.aiConfig = {
+      ...mockedSettings.aiConfig,
+      capabilities: {
+        vision: true,
+        structuredOutput: true
+      }
+    }
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("unknown variant 'image_url'", { status: 400 }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          choices: [
+            {
+              message: {
+                content: '{"name":"Recovered From Text"}'
+              }
+            }
+          ]
+        })
+      )
+
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await recognizeSubscriptionByAi({
+      text: 'Recovered From Text',
       imageBase64: 'dGVzdA==',
       mimeType: 'image/png'
     })
 
-    expect(result.name).toBe('OCR Result')
-    expect(recognizeMock).toHaveBeenCalledTimes(1)
-    const requestBody = JSON.parse(String((((fetchMock.mock.calls[0] as unknown) as [unknown, RequestInit])[1])?.body))
-    expect(typeof requestBody.messages[1].content).toBe('string')
-    expect(requestBody.messages[1].content).toContain('OCR 提取文本')
+    expect(result.name).toBe('Recovered From Text')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })

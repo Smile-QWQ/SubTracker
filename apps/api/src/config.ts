@@ -1,11 +1,36 @@
-export const config = {
-  port: Number(process.env.PORT ?? 3001),
-  host: process.env.HOST ?? '0.0.0.0',
-  webOrigin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
-  baseCurrency: (process.env.BASE_CURRENCY ?? 'CNY').toUpperCase(),
-  defaultNotifyDays: Number(process.env.DEFAULT_NOTIFY_DAYS ?? 3),
-  exchangeRateProvider: process.env.EXCHANGE_RATE_PROVIDER ?? 'er-api',
-  exchangeRateUrl: process.env.EXCHANGE_RATE_URL ?? 'https://open.er-api.com/v6/latest',
-  cronScan: process.env.CRON_SCAN ?? '* * * * *',
-  cronRefreshRates: process.env.CRON_REFRESH_RATES ?? '0 2 * * *'
+import { getWorkerPublicConfig } from './runtime'
+
+export const config = new Proxy(
+  {},
+  {
+    get(_target, property: string) {
+      const runtimeConfig = getWorkerPublicConfig()
+
+      const baseConfig = {
+        port: Number(process.env.PORT ?? 3001),
+        host: process.env.HOST ?? '0.0.0.0',
+        webOrigin: runtimeConfig.webOrigin,
+        baseCurrency: runtimeConfig.baseCurrency,
+        defaultNotifyDays: runtimeConfig.defaultNotifyDays,
+        exchangeRateProvider: runtimeConfig.exchangeRateProvider,
+        exchangeRateUrl: runtimeConfig.exchangeRateUrl,
+        cronScan: runtimeConfig.cronScan,
+        cronRefreshRates: runtimeConfig.cronRefreshRates,
+        mailchannelsApiUrl: runtimeConfig.mailchannelsApiUrl
+      } as const
+
+      return baseConfig[property as keyof typeof baseConfig]
+    }
+  }
+) as {
+  port: number
+  host: string
+  webOrigin: string
+  baseCurrency: string
+  defaultNotifyDays: number
+  exchangeRateProvider: string
+  exchangeRateUrl: string
+  cronScan: string
+  cronRefreshRates: string
+  mailchannelsApiUrl: string
 }

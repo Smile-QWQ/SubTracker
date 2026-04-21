@@ -1,14 +1,14 @@
-import { mkdir, readdir, stat, unlink, writeFile } from 'node:fs/promises'
 import crypto from 'node:crypto'
-import path from 'node:path'
 import { prisma } from '../db'
-import type { LogoSearchResultDto } from '@subtracker/shared'
+import type { LogoSearchInput, LogoSearchResultDto, LogoUploadInput } from '@subtracker/shared'
+import { getWorkerCache, getWorkerLogoBucket } from '../runtime'
 
-const logoDir = path.resolve(process.cwd(), 'apps/api/storage/logos')
 const SEARCH_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36'
 const LOGO_REQUEST_TIMEOUT_MS = 20000
+const SEARCH_CACHE_TTL_SECONDS = 5 * 60
 const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000
+const SEARCH_CACHE_PREFIX = 'logo-search:worker-parity:'
 const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml'])
 const extensionMap: Record<string, string> = {
   'image/png': '.png',
@@ -131,6 +131,41 @@ function makeCandidate(
     fallback: options?.fallback ?? false,
     scoreHint: sourcePriority(source)
   })
+}
+
+async function cacheGet(key: string) {
+  const kv = getWorkerCache()
+  if (kv) {
+    const raw = await kv.get(key, 'json')
+    if (!raw) return null
+    const entry = raw as SearchCacheEntry
+    if (entry.expiresAt <= Date.now()) return null
+    return entry
+  }
+
+  const cached = searchCache.get(key)
+  if (!cached || cached.expiresAt <= Date.now()) {
+    searchCache.delete(key)
+    return null
+  }
+  return cached
+}
+
+async function cacheSet(key: string, items: LogoSearchResultDto[]) {
+  const entry: SearchCacheEntry = {
+    expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,
+    items
+  }
+
+  const kv = getWorkerCache()
+  if (kv) {
+    await kv.put(key, JSON.stringify(entry), {
+      expirationTtl: SEARCH_CACHE_TTL_SECONDS
+    })
+    return
+  }
+
+  searchCache.set(key, entry)
 }
 
 async function fetchText(url: string, headers?: Record<string, string>) {
@@ -502,17 +537,19 @@ function dedupeBy<T>(items: T[], getKey: (item: T) => string) {
 }
 
 function filenameFromLogoUrl(logoUrl: string) {
-  return path.basename(new URL(logoUrl, 'http://localhost').pathname)
+  const pathname = new URL(logoUrl, 'http://localhost').pathname
+  const segments = pathname.split('/').filter(Boolean)
+  return segments[segments.length - 1] ?? ''
 }
 
-export async function searchSubscriptionLogos(params: { name: string; websiteUrl?: string; tagName?: string }) {
-  const cacheKey = JSON.stringify({
+export async function searchSubscriptionLogos(params: LogoSearchInput) {
+  const cacheKey = `${SEARCH_CACHE_PREFIX}${JSON.stringify({
     name: params.name.trim().toLowerCase(),
     websiteUrl: params.websiteUrl?.trim().toLowerCase() ?? '',
     tagName: params.tagName?.trim().toLowerCase() ?? ''
-  })
-  const cached = searchCache.get(cacheKey)
-  if (cached && cached.expiresAt > Date.now()) {
+  })}`
+  const cached = await cacheGet(cacheKey)
+  if (cached) {
     return cached.items
   }
 
@@ -587,23 +624,43 @@ export async function searchSubscriptionLogos(params: { name: string; websiteUrl
     (item) => item.logoUrl
   ).map(({ score, scoreHint, fallback, ...item }) => item)
 
-  searchCache.set(cacheKey, {
-    expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,
-    items: result
-  })
+  await cacheSet(cacheKey, result)
 
   return result
 }
 
-async function writeLogoBuffer(buffer: Buffer, contentType: string, logoSource: string) {
-  await mkdir(logoDir, { recursive: true })
+function decodeBase64(value: string) {
+  const binary = atob(value.trim())
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+  return bytes
+}
 
-  const filename = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}${extensionMap[contentType] ?? '.png'}`
-  const absolutePath = path.join(logoDir, filename)
-  await writeFile(absolutePath, buffer)
+function isLocalLogoUrl(url?: string | null) {
+  return Boolean(url && url.startsWith('/static/logos/'))
+}
+
+function createLogoUrl(key: string) {
+  return `/static/logos/${encodeURIComponent(key)}`
+}
+
+async function writeLogoBuffer(buffer: Buffer | Uint8Array, contentType: string, logoSource: string) {
+  const bucket = getWorkerLogoBucket()
+  if (!bucket) {
+    throw new Error('对象存储未启用，无法保存 Logo 文件')
+  }
+
+  const filename = `logos/${Date.now()}-${crypto.randomBytes(6).toString('hex')}${extensionMap[contentType] ?? '.png'}`
+  await bucket.put(filename, buffer, {
+    httpMetadata: {
+      contentType
+    }
+  })
 
   return {
-    logoUrl: `/static/logos/${filename}`,
+    logoUrl: createLogoUrl(filename),
     logoSource
   }
 }
@@ -618,16 +675,12 @@ export async function saveImportedLogoBuffer(buffer: Buffer, contentType: string
   return writeLogoBuffer(buffer, contentType, logoSource)
 }
 
-function isLocalLogoUrl(url?: string | null) {
-  return Boolean(url && url.startsWith('/static/logos/'))
-}
-
-export async function saveUploadedLogo(input: { filename: string; contentType: string; base64: string }) {
+export async function saveUploadedLogo(input: LogoUploadInput) {
   if (!allowedTypes.has(input.contentType)) {
     throw new Error('仅支持 PNG、JPG、WEBP、SVG 图片')
   }
 
-  const buffer = Buffer.from(input.base64, 'base64')
+  const buffer = decodeBase64(input.base64)
   if (!buffer.length) {
     throw new Error('图片内容为空')
   }
@@ -662,6 +715,14 @@ export async function normalizeLogoForStorage(input: { logoUrl?: string | null; 
   }
 
   if (/^https?:\/\//i.test(input.logoUrl)) {
+    if (!getWorkerLogoBucket()) {
+      return {
+        logoUrl: input.logoUrl,
+        logoSource: input.logoSource ?? 'remote',
+        logoFetchedAt: null as Date | null
+      }
+    }
+
     const imported = await importRemoteLogo({
       logoUrl: input.logoUrl,
       source: input.logoSource ?? 'remote'
@@ -682,7 +743,13 @@ export async function normalizeLogoForStorage(input: { logoUrl?: string | null; 
 }
 
 export async function getLocalLogoLibrary() {
-  await mkdir(logoDir, { recursive: true })
+  const bucket = getWorkerLogoBucket()
+  if (!bucket) {
+    return []
+  }
+
+  const files = await bucket.list()
+  const objects = files.objects.filter((item) => item.key.startsWith('logos/'))
 
   const localSubscriptions = await prisma.subscription.findMany({
     where: {
@@ -726,20 +793,16 @@ export async function getLocalLogoLibrary() {
     }
   }
 
-  const files = await readdir(logoDir)
-  for (const file of files) {
-    const logoUrl = `/static/logos/${file}`
+  for (const file of objects) {
+    const logoUrl = createLogoUrl(file.key)
     if (map.has(logoUrl)) continue
-
-    const filePath = path.join(logoDir, file)
-    const info = await stat(filePath)
     map.set(logoUrl, {
       label: '未使用 Logo',
       logoUrl,
       source: 'local-file',
       isLocal: true,
-      filename: file,
-      updatedAt: info.mtime.toISOString(),
+      filename: file.key,
+      updatedAt: file.uploaded?.toISOString() ?? new Date(0).toISOString(),
       usageCount: 0,
       relatedSubscriptionNames: []
     })
@@ -753,12 +816,17 @@ export async function getLocalLogoLibrary() {
 }
 
 export async function deleteLocalLogoFromLibrary(filename: string) {
-  const safeName = path.basename(filename)
+  const bucket = getWorkerLogoBucket()
+  if (!bucket) {
+    throw new Error('对象存储未启用，无法删除 Logo')
+  }
+
+  const safeName = filename.trim()
   if (!safeName) {
     throw new Error('无效的 Logo 文件名')
   }
 
-  const logoUrl = `/static/logos/${safeName}`
+  const logoUrl = createLogoUrl(safeName)
   const usageCount = await prisma.subscription.count({
     where: {
       logoUrl
@@ -769,8 +837,7 @@ export async function deleteLocalLogoFromLibrary(filename: string) {
     throw new Error('该 Logo 已被订阅使用，不能删除')
   }
 
-  const filePath = path.join(logoDir, safeName)
-  await unlink(filePath)
+  await bucket.delete(safeName)
 
   return {
     filename: safeName,

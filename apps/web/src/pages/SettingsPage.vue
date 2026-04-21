@@ -7,6 +7,15 @@
       icon-background="linear-gradient(135deg, #64748b 0%, #334155 100%)"
     />
 
+    <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
+      当前运行时：{{ runtimeLabel }}。
+      <template v-if="settingsForm.storageCapabilities.runtime === 'worker-lite'">
+        KV {{ settingsForm.storageCapabilities.kvEnabled ? '已启用' : '未启用，将退化缓存和通知去重' }}；
+        R2 {{ settingsForm.storageCapabilities.r2Enabled ? '已启用' : '未启用，仅支持远程 Logo 引用' }}；
+        Wallos 导入模式：{{ settingsForm.storageCapabilities.wallosImportMode === 'json-only' ? '仅 JSON' : '完整模式' }}。
+      </template>
+    </n-alert>
+
     <n-grid :cols="gridCols" :x-gap="12" :y-gap="12">
       <n-grid-item>
         <n-card title="基础设置" class="settings-card">
@@ -177,9 +186,12 @@
 
       <n-grid-item :span="gridSpanFull">
         <n-card title="通知设置" class="settings-card">
-          <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
-            统一管理邮箱、PushPlus 与 Webhook。每个渠道都可以单独保存并单独测试。
-          </n-alert>
+            <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
+              统一管理 MailChannels 邮件、PushPlus 与 Webhook。每个渠道都可以单独保存并单独测试。
+              <template v-if="isWorkerLiteRuntime">
+                Cloudflare Worker 不支持忽略 SSL 校验，Webhook 仅按标准 HTTPS 校验执行。
+              </template>
+            </n-alert>
 
           <n-grid :cols="notificationGridCols" :x-gap="12" :y-gap="12">
             <n-grid-item>
@@ -189,29 +201,23 @@
                   <n-switch v-model:value="settingsForm.emailNotificationsEnabled" />
                 </div>
                 <n-form label-placement="top">
-                  <n-form-item label="SMTP Host">
-                    <n-input v-model:value="settingsForm.emailConfig.host" />
+                  <n-form-item label="MailChannels API URL">
+                    <n-input v-model:value="settingsForm.emailConfig.apiBaseUrl" />
                   </n-form-item>
                   <n-grid :cols="formCols" :x-gap="8">
                     <n-grid-item>
-                      <n-form-item label="端口">
-                        <n-input-number v-model:value="settingsForm.emailConfig.port" :min="1" :max="65535" style="width: 100%" />
+                      <n-form-item label="发件邮箱">
+                        <n-input v-model:value="settingsForm.emailConfig.fromEmail" placeholder="noreply@example.com" />
                       </n-form-item>
                     </n-grid-item>
                     <n-grid-item>
-                      <n-form-item label="Secure">
-                        <n-switch v-model:value="settingsForm.emailConfig.secure" />
+                      <n-form-item label="发件名称">
+                        <n-input v-model:value="settingsForm.emailConfig.fromName" placeholder="SubTracker Lite" />
                       </n-form-item>
                     </n-grid-item>
                   </n-grid>
-                  <n-form-item label="用户名">
-                    <n-input v-model:value="settingsForm.emailConfig.username" />
-                  </n-form-item>
-                  <n-form-item label="密码">
-                    <n-input v-model:value="settingsForm.emailConfig.password" type="password" show-password-on="click" />
-                  </n-form-item>
-                  <n-form-item label="发件人">
-                    <n-input v-model:value="settingsForm.emailConfig.from" placeholder="SubTracker <noreply@example.com>" />
+                  <n-form-item label="Reply-To">
+                    <n-input v-model:value="settingsForm.emailConfig.replyTo" placeholder="可选：support@example.com" />
                   </n-form-item>
                   <n-form-item label="收件人">
                     <n-input v-model:value="settingsForm.emailConfig.to" placeholder="多个邮箱请用英文逗号分隔" />
@@ -284,7 +290,7 @@
                         <n-select v-model:value="webhookForm.requestMethod" :options="webhookMethodOptions" />
                       </n-form-item>
                     </n-grid-item>
-                    <n-grid-item>
+                    <n-grid-item v-if="supportsWebhookIgnoreSsl">
                       <n-form-item>
                         <n-switch v-model:value="webhookForm.ignoreSsl" />
                         <span class="switch-label">忽略 SSL 校验</span>
@@ -299,7 +305,7 @@
                           v-model:value="webhookForm.headers"
                           type="textarea"
                           :autosize="{ minRows: 3, maxRows: 6 }"
-                          placeholder="支持 JSON 对象或每行一个 Header，例如：&#10;Content-Type: application/json&#10;X-App: SubTracker"
+                          placeholder="支持 JSON 对象或每行一个 Header，例如：&#10;Content-Type: application/json&#10;X-App: SubTracker Lite"
                         />
                       </n-form-item>
                       <n-form-item label="Payload 模板">
@@ -423,6 +429,12 @@
           <n-space vertical style="width: 100%">
             <n-alert type="info" :show-icon="false">
               可导出全部订阅为 CSV / JSON，也可在这里导入 Wallos 数据。
+              <template v-if="settingsForm.storageCapabilities.wallosImportMode === 'json-only'">
+                当前 Cloudflare Worker 版本仅支持 JSON 导入。
+              </template>
+              <template v-if="!hasManagedLogoLibrary">
+                当前未启用 R2，Logo 只支持远程引用，不支持本地库持久化。
+              </template>
             </n-alert>
             <n-space wrap>
               <n-button type="success" @click="showWallosImportModal = true">导入 Wallos</n-button>
@@ -447,6 +459,7 @@ import {
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_AI_CONFIG,
   DEFAULT_AI_SUBSCRIPTION_PROMPT,
+  DEFAULT_MAILCHANNELS_API_URL,
   DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
   DEFAULT_OVERDUE_REMINDER_RULES
 } from '@subtracker/shared'
@@ -480,6 +493,7 @@ import WallosImportModal from '@/components/WallosImportModal.vue'
 import { useAuthStore } from '@/stores/auth'
 import { isRememberedSession } from '@/utils/auth-storage'
 import { buildCurrencyOptions } from '@/utils/currency'
+import { supportsManagedLogoLibrary } from '@/utils/worker-capabilities'
 import type { AiProviderPreset, ChangeCredentialsPayload, ExchangeRateSnapshot, NotificationWebhookSettings, Settings } from '@/types/api'
 
 const message = useMessage()
@@ -538,12 +552,11 @@ const settingsForm = reactive<Settings>({
   pushplusNotificationsEnabled: false,
   telegramNotificationsEnabled: false,
   emailConfig: {
-    host: '',
-    port: 587,
-    secure: false,
-    username: '',
-    password: '',
-    from: '',
+    provider: 'mailchannels',
+    apiBaseUrl: DEFAULT_MAILCHANNELS_API_URL,
+    fromEmail: '',
+    fromName: 'SubTracker Lite',
+    replyTo: '',
     to: ''
   },
   pushplusConfig: {
@@ -559,6 +572,13 @@ const settingsForm = reactive<Settings>({
     capabilities: {
       ...DEFAULT_AI_CONFIG.capabilities
     }
+  },
+  storageCapabilities: {
+    runtime: 'node',
+    kvEnabled: false,
+    r2Enabled: false,
+    logoStorageEnabled: false,
+    wallosImportMode: 'full'
   }
 })
 
@@ -598,6 +618,12 @@ const webhookMethodOptions = [
 ]
 const webhookVariablesText =
   '{{phase}}、{{days_until}}、{{days_overdue}}、{{subscription_id}}、{{subscription_name}}、{{subscription_amount}}、{{subscription_currency}}、{{subscription_next_renewal_date}}、{{subscription_tags}}、{{subscription_url}}、{{subscription_notes}}'
+const hasManagedLogoLibrary = computed(() => supportsManagedLogoLibrary(settingsForm))
+const isWorkerLiteRuntime = computed(() => settingsForm.storageCapabilities.runtime === 'worker-lite')
+const supportsWebhookIgnoreSsl = computed(() => !isWorkerLiteRuntime.value)
+const runtimeLabel = computed(() =>
+  settingsForm.storageCapabilities.runtime === 'worker-lite' ? 'Cloudflare Worker' : 'Node / Docker'
+)
 const aiProviderPresetOptions = [
   { label: '自定义', value: 'custom' },
   { label: '阿里百炼', value: 'aliyun-bailian' },
@@ -619,11 +645,8 @@ function validateEmailSettings(action: 'save' | 'test') {
   }
 
   const missing = getMissingRequiredFields([
-    ['SMTP Host', settingsForm.emailConfig.host],
-    ['端口', settingsForm.emailConfig.port],
-    ['用户名', settingsForm.emailConfig.username],
-    ['密码', settingsForm.emailConfig.password],
-    ['发件人', settingsForm.emailConfig.from],
+    ['MailChannels API URL', settingsForm.emailConfig.apiBaseUrl],
+    ['发件邮箱', settingsForm.emailConfig.fromEmail],
     ['收件人', settingsForm.emailConfig.to]
   ])
 
@@ -913,7 +936,7 @@ async function saveWebhook() {
     requestMethod: webhookForm.requestMethod,
     headers: webhookForm.headers.trim() || 'Content-Type: application/json',
     payloadTemplate: webhookForm.payloadTemplate.trim() || DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
-    ignoreSsl: webhookForm.ignoreSsl
+    ignoreSsl: supportsWebhookIgnoreSsl.value ? webhookForm.ignoreSsl : false
   })
   Object.assign(webhookForm, saved)
   message.success(webhookForm.enabled ? 'Webhook 配置已保存' : 'Webhook 已关闭')
@@ -928,7 +951,7 @@ async function testWebhook() {
       requestMethod: webhookForm.requestMethod,
       headers: webhookForm.headers.trim() || 'Content-Type: application/json',
       payloadTemplate: webhookForm.payloadTemplate.trim() || DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
-      ignoreSsl: webhookForm.ignoreSsl
+      ignoreSsl: supportsWebhookIgnoreSsl.value ? webhookForm.ignoreSsl : false
     })
     const preview = result.responseBody?.trim()
     message.success(preview ? `Webhook 测试成功，HTTP ${result.statusCode}：${preview}` : `Webhook 测试成功，HTTP ${result.statusCode}`)

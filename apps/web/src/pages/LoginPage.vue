@@ -8,7 +8,7 @@
           </n-icon>
         </div>
         <div>
-          <h1 class="login-title">登录 SubTracker</h1>
+          <h1 class="login-title">登录 SubTracker Lite</h1>
           <p class="login-subtitle">请输入您的用户名和密码</p>
         </div>
       </div>

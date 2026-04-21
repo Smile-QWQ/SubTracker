@@ -18,11 +18,8 @@ import {
 
 function validateSettingsPayload(settings: Awaited<ReturnType<typeof getAppSettings>>) {
   const missingEmailFields = [
-    ['SMTP Host', settings.emailConfig.host],
-    ['端口', settings.emailConfig.port],
-    ['用户名', settings.emailConfig.username],
-    ['密码', settings.emailConfig.password],
-    ['发件人', settings.emailConfig.from],
+    ['MailChannels API URL', settings.emailConfig.apiBaseUrl],
+    ['发件邮箱', settings.emailConfig.fromEmail],
     ['收件人', settings.emailConfig.to]
   ]
     .filter(([, value]) => !String(value ?? '').trim())
