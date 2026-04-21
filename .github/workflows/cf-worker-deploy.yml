@@ -52,12 +52,7 @@ jobs:
             exit 0
           fi
 
-          TAG_VALUE="$(git describe --tags --abbrev=0 2>/dev/null || true)"
-          if [ -n "$TAG_VALUE" ]; then
-            echo "value=$TAG_VALUE" >> "$GITHUB_OUTPUT"
-          else
-            echo "value=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          fi
+          echo "value=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Resolve deploy options
         id: deploy_options

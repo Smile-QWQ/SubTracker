@@ -93,6 +93,8 @@ npm test
 4. 选择 **Deploy to Cloudflare**
 5. 点击 **Run workflow**
 
+如果不填写 `app_version`，系统会自动使用当前部署 commit 的短 hash 作为版本号。
+
 ### 后续更新
 
 后续直接使用 GitHub 的 **Sync fork** 同步上游代码。  

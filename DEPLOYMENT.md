@@ -71,6 +71,8 @@ npm run deploy:worker
 
 默认域名前缀是 `subtracker`。
 
+如果 `app_version` 留空，workflow 会自动使用当前部署 commit 的短 hash 作为版本号。
+
 ## 5. 后续更新
 
 后续使用 GitHub 的 **Sync fork** 同步上游代码后，会自动触发部署 workflow。  
