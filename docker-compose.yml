@@ -9,6 +9,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-file:/app/data/subtracker.db}
       WEB_ORIGIN: ${WEB_ORIGIN:-https://subtracker.example.com}
       LOG_LEVEL: ${LOG_LEVEL:-warn}
+      TZ: ${TZ:-Asia/Shanghai}
     volumes:
       - ./data:/app/data
       - ./data/logos:/app/apps/api/storage/logos

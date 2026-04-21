@@ -7,6 +7,11 @@ PRISMA_BIN="$APP_ROOT/node_modules/.bin/prisma"
 
 mkdir -p "$APP_ROOT/data" "$APP_ROOT/apps/api/storage/logos"
 
+if [ -n "${TZ:-}" ] && [ -f "/usr/share/zoneinfo/$TZ" ]; then
+  ln -sf "/usr/share/zoneinfo/$TZ" /etc/localtime
+  echo "$TZ" > /etc/timezone
+fi
+
 if [ "${SKIP_DB_PUSH:-false}" != "true" ]; then
   if [ ! -x "$PRISMA_BIN" ]; then
     echo "[api] 未找到 Prisma CLI：$PRISMA_BIN" >&2
