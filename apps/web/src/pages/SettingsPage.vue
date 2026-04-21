@@ -8,12 +8,10 @@
     />
 
     <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
-      当前运行时：{{ runtimeLabel }}。
-      <template v-if="settingsForm.storageCapabilities.runtime === 'worker-lite'">
-        KV {{ settingsForm.storageCapabilities.kvEnabled ? '已启用' : '未启用，将退化缓存和通知去重' }}；
-        R2 {{ settingsForm.storageCapabilities.r2Enabled ? '已启用' : '未启用，仅支持远程 Logo 引用' }}；
-        Wallos 导入模式：{{ settingsForm.storageCapabilities.wallosImportMode === 'json-only' ? '仅 JSON' : '完整模式' }}。
-      </template>
+      当前运行时：Cloudflare Worker。
+      KV {{ settingsForm.storageCapabilities.kvEnabled ? '已启用' : '未启用，将退化缓存和通知去重' }}；
+      R2 {{ settingsForm.storageCapabilities.r2Enabled ? '已启用' : '未启用，仅支持远程 Logo 引用' }}；
+      Wallos 导入模式：仅 JSON。
     </n-alert>
 
     <n-grid :cols="gridCols" :x-gap="12" :y-gap="12">
@@ -188,9 +186,7 @@
         <n-card title="通知设置" class="settings-card">
             <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
               统一管理 MailChannels 邮件、PushPlus 与 Webhook。每个渠道都可以单独保存并单独测试。
-              <template v-if="isWorkerLiteRuntime">
-                Cloudflare Worker 不支持忽略 SSL 校验，Webhook 仅按标准 HTTPS 校验执行。
-              </template>
+              Cloudflare Worker 不支持忽略 SSL 校验，Webhook 仅按标准 HTTPS 校验执行。
             </n-alert>
 
           <n-grid :cols="notificationGridCols" :x-gap="12" :y-gap="12">
@@ -288,12 +284,6 @@
                     <n-grid-item>
                       <n-form-item label="请求方法">
                         <n-select v-model:value="webhookForm.requestMethod" :options="webhookMethodOptions" />
-                      </n-form-item>
-                    </n-grid-item>
-                    <n-grid-item v-if="supportsWebhookIgnoreSsl">
-                      <n-form-item>
-                        <n-switch v-model:value="webhookForm.ignoreSsl" />
-                        <span class="switch-label">忽略 SSL 校验</span>
                       </n-form-item>
                     </n-grid-item>
                   </n-grid>
@@ -429,9 +419,7 @@
           <n-space vertical style="width: 100%">
             <n-alert type="info" :show-icon="false">
               可导出全部订阅为 CSV / JSON，也可在这里导入 Wallos 数据。
-              <template v-if="settingsForm.storageCapabilities.wallosImportMode === 'json-only'">
-                当前 Cloudflare Worker 版本仅支持 JSON 导入。
-              </template>
+              当前 Cloudflare Worker 版本仅支持 JSON 导入。
               <template v-if="!hasManagedLogoLibrary">
                 当前未启用 R2，Logo 只支持远程引用，不支持本地库持久化。
               </template>
@@ -574,11 +562,11 @@ const settingsForm = reactive<Settings>({
     }
   },
   storageCapabilities: {
-    runtime: 'node',
+    runtime: 'worker-lite',
     kvEnabled: false,
     r2Enabled: false,
     logoStorageEnabled: false,
-    wallosImportMode: 'full'
+    wallosImportMode: 'json-only'
   }
 })
 
@@ -619,11 +607,6 @@ const webhookMethodOptions = [
 const webhookVariablesText =
   '{{phase}}、{{days_until}}、{{days_overdue}}、{{subscription_id}}、{{subscription_name}}、{{subscription_amount}}、{{subscription_currency}}、{{subscription_next_renewal_date}}、{{subscription_tags}}、{{subscription_url}}、{{subscription_notes}}'
 const hasManagedLogoLibrary = computed(() => supportsManagedLogoLibrary(settingsForm))
-const isWorkerLiteRuntime = computed(() => settingsForm.storageCapabilities.runtime === 'worker-lite')
-const supportsWebhookIgnoreSsl = computed(() => !isWorkerLiteRuntime.value)
-const runtimeLabel = computed(() =>
-  settingsForm.storageCapabilities.runtime === 'worker-lite' ? 'Cloudflare Worker' : 'Node / Docker'
-)
 const aiProviderPresetOptions = [
   { label: '自定义', value: 'custom' },
   { label: '阿里百炼', value: 'aliyun-bailian' },
@@ -936,7 +919,7 @@ async function saveWebhook() {
     requestMethod: webhookForm.requestMethod,
     headers: webhookForm.headers.trim() || 'Content-Type: application/json',
     payloadTemplate: webhookForm.payloadTemplate.trim() || DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
-    ignoreSsl: supportsWebhookIgnoreSsl.value ? webhookForm.ignoreSsl : false
+    ignoreSsl: false
   })
   Object.assign(webhookForm, saved)
   message.success(webhookForm.enabled ? 'Webhook 配置已保存' : 'Webhook 已关闭')
@@ -951,7 +934,7 @@ async function testWebhook() {
       requestMethod: webhookForm.requestMethod,
       headers: webhookForm.headers.trim() || 'Content-Type: application/json',
       payloadTemplate: webhookForm.payloadTemplate.trim() || DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
-      ignoreSsl: supportsWebhookIgnoreSsl.value ? webhookForm.ignoreSsl : false
+      ignoreSsl: false
     })
     const preview = result.responseBody?.trim()
     message.success(preview ? `Webhook 测试成功，HTTP ${result.statusCode}：${preview}` : `Webhook 测试成功，HTTP ${result.statusCode}`)

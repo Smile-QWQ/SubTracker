@@ -168,11 +168,11 @@ export const AiConfigSchema = z.object({
 })
 
 export const StorageCapabilitiesSchema = z.object({
-  runtime: z.enum(['node', 'worker-lite']).default('node'),
+  runtime: z.literal('worker-lite').default('worker-lite'),
   kvEnabled: z.boolean().default(false),
   r2Enabled: z.boolean().default(false),
   logoStorageEnabled: z.boolean().default(false),
-  wallosImportMode: z.enum(['full', 'json-only']).default('full')
+  wallosImportMode: z.literal('json-only').default('json-only')
 })
 
 export const SettingsSchema = z.object({

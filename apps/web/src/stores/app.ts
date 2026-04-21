@@ -44,11 +44,11 @@ export const useAppStore = defineStore('app', () => {
       }
     },
     storageCapabilities: {
-      runtime: 'node',
+      runtime: 'worker-lite',
       kvEnabled: false,
       r2Enabled: false,
       logoStorageEnabled: false,
-      wallosImportMode: 'full'
+      wallosImportMode: 'json-only'
     }
   })
 

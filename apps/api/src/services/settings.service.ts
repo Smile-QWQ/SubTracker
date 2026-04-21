@@ -7,7 +7,7 @@ import {
 } from '@subtracker/shared'
 import { prisma } from '../db'
 import { config } from '../config'
-import { getWorkerCache, getWorkerLogoBucket, isWorkerRuntime } from '../runtime'
+import { getWorkerCache, getWorkerLogoBucket } from '../runtime'
 import {
   deriveNotifyDaysBeforeFromAdvanceRules,
   deriveNotifyOnDueDayFromAdvanceRules,
@@ -71,11 +71,11 @@ export async function getAppSettings(): Promise<SettingsInput> {
   })
   const aiConfig = AiConfigSchema.parse(await getSetting<unknown>('aiConfig', DEFAULT_AI_CONFIG))
   const storageCapabilities = StorageCapabilitiesSchema.parse({
-    runtime: isWorkerRuntime() ? 'worker-lite' : 'node',
+    runtime: 'worker-lite',
     kvEnabled: Boolean(getWorkerCache()),
     r2Enabled: Boolean(getWorkerLogoBucket()),
     logoStorageEnabled: Boolean(getWorkerLogoBucket()),
-    wallosImportMode: isWorkerRuntime() ? 'json-only' : 'full'
+    wallosImportMode: 'json-only'
   })
 
   return SettingsSchema.parse({

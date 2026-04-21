@@ -204,11 +204,11 @@ export interface AiTestResponse {
 }
 
 export interface StorageCapabilities {
-  runtime: 'node' | 'worker-lite'
+  runtime: 'worker-lite'
   kvEnabled: boolean
   r2Enabled: boolean
   logoStorageEnabled: boolean
-  wallosImportMode: 'full' | 'json-only'
+  wallosImportMode: 'json-only'
 }
 
 export interface Settings {
