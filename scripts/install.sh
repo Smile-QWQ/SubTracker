@@ -297,18 +297,50 @@ download_repo_file() {
 }
 
 write_env_file() {
-  {
-    printf 'SUBTRACKER_API_IMAGE=%s\n' "$API_IMAGE"
-    printf 'PORT=%s\n' "$API_PORT"
-    printf 'HOST=0.0.0.0\n'
-    printf 'DATABASE_URL=file:/app/data/subtracker.db\n'
-    printf 'WEB_ORIGIN=%s\n' "$WEB_ORIGIN"
-    printf 'LOG_LEVEL=%s\n' "$LOG_LEVEL"
-    if [ "$MODE" = "full" ]; then
-      printf 'SUBTRACKER_WEB_IMAGE=%s\n' "$WEB_IMAGE"
-      printf 'WEB_PORT=%s\n' "$WEB_PORT"
-    fi
-  } > "$INSTALL_DIR/.env"
+  local template_file="$INSTALL_DIR/api.env.example"
+  local env_file="$INSTALL_DIR/.env"
+
+  if [ ! -f "$template_file" ]; then
+    fail "未找到 API 环境变量模板：$template_file"
+  fi
+
+  cp "$template_file" "$env_file"
+
+  upsert_env_value "$env_file" "SUBTRACKER_API_IMAGE" "$API_IMAGE"
+  upsert_env_value "$env_file" "PORT" "$API_PORT"
+  upsert_env_value "$env_file" "HOST" "0.0.0.0"
+  upsert_env_value "$env_file" "DATABASE_URL" "file:/app/data/subtracker.db"
+  upsert_env_value "$env_file" "WEB_ORIGIN" "$WEB_ORIGIN"
+  upsert_env_value "$env_file" "LOG_LEVEL" "$LOG_LEVEL"
+
+  if [ "$MODE" = "full" ]; then
+    upsert_env_value "$env_file" "SUBTRACKER_WEB_IMAGE" "$WEB_IMAGE"
+    upsert_env_value "$env_file" "WEB_PORT" "$WEB_PORT"
+  fi
+}
+
+upsert_env_value() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+  local tmp_file="${file}.tmp"
+
+  awk -v key="$key" -v value="$value" '
+    BEGIN { updated = 0 }
+    index($0, key "=") == 1 {
+      print key "=" value
+      updated = 1
+      next
+    }
+    { print }
+    END {
+      if (!updated) {
+        print key "=" value
+      }
+    }
+  ' "$file" > "$tmp_file"
+
+  mv "$tmp_file" "$file"
 }
 
 write_readme() {
