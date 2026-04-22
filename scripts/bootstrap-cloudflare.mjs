@@ -7,6 +7,7 @@ const cwd = process.cwd()
 const cliArgs = process.argv.slice(2)
 const args = new Set(cliArgs)
 const withR2 = args.has('--with-r2')
+const withoutKv = args.has('--without-kv')
 const skipBuild = args.has('--skip-build')
 const configPath = path.resolve(cwd, 'wrangler.jsonc')
 const generatedConfigPath = path.resolve(cwd, '.wrangler.generated.jsonc')
@@ -32,6 +33,37 @@ function withProvisionedR2Binding(config) {
       }
     ]
   }
+}
+
+function resolveBooleanFlag({
+  env = process.env,
+  envName,
+  defaultValue
+}) {
+  const raw = env[envName]
+  if (raw == null || String(raw).trim() === '') {
+    return defaultValue
+  }
+
+  const normalized = String(raw).trim().toLowerCase()
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false
+  return defaultValue
+}
+
+function applyOptionalBindings(config, { enableKv, enableR2 }) {
+  const next = { ...config }
+
+  if (!enableKv) {
+    delete next.kv_namespaces
+  }
+
+  if (enableR2) {
+    return withProvisionedR2Binding(next)
+  }
+
+  delete next.r2_buckets
+  return next
 }
 
 function readFlagValue(cliArgs, flagName) {
@@ -135,19 +167,56 @@ async function runJson(command, commandArgs) {
   return JSON.parse(normalized || '[]')
 }
 
-function getInventoryCommands() {
+function getInventoryCommands(options = {}) {
   return {
-    kv: ['npx', ['wrangler', 'kv', 'namespace', 'list']],
+    ...(options.includeKv === false ? {} : { kv: ['npx', ['wrangler', 'kv', 'namespace', 'list']] }),
     d1: ['npx', ['wrangler', 'd1', 'list', '--json']]
   }
 }
 
-async function discoverExistingResources() {
-  const commands = getInventoryCommands()
-  const [kv, d1] = await Promise.all([
-    runJson(...commands.kv),
-    runJson(...commands.d1)
-  ])
+function canUseInteractiveWranglerLogin(env = process.env) {
+  return !env.CLOUDFLARE_API_TOKEN?.trim() && !env.CI
+}
+
+function isWranglerAuthError(error) {
+  const message = error instanceof Error ? error.message : String(error)
+  return (
+    message.includes('CLOUDFLARE_API_TOKEN') ||
+    message.includes('Failed to fetch auth token') ||
+    message.includes('In a non-interactive environment')
+  )
+}
+
+async function discoverExistingResources(options = {}) {
+  const commands = getInventoryCommands({ includeKv: options.includeKv })
+  const readInventory = async () => {
+    const tasks = [runJson(...commands.d1)]
+    if (commands.kv) {
+      tasks.unshift(runJson(...commands.kv))
+    }
+
+    const results = await Promise.all(tasks)
+    if (commands.kv) {
+      const [kv, d1] = results
+      return { kv, d1 }
+    }
+
+    return { kv: [], d1: results[0] }
+  }
+
+  let kv = []
+  let d1 = []
+
+  try {
+    ;({ kv, d1 } = await readInventory())
+  } catch (error) {
+    if (!canUseInteractiveWranglerLogin() || !isWranglerAuthError(error)) {
+      throw error
+    }
+
+    await run('npx', ['wrangler', 'login'])
+    ;({ kv, d1 } = await readInventory())
+  }
 
   return {
     kv,
@@ -184,6 +253,13 @@ async function buildGeneratedConfig() {
   let config = JSON.parse(raw)
   const packageJson = JSON.parse(await readFile(path.resolve(cwd, 'package.json'), 'utf8'))
   const gitSha = (await run('git', ['rev-parse', '--short', 'HEAD'], { captureOutput: true })).stdout.trim()
+  const enableKv = withoutKv
+    ? false
+    : resolveBooleanFlag({
+        envName: 'ENABLE_KV',
+        defaultValue: true
+      })
+
   config.name = resolveWorkerName({
     defaultName: config.name || 'subtracker',
     cliArgs
@@ -197,13 +273,14 @@ async function buildGeneratedConfig() {
     })
   }
 
-  if (withR2) {
-    config = withProvisionedR2Binding(config)
-  } else {
-    delete config.r2_buckets
-  }
+  config = applyOptionalBindings(config, {
+    enableKv,
+    enableR2: withR2
+  })
 
-  const inventory = await discoverExistingResources()
+  const inventory = await discoverExistingResources({
+    includeKv: enableKv
+  })
   attachExistingResources(config, inventory)
 
   await writeFile(generatedConfigPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8')
@@ -241,5 +318,5 @@ if (isDirectRun) {
   })
 }
 
-export { attachExistingResources, bindingResourceName, getInventoryCommands }
-export { resolveAppVersion, resolveWorkerName, withProvisionedR2Binding }
+export { applyOptionalBindings, attachExistingResources, bindingResourceName, getInventoryCommands }
+export { canUseInteractiveWranglerLogin, isWranglerAuthError, resolveAppVersion, resolveWorkerName, withProvisionedR2Binding }

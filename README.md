@@ -81,28 +81,22 @@ npm test
 
 当前推荐通过 **GitHub Actions + Cloudflare** 部署。
 
-### fork 后首次部署
-
-1. 在你自己的 fork 仓库中配置 Secrets：
-   - `CLOUDFLARE_API_TOKEN`
-   - `CLOUDFLARE_ACCOUNT_ID`
-2. 可选配置 Actions Variables：
-   - `WORKER_NAME_PREFIX`：默认 `subtracker`
-   - `ENABLE_R2`：填 `true` 时，后续自动部署也会持续启用 R2
-3. 打开 Actions 页面
-4. 选择 **Deploy to Cloudflare**
-5. 点击 **Run workflow**
-
-如果不填写 `app_version`，系统会自动使用当前部署 commit 的短 hash 作为版本号。
-
-### 后续更新
-
-后续直接使用 GitHub 的 **Sync fork** 同步上游代码。  
-同步后会触发 `Deploy to Cloudflare` workflow，自动部署新代码。
-
-完整说明见：
+部署流程已经整理到：
 
 - [DEPLOYMENT.md](./DEPLOYMENT.md)
+
+大致流程：
+
+1. fork 仓库
+2. 配置 Cloudflare Secrets / Variables
+3. 在 GitHub Actions 中运行 **Deploy to Cloudflare**
+4. 后续通过 **Sync fork** 自动更新
+
+常用仓库 Variables：
+
+- `WORKER_NAME_PREFIX`
+- `ENABLE_KV`（默认开启）
+- `ENABLE_R2`（默认关闭）
 
 ## 工作流
 

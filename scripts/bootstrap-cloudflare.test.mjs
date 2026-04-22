@@ -1,9 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  applyOptionalBindings,
   attachExistingResources,
   bindingResourceName,
+  canUseInteractiveWranglerLogin,
   getInventoryCommands,
+  isWranglerAuthError,
   resolveAppVersion,
   resolveWorkerName,
   withProvisionedR2Binding
@@ -104,6 +107,29 @@ test('getInventoryCommands matches wrangler 4 command capabilities', () => {
   assert.deepEqual(commands.d1, ['npx', ['wrangler', 'd1', 'list', '--json']])
 })
 
+test('getInventoryCommands can skip kv inventory when kv is disabled', () => {
+  const commands = getInventoryCommands({ includeKv: false })
+  assert.equal(commands.kv, undefined)
+  assert.deepEqual(commands.d1, ['npx', ['wrangler', 'd1', 'list', '--json']])
+})
+
+test('interactive wrangler login is only allowed for local deploy without api token', () => {
+  assert.equal(canUseInteractiveWranglerLogin({}), true)
+  assert.equal(canUseInteractiveWranglerLogin({ CLOUDFLARE_API_TOKEN: 'token' }), false)
+  assert.equal(canUseInteractiveWranglerLogin({ CI: 'true' }), false)
+})
+
+test('isWranglerAuthError detects missing-token style wrangler failures', () => {
+  assert.equal(isWranglerAuthError(new Error('Failed to fetch auth token: 400 Bad Request')), true)
+  assert.equal(
+    isWranglerAuthError(
+      new Error("In a non-interactive environment, it's necessary to set a CLOUDFLARE_API_TOKEN environment variable")
+    ),
+    true
+  )
+  assert.equal(isWranglerAuthError(new Error('random failure')), false)
+})
+
 test('withProvisionedR2Binding sets deterministic bucket name', () => {
   const config = withProvisionedR2Binding({
     name: 'subtracker'
@@ -115,4 +141,20 @@ test('withProvisionedR2Binding sets deterministic bucket name', () => {
       bucket_name: 'subtracker-logos'
     }
   ])
+})
+
+test('applyOptionalBindings can disable kv while preserving d1', () => {
+  const config = applyOptionalBindings(
+    {
+      kv_namespaces: [{ binding: 'SUBTRACKER_CACHE' }],
+      d1_databases: [{ binding: 'DB' }]
+    },
+    {
+      enableKv: false,
+      enableR2: false
+    }
+  )
+
+  assert.equal(config.kv_namespaces, undefined)
+  assert.deepEqual(config.d1_databases, [{ binding: 'DB' }])
 })

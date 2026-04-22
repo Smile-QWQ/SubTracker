@@ -1,102 +1,274 @@
-# Cloudflare Worker 部署说明（SubTracker Lite）
+# SubTracker Lite 部署说明
 
-> 适用于当前 Cloudflare Worker 版本。
+当前分支只支持 **Cloudflare Worker** 部署。
 
-## 当前能力边界
+## 一、部署方式
 
-- 单 Worker 一体化部署：前端静态资源 + API 同域提供
-- 必需资源：**D1**
-- 推荐资源：**KV**
-- 可选资源：**R2**
-- 支持：登录、订阅、标签、设置、统计、日历、汇率刷新、Webhook、PushPlus、Telegram、Resend 邮件、AI 文本/视觉识别、Wallos JSON 导入
-- 不支持：本地 OCR、Wallos SQLite/ZIP 导入、原生 SMTP
+推荐方式只有一条：
 
-## 1. fork 仓库并配置 GitHub Secrets
+- **fork 仓库**
+- 在你自己的 GitHub 仓库里配置 Cloudflare 凭据
+- 通过 **GitHub Actions** 首次部署
+- 后续用 **Sync fork** 自动更新
 
-在你自己的 fork 仓库里配置：
+---
+
+## 二、部署前需要准备什么
+
+### 1. Cloudflare 账号
+
+你需要有一个自己的 Cloudflare 账号。
+
+### 2. GitHub fork 仓库
+
+先把当前仓库 fork 到你自己的 GitHub 账号下。
+
+### 3. Cloudflare API Token
+
+在 Cloudflare Dashboard 中创建：
+
+- `My Profile`
+- `API Tokens`
+- `Create Token`
+
+推荐使用 **Custom token**。
+
+至少给这个 token 这些 **Account 级权限**：
+
+- `Account Settings: Read`
+- `Workers Scripts: Edit`
+- `Workers KV Storage: Edit`
+- `D1: Edit`
+
+如果你要启用 Logo 持久化，再额外加：
+
+- `Workers R2 Storage: Edit`
+
+如果你以后还要绑定自定义域名 / Route，再额外加：
+
+- `Workers Routes: Edit`
+
+建议把资源范围限制在你自己的目标 Account。
+
+### 4. Cloudflare Account ID
+
+你还需要你的：
+
+- `CLOUDFLARE_ACCOUNT_ID`
+
+可以在 Cloudflare Dashboard 里看到，例如：
+
+- `Account home`
+- 或 `Workers & Pages` 页面右侧 `Account details`
+
+---
+
+## 三、在 GitHub 仓库里配置什么
+
+进入你自己 fork 后的 GitHub 仓库：
+
+- `Settings`
+- `Secrets and variables`
+- `Actions`
+
+### 必填 Secrets
+
+添加：
 
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
 
-可选配置 GitHub Actions Variables：
+### 可选 Variables
 
-- `WORKER_NAME_PREFIX`：默认 `subtracker`
-- `ENABLE_R2`：填 `true` 后，后续 sync fork 自动部署也会启用 R2
+按需添加：
 
-## 2. 调整变量
+- `WORKER_NAME_PREFIX`
+  - 默认值是：`subtracker`
+  - 用来决定 Worker 名称、KV / D1 / R2 资源名前缀
+- `ENABLE_KV`
+  - 默认值是：`true`
+  - 不填时默认启用 KV
+  - 如果明确填 `false`，部署时将不绑定 KV
+- `ENABLE_R2`
+  - 填 `true` 时启用 R2
+  - 不填或填其他值时，默认不开启
 
-按需修改 `wrangler.jsonc` 里的 `vars`：
+如果你只是想先跑起来，通常只需要：
 
-- `WEB_ORIGIN`
-- `BASE_CURRENCY`
-- `DEFAULT_NOTIFY_DAYS`
-- `EXCHANGE_RATE_URL`
-- `CRON_SCAN`
-- `CRON_REFRESH_RATES`
-- `RESEND_API_URL`
+- 配好两个 Secrets
+- 不配 Variables 也可以部署
 
-## 3. 本地调试
+---
 
-```bash
-npm run dev:worker
-```
+## 四、首次部署
 
-默认会使用 `wrangler.jsonc` 启动本地 Worker。
+在你自己的 fork 仓库中：
 
-默认 Workers 域名前缀为 `subtracker`。如果你想改成别的前缀，可以在部署时传：
-
-```bash
-npm run deploy:worker -- --name-prefix your-prefix
-```
-
-或者：
-
-```bash
-$env:CLOUDFLARE_WORKER_PREFIX='your-prefix'
-npm run deploy:worker
-```
-
-## 4. 通过 GitHub Actions 首次部署
-
-首次 fork 后：
-
-1. 打开 Actions 页面
+1. 打开 **Actions**
 2. 选择 **Deploy to Cloudflare**
 3. 点击 **Run workflow**
-4. 根据需要填写：
-   - `branch`
-   - `name_prefix`
-   - `enable_r2`
-   - `app_version`
 
-默认域名前缀是 `subtracker`。
+这一步不需要再填写额外参数。
 
-如果 `app_version` 留空，workflow 会自动使用当前部署 commit 的短 hash 作为版本号。
+首次部署时，workflow 会自动：
 
-## 5. 后续更新
+- 安装依赖
+- 运行测试
+- 构建前端
+- 部署 Worker
+- 自动使用当前提交的短 hash 作为版本号
 
-后续使用 GitHub 的 **Sync fork** 同步上游代码后，会自动触发部署 workflow。  
-自动部署会优先读取仓库 Variables 中的：
+---
 
+## 五、后续更新
+
+后续更新推荐直接使用：
+
+- GitHub 的 **Sync fork**
+
+同步上游代码后，会自动触发：
+
+- `Deploy to Cloudflare`
+
+也就是说，正常情况下你后面不需要再手工重复部署。
+
+只要这些不变：
+
+- Cloudflare 账号
 - `WORKER_NAME_PREFIX`
 - `ENABLE_R2`
 
-## 6. 命令行手动部署（开发者 / 本地）
+就会继续复用原来的：
 
-如果你自己本地维护并想手动部署，也可以继续使用：
+- D1
+- KV
+- R2（如果启用了）
+
+不会因为同步代码就把数据重建掉。
+
+---
+
+## 六、当前资源说明
+
+### 必需
+
+- **D1**
+
+### 推荐
+
+- **KV**
+
+用途：
+
+- Logo 搜索缓存
+- 通知去重
+- 导入预览缓存
+
+默认会启用 KV。  
+如果你在仓库 Variables 里把 `ENABLE_KV` 明确设为 `false`，系统仍然可以运行，但会有功能退化。
+
+### 可选
+
+- **R2**
+
+用途：
+
+- Logo 持久化存储
+
+不启用 R2 时：
+
+- 仍然可以正常使用系统
+- 但只支持远程 Logo 引用
+- 不支持本地持久化 Logo 库
+
+---
+
+## 七、邮件通知
+
+当前分支默认使用：
+
+- **Resend**
+
+你需要在系统设置里填写：
+
+- `Resend API URL`
+- `Resend API Key`
+- `发件人`
+- `收件人`
+
+默认 API URL 是：
+
+```txt
+https://api.resend.com/emails
+```
+
+---
+
+## 八、本地手动部署（开发者可选）
+
+如果你不是普通 fork 用户，而是本地维护这个分支的开发者，也可以直接在本机执行：
 
 ```bash
 npm run deploy:worker
 ```
 
-启用 R2：
+如果要启用 R2：
 
 ```bash
 npm run deploy:worker:r2
 ```
 
-## 7. 运行期说明
+本地命令行部署会：
 
-- 没配 KV：系统仍可运行，但导入预览缓存、Logo 搜索缓存和通知去重会退化
-- 没配 R2：系统仍可运行，但只支持远程 Logo 引用，不支持持久上传 Logo 库
-- 邮件通知默认走 Resend HTTP API，请在系统设置里配置 API Key、发件人和收件人
+- 优先读取环境变量里的 Cloudflare 凭据
+- 如果没有配置 `CLOUDFLARE_API_TOKEN`，会尝试走 `wrangler login` 浏览器授权
+
+如果你本地想关闭 KV，也可以临时设置：
+
+```powershell
+$env:ENABLE_KV='false'
+npm run deploy:worker
+```
+
+---
+
+## 九、本地开发（开发者可选）
+
+如果你需要本地调试 Worker：
+
+```bash
+npm run dev:worker
+```
+
+默认本地地址：
+
+```txt
+http://127.0.0.1:8787
+```
+
+> 注意：本地 `wrangler dev` 不会自动触发 cron。
+
+---
+
+## 十、当前分支能力边界
+
+### 支持
+
+- 登录
+- 订阅管理
+- 标签
+- 统计
+- 日历
+- 汇率刷新
+- Webhook
+- PushPlus
+- Telegram
+- Resend 邮件
+- AI 文本 / 图片识别
+- Wallos JSON 导入
+
+### 不支持
+
+- 本地 OCR
+- Wallos SQLite / ZIP 导入
+- 原生 SMTP

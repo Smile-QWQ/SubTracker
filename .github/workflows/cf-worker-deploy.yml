@@ -2,26 +2,6 @@ name: Deploy to Cloudflare
 
 on:
   workflow_dispatch:
-    inputs:
-      branch:
-        description: 'Deploy branch'
-        required: false
-        default: 'feat/cf-worker'
-        type: string
-      name_prefix:
-        description: 'Worker domain/resource prefix, default subtracker'
-        required: false
-        default: 'subtracker'
-        type: string
-      enable_r2:
-        description: 'Enable R2 logo storage'
-        required: false
-        default: false
-        type: boolean
-      app_version:
-        description: 'Optional app version override, for example v1.0.0'
-        required: false
-        type: string
   push:
     branches:
       - feat/cf-worker
@@ -40,34 +20,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || github.ref_name }}
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
 
       - name: Resolve app version
         id: app_version
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.app_version }}" ]; then
-            echo "value=${{ github.event.inputs.app_version }}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
           echo "value=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Resolve deploy options
         id: deploy_options
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            NAME_PREFIX="${{ github.event.inputs.name_prefix }}"
-            ENABLE_R2="${{ github.event.inputs.enable_r2 }}"
-          else
-            NAME_PREFIX="${{ vars.WORKER_NAME_PREFIX }}"
-            ENABLE_R2="${{ vars.ENABLE_R2 }}"
-          fi
+          NAME_PREFIX="${{ vars.WORKER_NAME_PREFIX }}"
+          ENABLE_KV="${{ vars.ENABLE_KV }}"
+          ENABLE_R2="${{ vars.ENABLE_R2 }}"
 
           if [ -z "$NAME_PREFIX" ]; then
             NAME_PREFIX="subtracker"
+          fi
+
+          if [ -z "$ENABLE_KV" ]; then
+            ENABLE_KV="true"
           fi
 
           if [ -z "$ENABLE_R2" ]; then
@@ -75,6 +50,7 @@ jobs:
           fi
 
           echo "name_prefix=$NAME_PREFIX" >> "$GITHUB_OUTPUT"
+          echo "enable_kv=$ENABLE_KV" >> "$GITHUB_OUTPUT"
           echo "enable_r2=$ENABLE_R2" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
@@ -111,6 +87,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ENABLE_KV: ${{ steps.deploy_options.outputs.enable_kv }}
         run: >
           npm run deploy:worker --
           --name-prefix ${{ steps.deploy_options.outputs.name_prefix }}
@@ -121,6 +98,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ENABLE_KV: ${{ steps.deploy_options.outputs.enable_kv }}
         run: >
           npm run deploy:worker:r2 --
           --name-prefix ${{ steps.deploy_options.outputs.name_prefix }}
