@@ -266,17 +266,17 @@ export async function recognizeSubscriptionByAi(input: unknown): Promise<AiRecog
 
 export async function testAiConnection(overrideConfig?: AiSettings) {
   const aiConfig = overrideConfig ?? (await getAppSettings()).aiConfig
-  const response = await requestAiChatCompletion({
+  const raw = await requestAiChatCompletion({
     aiConfig,
-    requireEnabled: overrideConfig ? false : true,
+    requireEnabled: false,
     messages: [
       {
         role: 'system',
-        content: '你是一个连接测试助手。'
+        content: '请只返回 OK'
       },
       {
         role: 'user',
-        content: '请只回复：连接成功'
+        content: 'ping'
       }
     ]
   })
@@ -285,30 +285,30 @@ export async function testAiConnection(overrideConfig?: AiSettings) {
     success: true,
     providerName: aiConfig.providerName,
     model: aiConfig.model,
-    response
+    response: raw.trim()
   }
 }
 
 export async function testAiVisionConnection(overrideConfig?: AiSettings) {
   const aiConfig = overrideConfig ?? (await getAppSettings()).aiConfig
   if (!aiConfig.capabilities.vision) {
-    throw new Error('当前模型未开启视觉能力')
+    throw new Error('当前 Provider 未启用视觉输入能力')
   }
 
-  const response = await requestAiChatCompletion({
+  const raw = await requestAiChatCompletion({
     aiConfig,
-    requireEnabled: overrideConfig ? false : true,
+    requireEnabled: false,
     messages: [
       {
         role: 'system',
-        content: '你是一个视觉连接测试助手。'
+        content: '请根据用户发送的图片进行响应，只返回一句简短确认。'
       },
       {
         role: 'user',
         content: [
           {
             type: 'text',
-            text: '请回答：这是一个纯色测试图'
+            text: '请确认你已成功接收到这张测试图片。'
           },
           {
             type: 'image_url',
@@ -325,6 +325,6 @@ export async function testAiVisionConnection(overrideConfig?: AiSettings) {
     success: true,
     providerName: aiConfig.providerName,
     model: aiConfig.model,
-    response
+    response: raw.trim()
   }
 }

@@ -211,11 +211,10 @@ async function buildGeneratedConfig() {
 
 async function main() {
   await buildGeneratedConfig()
+  const generatedConfig = JSON.parse(await readFile(generatedConfigPath, 'utf8'))
 
   try {
     if (withR2) {
-      const raw = await readFile(generatedConfigPath, 'utf8')
-      const generatedConfig = JSON.parse(raw)
       await ensureR2Bucket(generatedConfig)
     }
 

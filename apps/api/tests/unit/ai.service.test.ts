@@ -18,7 +18,7 @@ vi.mock('../../src/services/settings.service', () => ({
   getAppSettings: vi.fn(async () => mockedSettings)
 }))
 
-import { recognizeSubscriptionByAi, testAiConnection } from '../../src/services/ai.service'
+import { recognizeSubscriptionByAi, testAiConnection, testAiVisionConnection } from '../../src/services/ai.service'
 
 function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -82,6 +82,87 @@ describe('ai service', () => {
     const result = await testAiConnection(mockedSettings.aiConfig)
 
     expect(result.response).toBe('OK')
+  })
+
+  it('trims connection test response to stay aligned with main behavior', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        choices: [
+          {
+            message: {
+              content: '  OK  \n'
+            }
+          }
+        ]
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await testAiConnection(mockedSettings.aiConfig)
+
+    expect(result.response).toBe('OK')
+  })
+
+  it('keeps main connection-test prompt and allows disabled config without override', async () => {
+    mockedSettings.aiConfig.enabled = false
+
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        choices: [
+          {
+            message: {
+              content: 'OK'
+            }
+          }
+        ]
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await testAiConnection()
+    const requestBody = JSON.parse(String((fetchMock.mock.calls[0] as [unknown, RequestInit])[1]?.body))
+
+    expect(result.response).toBe('OK')
+    expect(requestBody.messages).toEqual([
+      {
+        role: 'system',
+        content: '请只返回 OK'
+      },
+      {
+        role: 'user',
+        content: 'ping'
+      }
+    ])
+  })
+
+  it('keeps main vision-test prompt wording', async () => {
+    mockedSettings.aiConfig.capabilities.vision = true
+
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        choices: [
+          {
+            message: {
+              content: 'OK'
+            }
+          }
+        ]
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await testAiVisionConnection(mockedSettings.aiConfig)
+    const requestBody = JSON.parse(String((fetchMock.mock.calls[0] as [unknown, RequestInit])[1]?.body))
+
+    expect(result.response).toBe('OK')
+    expect(requestBody.messages[0]).toEqual({
+      role: 'system',
+      content: '请根据用户发送的图片进行响应，只返回一句简短确认。'
+    })
+    expect((requestBody.messages[1].content as Array<{ type: string; text?: string }>)[0]).toEqual({
+      type: 'text',
+      text: '请确认你已成功接收到这张测试图片。'
+    })
   })
 
   it('falls back to prompt-only JSON when response_format is unsupported', async () => {

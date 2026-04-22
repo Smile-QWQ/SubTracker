@@ -43,11 +43,5 @@
 		{
 			"binding": "SUBTRACKER_CACHE"
 		}
-	],
-	"r2_buckets": [
-		{
-			"bucket_name": "subtracker-subtracker-logos",
-			"binding": "subtracker_subtracker_logos"
-		}
 	]
 }
