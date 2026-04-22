@@ -26,7 +26,8 @@ test('resolveAppVersion prefers explicit app version and falls back to package v
     resolveAppVersion({
       cliArgs: ['--app-version', 'v1.2.3'],
       env: {},
-      packageVersion: '0.0.1'
+      packageVersion: '0.0.1',
+      gitSha: 'abc1234'
     }),
     'v1.2.3'
   )
@@ -34,7 +35,8 @@ test('resolveAppVersion prefers explicit app version and falls back to package v
     resolveAppVersion({
       cliArgs: [],
       env: { VITE_APP_VERSION: 'v9.9.9' },
-      packageVersion: '0.0.1'
+      packageVersion: '0.0.1',
+      gitSha: 'abc1234'
     }),
     'v9.9.9'
   )
@@ -42,7 +44,17 @@ test('resolveAppVersion prefers explicit app version and falls back to package v
     resolveAppVersion({
       cliArgs: [],
       env: {},
-      packageVersion: '0.0.1'
+      packageVersion: '0.0.1',
+      gitSha: 'abc1234'
+    }),
+    'abc1234'
+  )
+  assert.equal(
+    resolveAppVersion({
+      cliArgs: [],
+      env: {},
+      packageVersion: '0.0.1',
+      gitSha: ''
     }),
     '0.0.1'
   )

@@ -43,10 +43,11 @@ function readFlagValue(cliArgs, flagName) {
 function resolveAppVersion({
   cliArgs = [],
   env = process.env,
-  packageVersion = '0.0.1'
+  packageVersion = '0.0.1',
+  gitSha = ''
 }) {
   const cliValue = readFlagValue(cliArgs, '--app-version')
-  return cliValue || env.VITE_APP_VERSION?.trim() || env.APP_VERSION?.trim() || packageVersion
+  return cliValue || env.VITE_APP_VERSION?.trim() || env.APP_VERSION?.trim() || gitSha || packageVersion
 }
 
 function sanitizeWorkerName(input) {
@@ -182,6 +183,7 @@ async function buildGeneratedConfig() {
   const raw = await readFile(configPath, 'utf8')
   let config = JSON.parse(raw)
   const packageJson = JSON.parse(await readFile(path.resolve(cwd, 'package.json'), 'utf8'))
+  const gitSha = (await run('git', ['rev-parse', '--short', 'HEAD'], { captureOutput: true })).stdout.trim()
   config.name = resolveWorkerName({
     defaultName: config.name || 'subtracker',
     cliArgs
@@ -190,7 +192,8 @@ async function buildGeneratedConfig() {
     ...(config.vars ?? {}),
     APP_VERSION: resolveAppVersion({
       cliArgs,
-      packageVersion: packageJson.version || '0.0.1'
+      packageVersion: packageJson.version || '0.0.1',
+      gitSha
     })
   }
 
