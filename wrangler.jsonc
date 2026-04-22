@@ -17,7 +17,7 @@
 		"EXCHANGE_RATE_URL": "https://open.er-api.com/v6/latest",
 		"CRON_SCAN": "* * * * *",
 		"CRON_REFRESH_RATES": "0 2 * * *",
-		"MAILCHANNELS_API_URL": "https://api.mailchannels.net/tx/v1/send"
+		"RESEND_API_URL": "https://api.resend.com/emails"
 	},
 	"assets": {
 		"directory": "./apps/web/dist",

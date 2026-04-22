@@ -242,47 +242,35 @@ function buildNotificationBody(params: NotificationDispatchParams) {
 }
 
 async function sendEmailWithConfig(params: NotificationDispatchParams, emailConfig: EmailConfigInput) {
-  const apiBaseUrl = emailConfig.apiBaseUrl?.trim() || config.mailchannelsApiUrl
-  const fromEmail = emailConfig.fromEmail?.trim()
+  const apiBaseUrl = emailConfig.apiBaseUrl?.trim() || config.resendApiUrl
+  const apiKey = emailConfig.apiKey?.trim()
+  const from = emailConfig.from?.trim()
   const to = emailConfig.to?.trim()
 
-  if (!apiBaseUrl || !fromEmail || !to) {
+  if (!apiBaseUrl || !apiKey || !from || !to) {
     throw new Error('邮箱通知未启用或配置不完整')
   }
 
   const response = await fetch(apiBaseUrl, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`
     },
     body: JSON.stringify({
-      personalizations: [
-        {
-          to: to
-            .split(',')
-            .map((item) => item.trim())
-            .filter(Boolean)
-            .map((email) => ({ email }))
-        }
-      ],
-      from: {
-        email: fromEmail,
-        name: emailConfig.fromName?.trim() || 'SubTracker Lite'
-      },
-      reply_to: emailConfig.replyTo?.trim() ? { email: emailConfig.replyTo.trim() } : undefined,
+      from,
+      to: to
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
       subject: buildNotificationTitle(params),
-      content: [
-        {
-          type: 'text/plain',
-          value: buildNotificationBody(params)
-        }
-      ]
+      text: buildNotificationBody(params)
     })
   })
 
   const rawText = await response.text()
   if (!response.ok) {
-    throw new Error(`MailChannels 请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
+    throw new Error(`Resend 请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
   }
 }
 

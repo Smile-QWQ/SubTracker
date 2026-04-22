@@ -16,7 +16,7 @@ export const config = new Proxy(
         exchangeRateUrl: runtimeConfig.exchangeRateUrl,
         cronScan: runtimeConfig.cronScan,
         cronRefreshRates: runtimeConfig.cronRefreshRates,
-        mailchannelsApiUrl: runtimeConfig.mailchannelsApiUrl
+        resendApiUrl: runtimeConfig.resendApiUrl
       } as const
 
       return baseConfig[property as keyof typeof baseConfig]
@@ -32,5 +32,5 @@ export const config = new Proxy(
   exchangeRateUrl: string
   cronScan: string
   cronRefreshRates: string
-  mailchannelsApiUrl: string
+  resendApiUrl: string
 }

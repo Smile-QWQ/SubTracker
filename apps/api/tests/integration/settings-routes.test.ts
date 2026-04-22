@@ -21,11 +21,10 @@ vi.mock('../../src/services/settings.service', () => ({
     pushplusNotificationsEnabled: (store.get('pushplusNotificationsEnabled') as boolean) ?? false,
     telegramNotificationsEnabled: (store.get('telegramNotificationsEnabled') as boolean) ?? false,
     emailConfig: {
-      provider: 'mailchannels',
-      apiBaseUrl: 'https://api.mailchannels.net/tx/v1/send',
-      fromEmail: '',
-      fromName: 'SubTracker Lite',
-      replyTo: '',
+      provider: 'resend',
+      apiBaseUrl: 'https://api.resend.com/emails',
+      apiKey: '',
+      from: 'SubTracker Lite <noreply@example.com>',
       to: '',
       ...(store.get('emailConfig') as Record<string, unknown> | undefined)
     },
@@ -115,11 +114,10 @@ describe('settings routes validation', () => {
       payload: {
         emailNotificationsEnabled: true,
         emailConfig: {
-          provider: 'mailchannels',
-          apiBaseUrl: 'https://api.mailchannels.net/tx/v1/send',
-          fromEmail: '',
-          fromName: 'SubTracker Lite',
-          replyTo: '',
+          provider: 'resend',
+          apiBaseUrl: 'https://api.resend.com/emails',
+          apiKey: '',
+          from: '',
           to: ''
         }
       }
@@ -127,6 +125,7 @@ describe('settings routes validation', () => {
 
     expect(res.statusCode).toBe(422)
     expect(res.json().error.message).toContain('启用邮箱通知时必须填写')
+    expect(res.json().error.message).toContain('Resend API Key')
   })
 
   it('rejects invalid reminder rules', async () => {

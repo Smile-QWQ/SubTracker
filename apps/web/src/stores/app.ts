@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { DEFAULT_ADVANCE_REMINDER_RULES, DEFAULT_AI_CONFIG, DEFAULT_MAILCHANNELS_API_URL, DEFAULT_OVERDUE_REMINDER_RULES } from '@subtracker/shared'
+import { DEFAULT_ADVANCE_REMINDER_RULES, DEFAULT_AI_CONFIG, DEFAULT_OVERDUE_REMINDER_RULES, DEFAULT_RESEND_API_URL } from '@subtracker/shared'
 import { api } from '@/composables/api'
 import type { Settings } from '@/types/api'
 
@@ -22,11 +22,10 @@ export const useAppStore = defineStore('app', () => {
     pushplusNotificationsEnabled: false,
     telegramNotificationsEnabled: false,
     emailConfig: {
-      provider: 'mailchannels',
-      apiBaseUrl: DEFAULT_MAILCHANNELS_API_URL,
-      fromEmail: '',
-      fromName: 'SubTracker Lite',
-      replyTo: '',
+      provider: 'resend',
+      apiBaseUrl: DEFAULT_RESEND_API_URL,
+      apiKey: '',
+      from: 'SubTracker Lite <noreply@example.com>',
       to: ''
     },
     pushplusConfig: {

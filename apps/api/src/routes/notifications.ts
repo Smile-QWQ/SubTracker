@@ -49,11 +49,10 @@ export async function notificationRoutes(app: FastifyInstance) {
           return sendError(reply, 422, 'validation_error', 'Invalid email config payload', parsed.error.flatten())
         }
         await sendTestEmailNotificationWithConfig({
-          provider: 'mailchannels',
+          provider: 'resend',
           apiBaseUrl: parsed.data.apiBaseUrl ?? '',
-          fromEmail: parsed.data.fromEmail ?? '',
-          fromName: parsed.data.fromName ?? '',
-          replyTo: parsed.data.replyTo ?? '',
+          apiKey: parsed.data.apiKey ?? '',
+          from: parsed.data.from ?? '',
           to: parsed.data.to ?? ''
         })
       } else {

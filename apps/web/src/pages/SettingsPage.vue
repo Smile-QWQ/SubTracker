@@ -185,7 +185,7 @@
       <n-grid-item :span="gridSpanFull">
         <n-card title="通知设置" class="settings-card">
             <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
-              统一管理 MailChannels 邮件、PushPlus 与 Webhook。每个渠道都可以单独保存并单独测试。
+              统一管理 Resend 邮件、PushPlus 与 Webhook。每个渠道都可以单独保存并单独测试。
               Cloudflare Worker 不支持忽略 SSL 校验，Webhook 仅按标准 HTTPS 校验执行。
             </n-alert>
 
@@ -197,24 +197,21 @@
                   <n-switch v-model:value="settingsForm.emailNotificationsEnabled" />
                 </div>
                 <n-form label-placement="top">
-                  <n-form-item label="MailChannels API URL">
+                  <n-form-item label="Resend API URL">
                     <n-input v-model:value="settingsForm.emailConfig.apiBaseUrl" />
                   </n-form-item>
                   <n-grid :cols="formCols" :x-gap="8">
                     <n-grid-item>
-                      <n-form-item label="发件邮箱">
-                        <n-input v-model:value="settingsForm.emailConfig.fromEmail" placeholder="noreply@example.com" />
+                      <n-form-item label="Resend API Key">
+                        <n-input v-model:value="settingsForm.emailConfig.apiKey" type="password" show-password-on="click" placeholder="re_xxxxx" />
                       </n-form-item>
                     </n-grid-item>
                     <n-grid-item>
-                      <n-form-item label="发件名称">
-                        <n-input v-model:value="settingsForm.emailConfig.fromName" placeholder="SubTracker Lite" />
+                      <n-form-item label="发件人">
+                        <n-input v-model:value="settingsForm.emailConfig.from" placeholder="SubTracker Lite <noreply@example.com>" />
                       </n-form-item>
                     </n-grid-item>
                   </n-grid>
-                  <n-form-item label="Reply-To">
-                    <n-input v-model:value="settingsForm.emailConfig.replyTo" placeholder="可选：support@example.com" />
-                  </n-form-item>
                   <n-form-item label="收件人">
                     <n-input v-model:value="settingsForm.emailConfig.to" placeholder="多个邮箱请用英文逗号分隔" />
                   </n-form-item>
@@ -447,9 +444,9 @@ import {
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_AI_CONFIG,
   DEFAULT_AI_SUBSCRIPTION_PROMPT,
-  DEFAULT_MAILCHANNELS_API_URL,
   DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
-  DEFAULT_OVERDUE_REMINDER_RULES
+  DEFAULT_OVERDUE_REMINDER_RULES,
+  DEFAULT_RESEND_API_URL
 } from '@subtracker/shared'
 import {
   NAlert,
@@ -540,11 +537,10 @@ const settingsForm = reactive<Settings>({
   pushplusNotificationsEnabled: false,
   telegramNotificationsEnabled: false,
   emailConfig: {
-    provider: 'mailchannels',
-    apiBaseUrl: DEFAULT_MAILCHANNELS_API_URL,
-    fromEmail: '',
-    fromName: 'SubTracker Lite',
-    replyTo: '',
+    provider: 'resend',
+    apiBaseUrl: DEFAULT_RESEND_API_URL,
+    apiKey: '',
+    from: 'SubTracker Lite <noreply@example.com>',
     to: ''
   },
   pushplusConfig: {
@@ -628,8 +624,9 @@ function validateEmailSettings(action: 'save' | 'test') {
   }
 
   const missing = getMissingRequiredFields([
-    ['MailChannels API URL', settingsForm.emailConfig.apiBaseUrl],
-    ['发件邮箱', settingsForm.emailConfig.fromEmail],
+    ['Resend API URL', settingsForm.emailConfig.apiBaseUrl],
+    ['Resend API Key', settingsForm.emailConfig.apiKey],
+    ['发件人', settingsForm.emailConfig.from],
     ['收件人', settingsForm.emailConfig.to]
   ])
 

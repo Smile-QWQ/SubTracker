@@ -159,11 +159,10 @@ export interface CalendarEvent {
 }
 
 export interface EmailConfig {
-  provider: 'mailchannels'
+  provider: 'resend'
   apiBaseUrl: string
-  fromEmail: string
-  fromName: string
-  replyTo: string
+  apiKey: string
+  from: string
   to: string
 }
 

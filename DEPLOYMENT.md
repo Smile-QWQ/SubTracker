@@ -8,7 +8,7 @@
 - 必需资源：**D1**
 - 推荐资源：**KV**
 - 可选资源：**R2**
-- 支持：登录、订阅、标签、设置、统计、日历、汇率刷新、Webhook、PushPlus、Telegram、MailChannels 邮件、AI 文本/视觉识别、Wallos JSON 导入
+- 支持：登录、订阅、标签、设置、统计、日历、汇率刷新、Webhook、PushPlus、Telegram、Resend 邮件、AI 文本/视觉识别、Wallos JSON 导入
 - 不支持：本地 OCR、Wallos SQLite/ZIP 导入、原生 SMTP
 
 ## 1. fork 仓库并配置 GitHub Secrets
@@ -33,7 +33,7 @@
 - `EXCHANGE_RATE_URL`
 - `CRON_SCAN`
 - `CRON_REFRESH_RATES`
-- `MAILCHANNELS_API_URL`
+- `RESEND_API_URL`
 
 ## 3. 本地调试
 
@@ -99,4 +99,4 @@ npm run deploy:worker:r2
 
 - 没配 KV：系统仍可运行，但导入预览缓存、Logo 搜索缓存和通知去重会退化
 - 没配 R2：系统仍可运行，但只支持远程 Logo 引用，不支持持久上传 Logo 库
-- 邮件通知默认走 MailChannels HTTP API，请在系统设置里配置发件邮箱和收件邮箱
+- 邮件通知默认走 Resend HTTP API，请在系统设置里配置 API Key、发件人和收件人

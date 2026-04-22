@@ -2,13 +2,14 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const notificationMocks = vi.hoisted(() => ({
+  sendTestEmailNotificationWithConfigMock: vi.fn(),
   sendTestTelegramNotificationMock: vi.fn(),
   sendTestTelegramNotificationWithConfigMock: vi.fn()
 }))
 
 vi.mock('../../src/services/channel-notification.service', () => ({
   sendTestEmailNotification: vi.fn(),
-  sendTestEmailNotificationWithConfig: vi.fn(),
+  sendTestEmailNotificationWithConfig: notificationMocks.sendTestEmailNotificationWithConfigMock,
   sendTestPushplusNotification: vi.fn(),
   sendTestPushplusNotificationWithConfig: vi.fn(),
   sendTestTelegramNotification: notificationMocks.sendTestTelegramNotificationMock,
@@ -37,8 +38,10 @@ describe('notification routes', () => {
   beforeEach(async () => {
     app = Fastify()
     await notificationRoutes(app)
+    notificationMocks.sendTestEmailNotificationWithConfigMock.mockReset()
     notificationMocks.sendTestTelegramNotificationMock.mockReset()
     notificationMocks.sendTestTelegramNotificationWithConfigMock.mockReset()
+    notificationMocks.sendTestEmailNotificationWithConfigMock.mockResolvedValue(undefined)
     notificationMocks.sendTestTelegramNotificationMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestTelegramNotificationWithConfigMock.mockResolvedValue({ success: true })
   })
@@ -55,6 +58,29 @@ describe('notification routes', () => {
 
     expect(res.statusCode).toBe(200)
     expect(notificationMocks.sendTestTelegramNotificationMock).toHaveBeenCalled()
+  })
+
+  it('passes resend config through email test endpoint', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/notifications/test/email',
+      payload: {
+        provider: 'resend',
+        apiBaseUrl: 'https://api.resend.com/emails',
+        apiKey: 're_test_123',
+        from: 'SubTracker Lite <noreply@example.com>',
+        to: 'user@example.com'
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(notificationMocks.sendTestEmailNotificationWithConfigMock).toHaveBeenCalledWith({
+      provider: 'resend',
+      apiBaseUrl: 'https://api.resend.com/emails',
+      apiKey: 're_test_123',
+      from: 'SubTracker Lite <noreply@example.com>',
+      to: 'user@example.com'
+    })
   })
 
 })

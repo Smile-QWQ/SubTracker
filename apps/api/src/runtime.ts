@@ -14,7 +14,7 @@ export interface WorkerBindings {
   EXCHANGE_RATE_URL?: string
   CRON_SCAN?: string
   CRON_REFRESH_RATES?: string
-  MAILCHANNELS_API_URL?: string
+  RESEND_API_URL?: string
 }
 
 type RuntimeContext = {
@@ -94,6 +94,17 @@ export function isWorkerRuntime() {
 }
 
 export function getWorkerPublicConfig() {
+  let resendApiUrl = process.env.RESEND_API_URL?.trim()
+
+  try {
+    const bindings = getRuntimeBindings()
+    resendApiUrl = bindings.RESEND_API_URL?.trim() || resendApiUrl
+  } catch {
+    // ignore runtime binding lookup outside Worker context
+  }
+
+  resendApiUrl ||= 'https://api.resend.com/emails'
+
   return {
     webOrigin: getBindingOrEnv('WEB_ORIGIN', 'http://localhost:5173'),
     baseCurrency: getBindingOrEnv('BASE_CURRENCY', 'CNY').toUpperCase(),
@@ -102,6 +113,6 @@ export function getWorkerPublicConfig() {
     exchangeRateUrl: getBindingOrEnv('EXCHANGE_RATE_URL', 'https://open.er-api.com/v6/latest'),
     cronScan: getBindingOrEnv('CRON_SCAN', '* * * * *'),
     cronRefreshRates: getBindingOrEnv('CRON_REFRESH_RATES', '0 2 * * *'),
-    mailchannelsApiUrl: getBindingOrEnv('MAILCHANNELS_API_URL', 'https://api.mailchannels.net/tx/v1/send')
+    resendApiUrl
   }
 }

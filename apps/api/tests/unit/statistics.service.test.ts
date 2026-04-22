@@ -38,11 +38,9 @@ vi.mock('../../src/services/settings.service', () => ({
     emailNotificationsEnabled: false,
     pushplusNotificationsEnabled: false,
     emailConfig: {
-      host: '',
-      port: 587,
-      secure: false,
-      username: '',
-      password: '',
+      provider: 'resend',
+      apiBaseUrl: 'https://api.resend.com/emails',
+      apiKey: '',
       from: '',
       to: ''
     },

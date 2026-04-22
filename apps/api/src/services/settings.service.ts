@@ -1,6 +1,7 @@
 import {
   AiConfigSchema,
   DEFAULT_AI_CONFIG,
+  DEFAULT_RESEND_API_URL,
   StorageCapabilitiesSchema,
   SettingsSchema,
   type SettingsInput
@@ -54,11 +55,10 @@ export async function getAppSettings(): Promise<SettingsInput> {
   const pushplusNotificationsEnabled = await getSetting('pushplusNotificationsEnabled', false)
   const telegramNotificationsEnabled = await getSetting('telegramNotificationsEnabled', false)
   const emailConfig = await getSetting<SettingsInput['emailConfig']>('emailConfig', {
-    provider: 'mailchannels',
-    apiBaseUrl: config.mailchannelsApiUrl,
-    fromEmail: '',
-    fromName: '',
-    replyTo: '',
+    provider: 'resend',
+    apiBaseUrl: config.resendApiUrl,
+    apiKey: '',
+    from: '',
     to: ''
   })
   const pushplusConfig = await getSetting<SettingsInput['pushplusConfig']>('pushplusConfig', {
@@ -70,6 +70,13 @@ export async function getAppSettings(): Promise<SettingsInput> {
     chatId: ''
   })
   const aiConfig = AiConfigSchema.parse(await getSetting<unknown>('aiConfig', DEFAULT_AI_CONFIG))
+  const normalizedEmailConfig = {
+    provider: 'resend' as const,
+    apiBaseUrl: String((emailConfig as { apiBaseUrl?: unknown })?.apiBaseUrl || config.resendApiUrl || DEFAULT_RESEND_API_URL).trim() || DEFAULT_RESEND_API_URL,
+    apiKey: String((emailConfig as { apiKey?: unknown })?.apiKey || '').trim(),
+    from: String((emailConfig as { from?: unknown })?.from || '').trim(),
+    to: String((emailConfig as { to?: unknown })?.to || '').trim()
+  }
   const storageCapabilities = StorageCapabilitiesSchema.parse({
     runtime: 'worker-lite',
     kvEnabled: Boolean(getWorkerCache()),
@@ -94,7 +101,7 @@ export async function getAppSettings(): Promise<SettingsInput> {
     emailNotificationsEnabled,
     pushplusNotificationsEnabled,
     telegramNotificationsEnabled,
-    emailConfig,
+    emailConfig: normalizedEmailConfig,
     pushplusConfig,
     telegramConfig,
     aiConfig,

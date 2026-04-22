@@ -97,14 +97,13 @@ export const RenewSubscriptionSchema = z.object({
   currency: z.string().length(3).optional()
 })
 
-export const DEFAULT_MAILCHANNELS_API_URL = 'https://api.mailchannels.net/tx/v1/send'
+export const DEFAULT_RESEND_API_URL = 'https://api.resend.com/emails'
 
 export const EmailConfigSchema = z.object({
-  provider: z.literal('mailchannels').default('mailchannels'),
-  apiBaseUrl: z.string().url().default(DEFAULT_MAILCHANNELS_API_URL),
-  fromEmail: z.string().max(200).default(''),
-  fromName: z.string().max(200).default(''),
-  replyTo: z.string().max(200).default(''),
+  provider: z.literal('resend').default('resend'),
+  apiBaseUrl: z.string().url().default(DEFAULT_RESEND_API_URL),
+  apiKey: z.string().max(500).default(''),
+  from: z.string().max(200).default(''),
   to: z.string().max(500).default('')
 })
 

@@ -120,7 +120,7 @@ describe('ai service', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await testAiConnection()
-    const requestBody = JSON.parse(String((fetchMock.mock.calls[0] as [unknown, RequestInit])[1]?.body))
+    const requestBody = JSON.parse(String(((fetchMock.mock.calls[0] as unknown) as [unknown, RequestInit])[1]?.body))
 
     expect(result.response).toBe('OK')
     expect(requestBody.messages).toEqual([
@@ -152,7 +152,7 @@ describe('ai service', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await testAiVisionConnection(mockedSettings.aiConfig)
-    const requestBody = JSON.parse(String((fetchMock.mock.calls[0] as [unknown, RequestInit])[1]?.body))
+    const requestBody = JSON.parse(String(((fetchMock.mock.calls[0] as unknown) as [unknown, RequestInit])[1]?.body))
 
     expect(result.response).toBe('OK')
     expect(requestBody.messages[0]).toEqual({
