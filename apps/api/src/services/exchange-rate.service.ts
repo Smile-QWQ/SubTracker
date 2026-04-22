@@ -3,6 +3,7 @@ import { prisma } from '../db'
 import { config } from '../config'
 import { convertAmount } from '../utils/money'
 import { getSetting } from './settings.service'
+import { getExchangeRateSnapshotLite } from './worker-lite-repository.service'
 import type { ExchangeRateSnapshotDto } from '@subtracker/shared'
 
 type ProviderResponse = {
@@ -20,7 +21,7 @@ export async function getBaseCurrency(): Promise<string> {
 
 export async function getLatestSnapshot(baseCurrency?: string): Promise<ExchangeRateSnapshotDto> {
   const base = (baseCurrency ?? (await getBaseCurrency())).toUpperCase()
-  let snapshot = await prisma.exchangeRateSnapshot.findUnique({ where: { baseCurrency: base } })
+  let snapshot = await getExchangeRateSnapshotLite(base)
 
   if (!snapshot) {
     snapshot = await refreshExchangeRates(base)
@@ -68,7 +69,7 @@ export async function refreshExchangeRates(baseCurrency?: string) {
       }
     })
   } catch (error) {
-    const existing = await prisma.exchangeRateSnapshot.findUnique({ where: { baseCurrency: base } })
+    const existing = await getExchangeRateSnapshotLite(base)
     if (existing) {
       return prisma.exchangeRateSnapshot.update({
         where: { baseCurrency: base },
@@ -84,7 +85,7 @@ export async function refreshExchangeRates(baseCurrency?: string) {
 
 export async function ensureExchangeRates(baseCurrency?: string): Promise<ExchangeRateSnapshotDto> {
   const base = (baseCurrency ?? (await getBaseCurrency())).toUpperCase()
-  const existing = await prisma.exchangeRateSnapshot.findUnique({ where: { baseCurrency: base } })
+  const existing = await getExchangeRateSnapshotLite(base)
 
   if (!existing) {
     return getLatestSnapshot(base)

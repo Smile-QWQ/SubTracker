@@ -16,6 +16,8 @@ import {
   setSubscriptionOrder,
   sortSubscriptionsByOrder
 } from '../services/subscription-order.service'
+import { invalidateWorkerLiteCache, withWorkerLiteCache } from '../services/worker-lite-cache.service'
+import { listSubscriptionsLite } from '../services/worker-lite-repository.service'
 import { renewSubscription } from '../services/subscription.service'
 import { flattenSubscriptionTags, normalizeTagIds, replaceSubscriptionTags } from '../services/tag.service'
 import {
@@ -31,24 +33,31 @@ import {
   deriveNotifyDaysBeforeFromAdvanceRules,
   normalizeOptionalReminderRules
 } from '../services/reminder-rules.service'
-import { getAppSettings } from '../services/settings.service'
+import { getDefaultAdvanceReminderRulesSetting } from '../services/settings.service'
 
 const subscriptionInclude = {
   tags: { include: { tag: true } }
 } as const
+
+async function fetchSubscriptionWithTags(id: string) {
+  return prisma.subscription.findUniqueOrThrow({
+    where: { id },
+    include: subscriptionInclude
+  })
+}
 
 async function resolveSubscriptionReminderFields(payload: {
   advanceReminderRules?: string | null
   overdueReminderRules?: string | null
   notifyDaysBefore?: number
 }) {
-  const settings = await getAppSettings()
+  const defaultAdvanceReminderRules = await getDefaultAdvanceReminderRulesSetting()
 
   const normalizedAdvanceReminderRules =
     payload.advanceReminderRules !== undefined
       ? normalizeOptionalReminderRules(payload.advanceReminderRules, 'advance')
       : payload.notifyDaysBefore !== undefined
-        ? buildAdvanceReminderRulesFromLegacyWithDefault(payload.notifyDaysBefore, settings.defaultAdvanceReminderRules)
+        ? buildAdvanceReminderRulesFromLegacyWithDefault(payload.notifyDaysBefore, defaultAdvanceReminderRules)
         : undefined
 
   const normalizedOverdueReminderRules =
@@ -58,7 +67,7 @@ async function resolveSubscriptionReminderFields(payload: {
 
   const derivedNotifyDaysBefore =
     normalizedAdvanceReminderRules !== undefined
-      ? deriveNotifyDaysBeforeFromAdvanceRules(normalizedAdvanceReminderRules || settings.defaultAdvanceReminderRules)
+      ? deriveNotifyDaysBeforeFromAdvanceRules(normalizedAdvanceReminderRules || defaultAdvanceReminderRules)
       : payload.notifyDaysBefore
 
   return {
@@ -234,11 +243,30 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       }
     }
 
-    const rows = await prisma.subscription.findMany({
-      where,
-      include: subscriptionInclude,
-      orderBy: [{ createdAt: 'asc' }]
+    const cacheKey = JSON.stringify({
+      q: parsed.data.q ?? '',
+      status: parsed.data.status ?? '',
+      tagIds: parsed.data.tagIds ?? ''
     })
+
+    const rows = await withWorkerLiteCache(
+      'subscriptions',
+      cacheKey,
+      async () =>
+        listSubscriptionsLite({
+          q: parsed.data.q,
+          status: parsed.data.status,
+          tagIds: parsed.data.tagIds
+            ? normalizeTagIds(
+                parsed.data.tagIds
+                  .split(',')
+                  .map((item) => item.trim())
+                  .filter(Boolean)
+              )
+            : undefined
+        }),
+      30
+    )
 
     return sendOk(reply, await sortSubscriptionsByOrder(rows.map(flattenSubscriptionTags)))
   })
@@ -253,6 +281,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     }
 
     await setSubscriptionOrder(parsed.data.ids)
+    await invalidateWorkerLiteCache(['subscriptions'])
     return sendOk(reply, { success: true })
   })
 
@@ -265,6 +294,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     const result = await runBatchAction(parsed.data.ids, async (id) => {
       await renewSubscription(id)
     })
+    await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar', 'exchange-rates'])
 
     return sendOk(reply, result)
   })
@@ -288,6 +318,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
           rows.some((row) => row.status !== 'active') ? 'Only active subscriptions can be paused in batch mode' : null
       }
     )
+    await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar'])
 
     return sendOk(reply, result)
   })
@@ -311,6 +342,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
           rows.some((row) => row.status !== 'active') ? 'Only active subscriptions can be cancelled in batch mode' : null
       }
     )
+    await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar'])
 
     return sendOk(reply, result)
   })
@@ -339,6 +371,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       return sendError(reply, 422, 'batch_delete_not_allowed', result.failures[0]?.message ?? 'Batch delete failed', result)
     }
 
+    await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar'])
     return sendOk(reply, result)
   })
 
@@ -399,42 +432,38 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       return sendError(reply, 422, 'validation_error', error instanceof Error ? error.message : 'Invalid reminder rules')
     }
 
-    const created = await prisma.$transaction(async (tx) => {
-      const subscription = await tx.subscription.create({
-        data: {
-          name: parsed.data.name,
-          description: parsed.data.description,
-          amount: parsed.data.amount,
-          currency: parsed.data.currency,
-          billingIntervalCount: parsed.data.billingIntervalCount,
-          billingIntervalUnit: parsed.data.billingIntervalUnit,
-          autoRenew: parsed.data.autoRenew,
-          startDate: dayjs(parsed.data.startDate).toDate(),
-          nextRenewalDate: dayjs(parsed.data.nextRenewalDate).toDate(),
-          notifyDaysBefore: reminderFields.notifyDaysBefore ?? parsed.data.notifyDaysBefore,
-          ...(reminderFields.advanceReminderRules !== undefined
-            ? { advanceReminderRules: reminderFields.advanceReminderRules }
-            : {}),
-          ...(reminderFields.overdueReminderRules !== undefined
-            ? { overdueReminderRules: reminderFields.overdueReminderRules }
-            : {}),
-          webhookEnabled: parsed.data.webhookEnabled,
-          notes: parsed.data.notes,
-          websiteUrl: parsed.data.websiteUrl ?? null,
-          logoUrl: normalizedLogo.logoUrl,
-          logoSource: normalizedLogo.logoSource,
-          logoFetchedAt: normalizedLogo.logoFetchedAt
-        }
-      })
-
-      await replaceSubscriptionTags(tx, subscription.id, tagIds)
-      return tx.subscription.findUniqueOrThrow({
-        where: { id: subscription.id },
-        include: subscriptionInclude
-      })
+    const subscription = await prisma.subscription.create({
+      data: {
+        name: parsed.data.name,
+        description: parsed.data.description,
+        amount: parsed.data.amount,
+        currency: parsed.data.currency,
+        billingIntervalCount: parsed.data.billingIntervalCount,
+        billingIntervalUnit: parsed.data.billingIntervalUnit,
+        autoRenew: parsed.data.autoRenew,
+        startDate: dayjs(parsed.data.startDate).toDate(),
+        nextRenewalDate: dayjs(parsed.data.nextRenewalDate).toDate(),
+        notifyDaysBefore: reminderFields.notifyDaysBefore ?? parsed.data.notifyDaysBefore,
+        ...(reminderFields.advanceReminderRules !== undefined
+          ? { advanceReminderRules: reminderFields.advanceReminderRules }
+          : {}),
+        ...(reminderFields.overdueReminderRules !== undefined
+          ? { overdueReminderRules: reminderFields.overdueReminderRules }
+          : {}),
+        webhookEnabled: parsed.data.webhookEnabled,
+        notes: parsed.data.notes,
+        websiteUrl: parsed.data.websiteUrl ?? null,
+        logoUrl: normalizedLogo.logoUrl,
+        logoSource: normalizedLogo.logoSource,
+        logoFetchedAt: normalizedLogo.logoFetchedAt
+      }
     })
 
+    await replaceSubscriptionTags(prisma, subscription.id, tagIds)
+    const created = await fetchSubscriptionWithTags(subscription.id)
+
     await appendSubscriptionOrder(created.id)
+    await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar'])
     return sendCreated(reply, flattenSubscriptionTags(created))
   })
 
@@ -461,52 +490,48 @@ export async function subscriptionRoutes(app: FastifyInstance) {
             })
           : null
 
-      const updated = await prisma.$transaction(async (tx) => {
-        const tagIds = payload.tagIds !== undefined ? normalizeTagIds(payload.tagIds) : null
+      const tagIds = payload.tagIds !== undefined ? normalizeTagIds(payload.tagIds) : null
 
-        const subscription = await tx.subscription.update({
-          where: { id: params.data.id },
-          data: {
-            ...(payload.name !== undefined ? { name: payload.name } : {}),
-            ...(payload.description !== undefined ? { description: payload.description } : {}),
-            ...(payload.status !== undefined ? { status: payload.status } : {}),
-            ...(payload.amount !== undefined ? { amount: payload.amount } : {}),
-            ...(payload.currency !== undefined ? { currency: payload.currency } : {}),
-            ...(payload.billingIntervalCount !== undefined ? { billingIntervalCount: payload.billingIntervalCount } : {}),
-            ...(payload.billingIntervalUnit !== undefined ? { billingIntervalUnit: payload.billingIntervalUnit } : {}),
-            ...(payload.autoRenew !== undefined ? { autoRenew: payload.autoRenew } : {}),
-            ...(payload.startDate !== undefined ? { startDate: dayjs(payload.startDate).toDate() } : {}),
-            ...(payload.nextRenewalDate !== undefined ? { nextRenewalDate: dayjs(payload.nextRenewalDate).toDate() } : {}),
-            ...(reminderFields.notifyDaysBefore !== undefined ? { notifyDaysBefore: reminderFields.notifyDaysBefore } : {}),
-            ...(reminderFields.advanceReminderRules !== undefined
-              ? { advanceReminderRules: reminderFields.advanceReminderRules }
-              : {}),
-            ...(reminderFields.overdueReminderRules !== undefined
-              ? { overdueReminderRules: reminderFields.overdueReminderRules }
-              : {}),
-            ...(payload.webhookEnabled !== undefined ? { webhookEnabled: payload.webhookEnabled } : {}),
-            ...(payload.notes !== undefined ? { notes: payload.notes } : {}),
-            ...(payload.websiteUrl !== undefined ? { websiteUrl: payload.websiteUrl } : {}),
-            ...(normalizedLogo
-              ? {
-                  logoUrl: normalizedLogo.logoUrl,
-                  logoSource: normalizedLogo.logoSource,
-                  logoFetchedAt: normalizedLogo.logoFetchedAt
-                }
-              : {})
-          }
-        })
-
-        if (tagIds) {
-          await replaceSubscriptionTags(tx, subscription.id, tagIds)
+      const subscription = await prisma.subscription.update({
+        where: { id: params.data.id },
+        data: {
+          ...(payload.name !== undefined ? { name: payload.name } : {}),
+          ...(payload.description !== undefined ? { description: payload.description } : {}),
+          ...(payload.status !== undefined ? { status: payload.status } : {}),
+          ...(payload.amount !== undefined ? { amount: payload.amount } : {}),
+          ...(payload.currency !== undefined ? { currency: payload.currency } : {}),
+          ...(payload.billingIntervalCount !== undefined ? { billingIntervalCount: payload.billingIntervalCount } : {}),
+          ...(payload.billingIntervalUnit !== undefined ? { billingIntervalUnit: payload.billingIntervalUnit } : {}),
+          ...(payload.autoRenew !== undefined ? { autoRenew: payload.autoRenew } : {}),
+          ...(payload.startDate !== undefined ? { startDate: dayjs(payload.startDate).toDate() } : {}),
+          ...(payload.nextRenewalDate !== undefined ? { nextRenewalDate: dayjs(payload.nextRenewalDate).toDate() } : {}),
+          ...(reminderFields.notifyDaysBefore !== undefined ? { notifyDaysBefore: reminderFields.notifyDaysBefore } : {}),
+          ...(reminderFields.advanceReminderRules !== undefined
+            ? { advanceReminderRules: reminderFields.advanceReminderRules }
+            : {}),
+          ...(reminderFields.overdueReminderRules !== undefined
+            ? { overdueReminderRules: reminderFields.overdueReminderRules }
+            : {}),
+          ...(payload.webhookEnabled !== undefined ? { webhookEnabled: payload.webhookEnabled } : {}),
+          ...(payload.notes !== undefined ? { notes: payload.notes } : {}),
+          ...(payload.websiteUrl !== undefined ? { websiteUrl: payload.websiteUrl } : {}),
+          ...(normalizedLogo
+            ? {
+                logoUrl: normalizedLogo.logoUrl,
+                logoSource: normalizedLogo.logoSource,
+                logoFetchedAt: normalizedLogo.logoFetchedAt
+              }
+            : {})
         }
-
-        return tx.subscription.findUniqueOrThrow({
-          where: { id: subscription.id },
-          include: subscriptionInclude
-        })
       })
 
+      if (tagIds) {
+        await replaceSubscriptionTags(prisma, subscription.id, tagIds)
+      }
+
+      const updated = await fetchSubscriptionWithTags(subscription.id)
+
+      await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar'])
       return sendOk(reply, flattenSubscriptionTags(updated))
     } catch (error) {
       if (error instanceof Error && error.message.includes('Logo')) {
@@ -535,6 +560,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
         parsed.data.currency
       )
 
+      await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar', 'exchange-rates'])
       return sendOk(reply, result)
     } catch (error) {
       return sendError(reply, 404, 'not_found', error instanceof Error ? error.message : 'Renew failed')
@@ -552,6 +578,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       data: { status: 'paused' }
     })
 
+    await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar'])
     return sendOk(reply, updated)
   })
 
@@ -566,6 +593,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       data: { status: 'cancelled' }
     })
 
+    await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar'])
     return sendOk(reply, updated)
   })
 
@@ -581,6 +609,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       })
 
       await removeSubscriptionOrder(params.data.id)
+      await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar'])
       return sendOk(reply, { id: params.data.id, deleted: true })
     } catch {
       return sendError(reply, 404, 'not_found', 'Subscription not found')

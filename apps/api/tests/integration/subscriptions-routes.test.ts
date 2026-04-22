@@ -1,0 +1,146 @@
+import Fastify from 'fastify'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const routeMocks = vi.hoisted(() => ({
+  prisma: {
+    $transaction: vi.fn(async () => {
+      throw new Error('interactive transaction should not be used in worker routes')
+    }),
+    subscription: {
+      create: vi.fn(),
+      update: vi.fn(),
+      findUniqueOrThrow: vi.fn()
+    }
+  },
+  appendSubscriptionOrder: vi.fn(async () => undefined),
+  removeSubscriptionOrder: vi.fn(async () => undefined),
+  setSubscriptionOrder: vi.fn(async () => undefined),
+  sortSubscriptionsByOrder: vi.fn(async (rows: unknown[]) => rows),
+  renewSubscription: vi.fn(),
+  normalizeTagIds: vi.fn((tagIds?: string[] | null) => Array.from(new Set((tagIds ?? []).filter(Boolean)))),
+  replaceSubscriptionTags: vi.fn(async () => undefined),
+  flattenSubscriptionTags: vi.fn((row: unknown) => row),
+  deleteLocalLogoFromLibrary: vi.fn(),
+  getLocalLogoLibrary: vi.fn(async () => []),
+  importRemoteLogo: vi.fn(),
+  normalizeLogoForStorage: vi.fn(async ({ logoUrl, logoSource }: { logoUrl?: string | null; logoSource?: string | null }) => ({
+    logoUrl: logoUrl ?? null,
+    logoSource: logoSource ?? null,
+    logoFetchedAt: null
+  })),
+  saveUploadedLogo: vi.fn(),
+  searchSubscriptionLogos: vi.fn(async () => []),
+  getAppSettings: vi.fn(async () => ({
+    defaultAdvanceReminderRules: '3&09:30;0&09:30;',
+    defaultOverdueReminderRules: '1&09:30;'
+  }))
+}))
+
+vi.mock('../../src/db', () => ({
+  prisma: routeMocks.prisma
+}))
+
+vi.mock('../../src/services/subscription-order.service', () => ({
+  appendSubscriptionOrder: routeMocks.appendSubscriptionOrder,
+  removeSubscriptionOrder: routeMocks.removeSubscriptionOrder,
+  setSubscriptionOrder: routeMocks.setSubscriptionOrder,
+  sortSubscriptionsByOrder: routeMocks.sortSubscriptionsByOrder
+}))
+
+vi.mock('../../src/services/subscription.service', () => ({
+  renewSubscription: routeMocks.renewSubscription
+}))
+
+vi.mock('../../src/services/tag.service', () => ({
+  normalizeTagIds: routeMocks.normalizeTagIds,
+  replaceSubscriptionTags: routeMocks.replaceSubscriptionTags,
+  flattenSubscriptionTags: routeMocks.flattenSubscriptionTags
+}))
+
+vi.mock('../../src/services/logo.service', () => ({
+  deleteLocalLogoFromLibrary: routeMocks.deleteLocalLogoFromLibrary,
+  getLocalLogoLibrary: routeMocks.getLocalLogoLibrary,
+  importRemoteLogo: routeMocks.importRemoteLogo,
+  normalizeLogoForStorage: routeMocks.normalizeLogoForStorage,
+  saveUploadedLogo: routeMocks.saveUploadedLogo,
+  searchSubscriptionLogos: routeMocks.searchSubscriptionLogos
+}))
+
+vi.mock('../../src/services/settings.service', () => ({
+  getAppSettings: routeMocks.getAppSettings
+}))
+
+describe('subscription routes D1 compatibility', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.clearAllMocks()
+  })
+
+  it('creates subscriptions without using Prisma interactive transactions', async () => {
+    const { subscriptionRoutes } = await import('../../src/routes/subscriptions')
+    const app = Fastify()
+    await subscriptionRoutes(app)
+
+    routeMocks.prisma.subscription.create.mockResolvedValue({ id: 'sub_1' })
+    routeMocks.prisma.subscription.findUniqueOrThrow.mockResolvedValue({
+      id: 'sub_1',
+      name: '哔哩哔哩',
+      tags: []
+    })
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/subscriptions',
+      payload: {
+        name: '哔哩哔哩',
+        description: '',
+        amount: 25,
+        currency: 'CNY',
+        billingIntervalCount: 1,
+        billingIntervalUnit: 'month',
+        autoRenew: false,
+        startDate: '2026-04-22',
+        nextRenewalDate: '2026-05-22',
+        notifyDaysBefore: 3,
+        webhookEnabled: true,
+        notes: '',
+        tagIds: ['cksubtracker000000000000001']
+      }
+    })
+
+    expect(response.statusCode).toBe(201)
+    expect(routeMocks.prisma.$transaction).not.toHaveBeenCalled()
+    expect(routeMocks.replaceSubscriptionTags).toHaveBeenCalledWith(routeMocks.prisma, 'sub_1', ['cksubtracker000000000000001'])
+    expect(routeMocks.appendSubscriptionOrder).toHaveBeenCalledWith('sub_1')
+
+    await app.close()
+  })
+
+  it('updates subscriptions without using Prisma interactive transactions', async () => {
+    const { subscriptionRoutes } = await import('../../src/routes/subscriptions')
+    const app = Fastify()
+    await subscriptionRoutes(app)
+
+    routeMocks.prisma.subscription.update.mockResolvedValue({ id: 'sub_1' })
+    routeMocks.prisma.subscription.findUniqueOrThrow.mockResolvedValue({
+      id: 'sub_1',
+      name: '哔哩哔哩年度大会员',
+      tags: []
+    })
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/subscriptions/sub_1',
+      payload: {
+        name: '哔哩哔哩年度大会员',
+        tagIds: ['cksubtracker000000000000002']
+      }
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(routeMocks.prisma.$transaction).not.toHaveBeenCalled()
+    expect(routeMocks.replaceSubscriptionTags).toHaveBeenCalledWith(routeMocks.prisma, 'sub_1', ['cksubtracker000000000000002'])
+
+    await app.close()
+  })
+})

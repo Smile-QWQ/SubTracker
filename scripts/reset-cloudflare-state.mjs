@@ -1,28 +1,30 @@
 import { spawn } from 'node:child_process'
-import { rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 
 const cwd = process.cwd()
 const args = new Set(process.argv.slice(2))
 
-const command = args.has('--remote-all')
-  ? 'remote-all'
-  : args.has('--remote-rates')
-    ? 'remote-rates'
-    : args.has('--local-rates')
-      ? 'local-rates'
-      : args.has('--local-kv')
-        ? 'local-kv'
-      : args.has('--local-d1')
-        ? 'local-d1'
-        : 'local-all'
+const command = args.has('--local-rates')
+  ? 'local-rates'
+  : args.has('--local-kv')
+    ? 'local-kv'
+    : args.has('--local-d1')
+      ? 'local-d1'
+      : 'local-all'
 
 function run(bin, binArgs) {
   return new Promise((resolve, reject) => {
-    const child = spawn(bin, binArgs, {
+    const resolvedBin = process.platform === 'win32' && bin === 'npx' ? 'npx.cmd' : bin
+    const child = spawn(resolvedBin, binArgs, {
       cwd,
       stdio: 'inherit',
-      shell: process.platform === 'win32'
+      shell: false
+    })
+
+    child.on('error', (error) => {
+      reject(error)
     })
 
     child.on('exit', (code) => {
@@ -31,7 +33,7 @@ function run(bin, binArgs) {
         return
       }
 
-      reject(new Error(`${bin} ${binArgs.join(' ')} exited with code ${code ?? 1}`))
+      reject(new Error(`${resolvedBin} ${binArgs.join(' ')} exited with code ${code ?? 1}`))
     })
   })
 }
@@ -44,7 +46,18 @@ async function removeIfExists(relativePath) {
 }
 
 async function execD1(mode, sql) {
-  await run('npx', ['wrangler', 'd1', 'execute', 'DB', `--${mode}`, '--command', sql])
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'subtracker-d1-reset-'))
+  const sqlFile = path.join(tempDir, 'reset.sql')
+
+  try {
+    await writeFile(sqlFile, sql, 'utf8')
+    await run('npx', ['wrangler', 'd1', 'execute', 'DB', `--${mode}`, '--file', sqlFile])
+  } finally {
+    await rm(tempDir, {
+      recursive: true,
+      force: true
+    })
+  }
 }
 
 async function main() {
@@ -64,17 +77,6 @@ async function main() {
     case 'local-rates':
       await execD1('local', 'DELETE FROM "ExchangeRateSnapshot";')
       console.log('[reset-worker] 已清空本地汇率快照')
-      return
-    case 'remote-rates':
-      await execD1('remote', 'DELETE FROM "ExchangeRateSnapshot";')
-      console.log('[reset-worker] 已清空远端汇率快照')
-      return
-    case 'remote-all':
-      await execD1(
-        'remote',
-        'DROP TABLE IF EXISTS "PaymentRecord"; DROP TABLE IF EXISTS "SubscriptionTag"; DROP TABLE IF EXISTS "WebhookDelivery"; DROP TABLE IF EXISTS "Subscription"; DROP TABLE IF EXISTS "Tag"; DROP TABLE IF EXISTS "ExchangeRateSnapshot"; DROP TABLE IF EXISTS "Setting";'
-      )
-      console.log('[reset-worker] 已清空远端 D1 业务表；下次请求会自动重建表结构')
       return
     default:
       throw new Error(`Unsupported reset command: ${command}`)

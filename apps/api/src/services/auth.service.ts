@@ -8,6 +8,10 @@ const DEFAULT_PASSWORD = 'admin'
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const MIN_TOKEN_TTL_MS = 60 * 60 * 1000
 
+let cachedSessionSecret: string | null = null
+let cachedCredentials: StoredCredentials | null = null
+let cachedMustChangePassword: boolean | null = null
+
 type StoredCredentials = {
   username: string
   passwordHash: string
@@ -47,17 +51,38 @@ function decodeBase64Url(value: string) {
 }
 
 async function getSessionSecret() {
+  if (cachedSessionSecret) {
+    return cachedSessionSecret
+  }
+
   const existing = await getSetting<string | null>(SESSION_SECRET_KEY, null)
-  if (existing) return existing
+  if (existing) {
+    cachedSessionSecret = existing
+    return existing
+  }
 
   const created = randomBytes(32).toString('hex')
   await setSetting(SESSION_SECRET_KEY, created)
+  cachedSessionSecret = created
   return created
 }
 
+function updateCredentialsCache(credentials: StoredCredentials) {
+  cachedCredentials = credentials
+  cachedMustChangePassword =
+    credentials.username === DEFAULT_USERNAME && verifyPassword(DEFAULT_PASSWORD, credentials)
+}
+
 export async function getStoredCredentials() {
+  if (cachedCredentials) {
+    return cachedCredentials
+  }
+
   const existing = await getSetting<StoredCredentials | null>(CREDENTIALS_KEY, null)
-  if (existing) return existing
+  if (existing) {
+    updateCredentialsCache(existing)
+    return existing
+  }
 
   const defaultRecord = createPasswordRecord(DEFAULT_PASSWORD)
   const created: StoredCredentials = {
@@ -66,6 +91,7 @@ export async function getStoredCredentials() {
   }
 
   await setSetting(CREDENTIALS_KEY, created)
+  updateCredentialsCache(created)
   return created
 }
 
@@ -81,8 +107,14 @@ function verifyPassword(password: string, record: StoredCredentials) {
 }
 
 async function isUsingDefaultCredentials() {
+  if (cachedMustChangePassword !== null) {
+    return cachedMustChangePassword
+  }
+
   const credentials = await getStoredCredentials()
-  return credentials.username === DEFAULT_USERNAME && verifyPassword(DEFAULT_PASSWORD, credentials)
+  cachedMustChangePassword =
+    credentials.username === DEFAULT_USERNAME && verifyPassword(DEFAULT_PASSWORD, credentials)
+  return cachedMustChangePassword
 }
 
 async function buildAuthUser(username: string): Promise<AuthUser> {
@@ -175,6 +207,7 @@ export async function changeCredentials(input: {
   }
 
   await setSetting(CREDENTIALS_KEY, nextCredentials)
+  updateCredentialsCache(nextCredentials)
 
   return {
     token: await issueToken(input.newUsername),
@@ -198,6 +231,7 @@ export async function changeDefaultPassword(newPassword: string) {
   }
 
   await setSetting(CREDENTIALS_KEY, nextCredentials)
+  updateCredentialsCache(nextCredentials)
 
   return {
     token: await issueToken(DEFAULT_USERNAME),

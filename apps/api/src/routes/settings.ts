@@ -6,6 +6,7 @@ import {
 } from '@subtracker/shared'
 import { prisma } from '../db'
 import { sendError, sendOk } from '../http'
+import { invalidateWorkerLiteCache } from '../services/worker-lite-cache.service'
 import { getAppSettings, setSetting } from '../services/settings.service'
 import {
   buildAdvanceReminderRulesFromLegacy,
@@ -283,6 +284,7 @@ export async function settingsRoutes(app: FastifyInstance) {
 
     await Promise.all(filteredEntries.map(([key, value]) => setSetting(key, value)))
 
+    await invalidateWorkerLiteCache(['settings', 'statistics', 'exchange-rates'])
     const settings = await getAppSettings()
     return sendOk(reply, settings)
   })

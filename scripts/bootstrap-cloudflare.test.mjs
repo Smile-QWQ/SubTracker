@@ -9,6 +9,7 @@ import {
   isWranglerAuthError,
   resolveAppVersion,
   resolveWorkerName,
+  syncCronTriggers,
   withProvisionedR2Binding
 } from './bootstrap-cloudflare.mjs'
 
@@ -157,4 +158,17 @@ test('applyOptionalBindings can disable kv while preserving d1', () => {
 
   assert.equal(config.kv_namespaces, undefined)
   assert.deepEqual(config.d1_databases, [{ binding: 'DB' }])
+})
+
+test('syncCronTriggers mirrors worker cron vars into deployed triggers', () => {
+  const config = syncCronTriggers({
+    vars: {
+      CRON_SCAN: '*/5 * * * *',
+      CRON_AUTO_RENEW: '2 * * * *',
+      CRON_RECONCILE_EXPIRED: '10 2 * * *',
+      CRON_REFRESH_RATES: '0 2 * * *'
+    }
+  })
+
+  assert.deepEqual(config.triggers.crons, ['*/5 * * * *', '2 * * * *', '0 2 * * *', '10 2 * * *'])
 })

@@ -13,14 +13,17 @@ export interface WorkerBindings {
   EXCHANGE_RATE_PROVIDER?: string
   EXCHANGE_RATE_URL?: string
   CRON_SCAN?: string
+  CRON_AUTO_RENEW?: string
+  CRON_RECONCILE_EXPIRED?: string
   CRON_REFRESH_RATES?: string
   RESEND_API_URL?: string
 }
 
 type RuntimeContext = {
-  prisma: PrismaClient
+  prisma?: PrismaClient
   bindings: WorkerBindings
   request?: Request
+  createPrisma?: () => PrismaClient
 }
 
 const runtimeStorage = new AsyncLocalStorage<RuntimeContext>()
@@ -41,12 +44,23 @@ export function getRuntimeBindings() {
   return requireRuntimeContext().bindings
 }
 
+export function getRuntimeD1Database() {
+  return requireRuntimeContext().bindings.DB
+}
+
 export function getRuntimeRequest() {
   return requireRuntimeContext().request
 }
 
 export function getRuntimePrisma() {
-  return requireRuntimeContext().prisma
+  const context = requireRuntimeContext()
+  if (!context.prisma) {
+    if (!context.createPrisma) {
+      throw new Error('Runtime prisma factory unavailable')
+    }
+    context.prisma = context.createPrisma()
+  }
+  return context.prisma
 }
 
 function getBindingOrEnv(key: keyof WorkerBindings, fallback: string) {
@@ -111,7 +125,9 @@ export function getWorkerPublicConfig() {
     defaultNotifyDays: Number(getBindingOrEnv('DEFAULT_NOTIFY_DAYS', '3')),
     exchangeRateProvider: getBindingOrEnv('EXCHANGE_RATE_PROVIDER', 'er-api'),
     exchangeRateUrl: getBindingOrEnv('EXCHANGE_RATE_URL', 'https://open.er-api.com/v6/latest'),
-    cronScan: getBindingOrEnv('CRON_SCAN', '* * * * *'),
+    cronScan: getBindingOrEnv('CRON_SCAN', '*/5 * * * *'),
+    cronAutoRenew: getBindingOrEnv('CRON_AUTO_RENEW', '2 * * * *'),
+    cronReconcileExpired: getBindingOrEnv('CRON_RECONCILE_EXPIRED', '10 2 * * *'),
     cronRefreshRates: getBindingOrEnv('CRON_REFRESH_RATES', '0 2 * * *'),
     resendApiUrl
   }

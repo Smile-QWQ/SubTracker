@@ -1,5 +1,6 @@
 ﻿<template>
   <n-modal :show="show" preset="card" title="订阅信息" style="width: min(920px, calc(100vw - 24px))" @mask-click="close" @update:show="handleUpdateShow">
+    <n-spin :show="saving" description="保存中，请稍候...">
     <n-form :model="form" label-placement="top">
       <div class="name-logo-row">
         <n-form-item label="名称" class="name-logo-row__name">
@@ -9,19 +10,19 @@
         <div class="logo-dock">
           <div class="logo-dock__row">
             <div class="logo-dock__preview-wrap">
-              <button type="button" class="logo-dock__preview" @click="pickLogoFile">
+              <button type="button" class="logo-dock__preview" :disabled="saving" @click="pickLogoFile">
                 <img v-if="resolvedLogoUrl" :src="resolvedLogoUrl" alt="logo" class="logo-dock__image" />
                 <div v-else class="logo-dock__placeholder">
                   <span>{{ logoStorageEnabled ? (form.name.trim() ? '点击上传' : 'Logo') : '远程 Logo' }}</span>
                 </div>
               </button>
 
-              <button v-if="form.logoUrl" type="button" class="logo-dock__clear" @click.stop="clearLogo">
+              <button v-if="form.logoUrl" type="button" class="logo-dock__clear" :disabled="saving" @click.stop="clearLogo">
                 <n-icon :component="CloseOutline" />
               </button>
             </div>
 
-            <n-button circle tertiary type="primary" @click.stop="openLogoPanel">
+            <n-button circle tertiary type="primary" :disabled="saving || searchingLogoCandidates || applyingRemoteLogo" @click.stop="openLogoPanel">
               <template #icon>
                 <n-icon :component="SearchOutline" />
               </template>
@@ -51,6 +52,7 @@
                     :key="`${item.source}-${item.logoUrl}`"
                     type="button"
                     class="logo-panel__item"
+                    :disabled="saving || applyingRemoteLogo"
                     @click="applyRemoteLogoCandidate(item)"
                   >
                     <img :src="item.logoUrl" :alt="item.label" class="logo-panel__item-image" />
@@ -77,12 +79,13 @@
                       v-if="(item.usageCount ?? 0) === 0 && item.filename"
                       type="button"
                       class="logo-panel__delete"
+                      :disabled="saving || deletingLocalLogo"
                       @click.stop="deleteLocalLogo(item)"
                     >
                       <n-icon :component="CloseOutline" />
                     </button>
 
-                    <button type="button" class="logo-panel__item" @click="applyLocalLogoCandidate(item)">
+                    <button type="button" class="logo-panel__item" :disabled="saving" @click="applyLocalLogoCandidate(item)">
                       <img :src="resolveLogoUrl(item.logoUrl)" :alt="item.label" class="logo-panel__item-image" />
                       <span class="logo-panel__item-label">{{ item.label }}</span>
                       <span class="logo-panel__item-meta">
@@ -210,13 +213,14 @@
           <span>自动续订</span>
         </n-space>
         <n-space wrap>
-          <n-button @click="showAiModal = true">AI 识别</n-button>
-          <n-button @click="handleReset">重置</n-button>
-          <n-button @click="close">取消</n-button>
-          <n-button type="primary" @click="submit">保存</n-button>
+          <n-button :disabled="saving" @click="showAiModal = true">AI 识别</n-button>
+          <n-button :disabled="saving" @click="handleReset">重置</n-button>
+          <n-button :disabled="saving" @click="close">取消</n-button>
+          <n-button type="primary" :loading="saving" :disabled="saving" @click="submit">保存</n-button>
         </n-space>
       </div>
     </n-form>
+    </n-spin>
 
     <subscription-ai-modal :show="showAiModal" @close="showAiModal = false" @apply="applyAiResult" />
   </n-modal>
@@ -261,6 +265,7 @@ const LOGO_TAB_LIBRARY = 'library'
 const props = defineProps<{
   show: boolean
   model?: Subscription | null
+  saving?: boolean
   tags: Tag[]
   currencies?: string[]
   defaultAdvanceReminderRules?: string
@@ -283,6 +288,8 @@ const showLogoPanel = ref(false)
 const logoPanelTab = ref<string>(LOGO_TAB_WEB)
 const searchingLogoCandidates = ref(false)
 const loadingLocalLogoLibrary = ref(false)
+const applyingRemoteLogo = ref(false)
+const deletingLocalLogo = ref(false)
 const logoCandidates = ref<LogoSearchResult[]>([])
 const localLogoLibrary = ref<LogoSearchResult[]>([])
 const logoFileInputRef = ref<HTMLInputElement | null>(null)
@@ -462,6 +469,7 @@ function handleNextRenewalDateChange(value: number | null) {
 }
 
 async function openLogoPanel() {
+  if (props.saving || searchingLogoCandidates.value) return
   showLogoPanel.value = true
   if (logoStorageEnabled.value) {
     await loadLocalLogoLibrary()
@@ -478,6 +486,7 @@ async function openLogoPanel() {
 }
 
 async function searchLogos() {
+  if (props.saving || searchingLogoCandidates.value) return
   if (!form.name.trim() && !form.websiteUrl.trim()) {
     logoCandidates.value = []
     return
@@ -525,6 +534,8 @@ function pickLogoFile() {
 }
 
 async function applyRemoteLogoCandidate(item: LogoSearchResult) {
+  if (props.saving || applyingRemoteLogo.value) return
+  applyingRemoteLogo.value = true
   try {
     const next = resolveRemoteLogoApplication(item, {
       logoStorageEnabled: logoStorageEnabled.value,
@@ -557,6 +568,8 @@ async function applyRemoteLogoCandidate(item: LogoSearchResult) {
     }
   } catch (error) {
     message.error(error instanceof Error ? error.message : 'Logo 导入失败')
+  } finally {
+    applyingRemoteLogo.value = false
   }
 }
 
@@ -568,8 +581,9 @@ function applyLocalLogoCandidate(item: LogoSearchResult) {
 }
 
 async function deleteLocalLogo(item: LogoSearchResult) {
-  if (!item.filename) return
+  if (!item.filename || props.saving || deletingLocalLogo.value) return
 
+  deletingLocalLogo.value = true
   try {
     await api.deleteSubscriptionLogoFromLibrary(item.filename)
     localLogoLibrary.value = localLogoLibrary.value.filter((entry) => entry.logoUrl !== item.logoUrl)
@@ -580,10 +594,13 @@ async function deleteLocalLogo(item: LogoSearchResult) {
     message.success('本地 Logo 已删除')
   } catch (error) {
     message.error(error instanceof Error ? error.message : '删除 Logo 失败')
+  } finally {
+    deletingLocalLogo.value = false
   }
 }
 
 async function handleLogoFileChange(event: Event) {
+  if (props.saving) return
   const file = (event.target as HTMLInputElement).files?.[0]
   if (!file) return
 
@@ -633,11 +650,6 @@ function applyAiResult(result: AiRecognitionResult) {
     form.nextRenewalDateTs = dayjs(result.nextRenewalDate).valueOf()
     nextRenewalDirty.value = true
   }
-  if (result.notifyDaysBefore !== undefined) {
-    form.advanceReminderRules = `${result.notifyDaysBefore}&09:30;`
-  }
-  if (result.advanceReminderRules) form.advanceReminderRules = result.advanceReminderRules
-  if (result.overdueReminderRules) form.overdueReminderRules = result.overdueReminderRules
   if (result.websiteUrl) form.websiteUrl = result.websiteUrl
   if (result.notes) form.notes = result.notes
 }
@@ -678,6 +690,7 @@ function submit() {
 }
 
 function close() {
+  if (props.saving) return
   emit('close')
 }
 

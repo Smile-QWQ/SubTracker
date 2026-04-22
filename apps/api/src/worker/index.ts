@@ -14,7 +14,7 @@ import { importRoutes } from '../routes/imports'
 import { ensureDatabaseInitialized } from './database-init'
 import { LegacyFastifyApp, serveStaticLogo } from './legacy-fastify'
 import { runWithRuntimeContext, type WorkerBindings } from '../runtime'
-import { autoRenewDueSubscriptions } from '../services/subscription.service'
+import { autoRenewDueSubscriptions, reconcileExpiredSubscriptions } from '../services/subscription.service'
 import { scanRenewalNotifications } from '../services/notification.service'
 import { refreshExchangeRates } from '../services/exchange-rate.service'
 import type { D1Database, ExecutionContext, ScheduledController } from './types'
@@ -57,18 +57,23 @@ app.get('/static/logos/:key{.+}', async (c) => {
 
 async function runWithContext(bindings: WorkerBindings, request: Request, execute: () => Promise<Response>) {
   await ensureDatabaseInitialized(bindings.DB)
-  const prisma = getPrismaClient(bindings.DB)
+  let prisma: PrismaClient | undefined
   try {
     return await runWithRuntimeContext(
       {
-        prisma,
+        createPrisma: () => {
+          prisma ??= getPrismaClient(bindings.DB)
+          return prisma
+        },
         bindings,
         request
       },
       execute
     )
   } finally {
-    await prisma.$disconnect().catch(() => undefined)
+    if (prisma !== undefined) {
+      await prisma.$disconnect().catch(() => undefined)
+    }
   }
 }
 
@@ -106,9 +111,16 @@ export default {
         case env.CRON_REFRESH_RATES ?? '0 2 * * *':
           await refreshExchangeRates()
           break
-        case env.CRON_SCAN ?? '* * * * *':
+        case env.CRON_SCAN ?? '*/5 * * * *':
+          await scanRenewalNotifications(new Date(), {
+            scanWindowMinutes: 5
+          })
+          break
+        case env.CRON_AUTO_RENEW ?? '2 * * * *':
           await autoRenewDueSubscriptions()
-          await scanRenewalNotifications()
+          break
+        case env.CRON_RECONCILE_EXPIRED ?? '10 2 * * *':
+          await reconcileExpiredSubscriptions()
           break
         default:
           break

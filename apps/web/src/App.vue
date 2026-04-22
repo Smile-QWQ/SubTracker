@@ -131,7 +131,6 @@
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useWindowSize } from '@vueuse/core'
-import { useQuery } from '@tanstack/vue-query'
 import {
   NAlert,
   NButton,
@@ -169,6 +168,7 @@ import {
   WalletOutline
 } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
+import { useSettingsQuery } from '@/composables/settings-query'
 import { useAuthStore } from '@/stores/auth'
 import { isRememberedSession } from '@/utils/auth-storage'
 
@@ -188,10 +188,7 @@ const defaultPasswordForm = reactive({
   confirmPassword: ''
 })
 
-const { data: settings } = useQuery({
-  queryKey: ['app-menu-settings'],
-  queryFn: api.getSettings
-})
+const { data: settings } = useSettingsQuery()
 
 function renderMenuIcon(icon: typeof GridOutline) {
   return () => h(NIcon, null, { default: () => h(icon) })

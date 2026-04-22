@@ -71,6 +71,7 @@ import { useWindowSize } from '@vueuse/core'
 import { NCard, NEmpty, NGrid, NGridItem } from 'naive-ui'
 import { BarChartOutline } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
+import { useSettingsQuery } from '@/composables/settings-query'
 import ChartView from '@/components/ChartView.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import type { StatisticsOverview, SubscriptionStatus } from '@/types/api'
@@ -80,14 +81,12 @@ const { width } = useWindowSize()
 const barChartOutline = BarChartOutline
 
 const { data: overview } = useQuery({
-  queryKey: ['statistics-overview-full'],
-  queryFn: api.getStatisticsOverview
+  queryKey: ['statistics-overview'],
+  queryFn: api.getStatisticsOverview,
+  staleTime: 30_000
 })
 
-const { data: settings } = useQuery({
-  queryKey: ['settings-currency'],
-  queryFn: api.getSettings
-})
+const { data: settings } = useSettingsQuery()
 
 const baseCurrency = computed(() => settings.value?.baseCurrency ?? 'CNY')
 const gridCols = computed(() => (width.value < 1100 ? 1 : 2))

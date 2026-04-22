@@ -66,6 +66,21 @@ function applyOptionalBindings(config, { enableKv, enableR2 }) {
   return next
 }
 
+function syncCronTriggers(config) {
+  const refreshCron = config.vars?.CRON_REFRESH_RATES?.trim() || '0 2 * * *'
+  const scanCron = config.vars?.CRON_SCAN?.trim() || '*/5 * * * *'
+  const autoRenewCron = config.vars?.CRON_AUTO_RENEW?.trim() || '2 * * * *'
+  const reconcileExpiredCron = config.vars?.CRON_RECONCILE_EXPIRED?.trim() || '10 2 * * *'
+
+  return {
+    ...config,
+    triggers: {
+      ...(config.triggers ?? {}),
+      crons: [scanCron, autoRenewCron, refreshCron, reconcileExpiredCron]
+    }
+  }
+}
+
 function readFlagValue(cliArgs, flagName) {
   const index = cliArgs.indexOf(flagName)
   if (index === -1) return ''
@@ -277,6 +292,7 @@ async function buildGeneratedConfig() {
     enableKv,
     enableR2: withR2
   })
+  config = syncCronTriggers(config)
 
   const inventory = await discoverExistingResources({
     includeKv: enableKv
@@ -320,3 +336,4 @@ if (isDirectRun) {
 
 export { applyOptionalBindings, attachExistingResources, bindingResourceName, getInventoryCommands }
 export { canUseInteractiveWranglerLogin, isWranglerAuthError, resolveAppVersion, resolveWorkerName, withProvisionedR2Binding }
+export { syncCronTriggers }

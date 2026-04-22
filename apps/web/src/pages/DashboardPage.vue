@@ -122,6 +122,7 @@ import { useWindowSize } from '@vueuse/core'
 import { NCard, NDataTable, NEmpty, NGrid, NGridItem, NProgress, NTag } from 'naive-ui'
 import { CashOutline, GridOutline, LayersOutline, NotificationsOutline, WalletOutline } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
+import { useSettingsQuery } from '@/composables/settings-query'
 import ChartView from '@/components/ChartView.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
@@ -133,13 +134,11 @@ const gridOutline = GridOutline
 
 const { data: overview } = useQuery({
   queryKey: ['statistics-overview'],
-  queryFn: api.getStatisticsOverview
+  queryFn: api.getStatisticsOverview,
+  staleTime: 30_000
 })
 
-const { data: settings } = useQuery({
-  queryKey: ['settings'],
-  queryFn: api.getSettings
-})
+const { data: settings } = useSettingsQuery()
 
 const baseCurrency = computed(() => settings.value?.baseCurrency ?? 'CNY')
 const showTagBudgetSummary = computed(() => settings.value?.enableTagBudgets ?? false)

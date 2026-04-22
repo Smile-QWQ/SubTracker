@@ -22,6 +22,18 @@ export async function appendSubscriptionOrder(id: string) {
   }
 }
 
+export async function appendSubscriptionOrders(ids: string[]) {
+  const normalized = uniqueIds(ids)
+  if (normalized.length === 0) return
+
+  const current = await getSubscriptionOrder()
+  const existing = new Set(current)
+  const appended = normalized.filter((id) => !existing.has(id))
+  if (appended.length === 0) return
+
+  await setSubscriptionOrder([...current, ...appended])
+}
+
 export async function removeSubscriptionOrder(id: string) {
   const current = await getSubscriptionOrder()
   await setSubscriptionOrder(current.filter((item) => item !== id))

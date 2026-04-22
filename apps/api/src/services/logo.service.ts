@@ -9,6 +9,8 @@ const LOGO_REQUEST_TIMEOUT_MS = 20000
 const SEARCH_CACHE_TTL_SECONDS = 5 * 60
 const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000
 const SEARCH_CACHE_PREFIX = 'logo-search:worker-parity:'
+const MAX_DUCKDUCKGO_CANDIDATES = 12
+const MAX_SEARCH_RESULTS = 12
 const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml'])
 const extensionMap: Record<string, string> = {
   'image/png': '.png',
@@ -37,6 +39,7 @@ type SearchCacheEntry = {
 }
 
 const searchCache = new Map<string, SearchCacheEntry>()
+const inflightSearches = new Map<string, Promise<LogoSearchResultDto[]>>()
 
 function normalizeWebsiteUrl(input?: string) {
   if (!input) return ''
@@ -82,8 +85,6 @@ function sourcePriority(source: string) {
       return 72
     case 'duckduckgo':
       return 80
-    case 'brave':
-      return 68
     case 'favicon':
       return 38
     case 'google-favicon':
@@ -331,33 +332,7 @@ async function fetchDuckDuckGoCandidates(searchTerm: string) {
         width: row.width,
         height: row.height
       })
-      if (candidates.length >= 30) break
-    }
-  } catch {
-    return candidates
-  }
-
-  return candidates
-}
-
-async function fetchBraveCandidates(searchTerm: string) {
-  const candidates: RawCandidate[] = []
-
-  try {
-    const html = await fetchText(`https://search.brave.com/images?q=${encodeURIComponent(searchTerm)}`, {
-      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      Referer: 'https://search.brave.com/'
-    })
-
-    const imageRegex = /<img\b[^>]*(?:src|data-src)=["']([^"']+)["'][^>]*>/gi
-    for (const [index, match] of Array.from(html.matchAll(imageRegex)).entries()) {
-      const imageUrl = match[1] || ''
-      if (!/^https?:\/\//i.test(imageUrl)) continue
-      if (imageUrl.includes('cdn.search.brave.com')) continue
-      if (/favicon|logo\.svg/i.test(imageUrl)) continue
-
-      makeCandidate(candidates, `Brave 候选 ${index + 1}`, imageUrl, 'brave')
-      if (candidates.length >= 24) break
+      if (candidates.length >= MAX_DUCKDUCKGO_CANDIDATES) break
     }
   } catch {
     return candidates
@@ -472,11 +447,14 @@ async function inspectRemoteImage(url: string): Promise<ImageMeta | null> {
   }
 }
 
-function passesQualityFilter(meta: ImageMeta, source: string) {
-  const { width, height } = meta
+function passesQualityFilter(
+  dimensions: { width?: number; height?: number },
+  source: string
+) {
+  const { width, height } = dimensions
 
   if (!width || !height) {
-    return sourcePriority(source) >= 80
+    return sourcePriority(source) >= 68
   }
 
   if (width < 48 || height < 48) return false
@@ -490,10 +468,10 @@ function passesQualityFilter(meta: ImageMeta, source: string) {
   return true
 }
 
-function computeScore(candidate: RawCandidate, meta: ImageMeta) {
+function computeScore(candidate: RawCandidate) {
   let score = candidate.scoreHint ?? sourcePriority(candidate.source)
-  const width = meta.width ?? candidate.width ?? 0
-  const height = meta.height ?? candidate.height ?? 0
+  const width = candidate.width ?? 0
+  const height = candidate.height ?? 0
 
   if (width && height) {
     score += Math.min(Math.min(width, height) / 8, 24)
@@ -553,80 +531,89 @@ export async function searchSubscriptionLogos(params: LogoSearchInput) {
     return cached.items
   }
 
-  const explicitOrigin = normalizeWebsiteUrl(params.websiteUrl)
-  const fallbackSeed = deriveDomainSeed(params.name)
-  const guessedOrigin = explicitOrigin || (fallbackSeed ? `https://${fallbackSeed}.com` : '')
-  const searchTerm = [params.name, params.tagName].filter(Boolean).join(' ').trim() || params.name
-
-  const rawCandidates: RawCandidate[] = []
-  const [websiteCandidates, duckCandidates, braveCandidates] = await Promise.all([
-    guessedOrigin ? fetchWebsiteCandidates(guessedOrigin) : Promise.resolve<RawCandidate[]>([]),
-    fetchDuckDuckGoCandidates(`${searchTerm} logo`),
-    fetchBraveCandidates(`${searchTerm} logo`)
-  ])
-
-  if (guessedOrigin) {
-    const hostname = new URL(guessedOrigin).hostname
-    websiteCandidates.forEach((item) => makeCandidate(rawCandidates, item.label, item.logoUrl, item.source, item))
-
-    makeCandidate(rawCandidates, '站点 favicon', `${guessedOrigin}/favicon.ico`, 'favicon', {
-      websiteUrl: guessedOrigin,
-      fallback: true
-    })
-    makeCandidate(
-      rawCandidates,
-      'Google Favicon',
-      `https://www.google.com/s2/favicons?sz=256&domain_url=${encodeURIComponent(guessedOrigin)}`,
-      'google-favicon',
-      {
-        websiteUrl: guessedOrigin,
-        fallback: true,
-        width: 256,
-        height: 256
-      }
-    )
-    makeCandidate(rawCandidates, 'Icon Horse', `https://icon.horse/icon/${hostname}`, 'icon-horse', {
-      websiteUrl: guessedOrigin,
-      fallback: true
-    })
-    makeCandidate(rawCandidates, 'Clearbit Logo', `https://logo.clearbit.com/${hostname}`, 'clearbit', {
-      websiteUrl: guessedOrigin,
-      fallback: true
-    })
+  const inflight = inflightSearches.get(cacheKey)
+  if (inflight) {
+    return inflight
   }
 
-  duckCandidates.forEach((item) => makeCandidate(rawCandidates, item.label, item.logoUrl, item.source, item))
-  braveCandidates.forEach((item) => makeCandidate(rawCandidates, item.label, item.logoUrl, item.source, item))
+  const searchPromise = (async () => {
+    const explicitOrigin = normalizeWebsiteUrl(params.websiteUrl)
+    const fallbackSeed = deriveDomainSeed(params.name)
+    const guessedOrigin = explicitOrigin || (fallbackSeed ? `https://${fallbackSeed}.com` : '')
+    const searchTerm = [params.name, params.tagName].filter(Boolean).join(' ').trim() || params.name
 
-  const prepared = rawCandidates
-    .sort((a, b) => (b.scoreHint ?? 0) - (a.scoreHint ?? 0))
-    .slice(0, 40)
+    const rawCandidates: RawCandidate[] = []
+    const [websiteCandidates, duckCandidates] = await Promise.all([
+      guessedOrigin ? fetchWebsiteCandidates(guessedOrigin) : Promise.resolve<RawCandidate[]>([]),
+      fetchDuckDuckGoCandidates(`${searchTerm} logo`)
+    ])
 
-  const inspected = await mapWithConcurrency(prepared, 4, async (candidate) => {
-    const meta = await inspectRemoteImage(candidate.logoUrl)
-    if (!meta) return null
-    if (!passesQualityFilter(meta, candidate.source)) return null
+    if (guessedOrigin) {
+      const hostname = new URL(guessedOrigin).hostname
+      websiteCandidates.forEach((item) => makeCandidate(rawCandidates, item.label, item.logoUrl, item.source, item))
 
-    return {
-      ...candidate,
-      logoUrl: meta.finalUrl,
-      width: meta.width ?? candidate.width,
-      height: meta.height ?? candidate.height,
-      score: computeScore(candidate, meta)
+      makeCandidate(rawCandidates, '站点 favicon', `${guessedOrigin}/favicon.ico`, 'favicon', {
+        websiteUrl: guessedOrigin,
+        fallback: true
+      })
+      makeCandidate(
+        rawCandidates,
+        'Google Favicon',
+        `https://www.google.com/s2/favicons?sz=256&domain_url=${encodeURIComponent(guessedOrigin)}`,
+        'google-favicon',
+        {
+          websiteUrl: guessedOrigin,
+          fallback: true,
+          width: 256,
+          height: 256
+        }
+      )
+      makeCandidate(rawCandidates, 'Icon Horse', `https://icon.horse/icon/${hostname}`, 'icon-horse', {
+        websiteUrl: guessedOrigin,
+        fallback: true
+      })
+      makeCandidate(rawCandidates, 'Clearbit Logo', `https://logo.clearbit.com/${hostname}`, 'clearbit', {
+        websiteUrl: guessedOrigin,
+        fallback: true
+      })
     }
+
+    duckCandidates.forEach((item) => makeCandidate(rawCandidates, item.label, item.logoUrl, item.source, item))
+    const prepared = rawCandidates
+      .sort((a, b) => (b.scoreHint ?? 0) - (a.scoreHint ?? 0))
+      .slice(0, MAX_SEARCH_RESULTS)
+
+    const inspected = prepared
+      .filter((candidate) =>
+        passesQualityFilter(
+          {
+            width: candidate.width,
+            height: candidate.height
+          },
+          candidate.source
+        )
+      )
+      .map((candidate) => ({
+        ...candidate,
+        score: computeScore(candidate)
+      }))
+
+    const result = dedupeBy(
+      inspected
+        .sort((a, b) => b.score - a.score)
+        .slice(0, MAX_SEARCH_RESULTS),
+      (item) => item.logoUrl
+    ).map(({ score, scoreHint, fallback, ...item }) => item)
+
+    await cacheSet(cacheKey, result)
+
+    return result
+  })().finally(() => {
+    inflightSearches.delete(cacheKey)
   })
 
-  const result = dedupeBy(
-    inspected
-      .filter((item): item is NonNullable<typeof item> => Boolean(item))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 24),
-    (item) => item.logoUrl
-  ).map(({ score, scoreHint, fallback, ...item }) => item)
-
-  await cacheSet(cacheKey, result)
-
-  return result
+  inflightSearches.set(cacheKey, searchPromise)
+  return searchPromise
 }
 
 function decodeBase64(value: string) {

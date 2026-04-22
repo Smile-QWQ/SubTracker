@@ -1,8 +1,8 @@
 import { AiRecognizeSubscriptionSchema, DEFAULT_AI_SUBSCRIPTION_PROMPT } from '@subtracker/shared'
 import type { AiRecognitionResultDto } from '@subtracker/shared'
-import { getAppSettings } from './settings.service'
+import { getAiConfig } from './settings.service'
 
-export type AiSettings = Awaited<ReturnType<typeof getAppSettings>>['aiConfig']
+export type AiSettings = Awaited<ReturnType<typeof getAiConfig>>
 
 type ChatMessage = {
   role: 'system' | 'user' | 'assistant'
@@ -214,7 +214,7 @@ export async function recognizeSubscriptionByAi(input: unknown): Promise<AiRecog
     throw new Error('AI 识别输入不合法')
   }
 
-  const aiConfig = (await getAppSettings()).aiConfig
+  const aiConfig = await getAiConfig()
   const text = parsed.data.text?.trim()
   const imageBase64 = parsed.data.imageBase64?.trim()
 
@@ -265,7 +265,7 @@ export async function recognizeSubscriptionByAi(input: unknown): Promise<AiRecog
 }
 
 export async function testAiConnection(overrideConfig?: AiSettings) {
-  const aiConfig = overrideConfig ?? (await getAppSettings()).aiConfig
+  const aiConfig = overrideConfig ?? (await getAiConfig())
   const raw = await requestAiChatCompletion({
     aiConfig,
     requireEnabled: false,
@@ -290,7 +290,7 @@ export async function testAiConnection(overrideConfig?: AiSettings) {
 }
 
 export async function testAiVisionConnection(overrideConfig?: AiSettings) {
-  const aiConfig = overrideConfig ?? (await getAppSettings()).aiConfig
+  const aiConfig = overrideConfig ?? (await getAiConfig())
   if (!aiConfig.capabilities.vision) {
     throw new Error('当前 Provider 未启用视觉输入能力')
   }

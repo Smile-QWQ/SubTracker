@@ -154,6 +154,7 @@ import { useRouter } from 'vue-router'
 import { NButton, NCard, NDataTable, NDivider, NEmpty, NGrid, NGridItem, NProgress, NSpace, NTag, useMessage } from 'naive-ui'
 import { WalletOutline } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
+import { SETTINGS_QUERY_KEY, useSettingsQuery } from '@/composables/settings-query'
 import ChartView from '@/components/ChartView.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import TagBudgetSettingsModal from '@/components/TagBudgetSettingsModal.vue'
@@ -168,18 +169,17 @@ const tagBudgetModalVisible = ref(false)
 
 const { data: budgetStats } = useQuery({
   queryKey: ['statistics-budgets'],
-  queryFn: api.getBudgetStatistics
+  queryFn: api.getBudgetStatistics,
+  staleTime: 30_000
 })
 
-const { data: settings } = useQuery({
-  queryKey: ['settings-budget-page'],
-  queryFn: api.getSettings
-})
+const { data: settings } = useSettingsQuery()
 
 const { data: tags } = useQuery({
-  queryKey: ['budget-page-tags'],
+  queryKey: ['tags'],
   queryFn: api.getTags,
-  initialData: []
+  initialData: [],
+  staleTime: 30_000
 })
 
 watch(
@@ -297,9 +297,7 @@ async function saveTagBudgets(tagBudgets: Record<string, number>) {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: ['statistics-budgets'] }),
     queryClient.invalidateQueries({ queryKey: ['statistics-overview'] }),
-    queryClient.invalidateQueries({ queryKey: ['settings-budget-page'] }),
-    queryClient.invalidateQueries({ queryKey: ['settings'] }),
-    queryClient.invalidateQueries({ queryKey: ['app-menu-settings'] })
+    queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEY })
   ])
 }
 

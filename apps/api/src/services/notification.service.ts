@@ -1,5 +1,4 @@
 ﻿import dayjs from 'dayjs'
-import { prisma } from '../db'
 import { toIsoDate } from '../utils/date'
 import { dispatchNotificationEvent, type NotificationChannelResult } from './channel-notification.service'
 import {
@@ -7,7 +6,8 @@ import {
   parseReminderRules,
   type ReminderRule
 } from './reminder-rules.service'
-import { getAppSettings } from './settings.service'
+import { getNotificationScanSettings } from './settings.service'
+import { listSubscriptionsLite } from './worker-lite-repository.service'
 
 export type ReminderPhase = 'upcoming' | 'due_today' | `overdue_day_${number}`
 
@@ -26,8 +26,17 @@ export type NotificationScanResult = {
 }
 
 export type NotificationScanOverrides = Partial<
-  Pick<Awaited<ReturnType<typeof getAppSettings>>, 'defaultAdvanceReminderRules' | 'defaultOverdueReminderRules' | 'mergeMultiSubscriptionNotifications'>
->
+  Awaited<ReturnType<typeof getNotificationScanSettings>>
+> & {
+  scanWindowMinutes?: number
+}
+
+const DEFAULT_NOTIFICATION_SCAN_WINDOW_MINUTES = 5
+
+function isReminderWithinWindow(now: dayjs.Dayjs, trigger: dayjs.Dayjs, scanWindowMinutes: number) {
+  if (now.isBefore(trigger)) return false
+  return now.diff(trigger, 'minute') < scanWindowMinutes
+}
 
 type ReminderSubscriptionLike = {
   id: string
@@ -152,10 +161,11 @@ function matchReminderRule(
   now: dayjs.Dayjs,
   nextRenewalDate: Date,
   rule: ReminderRule,
-  direction: 'advance' | 'overdue'
+  direction: 'advance' | 'overdue',
+  scanWindowMinutes: number
 ): ReminderMatch | null {
   const trigger = resolveRuleTriggerMoment(nextRenewalDate, rule, direction)
-  if (!now.isSame(trigger, 'minute')) {
+  if (!isReminderWithinWindow(now, trigger, scanWindowMinutes)) {
     return null
   }
 
@@ -185,25 +195,31 @@ function matchReminderRule(
 function resolveReminderMatches(
   now: dayjs.Dayjs,
   sub: ReminderSubscriptionLike,
-  settings: Awaited<ReturnType<typeof getAppSettings>>
+  settings: Awaited<ReturnType<typeof getNotificationScanSettings>>,
+  scanWindowMinutes: number
 ) {
   const matches: ReminderMatch[] = []
 
   for (const rule of resolveAdvanceRules(sub, settings.defaultAdvanceReminderRules)) {
-    const match = matchReminderRule(now, sub.nextRenewalDate, rule, 'advance')
+    const match = matchReminderRule(now, sub.nextRenewalDate, rule, 'advance', scanWindowMinutes)
     if (match) {
       matches.push(match)
     }
   }
 
   for (const rule of resolveOverdueRules(sub, settings.defaultOverdueReminderRules)) {
-    const match = matchReminderRule(now, sub.nextRenewalDate, rule, 'overdue')
+    const match = matchReminderRule(now, sub.nextRenewalDate, rule, 'overdue', scanWindowMinutes)
     if (match) {
       matches.push(match)
     }
   }
 
   return matches
+}
+
+function getMaxAdvanceReminderDays(defaultAdvanceReminderRules: string) {
+  const rules = parseReminderRules(defaultAdvanceReminderRules, 'advance')
+  return rules.reduce((max, rule) => Math.max(max, rule.days), 0)
 }
 
 function buildDispatchEntry(sub: ReminderSubscriptionLike, resolved: ReminderMatch): ReminderDispatchEntry {
@@ -296,39 +312,27 @@ export async function scanRenewalNotifications(
   today = new Date(),
   overrides: NotificationScanOverrides = {}
 ): Promise<NotificationScanResult> {
+  const scanWindowMinutes = Math.max(1, overrides.scanWindowMinutes ?? DEFAULT_NOTIFICATION_SCAN_WINDOW_MINUTES)
   const appSettings = {
-    ...(await getAppSettings()),
+    ...(await getNotificationScanSettings()),
     ...overrides
   }
-  const subscriptions = await prisma.subscription.findMany({
-    where: {
-      status: { in: ['active', 'expired'] },
-      webhookEnabled: true
-    },
-    include: {
-      tags: {
-        include: {
-          tag: true
-        }
-      }
-    }
-  })
-
   const now = dayjs(today).second(0).millisecond(0)
   const currentDay = now.startOf('day')
+  const maxAdvanceDays = getMaxAdvanceReminderDays(appSettings.defaultAdvanceReminderRules)
+  const queryStart = currentDay.subtract(7, 'day').toDate()
+  const queryEnd = currentDay.add(maxAdvanceDays, 'day').endOf('day').toDate()
+  const subscriptions = await listSubscriptionsLite({
+    statuses: ['active', 'expired'],
+    nextRenewalDateGte: queryStart,
+    nextRenewalDateLte: queryEnd
+  })
+  const notificationEligibleSubscriptions = subscriptions.filter((sub) => sub.webhookEnabled)
   const dispatchEntries: ReminderDispatchEntry[] = []
   const notifications: NotificationScanResult['notifications'] = []
 
-  for (const sub of subscriptions) {
-    const daysOverdue = Math.max(currentDay.diff(dayjs(sub.nextRenewalDate).startOf('day'), 'day'), 0)
-    if (daysOverdue >= 1 && sub.status !== 'expired') {
-      await prisma.subscription.update({
-        where: { id: sub.id },
-        data: { status: 'expired' }
-      })
-    }
-
-    const matches = resolveReminderMatches(now, sub, appSettings)
+  for (const sub of notificationEligibleSubscriptions) {
+    const matches = resolveReminderMatches(now, sub, appSettings, scanWindowMinutes)
     for (const match of matches) {
       dispatchEntries.push(buildDispatchEntry(sub, match))
     }
@@ -356,7 +360,7 @@ export async function scanRenewalNotifications(
     }
 
     return {
-      processedCount: subscriptions.length,
+      processedCount: notificationEligibleSubscriptions.length,
       notificationCount: notifications.length,
       notifications
     }
@@ -384,7 +388,7 @@ export async function scanRenewalNotifications(
   })
 
   return {
-    processedCount: subscriptions.length,
+    processedCount: notificationEligibleSubscriptions.length,
     notificationCount: notifications.length,
     notifications
   }

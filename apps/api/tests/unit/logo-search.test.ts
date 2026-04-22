@@ -51,10 +51,6 @@ describe('logo search regression', () => {
         )
       }
 
-      if (url.startsWith('https://search.brave.com/images?q=')) {
-        return mockResponse('<html><body>No results</body></html>', { contentType: 'text/html' })
-      }
-
       if (url === 'https://img.example/bilibili.svg') {
         return mockResponse(svgBuffer(256, 256), { contentType: 'image/svg+xml' })
       }
@@ -77,7 +73,7 @@ describe('logo search regression', () => {
     expect(results.some((item) => item.websiteUrl === 'https://.com')).toBe(false)
   })
 
-  it('matches main branch candidate aggregation and keeps up to 24 inspected results', async () => {
+  it('keeps lightweight DuckDuckGo-first aggregated results without probing every remote image', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
 
@@ -99,18 +95,6 @@ describe('logo search regression', () => {
         )
       }
 
-      if (url.startsWith('https://search.brave.com/images?q=')) {
-        const html = Array.from(
-          { length: 12 },
-          (_, index) => `<img src="https://img.example/brave-${index + 1}.svg" />`
-        ).join('')
-        return mockResponse(`<html><body>${html}</body></html>`, { contentType: 'text/html' })
-      }
-
-      if (/^https:\/\/img\.example\/(ddg|brave)-\d+\.svg$/.test(url)) {
-        return mockResponse(svgBuffer(256, 256), { contentType: 'image/svg+xml' })
-      }
-
       return mockResponse('not found', { status: 404, contentType: 'text/plain' })
     })
 
@@ -123,9 +107,10 @@ describe('logo search regression', () => {
       tagName: ''
     })
 
-    expect(results).toHaveLength(24)
-    expect(results.filter((item) => item.source === 'duckduckgo').length).toBeGreaterThan(0)
-    expect(results.filter((item) => item.source === 'brave').length).toBeGreaterThan(0)
+    expect(results).toHaveLength(12)
+    expect(results.every((item) => item.source === 'duckduckgo')).toBe(true)
+    expect(results.filter((item) => item.source === 'brave').length).toBe(0)
+    expect(fetchMock.mock.calls.some(([input]) => /^https:\/\/img\.example\/(ddg|brave)-\d+\.svg$/.test(String(input)))).toBe(false)
   })
 
   it('extracts icon candidates from explicit website html instead of relying only on generic favicon services', async () => {
@@ -138,16 +123,8 @@ describe('logo search regression', () => {
         })
       }
 
-      if (url === 'https://service.example/logo.svg') {
-        return mockResponse(svgBuffer(128, 128), { contentType: 'image/svg+xml' })
-      }
-
       if (url.startsWith('https://duckduckgo.com/?q=')) {
         return mockResponse('<html><body>no-vqd</body></html>', { contentType: 'text/html' })
-      }
-
-      if (url.startsWith('https://search.brave.com/images?q=')) {
-        return mockResponse('<html></html>', { contentType: 'text/html' })
       }
 
       return mockResponse('not found', { status: 404, contentType: 'text/plain' })
@@ -166,7 +143,8 @@ describe('logo search regression', () => {
     expect(results.some((item) => item.source === 'html-icon')).toBe(true)
   })
 
-  it('drops candidates whose remote image probe fails, matching main branch behavior', async () => {
+  it('does not probe remote candidate images during worker search, avoiding extra cpu-heavy fetches', async () => {
+    const imageRequests: string[] = []
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
 
@@ -189,11 +167,8 @@ describe('logo search regression', () => {
         )
       }
 
-      if (url.startsWith('https://search.brave.com/images?q=')) {
-        return mockResponse('<html></html>', { contentType: 'text/html' })
-      }
-
       if (url === 'https://img.example/ddg-worker-only.png') {
+        imageRequests.push(url)
         return mockResponse('forbidden', { status: 403, contentType: 'text/plain' })
       }
 
@@ -209,6 +184,47 @@ describe('logo search regression', () => {
       tagName: ''
     })
 
-    expect(results).toHaveLength(0)
+    expect(results).toHaveLength(1)
+    expect(results[0]?.logoUrl).toBe('https://img.example/ddg-worker-only.png')
+    expect(imageRequests).toHaveLength(0)
+  })
+
+  it('caps remote image probes to keep worker cpu usage lower under heavy search results', async () => {
+    const imageRequests: string[] = []
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+
+      if (url.startsWith('https://duckduckgo.com/?q=')) {
+        return mockResponse('<html><body>vqd="4-987654321"</body></html>', { contentType: 'text/html' })
+      }
+
+      if (url.startsWith('https://duckduckgo.com/i.js?')) {
+        const results = Array.from({ length: 40 }, (_, index) => ({
+          image: `https://img.example/ddg-heavy-${index + 1}.svg`,
+          width: 256,
+          height: 256
+        }))
+        return mockResponse(JSON.stringify({ results }), { contentType: 'application/json' })
+      }
+
+      if (/^https:\/\/img\.example\/ddg-heavy-\d+\.svg$/.test(url)) {
+        imageRequests.push(url)
+        return mockResponse(svgBuffer(256, 256), { contentType: 'image/svg+xml' })
+      }
+
+      return mockResponse('not found', { status: 404, contentType: 'text/plain' })
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { searchSubscriptionLogos } = await import('../../src/services/logo.service')
+    const results = await searchSubscriptionLogos({
+      name: 'Heavy Search',
+      websiteUrl: '',
+      tagName: ''
+    })
+
+    expect(results.length).toBeLessThanOrEqual(12)
+    expect(imageRequests.length).toBe(0)
   })
 })

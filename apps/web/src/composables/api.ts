@@ -25,6 +25,7 @@ import type {
 } from '@/types/api'
 import { clearAuthSession, getStoredToken } from '@/utils/auth-storage'
 import { getApiBaseUrl } from '@/utils/api-base'
+import { normalizeApiErrorMessage } from '@/utils/api-error'
 
 const client = axios.create({
   baseURL: getApiBaseUrl(import.meta.env.VITE_API_BASE_URL),
@@ -51,8 +52,7 @@ client.interceptors.response.use(
       }
     }
 
-    const message = error?.response?.data?.error?.message
-    return Promise.reject(new Error(message || error.message || '请求失败'))
+    return Promise.reject(new Error(normalizeApiErrorMessage(error)))
   }
 )
 
@@ -62,16 +62,67 @@ function unwrap<T>(res: { data: Envelope<T> }): T {
   return res.data.data
 }
 
+const inflightMutationRequests = new Map<string, Promise<unknown>>()
+
+function stableSerialize(value: unknown): string {
+  if (value === null || value === undefined) return String(value)
+  if (typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map((item) => stableSerialize(item)).join(',')}]`
+
+  const record = value as Record<string, unknown>
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableSerialize(record[key])}`)
+    .join(',')}}`
+}
+
+function withMutationSingleFlight<T>(method: string, url: string, payload: unknown, request: () => Promise<T>) {
+  const key = `${method}:${url}:${stableSerialize(payload)}`
+  const existing = inflightMutationRequests.get(key) as Promise<T> | undefined
+  if (existing) {
+    return existing
+  }
+
+  const inflight = request().finally(() => {
+    inflightMutationRequests.delete(key)
+  })
+
+  inflightMutationRequests.set(key, inflight)
+  return inflight
+}
+
+function postOnce<T>(url: string, payload?: unknown, config?: Parameters<typeof client.post>[2]) {
+  return withMutationSingleFlight('POST', url, payload, async () =>
+    unwrap<T>((await client.post(url, payload, config)) as { data: Envelope<T> })
+  )
+}
+
+function patchOnce<T>(url: string, payload?: unknown, config?: Parameters<typeof client.patch>[2]) {
+  return withMutationSingleFlight('PATCH', url, payload, async () =>
+    unwrap<T>((await client.patch(url, payload, config)) as { data: Envelope<T> })
+  )
+}
+
+function putOnce<T>(url: string, payload?: unknown, config?: Parameters<typeof client.put>[2]) {
+  return withMutationSingleFlight('PUT', url, payload, async () =>
+    unwrap<T>((await client.put(url, payload, config)) as { data: Envelope<T> })
+  )
+}
+
+function deleteOnce<T>(url: string, config?: Parameters<typeof client.delete>[1]) {
+  return withMutationSingleFlight('DELETE', url, undefined, async () =>
+    unwrap<T>((await client.delete(url, config)) as { data: Envelope<T> })
+  )
+}
+
 export const api = {
   async login(username: string, password: string, rememberMe = false, rememberDays?: number) {
-    return unwrap<AuthResponse>((await client.post('/auth/login', {
+    return postOnce<AuthResponse>('/auth/login', {
       username,
       password,
       rememberMe,
       rememberDays
-    } satisfies LoginPayload)) as {
-      data: Envelope<AuthResponse>
-    })
+    } satisfies LoginPayload)
   },
 
   async getLoginOptions() {
@@ -83,15 +134,11 @@ export const api = {
   },
 
   async changeCredentials(payload: ChangeCredentialsPayload) {
-    return unwrap<AuthResponse>((await client.post('/auth/change-credentials', payload)) as {
-      data: Envelope<AuthResponse>
-    })
+    return postOnce<AuthResponse>('/auth/change-credentials', payload)
   },
 
   async changeDefaultPassword(newPassword: string) {
-    return unwrap<AuthResponse>((await client.post('/auth/change-default-password', { newPassword })) as {
-      data: Envelope<AuthResponse>
-    })
+    return postOnce<AuthResponse>('/auth/change-default-password', { newPassword })
   },
 
   async getSubscriptions(params?: { q?: string; status?: string; tagIds?: string }) {
@@ -109,13 +156,11 @@ export const api = {
   },
 
   async createSubscription(payload: Record<string, unknown>) {
-    return unwrap<Subscription>((await client.post('/subscriptions', payload)) as { data: Envelope<Subscription> })
+    return postOnce<Subscription>('/subscriptions', payload)
   },
 
   async searchSubscriptionLogos(payload: { name: string; websiteUrl?: string; tagName?: string }) {
-    return unwrap<LogoSearchResult[]>((await client.post('/subscriptions/logo/search', payload, { timeout: LOGO_REQUEST_TIMEOUT_MS })) as {
-      data: Envelope<LogoSearchResult[]>
-    })
+    return postOnce<LogoSearchResult[]>('/subscriptions/logo/search', payload, { timeout: LOGO_REQUEST_TIMEOUT_MS })
   },
 
   async getSubscriptionLogoLibrary() {
@@ -125,79 +170,55 @@ export const api = {
   },
 
   async deleteSubscriptionLogoFromLibrary(filename: string) {
-    return unwrap<{ filename: string; logoUrl: string; deleted: boolean }>(
-      (await client.delete(`/subscriptions/logo/library/${encodeURIComponent(filename)}`)) as {
-        data: Envelope<{ filename: string; logoUrl: string; deleted: boolean }>
-      }
-    )
+    return deleteOnce<{ filename: string; logoUrl: string; deleted: boolean }>(`/subscriptions/logo/library/${encodeURIComponent(filename)}`)
   },
 
   async uploadSubscriptionLogo(payload: { filename: string; contentType: string; base64: string }) {
-    return unwrap<{ logoUrl: string; logoSource: string }>((await client.post('/subscriptions/logo/upload', payload)) as {
-      data: Envelope<{ logoUrl: string; logoSource: string }>
-    })
+    return postOnce<{ logoUrl: string; logoSource: string }>('/subscriptions/logo/upload', payload)
   },
 
   async importSubscriptionLogo(payload: { logoUrl: string; source?: string }) {
-    return unwrap<{ logoUrl: string; logoSource: string }>(
-      (await client.post('/subscriptions/logo/import', payload, { timeout: LOGO_REQUEST_TIMEOUT_MS })) as {
-      data: Envelope<{ logoUrl: string; logoSource: string }>
-      }
-    )
+    return postOnce<{ logoUrl: string; logoSource: string }>('/subscriptions/logo/import', payload, { timeout: LOGO_REQUEST_TIMEOUT_MS })
   },
 
   async updateSubscription(id: string, payload: Record<string, unknown>) {
-    return unwrap<Subscription>((await client.patch(`/subscriptions/${id}`, payload)) as { data: Envelope<Subscription> })
+    return patchOnce<Subscription>(`/subscriptions/${id}`, payload)
   },
 
   async reorderSubscriptions(ids: string[]) {
-    return unwrap<{ success: boolean }>((await client.post('/subscriptions/reorder', { ids })) as {
-      data: Envelope<{ success: boolean }>
-    })
+    return postOnce<{ success: boolean }>('/subscriptions/reorder', { ids })
   },
 
   async renewSubscription(id: string, payload: Record<string, unknown> = {}) {
-    return unwrap<{ subscription: Subscription }>(
-      (await client.post(`/subscriptions/${id}/renew`, payload)) as { data: Envelope<{ subscription: Subscription }> }
-    )
+    return postOnce<{ subscription: Subscription }>(`/subscriptions/${id}/renew`, payload)
   },
 
   async batchRenewSubscriptions(ids: string[]) {
-    return unwrap<BatchActionResult>((await client.post('/subscriptions/batch/renew', { ids })) as {
-      data: Envelope<BatchActionResult>
-    })
+    return postOnce<BatchActionResult>('/subscriptions/batch/renew', { ids })
   },
 
   async pauseSubscription(id: string) {
-    return unwrap<Subscription>((await client.post(`/subscriptions/${id}/pause`)) as { data: Envelope<Subscription> })
+    return postOnce<Subscription>(`/subscriptions/${id}/pause`)
   },
 
   async batchPauseSubscriptions(ids: string[]) {
-    return unwrap<BatchActionResult>((await client.post('/subscriptions/batch/pause', { ids })) as {
-      data: Envelope<BatchActionResult>
-    })
+    return postOnce<BatchActionResult>('/subscriptions/batch/pause', { ids })
   },
 
   async cancelSubscription(id: string) {
-    return unwrap<Subscription>((await client.post(`/subscriptions/${id}/cancel`)) as { data: Envelope<Subscription> })
+    return postOnce<Subscription>(`/subscriptions/${id}/cancel`)
   },
 
   async batchCancelSubscriptions(ids: string[]) {
-    return unwrap<BatchActionResult>((await client.post('/subscriptions/batch/cancel', { ids })) as {
-      data: Envelope<BatchActionResult>
-    })
+    return postOnce<BatchActionResult>('/subscriptions/batch/cancel', { ids })
   },
 
   async deleteSubscription(id: string) {
-    return unwrap<{ id: string; deleted: boolean }>(
-      (await client.delete(`/subscriptions/${id}`)) as { data: Envelope<{ id: string; deleted: boolean }> }
-    )
+    return deleteOnce<{ id: string; deleted: boolean }>(`/subscriptions/${id}`)
   },
 
   async batchDeleteSubscriptions(ids: string[]) {
-    return unwrap<BatchActionResult>((await client.post('/subscriptions/batch/delete', { ids })) as {
-      data: Envelope<BatchActionResult>
-    })
+    return postOnce<BatchActionResult>('/subscriptions/batch/delete', { ids })
   },
 
   async recognizeSubscriptionByAi(payload: {
@@ -206,21 +227,19 @@ export const api = {
     filename?: string
     mimeType?: string
   }) {
-    return unwrap<AiRecognitionResult>((await client.post('/ai/recognize-subscription', payload)) as {
-      data: Envelope<AiRecognitionResult>
-    })
+    return postOnce<AiRecognitionResult>('/ai/recognize-subscription', payload)
   },
 
   async testAiConfiguration() {
-    return unwrap<AiTestResponse>((await client.post('/ai/test')) as { data: Envelope<AiTestResponse> })
+    return postOnce<AiTestResponse>('/ai/test')
   },
 
   async testAiConfigurationWithPayload(payload: Settings['aiConfig']) {
-    return unwrap<AiTestResponse>((await client.post('/ai/test', payload)) as { data: Envelope<AiTestResponse> })
+    return postOnce<AiTestResponse>('/ai/test', payload)
   },
 
   async testAiVisionConfigurationWithPayload(payload: Settings['aiConfig']) {
-    return unwrap<AiTestResponse>((await client.post('/ai/test-vision', payload)) as { data: Envelope<AiTestResponse> })
+    return postOnce<AiTestResponse>('/ai/test-vision', payload)
   },
 
   async getTags() {
@@ -228,17 +247,15 @@ export const api = {
   },
 
   async createTag(payload: Record<string, unknown>) {
-    return unwrap<Tag>((await client.post('/tags', payload)) as { data: Envelope<Tag> })
+    return postOnce<Tag>('/tags', payload)
   },
 
   async updateTag(id: string, payload: Record<string, unknown>) {
-    return unwrap<Tag>((await client.patch(`/tags/${id}`, payload)) as { data: Envelope<Tag> })
+    return patchOnce<Tag>(`/tags/${id}`, payload)
   },
 
   async deleteTag(id: string) {
-    return unwrap<{ id: string; deleted: boolean }>(
-      (await client.delete(`/tags/${id}`)) as { data: Envelope<{ id: string; deleted: boolean }> }
-    )
+    return deleteOnce<{ id: string; deleted: boolean }>(`/tags/${id}`)
   },
 
   async getStatisticsOverview() {
@@ -254,11 +271,13 @@ export const api = {
   },
 
   async getSettings() {
-    return unwrap<Settings>((await client.get('/settings')) as { data: Envelope<Settings> })
+    return withMutationSingleFlight('GET', '/settings', undefined, async () =>
+      unwrap<Settings>((await client.get('/settings')) as { data: Envelope<Settings> })
+    )
   },
 
   async updateSettings(payload: Partial<Settings>) {
-    return unwrap<Settings>((await client.patch('/settings', payload)) as { data: Envelope<Settings> })
+    return patchOnce<Settings>('/settings', payload)
   },
 
   async getExchangeRateSnapshot() {
@@ -266,37 +285,27 @@ export const api = {
   },
 
   async refreshExchangeRates() {
-    return unwrap<ExchangeRateSnapshot>((await client.post('/exchange-rates/refresh')) as { data: Envelope<ExchangeRateSnapshot> })
+    return postOnce<ExchangeRateSnapshot>('/exchange-rates/refresh')
   },
 
   async testEmailNotification() {
-    return unwrap<{ success: boolean }>((await client.post('/notifications/test/email')) as {
-      data: Envelope<{ success: boolean }>
-    })
+    return postOnce<{ success: boolean }>('/notifications/test/email')
   },
 
   async testEmailNotificationWithPayload(payload: Settings['emailConfig']) {
-    return unwrap<{ success: boolean }>((await client.post('/notifications/test/email', payload)) as {
-      data: Envelope<{ success: boolean }>
-    })
+    return postOnce<{ success: boolean }>('/notifications/test/email', payload)
   },
 
   async testPushplusNotification() {
-    return unwrap<{ accepted: boolean; code?: number; message?: string; shortCode?: string }>((await client.post('/notifications/test/pushplus')) as {
-      data: Envelope<{ accepted: boolean; code?: number; message?: string; shortCode?: string }>
-    })
+    return postOnce<{ accepted: boolean; code?: number; message?: string; shortCode?: string }>('/notifications/test/pushplus')
   },
 
   async testPushplusNotificationWithPayload(payload: Settings['pushplusConfig']) {
-    return unwrap<{ accepted: boolean; code?: number; message?: string; shortCode?: string }>((await client.post('/notifications/test/pushplus', payload)) as {
-      data: Envelope<{ accepted: boolean; code?: number; message?: string; shortCode?: string }>
-    })
+    return postOnce<{ accepted: boolean; code?: number; message?: string; shortCode?: string }>('/notifications/test/pushplus', payload)
   },
 
   async testTelegramNotificationWithPayload(payload: TelegramConfig) {
-    return unwrap<{ success: boolean }>((await client.post('/notifications/test/telegram', payload)) as {
-      data: Envelope<{ success: boolean }>
-    })
+    return postOnce<{ success: boolean }>('/notifications/test/telegram', payload)
   },
 
   async getNotificationWebhook() {
@@ -306,21 +315,15 @@ export const api = {
   },
 
   async updateNotificationWebhook(payload: NotificationWebhookSettings) {
-    return unwrap<NotificationWebhookSettings>((await client.put('/notifications/webhook', payload)) as {
-      data: Envelope<NotificationWebhookSettings>
-    })
+    return putOnce<NotificationWebhookSettings>('/notifications/webhook', payload)
   },
 
   async testWebhookNotification() {
-    return unwrap<{ success: boolean; statusCode: number; responseBody: string }>((await client.post('/notifications/test/webhook')) as {
-      data: Envelope<{ success: boolean; statusCode: number; responseBody: string }>
-    })
+    return postOnce<{ success: boolean; statusCode: number; responseBody: string }>('/notifications/test/webhook')
   },
 
   async testWebhookNotificationWithPayload(payload: NotificationWebhookSettings) {
-    return unwrap<{ success: boolean; statusCode: number; responseBody: string }>((await client.post('/notifications/test/webhook', payload)) as {
-      data: Envelope<{ success: boolean; statusCode: number; responseBody: string }>
-    })
+    return postOnce<{ success: boolean; statusCode: number; responseBody: string }>('/notifications/test/webhook', payload)
   },
 
   async exportSubscriptions(format: 'csv' | 'json') {
@@ -338,14 +341,10 @@ export const api = {
   },
 
   async inspectWallosImport(payload: { filename: string; contentType: string; base64: string }) {
-    return unwrap<WallosImportInspectResult>((await client.post('/import/wallos/inspect', payload, { timeout: 60000 })) as {
-      data: Envelope<WallosImportInspectResult>
-    })
+    return postOnce<WallosImportInspectResult>('/import/wallos/inspect', payload, { timeout: 60000 })
   },
 
   async commitWallosImport(importToken: string) {
-    return unwrap<WallosImportCommitResult>((await client.post('/import/wallos/commit', { importToken })) as {
-      data: Envelope<WallosImportCommitResult>
-    })
+    return postOnce<WallosImportCommitResult>('/import/wallos/commit', { importToken })
   }
 }

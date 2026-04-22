@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { sendError, sendOk } from '../http'
 import { WallosImportCommitSchema, WallosImportInspectSchema } from '@subtracker/shared'
+import { invalidateWorkerLiteCache } from '../services/worker-lite-cache.service'
 import { commitWallosImport, inspectWallosImportFile } from '../services/wallos-import.service'
 
 export async function importRoutes(app: FastifyInstance) {
@@ -24,7 +25,9 @@ export async function importRoutes(app: FastifyInstance) {
     }
 
     try {
-      return sendOk(reply, await commitWallosImport(parsed.data))
+      const result = await commitWallosImport(parsed.data)
+      await invalidateWorkerLiteCache(['subscriptions', 'tags', 'statistics', 'calendar'])
+      return sendOk(reply, result)
     } catch (error) {
       return sendError(reply, 400, 'wallos_commit_failed', error instanceof Error ? error.message : 'Wallos import failed')
     }

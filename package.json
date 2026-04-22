@@ -22,8 +22,6 @@
     "reset:worker:local:d1": "node scripts/reset-cloudflare-state.mjs --local-d1",
     "reset:worker:local:kv": "node scripts/reset-cloudflare-state.mjs --local-kv",
     "reset:worker:local:rates": "node scripts/reset-cloudflare-state.mjs --local-rates",
-    "reset:worker:remote:rates": "node scripts/reset-cloudflare-state.mjs --remote-rates",
-    "reset:worker:remote:all": "node scripts/reset-cloudflare-state.mjs --remote-all",
     "deploy:worker": "node scripts/bootstrap-cloudflare.mjs",
     "deploy:worker:r2": "node scripts/bootstrap-cloudflare.mjs --with-r2"
   },

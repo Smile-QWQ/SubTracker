@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const notificationState = vi.hoisted(() => ({
   mergeMultiSubscriptionNotifications: true,
   dispatchMock: vi.fn(),
-  updateMock: vi.fn()
+  listSubscriptionsLiteMock: vi.fn()
 }))
 
 vi.mock('../../src/services/settings.service', () => ({
@@ -21,56 +21,8 @@ vi.mock('../../src/services/channel-notification.service', () => ({
   dispatchNotificationEvent: notificationState.dispatchMock
 }))
 
-vi.mock('../../src/db', () => ({
-  prisma: {
-    subscription: {
-      findMany: vi.fn(async () => [
-        {
-          id: 'sub-1',
-          name: 'Netflix',
-          nextRenewalDate: new Date('2026-04-23T00:00:00'),
-          notifyDaysBefore: 3,
-          advanceReminderRules: '',
-          overdueReminderRules: '',
-          amount: 9.9,
-          currency: 'USD',
-          status: 'active',
-          websiteUrl: 'https://netflix.com',
-          notes: 'stream',
-          tags: [{ tag: { name: '视频' } }]
-        },
-        {
-          id: 'sub-2',
-          name: 'Spotify',
-          nextRenewalDate: new Date('2026-04-22T00:00:00'),
-          notifyDaysBefore: 5,
-          advanceReminderRules: '',
-          overdueReminderRules: '',
-          amount: 12.9,
-          currency: 'USD',
-          status: 'active',
-          websiteUrl: 'https://spotify.com',
-          notes: 'music',
-          tags: [{ tag: { name: '音乐' } }]
-        },
-        {
-          id: 'sub-3',
-          name: 'Notion',
-          nextRenewalDate: new Date('2026-04-26T00:00:00'),
-          notifyDaysBefore: 3,
-          advanceReminderRules: '',
-          overdueReminderRules: '',
-          amount: 8.8,
-          currency: 'USD',
-          status: 'active',
-          websiteUrl: 'https://notion.so',
-          notes: 'workspace',
-          tags: [{ tag: { name: '办公' } }]
-        }
-      ]),
-      update: notificationState.updateMock
-    }
-  }
+vi.mock('../../src/services/worker-lite-repository.service', () => ({
+  listSubscriptionsLite: notificationState.listSubscriptionsLiteMock
 }))
 
 import { scanRenewalNotifications } from '../../src/services/notification.service'
@@ -78,7 +30,54 @@ import { scanRenewalNotifications } from '../../src/services/notification.servic
 describe('scanRenewalNotifications merge behavior', () => {
   beforeEach(() => {
     notificationState.dispatchMock.mockReset()
-    notificationState.updateMock.mockReset()
+    notificationState.listSubscriptionsLiteMock.mockReset()
+    notificationState.listSubscriptionsLiteMock.mockResolvedValue([
+      {
+        id: 'sub-1',
+        name: 'Netflix',
+        nextRenewalDate: new Date('2026-04-23T00:00:00'),
+        notifyDaysBefore: 3,
+        advanceReminderRules: '',
+        overdueReminderRules: '',
+        amount: 9.9,
+        currency: 'USD',
+        status: 'active',
+        websiteUrl: 'https://netflix.com',
+        notes: 'stream',
+        webhookEnabled: true,
+        tags: [{ tag: { name: '视频' } }]
+      },
+      {
+        id: 'sub-2',
+        name: 'Spotify',
+        nextRenewalDate: new Date('2026-04-22T00:00:00'),
+        notifyDaysBefore: 5,
+        advanceReminderRules: '',
+        overdueReminderRules: '',
+        amount: 12.9,
+        currency: 'USD',
+        status: 'active',
+        websiteUrl: 'https://spotify.com',
+        notes: 'music',
+        webhookEnabled: true,
+        tags: [{ tag: { name: '音乐' } }]
+      },
+      {
+        id: 'sub-3',
+        name: 'Notion',
+        nextRenewalDate: new Date('2026-04-26T00:00:00'),
+        notifyDaysBefore: 3,
+        advanceReminderRules: '',
+        overdueReminderRules: '',
+        amount: 8.8,
+        currency: 'USD',
+        status: 'active',
+        websiteUrl: 'https://notion.so',
+        notes: 'workspace',
+        webhookEnabled: true,
+        tags: [{ tag: { name: '办公' } }]
+      }
+    ])
   })
 
   it('merges all reminders from the same scan into a single summary notification by default', async () => {
@@ -104,5 +103,13 @@ describe('scanRenewalNotifications merge behavior', () => {
     for (const call of notificationState.dispatchMock.mock.calls) {
       expect(call[0].payload.merged).not.toBe(true)
     }
+  })
+
+  it('still matches reminders inside the default 5-minute scan window', async () => {
+    notificationState.mergeMultiSubscriptionNotifications = false
+
+    await scanRenewalNotifications(new Date('2026-04-23T09:34:00'))
+
+    expect(notificationState.dispatchMock).toHaveBeenCalledTimes(3)
   })
 })

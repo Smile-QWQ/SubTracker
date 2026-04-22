@@ -11,8 +11,7 @@ import type {
 import { prisma } from '../db'
 import { getWorkerCache } from '../runtime'
 import { getAppSettings, getSetting, setSetting } from './settings.service'
-import { appendSubscriptionOrder } from './subscription-order.service'
-import { replaceSubscriptionTags } from './tag.service'
+import { appendSubscriptionOrders } from './subscription-order.service'
 
 const IMPORT_TOKEN_TTL_SECONDS = 15 * 60
 const IMPORT_TOKEN_TTL_MS = IMPORT_TOKEN_TTL_SECONDS * 1000
@@ -51,6 +50,12 @@ function getImportedTagColor(name: string) {
     hash = (hash * 31 + char.charCodeAt(0)) >>> 0
   }
   return IMPORT_TAG_COLORS[hash % IMPORT_TAG_COLORS.length]
+}
+
+function createImportId() {
+  const random = crypto.randomUUID().replaceAll('-', '').slice(0, 16)
+  const timestamp = Date.now().toString(36).slice(-8)
+  return `c${timestamp}${random}`.slice(0, 25)
 }
 
 async function getStoredPreview(token: string) {
@@ -440,53 +445,97 @@ export async function commitWallosImport(input: WallosImportCommitInput): Promis
   const tagIdByName = new Map(existingTags.map((item) => [item.name, item.id]))
   let importedTags = 0
   let importedSubscriptions = 0
+  const missingTags = preview.usedTags.filter((tag) => !tagIdByName.has(tag.name))
 
-  for (const tag of preview.usedTags) {
-    if (tagIdByName.has(tag.name)) continue
-
-    const created = await prisma.tag.create({
-      data: {
+  if (missingTags.length > 0) {
+    await prisma.tag.createMany({
+      data: missingTags.map((tag) => ({
         name: tag.name,
         color: getImportedTagColor(tag.name),
         sortOrder: tag.sortOrder
+      }))
+    })
+    importedTags = missingTags.length
+
+    const refreshedTags = await prisma.tag.findMany({
+      where: {
+        name: {
+          in: preview.usedTags.map((item) => item.name)
+        }
       }
     })
-    tagIdByName.set(created.name, created.id)
-    importedTags += 1
+    tagIdByName.clear()
+    refreshedTags.forEach((tag) => {
+      tagIdByName.set(tag.name, tag.id)
+    })
   }
+
+  const createdSubscriptionIds: string[] = []
+  const subscriptionRows: Array<{
+    id: string
+    name: string
+    description: string
+    amount: number
+    currency: string
+    billingIntervalCount: number
+    billingIntervalUnit: BillingIntervalUnit
+    autoRenew: boolean
+    startDate: Date
+    nextRenewalDate: Date
+    notifyDaysBefore: number
+    webhookEnabled: boolean
+    notes: string
+    websiteUrl: string | null
+    status: SubscriptionStatus
+  }> = []
+  const subscriptionTagRows: Array<{ subscriptionId: string; tagId: string }> = []
 
   for (const item of preview.subscriptionsPreview) {
     const tagIds = item.tagNames
       .map((name) => tagIdByName.get(name))
       .filter((value): value is string => Boolean(value))
 
-    const created = await prisma.$transaction(async (tx) => {
-      const subscription = await tx.subscription.create({
-        data: {
-          name: item.name,
-          description: item.description,
-          amount: item.amount,
-          currency: item.currency,
-          billingIntervalCount: item.billingIntervalCount,
-          billingIntervalUnit: item.billingIntervalUnit,
-          autoRenew: item.autoRenew,
-          startDate: new Date(`${item.startDate}T00:00:00.000Z`),
-          nextRenewalDate: new Date(`${item.nextRenewalDate}T00:00:00.000Z`),
-          notifyDaysBefore: item.notifyDaysBefore,
-          webhookEnabled: item.webhookEnabled,
-          notes: item.notes,
-          websiteUrl: item.websiteUrl ?? null,
-          status: item.status
-        }
-      })
-
-      await replaceSubscriptionTags(tx, subscription.id, tagIds)
-      return subscription
+    const subscriptionId = createImportId()
+    createdSubscriptionIds.push(subscriptionId)
+    subscriptionRows.push({
+      id: subscriptionId,
+      name: item.name,
+      description: item.description,
+      amount: item.amount,
+      currency: item.currency,
+      billingIntervalCount: item.billingIntervalCount,
+      billingIntervalUnit: item.billingIntervalUnit,
+      autoRenew: item.autoRenew,
+      startDate: new Date(`${item.startDate}T00:00:00.000Z`),
+      nextRenewalDate: new Date(`${item.nextRenewalDate}T00:00:00.000Z`),
+      notifyDaysBefore: item.notifyDaysBefore,
+      webhookEnabled: item.webhookEnabled,
+      notes: item.notes,
+      websiteUrl: item.websiteUrl ?? null,
+      status: item.status
     })
-
-    await appendSubscriptionOrder(created.id)
+    tagIds.forEach((tagId) => {
+      subscriptionTagRows.push({
+        subscriptionId,
+        tagId
+      })
+    })
     importedSubscriptions += 1
   }
+
+  if (subscriptionRows.length > 0) {
+    await prisma.subscription.createMany({
+      data: subscriptionRows
+    })
+  }
+
+  if (subscriptionTagRows.length > 0) {
+    await prisma.subscriptionTag.createMany({
+      data: subscriptionTagRows
+    })
+  }
+
+  await appendSubscriptionOrders(createdSubscriptionIds)
 
   return {
     importedTags,

@@ -15,7 +15,9 @@
 		"DEFAULT_NOTIFY_DAYS": "3",
 		"EXCHANGE_RATE_PROVIDER": "er-api",
 		"EXCHANGE_RATE_URL": "https://open.er-api.com/v6/latest",
-		"CRON_SCAN": "* * * * *",
+		"CRON_SCAN": "*/5 * * * *",
+		"CRON_AUTO_RENEW": "2 * * * *",
+		"CRON_RECONCILE_EXPIRED": "10 2 * * *",
 		"CRON_REFRESH_RATES": "0 2 * * *",
 		"RESEND_API_URL": "https://api.resend.com/emails"
 	},
@@ -30,7 +32,9 @@
 	},
 	"triggers": {
 		"crons": [
-			"* * * * *",
+			"*/5 * * * *",
+			"2 * * * *",
+			"10 2 * * *",
 			"0 2 * * *"
 		]
 	},

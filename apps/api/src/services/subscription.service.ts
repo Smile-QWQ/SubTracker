@@ -24,8 +24,8 @@ export async function renewSubscription(subscriptionId: string, paidAt?: Date, p
     subscription.billingIntervalUnit
   )
 
-  return prisma.$transaction(async (tx) => {
-    const payment = await tx.paymentRecord.create({
+  const [payment, updated] = await prisma.$transaction([
+    prisma.paymentRecord.create({
       data: {
         subscriptionId: subscription.id,
         amount,
@@ -37,30 +37,32 @@ export async function renewSubscription(subscriptionId: string, paidAt?: Date, p
         periodStart,
         periodEnd
       }
-    })
-
-    const updated = await tx.subscription.update({
+    }),
+    prisma.subscription.update({
       where: { id: subscription.id },
       data: {
         nextRenewalDate: periodEnd,
         status: 'active'
       }
     })
+  ])
 
-    return {
-      payment,
-      subscription: updated
-    }
-  })
+  return {
+    payment,
+    subscription: updated
+  }
 }
 
 export async function autoRenewDueSubscriptions(today = new Date()) {
+  const windowStart = dayjs(today).startOf('hour').toDate()
+  const windowEnd = dayjs(today).endOf('hour').toDate()
   const dueSubscriptions = await prisma.subscription.findMany({
     where: {
       autoRenew: true,
       status: { in: ['active', 'expired'] },
       nextRenewalDate: {
-        lte: dayjs(today).endOf('day').toDate()
+        gte: windowStart,
+        lte: windowEnd
       }
     },
     orderBy: { nextRenewalDate: 'asc' }
@@ -81,4 +83,21 @@ export async function autoRenewDueSubscriptions(today = new Date()) {
   }
 
   return renewedCount
+}
+
+export async function reconcileExpiredSubscriptions(today = new Date()) {
+  const cutoff = dayjs(today).startOf('day').toDate()
+  const result = await prisma.subscription.updateMany({
+    where: {
+      status: 'active',
+      nextRenewalDate: {
+        lt: cutoff
+      }
+    },
+    data: {
+      status: 'expired'
+    }
+  })
+
+  return result.count
 }

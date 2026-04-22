@@ -40,6 +40,25 @@
 - **Wallos 导入**：当前分支支持 JSON 导入
 - **登录体验**：支持“记住我”、可配置的登录保留时长、默认密码修改提醒，以及登录失败限流保护
 
+## Lite 版说明
+
+这个分支面向 **Cloudflare Worker Free**，因此会主动做一些性能取舍来换稳定性：
+
+- 读取类接口默认使用 **30 秒短 TTL 缓存**
+- Logo 搜索是 Lite 版，只保留网站候选 + DuckDuckGo
+- Cron 已拆成更轻的 Worker 版职责
+- 遇到 `503` / CPU 超限时，前端会明确提示可能受 Worker 免费版限制影响
+
+这意味着：
+
+- 大部分功能可以还原
+- 但短时间内可能看到旧数据
+- Logo 搜索质量和实时性不追求与 main 的 Docker 版完全一致
+
+详细说明见：
+
+- [`DEPLOYMENT.md`](./DEPLOYMENT.md)
+
 ## 技术栈
 
 - **前端**：Vue 3、Vite、TypeScript、Naive UI、Pinia、TanStack Query、ECharts

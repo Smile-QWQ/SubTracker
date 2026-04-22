@@ -167,6 +167,12 @@
 默认会启用 KV。  
 如果你在仓库 Variables 里把 `ENABLE_KV` 明确设为 `false`，系统仍然可以运行，但会有功能退化。
 
+KV 关闭后的主要退化包括：
+
+- 读取类接口不再享受 Worker Lite 的短 TTL 缓存
+- Logo 搜索缓存失效，重复搜索会更慢
+- 通知去重与导入预览状态会退回到更重的数据库路径
+
 ### 可选
 
 - **R2**
@@ -204,7 +210,97 @@ https://api.resend.com/emails
 
 ---
 
-## 八、本地手动部署（开发者可选）
+## 八、Worker Lite 的性能取舍
+
+这个分支面向 **Cloudflare Worker Free**，因此实现上做了明确的 Lite 化裁剪，而不是完全复刻 Docker 版的运行模型。
+
+### 1. 30 秒短 TTL 缓存
+
+以下读取类接口默认会缓存 **30 秒**：
+
+- `/settings`
+- `/tags`
+- `/subscriptions`
+- `/statistics/overview`
+- `/statistics/budgets`
+- `/exchange-rates/latest`
+- `/calendar/events`
+
+这样做的原因是：
+
+- Worker Free 每次 HTTP 请求只有 **10ms CPU**
+- 同一页面会并发读取多份数据
+- 如果每次都实时重算，很容易撞上 `Worker exceeded CPU time limit`
+
+这 30 秒缓存的副作用是：
+
+- 刚修改完数据后，其他页面在极短时间内可能看到旧数据
+- 统计页、日历页、标签页在 30 秒窗口内可能不是绝对实时
+- 如果关闭 KV，只能退回到 isolate 内存缓存，跨实例缓存一致性会更弱
+
+当前实现已经对主要写操作做了主动失效，所以正常情况下：
+
+- 保存设置后，会刷新 settings / statistics / exchange-rates
+- 修改标签后，会刷新 tags / subscriptions / statistics
+- 修改订阅后，会刷新 subscriptions / statistics / calendar
+- Wallos 导入提交后，会刷新 subscriptions / tags / statistics / calendar
+
+也就是说：
+
+> **30 秒缓存带来的不是“数据一定延迟 30 秒”，而是“最多可能有短时间旧数据”。**
+
+### 2. Logo 搜索是 Lite 版
+
+Worker Lite 的 Logo 搜索只保留：
+
+- 网站 icon / manifest / og:image
+- DuckDuckGo 候选
+
+并明确去掉：
+
+- Brave
+- 搜索阶段的服务端逐图探测
+- main 分支那种更重的结果精筛
+
+这样做的目的，是把 `/subscriptions/logo/search` 从高 CPU 路径压到 Worker Free 能承受的范围内。
+
+副作用是：
+
+- 搜索结果质量不如 Docker / main 分支
+- 偶尔会混入不够理想的候选图
+
+### 3. Cron 已拆成 Lite 版职责
+
+当前默认触发器是：
+
+- `*/5 * * * *`：提醒扫描
+- `2 * * * *`：自动续费
+- `0 2 * * *`：汇率刷新
+- `10 2 * * *`：过期状态对账
+
+这和主线每分钟/更重扫描不同，目的是减少 Worker Free 的定时 CPU 压力。
+
+副作用是：
+
+- 提醒扫描不再追求“每分钟严格实时”
+- 而是采用 **5 分钟窗口命中**
+- 以换取更稳定的执行
+
+### 4. 错误提示会明确说明 Worker 限制
+
+前端遇到：
+
+- `503`
+- `Worker exceeded CPU time limit`
+
+会统一提示用户：
+
+- 可能受 **Cloudflare Worker 免费版限制** 影响
+- 请稍后重试并避免连续重复点击
+
+---
+
+## 九、本地手动部署（开发者可选）
 
 如果你不是普通 fork 用户，而是本地维护这个分支的开发者，也可以直接在本机执行：
 
@@ -232,7 +328,7 @@ npm run deploy:worker
 
 ---
 
-## 九、本地开发（开发者可选）
+## 十、本地开发（开发者可选）
 
 如果你需要本地调试 Worker：
 
@@ -250,7 +346,7 @@ http://127.0.0.1:8787
 
 ---
 
-## 十、当前分支能力边界
+## 十一、当前分支能力边界
 
 ### 支持
 

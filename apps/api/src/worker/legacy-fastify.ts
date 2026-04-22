@@ -197,6 +197,12 @@ export class LegacyFastifyApp {
         const response = await (handler as LegacyHandler)(request, reply)
         return reply.buildResponse(response)
       } catch (error) {
+        console.error('[worker-route-error]', {
+          method: c.req.method,
+          path: c.req.path,
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined
+        })
         return new Response(
           JSON.stringify({
             error: {

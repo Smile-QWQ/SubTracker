@@ -1,12 +1,13 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { TagSchema } from '@subtracker/shared'
-import { prisma } from '../db'
 import { sendCreated, sendError, sendOk } from '../http'
+import { invalidateWorkerLiteCache, withWorkerLiteCache } from '../services/worker-lite-cache.service'
+import { createTagLite, deleteTagLite, listTagsLite, updateTagLite } from '../services/worker-lite-repository.service'
 
 export async function tagRoutes(app: FastifyInstance) {
   app.get('/tags', async (_request, reply) => {
-    const tags = await prisma.tag.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] })
+    const tags = await withWorkerLiteCache('tags', 'list', () => listTagsLite(), 30)
     return sendOk(reply, tags)
   })
 
@@ -17,14 +18,8 @@ export async function tagRoutes(app: FastifyInstance) {
     }
 
     try {
-      const created = await prisma.tag.create({
-        data: {
-          name: parsed.data.name,
-          color: parsed.data.color,
-          icon: parsed.data.icon,
-          sortOrder: parsed.data.sortOrder
-        }
-      })
+      const created = await createTagLite(parsed.data)
+      await invalidateWorkerLiteCache(['tags', 'subscriptions', 'statistics'])
       return sendCreated(reply, created)
     } catch (error) {
       return sendError(reply, 409, 'conflict', 'Tag name already exists', error)
@@ -43,18 +38,18 @@ export async function tagRoutes(app: FastifyInstance) {
     }
 
     try {
-      const updated = await prisma.tag.update({
-        where: { id: params.data.id },
-        data: {
-          ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
-          ...(parsed.data.color !== undefined ? { color: parsed.data.color } : {}),
-          ...(parsed.data.icon !== undefined ? { icon: parsed.data.icon } : {}),
-          ...(parsed.data.sortOrder !== undefined ? { sortOrder: parsed.data.sortOrder } : {})
-        }
-      })
+      const updated = await updateTagLite(params.data.id, parsed.data)
+      await invalidateWorkerLiteCache(['tags', 'subscriptions', 'statistics'])
       return sendOk(reply, updated)
     } catch (error) {
-      return sendError(reply, 409, 'conflict', 'Tag update failed', error)
+      const message = error instanceof Error ? error.message : 'Tag update failed'
+      return sendError(
+        reply,
+        message === 'Tag not found' ? 404 : 409,
+        message === 'Tag not found' ? 'not_found' : 'conflict',
+        message,
+        error
+      )
     }
   })
 
@@ -65,16 +60,8 @@ export async function tagRoutes(app: FastifyInstance) {
     }
 
     try {
-      await prisma.$transaction(async (tx) => {
-        await tx.subscriptionTag.deleteMany({
-          where: { tagId: params.data.id }
-        })
-
-        await tx.tag.delete({
-          where: { id: params.data.id }
-        })
-      })
-
+      await deleteTagLite(params.data.id)
+      await invalidateWorkerLiteCache(['tags', 'subscriptions', 'statistics'])
       return sendOk(reply, { id: params.data.id, deleted: true })
     } catch (error) {
       return sendError(reply, 404, 'not_found', 'Tag not found', error)

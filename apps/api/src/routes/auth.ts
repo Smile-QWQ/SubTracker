@@ -3,7 +3,7 @@ import { ChangeCredentialsSchema, LoginSchema } from '@subtracker/shared'
 import { z } from 'zod'
 import { sendError, sendOk } from '../http'
 import { changeCredentials, changeDefaultPassword, loginWithCredentials } from '../services/auth.service'
-import { getAppSettings } from '../services/settings.service'
+import { getRememberSessionDays } from '../services/settings.service'
 
 function resolveLoginValidationMessage(body: unknown) {
   const payload = (body ?? {}) as Partial<{ username: string; password: string }>
@@ -18,9 +18,8 @@ function resolveLoginValidationMessage(body: unknown) {
 
 export async function authRoutes(app: FastifyInstance) {
   app.get('/auth/login-options', async (_request, reply) => {
-    const settings = await getAppSettings()
     return sendOk(reply, {
-      rememberSessionDays: settings.rememberSessionDays
+      rememberSessionDays: await getRememberSessionDays()
     })
   })
 

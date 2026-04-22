@@ -13,6 +13,7 @@ vi.mock('../../src/services/settings.service', () => ({
 
 import {
   appendSubscriptionOrder,
+  appendSubscriptionOrders,
   getSubscriptionOrder,
   removeSubscriptionOrder,
   setSubscriptionOrder,
@@ -37,6 +38,13 @@ describe('subscription order service', () => {
     await removeSubscriptionOrder('sub-2')
 
     await expect(getSubscriptionOrder()).resolves.toEqual(['sub-1'])
+  })
+
+  it('should append multiple ids in one pass while preserving uniqueness', async () => {
+    await setSubscriptionOrder(['sub-1'])
+    await appendSubscriptionOrders(['sub-2', 'sub-3', 'sub-2', 'sub-1', 'sub-4'])
+
+    await expect(getSubscriptionOrder()).resolves.toEqual(['sub-1', 'sub-2', 'sub-3', 'sub-4'])
   })
 
   it('should sort subscriptions by stored custom order', async () => {

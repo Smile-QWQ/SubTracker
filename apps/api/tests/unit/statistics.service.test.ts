@@ -1,19 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { findManySubscriptionsMock, findManyTagsMock } = vi.hoisted(() => ({
-  findManySubscriptionsMock: vi.fn(),
-  findManyTagsMock: vi.fn()
+const { listStatisticsSubscriptionsLiteMock, listTagsLiteMock } = vi.hoisted(() => ({
+  listStatisticsSubscriptionsLiteMock: vi.fn(),
+  listTagsLiteMock: vi.fn()
 }))
 
-vi.mock('../../src/db', () => ({
-  prisma: {
-    subscription: {
-      findMany: findManySubscriptionsMock
-    },
-    tag: {
-      findMany: findManyTagsMock
-    }
-  }
+vi.mock('../../src/services/worker-lite-repository.service', () => ({
+  listStatisticsSubscriptionsLite: listStatisticsSubscriptionsLiteMock,
+  listTagsLite: listTagsLiteMock
 }))
 
 vi.mock('../../src/services/exchange-rate.service', () => ({
@@ -100,13 +94,13 @@ function createSubscription(id: string, overrides: Record<string, unknown> = {})
 
 describe('statistics service', () => {
   beforeEach(() => {
-    findManyTagsMock.mockReset()
-    findManySubscriptionsMock.mockReset()
-    findManyTagsMock.mockResolvedValue([])
+    listTagsLiteMock.mockReset()
+    listStatisticsSubscriptionsLiteMock.mockReset()
+    listTagsLiteMock.mockResolvedValue([])
   })
 
   it('returns top subscriptions sorted by monthly normalized cost and limited to 10', async () => {
-    findManySubscriptionsMock.mockResolvedValue([
+    listStatisticsSubscriptionsLiteMock.mockResolvedValue([
       createSubscription('yearly', { name: 'Yearly', amount: 1200, billingIntervalUnit: 'year' }),
       createSubscription('monthly', { name: 'Monthly', amount: 50, billingIntervalUnit: 'month' }),
       createSubscription('paused', { name: 'Paused', amount: 999, status: 'paused' }),
