@@ -252,6 +252,7 @@ import { api } from '@/composables/api'
 import SubscriptionAiModal from '@/components/SubscriptionAiModal.vue'
 import { buildCurrencyOptions } from '@/utils/currency'
 import { resolveLogoUrl } from '@/utils/logo'
+import { resolveRemoteLogoApplication } from '@/utils/logo-selection'
 import type { AiRecognitionResult, LogoSearchResult, Subscription, Tag } from '@/types/api'
 
 const LOGO_TAB_WEB = 'web'
@@ -525,15 +526,26 @@ function pickLogoFile() {
 
 async function applyRemoteLogoCandidate(item: LogoSearchResult) {
   try {
-    const imported = await api.importSubscriptionLogo({
-      logoUrl: item.logoUrl,
-      source: item.source
+    const next = resolveRemoteLogoApplication(item, {
+      logoStorageEnabled: logoStorageEnabled.value,
+      currentWebsiteUrl: form.websiteUrl
     })
 
-    form.logoUrl = imported.logoUrl
-    form.logoSource = imported.logoSource
-    if (item.websiteUrl && !form.websiteUrl) {
-      form.websiteUrl = item.websiteUrl
+    if (next.mode === 'import') {
+      const imported = await api.importSubscriptionLogo({
+        logoUrl: next.logoUrl,
+        source: next.logoSource
+      })
+
+      form.logoUrl = imported.logoUrl
+      form.logoSource = imported.logoSource
+    } else {
+      form.logoUrl = next.logoUrl
+      form.logoSource = next.logoSource
+    }
+
+    if (next.websiteUrl) {
+      form.websiteUrl = next.websiteUrl
     }
 
     showLogoPanel.value = false
