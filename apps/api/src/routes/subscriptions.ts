@@ -31,7 +31,7 @@ import {
   deriveNotifyDaysBeforeFromAdvanceRules,
   normalizeOptionalReminderRules
 } from '../services/reminder-rules.service'
-import { getAppSettings } from '../services/settings.service'
+import { getDefaultAdvanceReminderRulesSetting } from '../services/settings.service'
 
 const subscriptionInclude = {
   tags: { include: { tag: true } }
@@ -42,13 +42,13 @@ async function resolveSubscriptionReminderFields(payload: {
   overdueReminderRules?: string | null
   notifyDaysBefore?: number
 }) {
-  const settings = await getAppSettings()
+  const defaultAdvanceReminderRules = await getDefaultAdvanceReminderRulesSetting()
 
   const normalizedAdvanceReminderRules =
     payload.advanceReminderRules !== undefined
       ? normalizeOptionalReminderRules(payload.advanceReminderRules, 'advance')
       : payload.notifyDaysBefore !== undefined
-        ? buildAdvanceReminderRulesFromLegacyWithDefault(payload.notifyDaysBefore, settings.defaultAdvanceReminderRules)
+        ? buildAdvanceReminderRulesFromLegacyWithDefault(payload.notifyDaysBefore, defaultAdvanceReminderRules)
         : undefined
 
   const normalizedOverdueReminderRules =
@@ -58,7 +58,7 @@ async function resolveSubscriptionReminderFields(payload: {
 
   const derivedNotifyDaysBefore =
     normalizedAdvanceReminderRules !== undefined
-      ? deriveNotifyDaysBeforeFromAdvanceRules(normalizedAdvanceReminderRules || settings.defaultAdvanceReminderRules)
+      ? deriveNotifyDaysBeforeFromAdvanceRules(normalizedAdvanceReminderRules || defaultAdvanceReminderRules)
       : payload.notifyDaysBefore
 
   return {

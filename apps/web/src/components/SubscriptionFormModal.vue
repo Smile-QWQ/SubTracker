@@ -1,5 +1,6 @@
 ﻿<template>
   <n-modal :show="show" preset="card" title="订阅信息" style="width: min(920px, calc(100vw - 24px))" @mask-click="close" @update:show="handleUpdateShow">
+    <n-spin :show="saving" description="保存中，请稍候...">
     <n-form :model="form" label-placement="top">
       <div class="name-logo-row">
         <n-form-item label="名称" class="name-logo-row__name">
@@ -210,13 +211,14 @@
           <span>自动续订</span>
         </n-space>
         <n-space wrap>
-          <n-button @click="showAiModal = true">AI 识别</n-button>
-          <n-button @click="handleReset">重置</n-button>
-          <n-button @click="close">取消</n-button>
-          <n-button type="primary" @click="submit">保存</n-button>
+          <n-button :disabled="saving" @click="showAiModal = true">AI 识别</n-button>
+          <n-button :disabled="saving" @click="handleReset">重置</n-button>
+          <n-button :disabled="saving" @click="close">取消</n-button>
+          <n-button type="primary" :loading="saving" :disabled="saving" @click="submit">保存</n-button>
         </n-space>
       </div>
     </n-form>
+    </n-spin>
 
     <subscription-ai-modal :show="showAiModal" @close="showAiModal = false" @apply="applyAiResult" />
   </n-modal>
@@ -260,6 +262,7 @@ const LOGO_TAB_LIBRARY = 'library'
 const props = defineProps<{
   show: boolean
   model?: Subscription | null
+  saving?: boolean
   tags: Tag[]
   currencies?: string[]
   defaultAdvanceReminderRules?: string
@@ -601,11 +604,6 @@ function applyAiResult(result: AiRecognitionResult) {
     form.nextRenewalDateTs = dayjs(result.nextRenewalDate).valueOf()
     nextRenewalDirty.value = true
   }
-  if (result.notifyDaysBefore !== undefined) {
-    form.advanceReminderRules = `${result.notifyDaysBefore}&09:30;`
-  }
-  if (result.advanceReminderRules) form.advanceReminderRules = result.advanceReminderRules
-  if (result.overdueReminderRules) form.overdueReminderRules = result.overdueReminderRules
   if (result.websiteUrl) form.websiteUrl = result.websiteUrl
   if (result.notes) form.notes = result.notes
 }
@@ -646,6 +644,7 @@ function submit() {
 }
 
 function close() {
+  if (props.saving) return
   emit('close')
 }
 

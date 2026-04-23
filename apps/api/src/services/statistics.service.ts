@@ -1,6 +1,6 @@
 import dayjs from 'dayjs'
 import { prisma } from '../db'
-import { ensureExchangeRates, getBaseCurrency } from './exchange-rate.service'
+import { ensureExchangeRates } from './exchange-rate.service'
 import { convertAmount } from '../utils/money'
 import { getAppSettings } from './settings.service'
 import { projectRenewalEvents } from './projected-renewal.service'
@@ -39,10 +39,25 @@ interface TopSubscriptionEntry {
 
 async function fetchStatisticsSubscriptions() {
   return prisma.subscription.findMany({
-    include: {
+    select: {
+      id: true,
+      name: true,
+      amount: true,
+      currency: true,
+      billingIntervalCount: true,
+      billingIntervalUnit: true,
+      autoRenew: true,
+      nextRenewalDate: true,
+      status: true,
       tags: {
-        include: {
-          tag: true
+        select: {
+          tag: {
+            select: {
+              id: true,
+              name: true,
+              sortOrder: true
+            }
+          }
         }
       }
     }
@@ -155,18 +170,18 @@ function buildUpcomingByDay(
 }
 
 async function buildStatisticsState() {
-  const [subscriptions, tags, appSettings] = await Promise.all([
+  const [subscriptions, appSettings] = await Promise.all([
     fetchStatisticsSubscriptions(),
-    prisma.tag.findMany(),
     getAppSettings()
   ])
+  const tags = appSettings.enableTagBudgets ? await prisma.tag.findMany() : []
 
   const today = dayjs()
   const next7 = today.add(7, 'day')
   const next30 = today.add(30, 'day')
 
-  const rates = await ensureExchangeRates()
-  const baseCurrency = await getBaseCurrency()
+  const baseCurrency = appSettings.baseCurrency
+  const rates = await ensureExchangeRates(baseCurrency)
 
   let monthlyEstimatedBase = 0
   let yearlyEstimatedBase = 0
@@ -234,12 +249,14 @@ async function buildStatisticsState() {
     for (const tag of tags) {
       tagSpendMap.set(tag.name, (tagSpendMap.get(tag.name) ?? 0) + splitMonthly)
 
-      const current = tagBudgetMap.get(tag.id) ?? {
-        name: tag.name,
-        spent: 0
+      if (appSettings.enableTagBudgets) {
+        const current = tagBudgetMap.get(tag.id) ?? {
+          name: tag.name,
+          spent: 0
+        }
+        current.spent += splitMonthly
+        tagBudgetMap.set(tag.id, current)
       }
-      current.spent += splitMonthly
-      tagBudgetMap.set(tag.id, current)
     }
   }
 

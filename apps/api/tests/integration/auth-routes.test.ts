@@ -5,13 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const authMocks = vi.hoisted(() => ({
   loginWithCredentialsMock: vi.fn(),
   changeCredentialsMock: vi.fn(),
-  changeDefaultPasswordMock: vi.fn()
+  changeDefaultPasswordMock: vi.fn(),
+  getRememberSessionDaysMock: vi.fn(async () => 7)
 }))
 
 vi.mock('../../src/services/settings.service', () => ({
-  getAppSettings: vi.fn(async () => ({
-    rememberSessionDays: 7
-  }))
+  getRememberSessionDays: authMocks.getRememberSessionDaysMock
 }))
 
 vi.mock('../../src/services/auth.service', () => ({
@@ -44,6 +43,7 @@ describe('auth routes', () => {
     authMocks.loginWithCredentialsMock.mockReset()
     authMocks.changeCredentialsMock.mockReset()
     authMocks.changeDefaultPasswordMock.mockReset()
+    authMocks.getRememberSessionDaysMock.mockClear()
     authMocks.loginWithCredentialsMock.mockResolvedValue(null)
     authMocks.changeCredentialsMock.mockResolvedValue(null)
     authMocks.changeDefaultPasswordMock.mockResolvedValue(null)
@@ -87,6 +87,17 @@ describe('auth routes', () => {
 
     expect(res.statusCode).toBe(200)
     expect(res.json().data.user.mustChangePassword).toBe(true)
+  })
+
+  it('uses the narrow remember-session getter for login options', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/auth/login-options'
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data.rememberSessionDays).toBe(7)
+    expect(authMocks.getRememberSessionDaysMock).toHaveBeenCalledTimes(1)
   })
 
   it('blocks repeated failed login attempts with rate limit', async () => {

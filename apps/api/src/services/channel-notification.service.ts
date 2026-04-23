@@ -2,7 +2,7 @@ import dayjs from 'dayjs'
 import nodemailer from 'nodemailer'
 import type { EmailConfigInput, PushPlusConfigInput, TelegramConfigInput, WebhookEventType } from '@subtracker/shared'
 import { dispatchWebhookEvent } from './webhook.service'
-import { getAppSettings, getSetting, setSetting } from './settings.service'
+import { getNotificationChannelSettings, getSetting, setSetting } from './settings.service'
 
 type NotificationDispatchParams = {
   eventType: WebhookEventType
@@ -250,7 +250,7 @@ async function sendEmailWithConfig(params: NotificationDispatchParams, config: E
 }
 
 async function sendEmailNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
-  const settings = await getAppSettings()
+  const settings = await getNotificationChannelSettings()
   if (!settings.emailNotificationsEnabled) {
     return {
       channel: 'email',
@@ -344,7 +344,7 @@ async function sendPushplusWithConfig(
 }
 
 async function sendPushplusNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
-  const settings = await getAppSettings()
+  const settings = await getNotificationChannelSettings()
   if (!settings.pushplusNotificationsEnabled) {
     return {
       channel: 'pushplus',
@@ -406,7 +406,7 @@ async function sendTelegramWithConfig(params: NotificationDispatchParams, config
 }
 
 async function sendTelegramNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
-  const settings = await getAppSettings()
+  const settings = await getNotificationChannelSettings()
   if (!settings.telegramNotificationsEnabled) {
     return {
       channel: 'telegram',

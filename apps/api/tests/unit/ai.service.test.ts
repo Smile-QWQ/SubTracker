@@ -19,7 +19,7 @@ const recognizeMock = vi.fn(async () => ({
 }))
 
 vi.mock('../../src/services/settings.service', () => ({
-  getAppSettings: vi.fn(async () => mockedSettings)
+  getAiConfig: vi.fn(async () => mockedSettings.aiConfig)
 }))
 
 vi.mock('tesseract.js', () => ({

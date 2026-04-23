@@ -12,11 +12,11 @@
         <stat-card label="当前月份" :value="panelMonthLabel" suffix="当前正在查看的月份" :icon="calendarClearOutline" />
       </n-grid-item>
       <n-grid-item>
-        <stat-card label="本月续订数量" :value="monthEventCount" suffix="当前月份内的订阅数" :icon="notificationsOutline" />
+        <stat-card label="本月应续订数量" :value="monthEventCount" suffix="当前月份内的订阅数" :icon="notificationsOutline" />
       </n-grid-item>
       <n-grid-item>
         <stat-card
-          label="本月预计支出"
+          label="本月预计需支出"
           :value="`${baseCurrency} ${monthConvertedAmount.toFixed(2)}`"
           suffix="已按汇率折算"
           :icon="walletOutline"
@@ -24,7 +24,7 @@
       </n-grid-item>
       <n-grid-item>
         <stat-card
-          label="选中日期续订"
+          label="选中日期订阅数"
           :value="selectedDateEvents.length"
           :suffix="`${selectedDateLabel} · ${baseCurrency} ${selectedDateConvertedAmount.toFixed(2)}`"
           :icon="todayOutline"
@@ -102,6 +102,7 @@ import {
   WalletOutline
 } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
+import { useSettingsQuery } from '@/composables/settings-query'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
 import type { CalendarEvent } from '@/types/api'
@@ -118,10 +119,11 @@ const events = ref<CalendarEvent[]>([])
 const tab = ref('month')
 const selectedDateTs = ref(dayjs().valueOf())
 const panelMonthTs = ref(dayjs().startOf('month').valueOf())
-const baseCurrency = ref('CNY')
 let latestMonthRequestId = 0
 let ignoreSelectedDateWatch = false
 const monthEventsCache = new Map<string, CalendarEvent[]>()
+const { data: settings } = useSettingsQuery()
+const baseCurrency = computed(() => settings.value?.baseCurrency ?? 'CNY')
 
 const summaryCols = computed(() => (width.value < 640 ? 1 : width.value < 1100 ? 2 : 4))
 const calendarCols = computed(() => (width.value < 1100 ? 1 : 2))
@@ -130,7 +132,7 @@ onMounted(async () => {
   if (width.value < 720) {
     tab.value = 'list'
   }
-  await Promise.all([loadEventsForMonth(panelMonthTs.value), loadSettings()])
+  await loadEventsForMonth(panelMonthTs.value)
 })
 
 watch(selectedDateTs, async (value) => {
@@ -190,11 +192,6 @@ async function prefetchAdjacentMonths(monthTs: number) {
     fetchMonthEvents(currentMonth.add(1, 'month').valueOf()),
     fetchMonthEvents(currentMonth.subtract(1, 'month').valueOf())
   ])
-}
-
-async function loadSettings() {
-  const settings = await api.getSettings()
-  baseCurrency.value = settings.baseCurrency
 }
 
 const panelMonthLabel = computed(() => dayjs(panelMonthTs.value).format('YYYY 年 M 月'))

@@ -29,7 +29,17 @@ export async function calendarRoutes(app: FastifyInstance) {
           lte: end
         }
       },
-      orderBy: { nextRenewalDate: 'asc' }
+      orderBy: { nextRenewalDate: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        amount: true,
+        currency: true,
+        billingIntervalCount: true,
+        billingIntervalUnit: true,
+        nextRenewalDate: true,
+        status: true
+      }
     })
 
     const baseCurrency = await getBaseCurrency()

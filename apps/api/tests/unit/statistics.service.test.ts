@@ -20,8 +20,7 @@ vi.mock('../../src/services/exchange-rate.service', () => ({
   ensureExchangeRates: vi.fn(async () => ({
     baseCurrency: 'CNY',
     rates: {}
-  })),
-  getBaseCurrency: vi.fn(async () => 'CNY')
+  }))
 }))
 
 vi.mock('../../src/services/settings.service', () => ({
@@ -65,6 +64,11 @@ vi.mock('../../src/services/settings.service', () => ({
       }
     }
   }))
+}))
+
+vi.mock('../../src/services/worker-lite-repository.service', () => ({
+  listStatisticsSubscriptionsLite: findManySubscriptionsMock,
+  listTagsLite: findManyTagsMock
 }))
 
 vi.mock('../../src/utils/money', () => ({
@@ -127,5 +131,13 @@ describe('statistics service', () => {
       baseCurrency: 'CNY'
     })
     expect(result.topSubscriptionsByMonthlyCost.some((item) => item.id === 'paused')).toBe(false)
+  })
+
+  it('does not load tag budgets when tag budgets are disabled', async () => {
+    findManySubscriptionsMock.mockResolvedValue([createSubscription('monthly')])
+
+    await getOverviewStatistics()
+
+    expect(findManyTagsMock).not.toHaveBeenCalled()
   })
 })

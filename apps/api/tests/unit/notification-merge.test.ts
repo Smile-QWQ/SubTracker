@@ -7,13 +7,10 @@ const notificationState = vi.hoisted(() => ({
 }))
 
 vi.mock('../../src/services/settings.service', () => ({
-  getAppSettings: vi.fn(async () => ({
+  getNotificationScanSettings: vi.fn(async () => ({
     defaultAdvanceReminderRules: '3&09:30;0&09:30;',
     defaultOverdueReminderRules: '1&09:30;2&09:30;3&09:30;',
-    defaultNotifyDays: 3,
-    notifyOnDueDay: true,
-    mergeMultiSubscriptionNotifications: notificationState.mergeMultiSubscriptionNotifications,
-    overdueReminderDays: [1, 2, 3]
+    mergeMultiSubscriptionNotifications: notificationState.mergeMultiSubscriptionNotifications
   }))
 }))
 

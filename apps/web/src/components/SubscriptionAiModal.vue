@@ -4,7 +4,9 @@
     preset="card"
     title="AI 识别订阅"
     style="width: min(720px, calc(100vw - 24px))"
-    @mask-click="emit('close')"
+    :mask-closable="!loading"
+    :closable="!loading"
+    @mask-click="handleMaskClick"
     @update:show="handleUpdateShow"
   >
     <n-space vertical>
@@ -12,37 +14,49 @@
         支持输入文本、上传图片或直接粘贴截图。若当前模型不支持图片识别，将自动回退到本地 OCR 提取文本后再交给模型清洗。识别结果只会回填表单，不会自动保存。
       </n-alert>
 
-      <n-form label-placement="top">
-        <n-form-item label="文本内容">
-          <n-input
-            v-model:value="text"
-            type="textarea"
-            :autosize="{ minRows: 4, maxRows: 8 }"
-            placeholder="粘贴订阅邮件、支付记录、订单文本等"
-          />
-        </n-form-item>
-
-        <n-form-item label="图片">
-          <div class="ai-upload-box" @paste="handlePaste">
-            <input ref="fileInputRef" type="file" accept="image/*" class="hidden-input" @change="handleFileChange" />
-            <n-space vertical>
-              <n-space>
-                <n-button @click="pickFile">上传图片</n-button>
-                <n-button quaternary @click="clearImage">清空图片</n-button>
-              </n-space>
-              <div class="card-muted">也可以直接在此区域粘贴截图</div>
-              <img v-if="imagePreview" :src="imagePreview" alt="识别图片预览" class="ai-upload-box__preview" />
-            </n-space>
+      <n-spin :show="loading" size="small">
+        <template #description>
+          <div class="ai-loading-copy">
+            <div class="ai-loading-copy__primary">{{ loadingStatusText }}</div>
+            <div class="ai-loading-copy__secondary">完成后会自动展示识别结果，无需重复点击。</div>
           </div>
-        </n-form-item>
-      </n-form>
+        </template>
+
+        <n-form label-placement="top">
+          <n-form-item label="文本内容">
+            <n-input
+              v-model:value="text"
+              type="textarea"
+              :autosize="{ minRows: 4, maxRows: 8 }"
+              placeholder="粘贴订阅邮件、支付记录、订单文本等"
+              :disabled="loading"
+            />
+          </n-form-item>
+
+          <n-form-item label="图片">
+            <div class="ai-upload-box" @paste="handlePaste">
+              <input ref="fileInputRef" type="file" accept="image/*" class="hidden-input" :disabled="loading" @change="handleFileChange" />
+              <n-space vertical>
+                <n-space>
+                  <n-button :disabled="loading" @click="pickFile">上传图片</n-button>
+                  <n-button quaternary :disabled="loading || !imagePreview" @click="clearImage">清空图片</n-button>
+                </n-space>
+                <div class="card-muted">也可以直接在此区域粘贴截图</div>
+                <img v-if="imagePreview" :src="imagePreview" alt="识别图片预览" class="ai-upload-box__preview" />
+              </n-space>
+            </div>
+          </n-form-item>
+        </n-form>
+      </n-spin>
 
       <n-space justify="space-between">
         <div v-if="result" class="card-muted">置信度：{{ ((result.confidence ?? 0) * 100).toFixed(0) }}%</div>
         <n-space>
-          <n-button @click="emit('close')">关闭</n-button>
-          <n-button type="primary" :loading="loading" @click="recognize">开始识别</n-button>
-          <n-button type="success" :disabled="!result" @click="applyResult">应用结果</n-button>
+          <n-button :disabled="loading" @click="emit('close')">关闭</n-button>
+          <n-button type="primary" :loading="loading" :disabled="loading" @click="recognize">
+            {{ loading ? '识别中…' : '开始识别' }}
+          </n-button>
+          <n-button type="success" :disabled="!result || loading" @click="applyResult">应用结果</n-button>
         </n-space>
       </n-space>
 
@@ -59,10 +73,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, ref } from 'vue'
-import { NAlert, NButton, NCard, NDataTable, NForm, NFormItem, NInput, NModal, NSpace, useMessage } from 'naive-ui'
+import { computed, h, onBeforeUnmount, ref } from 'vue'
+import { NAlert, NButton, NCard, NDataTable, NForm, NFormItem, NInput, NModal, NSpace, NSpin, useMessage } from 'naive-ui'
 import { api } from '@/composables/api'
 import type { AiRecognitionResult } from '@/types/api'
+import { getAiRecognitionStatusText } from '@/utils/ai-recognition-status'
 
 defineProps<{
   show: boolean
@@ -82,6 +97,8 @@ const imageFilename = ref('')
 const imageMimeType = ref('image/png')
 const loading = ref(false)
 const result = ref<AiRecognitionResult | null>(null)
+const loadingElapsedMs = ref(0)
+let loadingTimer: ReturnType<typeof setInterval> | null = null
 
 const fieldLabels: Record<string, string> = {
   name: '名称',
@@ -148,8 +165,34 @@ const resultColumns = [
   }
 ]
 
+const loadingStatusText = computed(() =>
+  getAiRecognitionStatusText({
+    hasImage: Boolean(imageBase64.value),
+    elapsedMs: loadingElapsedMs.value
+  })
+)
+
 function handleUpdateShow(value: boolean) {
-  if (!value) emit('close')
+  if (!value && !loading.value) emit('close')
+}
+
+function handleMaskClick() {
+  if (loading.value) return
+  emit('close')
+}
+
+function startLoadingTimer() {
+  loadingElapsedMs.value = 0
+  stopLoadingTimer()
+  loadingTimer = setInterval(() => {
+    loadingElapsedMs.value += 1000
+  }, 1000)
+}
+
+function stopLoadingTimer() {
+  if (!loadingTimer) return
+  clearInterval(loadingTimer)
+  loadingTimer = null
 }
 
 function pickFile() {
@@ -185,6 +228,7 @@ async function handleFileChange(event: Event) {
 }
 
 async function handlePaste(event: ClipboardEvent) {
+  if (loading.value) return
   const file = event.clipboardData?.files?.[0]
   if (!file) return
   await readFile(file)
@@ -197,6 +241,7 @@ async function recognize() {
   }
 
   loading.value = true
+  startLoadingTimer()
   try {
     result.value = await api.recognizeSubscriptionByAi({
       text: text.value.trim() || undefined,
@@ -210,6 +255,7 @@ async function recognize() {
     message.error(error instanceof Error ? error.message : 'AI 识别失败')
   } finally {
     loading.value = false
+    stopLoadingTimer()
   }
 }
 
@@ -218,6 +264,10 @@ function applyResult() {
   emit('apply', result.value)
   emit('close')
 }
+
+onBeforeUnmount(() => {
+  stopLoadingTimer()
+})
 </script>
 
 <style scoped>
@@ -239,6 +289,30 @@ function applyResult() {
   border-radius: 10px;
   object-fit: contain;
   border: 1px solid #e5e7eb;
+}
+
+.ai-loading-copy {
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.ai-loading-copy__primary {
+  color: #0f172a;
+  line-height: 1.6;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+.ai-loading-copy__secondary {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: normal;
+  word-break: keep-all;
 }
 
 .ai-raw-text {

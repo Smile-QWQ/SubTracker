@@ -221,6 +221,7 @@
     <subscription-form-modal
       :show="showModal"
       :model="editing"
+      :saving="savingSubscription"
       :tags="tags"
       :currencies="currencies"
       :default-advance-reminder-rules="defaultAdvanceReminderRules"
@@ -273,6 +274,7 @@ import {
   SearchOutline
 } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
+import { useSettingsQuery } from '@/composables/settings-query'
 import TagManageModal from '@/components/TagManageModal.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import SubscriptionDetailDrawer from '@/components/SubscriptionDetailDrawer.vue'
@@ -280,6 +282,7 @@ import SubscriptionFormModal from '@/components/SubscriptionFormModal.vue'
 import SubscriptionPaymentRecordsDrawer from '@/components/SubscriptionPaymentRecordsDrawer.vue'
 import type { PaymentRecord, Settings, Subscription, SubscriptionDetail, Tag } from '@/types/api'
 import { resolveLogoUrl } from '@/utils/logo'
+import { createSingleFlight } from '@/utils/single-flight'
 import {
   DEFAULT_SUBSCRIPTION_PAGE_SIZE,
   SUBSCRIPTION_PAGE_SIZE_OPTIONS,
@@ -297,6 +300,7 @@ const isMobile = computed(() => width.value < 960)
 
 const subscriptions = ref<Subscription[]>([])
 const tags = ref<Tag[]>([])
+const { data: settings } = useSettingsQuery()
 const detail = ref<SubscriptionDetail | null>(null)
 const paymentRecords = ref<PaymentRecord[]>([])
 const currencies = ref<string[]>(['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'HKD'])
@@ -320,6 +324,7 @@ const draggingId = ref<string | null>(null)
 const dragOverId = ref<string | null>(null)
 const armedDragId = ref<string | null>(null)
 const savingOrder = ref(false)
+const savingSubscription = ref(false)
 const showDragHandles = ref(false)
 const currentPage = ref(1)
 const desktopPageSize = ref<number>(DEFAULT_SUBSCRIPTION_PAGE_SIZE)
@@ -638,7 +643,7 @@ const tableRows = computed<SubscriptionTableRow[]>(() => buildSubscriptionTableR
 onMounted(async () => {
   desktopPageSize.value = getStoredSubscriptionPageSize()
   window.addEventListener('mouseup', resetArmedDrag)
-  await Promise.all([loadTags(), loadSubscriptions(), loadCurrencies(), loadSettings()])
+  await Promise.all([loadTags(), loadSubscriptions(), loadCurrencies()])
 })
 
 onBeforeUnmount(() => {
@@ -684,11 +689,15 @@ async function loadCurrencies() {
   currencies.value = Array.from(new Set([snapshot.baseCurrency, ...Object.keys(snapshot.rates)])).sort()
 }
 
-async function loadSettings() {
-  const settings: Settings = await api.getSettings()
-  defaultAdvanceReminderRules.value = settings.defaultAdvanceReminderRules
-  defaultOverdueReminderRules.value = settings.defaultOverdueReminderRules
-}
+watch(
+  settings,
+  (value) => {
+    if (!value) return
+    defaultAdvanceReminderRules.value = value.defaultAdvanceReminderRules
+    defaultOverdueReminderRules.value = value.defaultOverdueReminderRules
+  },
+  { immediate: true }
+)
 
 function toggleTagFilter(tagId: string) {
   if (filters.tagIds.includes(tagId)) {
@@ -736,7 +745,8 @@ function closeModal() {
   showModal.value = false
 }
 
-async function submitSubscription(payload: Record<string, unknown>, editingId?: string) {
+const submitSubscriptionTask = createSingleFlight(async (payload: Record<string, unknown>, editingId?: string) => {
+  savingSubscription.value = true
   try {
     if (editingId) {
       await api.updateSubscription(editingId, payload)
@@ -750,7 +760,13 @@ async function submitSubscription(payload: Record<string, unknown>, editingId?: 
     await loadSubscriptions()
   } catch (error) {
     message.error(`保存失败：${error instanceof Error ? error.message : 'Unknown'}`)
+  } finally {
+    savingSubscription.value = false
   }
+})
+
+function submitSubscription(payload: Record<string, unknown>, editingId?: string) {
+  return submitSubscriptionTask.run(payload, editingId)
 }
 
 async function createTag(payload: { name: string; color: string; icon: string; sortOrder: number }) {

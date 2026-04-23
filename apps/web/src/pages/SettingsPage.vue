@@ -217,7 +217,7 @@
                     <n-input v-model:value="settingsForm.emailConfig.to" placeholder="多个邮箱请用英文逗号分隔" />
                   </n-form-item>
                   <n-space>
-                    <n-button @click="saveEmailSettings">保存</n-button>
+                    <n-button :loading="savingEmailSettings" :disabled="savingEmailSettings" @click="saveEmailSettings">保存</n-button>
                     <n-button type="primary" @click="testEmail">测试</n-button>
                   </n-space>
                 </n-form>
@@ -238,7 +238,7 @@
                     <n-input v-model:value="settingsForm.pushplusConfig.topic" placeholder="可选" />
                   </n-form-item>
                   <n-space>
-                    <n-button @click="savePushplusSettings">保存</n-button>
+                    <n-button :loading="savingPushplusSettings" :disabled="savingPushplusSettings" @click="savePushplusSettings">保存</n-button>
                     <n-button type="primary" @click="testPushplus">测试</n-button>
                   </n-space>
                 </n-form>
@@ -259,7 +259,7 @@
                     <n-input v-model:value="settingsForm.telegramConfig.chatId" placeholder="例如：123456789 或 -100xxxxxxxxxx" />
                   </n-form-item>
                   <n-space>
-                    <n-button @click="saveTelegramSettings">保存</n-button>
+                    <n-button :loading="savingTelegramSettings" :disabled="savingTelegramSettings" @click="saveTelegramSettings">保存</n-button>
                     <n-button type="primary" @click="testTelegram">测试</n-button>
                   </n-space>
                 </n-form>
@@ -315,7 +315,7 @@
                     </n-collapse-item>
                   </n-collapse>
                   <n-space>
-                    <n-button @click="saveWebhook">保存</n-button>
+                    <n-button :loading="savingWebhookSettings" :disabled="savingWebhookSettings" @click="saveWebhook">保存</n-button>
                     <n-button type="primary" @click="testWebhook">测试</n-button>
                   </n-space>
                 </n-form>
@@ -390,7 +390,7 @@
               </n-collapse-item>
             </n-collapse>
             <n-space>
-              <n-button @click="saveAiSettings">保存</n-button>
+              <n-button :loading="savingAiSettings" :disabled="savingAiSettings" @click="saveAiSettings">保存</n-button>
               <n-button type="primary" ghost @click="testAiConnectionSettings">连接测试</n-button>
               <n-button v-if="settingsForm.aiConfig.capabilities.vision" type="primary" @click="testAiVisionSettings">视觉测试</n-button>
             </n-space>
@@ -413,7 +413,7 @@
             <n-form-item label="新密码">
               <n-input v-model:value="credentialsForm.newPassword" type="password" show-password-on="click" />
             </n-form-item>
-            <n-button type="primary" @click="submitCredentialsChange">修改</n-button>
+            <n-button type="primary" :loading="savingCredentials" :disabled="savingCredentials" @click="submitCredentialsChange">修改</n-button>
           </n-form>
         </n-card>
       </n-grid-item>
@@ -440,7 +440,7 @@
 
 <script setup lang="ts">
 import dayjs from 'dayjs'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { useQueryClient } from '@tanstack/vue-query'
 import {
@@ -475,16 +475,19 @@ import {
 } from 'naive-ui'
 import { HelpCircleOutline, RefreshOutline, SaveOutline, SettingsOutline } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
+import { SETTINGS_QUERY_KEY, useSettingsQuery } from '@/composables/settings-query'
 import PageHeader from '@/components/PageHeader.vue'
 import WallosImportModal from '@/components/WallosImportModal.vue'
 import { useAuthStore } from '@/stores/auth'
 import { isRememberedSession } from '@/utils/auth-storage'
 import { buildCurrencyOptions } from '@/utils/currency'
+import { cloneSettingsForForm } from '@/utils/settings-form'
 import type { AiProviderPreset, ChangeCredentialsPayload, ExchangeRateSnapshot, NotificationWebhookSettings, Settings } from '@/types/api'
 
 const message = useMessage()
 const authStore = useAuthStore()
 const queryClient = useQueryClient()
+const { data: settingsQueryData } = useSettingsQuery()
 const { width } = useWindowSize()
 const helpCircleOutline = HelpCircleOutline
 const settingsOutline = SettingsOutline
@@ -580,6 +583,13 @@ const webhookForm = reactive<NotificationWebhookSettings>({
 
 const snapshot = ref<ExchangeRateSnapshot | null>(null)
 const aiPromptInput = ref(DEFAULT_AI_SUBSCRIPTION_PROMPT)
+const savingBasicSettings = ref(false)
+const savingEmailSettings = ref(false)
+const savingPushplusSettings = ref(false)
+const savingTelegramSettings = ref(false)
+const savingWebhookSettings = ref(false)
+const savingAiSettings = ref(false)
+const savingCredentials = ref(false)
 const sourceCurrency = ref('USD')
 const targetCurrency = ref('CNY')
 const converterAmount = ref(1)
@@ -686,17 +696,21 @@ function validateAiSettings(action: 'save' | 'connection-test' | 'vision-test') 
 }
 
 onMounted(async () => {
-  await Promise.all([loadSettings(), loadSnapshot(), loadWebhook()])
+  await Promise.all([loadSnapshot(), loadWebhook()])
 })
 
-async function loadSettings() {
-  const settings = await api.getSettings()
-  Object.assign(settingsForm, settings)
-  aiPromptInput.value = settings.aiConfig.promptTemplate.trim() || DEFAULT_AI_SUBSCRIPTION_PROMPT
-  credentialsForm.oldUsername = authStore.username
-  credentialsForm.newUsername = authStore.username
-  targetCurrency.value = settings.baseCurrency
-}
+watch(
+  settingsQueryData,
+  (settings) => {
+    if (!settings) return
+    Object.assign(settingsForm, cloneSettingsForForm(settings))
+    aiPromptInput.value = settings.aiConfig.promptTemplate.trim() || DEFAULT_AI_SUBSCRIPTION_PROMPT
+    credentialsForm.oldUsername = authStore.username
+    credentialsForm.newUsername = authStore.username
+    targetCurrency.value = settings.baseCurrency
+  },
+  { immediate: true }
+)
 
 async function loadSnapshot() {
   snapshot.value = await api.getExchangeRateSnapshot()
@@ -708,6 +722,8 @@ async function loadWebhook() {
 }
 
 async function saveBasicSettings() {
+  if (savingBasicSettings.value) return
+  savingBasicSettings.value = true
   try {
     const result = await api.updateSettings({
       baseCurrency: settingsForm.baseCurrency.toUpperCase(),
@@ -724,60 +740,84 @@ async function saveBasicSettings() {
     message.success('基础设置已保存')
     targetCurrency.value = settingsForm.baseCurrency.toUpperCase()
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['settings'] }),
-      queryClient.invalidateQueries({ queryKey: ['settings-budget-page'] }),
-      queryClient.invalidateQueries({ queryKey: ['app-menu-settings'] }),
+      queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: ['statistics-overview'] }),
       queryClient.invalidateQueries({ queryKey: ['statistics-budgets'] })
     ])
     await loadSnapshot()
   } catch (error) {
     message.error(error instanceof Error ? error.message : '基础设置保存失败')
+  } finally {
+    savingBasicSettings.value = false
   }
 }
 
 async function saveEmailSettings() {
+  if (savingEmailSettings.value) return
   if (!validateEmailSettings('save')) return
-  await api.updateSettings({
-    emailNotificationsEnabled: settingsForm.emailNotificationsEnabled,
-    emailConfig: settingsForm.emailConfig
-  })
-  message.success(settingsForm.emailNotificationsEnabled ? '邮箱通知配置已保存' : '邮箱通知已关闭')
+  savingEmailSettings.value = true
+  try {
+    await api.updateSettings({
+      emailNotificationsEnabled: settingsForm.emailNotificationsEnabled,
+      emailConfig: settingsForm.emailConfig
+    })
+    message.success(settingsForm.emailNotificationsEnabled ? '邮箱通知配置已保存' : '邮箱通知已关闭')
+  } finally {
+    savingEmailSettings.value = false
+  }
 }
 
 async function savePushplusSettings() {
+  if (savingPushplusSettings.value) return
   if (!validatePushplusSettings('save')) return
-  await api.updateSettings({
-    pushplusNotificationsEnabled: settingsForm.pushplusNotificationsEnabled,
-    pushplusConfig: settingsForm.pushplusConfig
-  })
-  message.success(settingsForm.pushplusNotificationsEnabled ? 'PushPlus 配置已保存' : 'PushPlus 已关闭')
+  savingPushplusSettings.value = true
+  try {
+    await api.updateSettings({
+      pushplusNotificationsEnabled: settingsForm.pushplusNotificationsEnabled,
+      pushplusConfig: settingsForm.pushplusConfig
+    })
+    message.success(settingsForm.pushplusNotificationsEnabled ? 'PushPlus 配置已保存' : 'PushPlus 已关闭')
+  } finally {
+    savingPushplusSettings.value = false
+  }
 }
 
 async function saveTelegramSettings() {
+  if (savingTelegramSettings.value) return
   if (!validateTelegramSettings('save')) return
-  await api.updateSettings({
-    telegramNotificationsEnabled: settingsForm.telegramNotificationsEnabled,
-    telegramConfig: settingsForm.telegramConfig
-  })
-  message.success(settingsForm.telegramNotificationsEnabled ? 'Telegram 配置已保存' : 'Telegram 已关闭')
+  savingTelegramSettings.value = true
+  try {
+    await api.updateSettings({
+      telegramNotificationsEnabled: settingsForm.telegramNotificationsEnabled,
+      telegramConfig: settingsForm.telegramConfig
+    })
+    message.success(settingsForm.telegramNotificationsEnabled ? 'Telegram 配置已保存' : 'Telegram 已关闭')
+  } finally {
+    savingTelegramSettings.value = false
+  }
 }
 
 async function saveAiSettings() {
+  if (savingAiSettings.value) return
   if (!validateAiSettings('save')) return
   const promptTemplate = normalizeAiPrompt(aiPromptInput.value)
   settingsForm.aiConfig.promptTemplate = promptTemplate
   aiPromptInput.value = promptTemplate || DEFAULT_AI_SUBSCRIPTION_PROMPT
-  await api.updateSettings({
-    aiConfig: {
-      ...settingsForm.aiConfig,
-      capabilities: {
-        ...settingsForm.aiConfig.capabilities
-      },
-      promptTemplate
-    }
-  })
-  message.success(settingsForm.aiConfig.enabled ? 'AI 识别配置已保存' : 'AI 识别已关闭')
+  savingAiSettings.value = true
+  try {
+    await api.updateSettings({
+      aiConfig: {
+        ...settingsForm.aiConfig,
+        capabilities: {
+          ...settingsForm.aiConfig.capabilities
+        },
+        promptTemplate
+      }
+    })
+    message.success(settingsForm.aiConfig.enabled ? 'AI 识别配置已保存' : 'AI 识别已关闭')
+  } finally {
+    savingAiSettings.value = false
+  }
 }
 
 async function testAiConnectionSettings() {
@@ -842,13 +882,19 @@ async function refreshRates() {
 }
 
 async function submitCredentialsChange() {
-  const result = await api.changeCredentials(credentialsForm)
-  authStore.setSession(result.token, result.user.username, isRememberedSession(), result.user.mustChangePassword)
-  credentialsForm.oldPassword = ''
-  credentialsForm.newPassword = ''
-  credentialsForm.oldUsername = result.user.username
-  credentialsForm.newUsername = result.user.username
-  message.success('登录凭据已更新')
+  if (savingCredentials.value) return
+  savingCredentials.value = true
+  try {
+    const result = await api.changeCredentials(credentialsForm)
+    authStore.setSession(result.token, result.user.username, isRememberedSession(), result.user.mustChangePassword)
+    credentialsForm.oldPassword = ''
+    credentialsForm.newPassword = ''
+    credentialsForm.oldUsername = result.user.username
+    credentialsForm.newUsername = result.user.username
+    message.success('登录凭据已更新')
+  } finally {
+    savingCredentials.value = false
+  }
 }
 
 async function testEmail() {
@@ -906,17 +952,23 @@ function handleWallosImported() {
 }
 
 async function saveWebhook() {
+  if (savingWebhookSettings.value) return
   if (!validateWebhookSettings('save')) return
-  const saved = await api.updateNotificationWebhook({
-    url: webhookForm.url.trim(),
-    enabled: webhookForm.enabled,
-    requestMethod: webhookForm.requestMethod,
-    headers: webhookForm.headers.trim() || 'Content-Type: application/json',
-    payloadTemplate: webhookForm.payloadTemplate.trim() || DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
-    ignoreSsl: webhookForm.ignoreSsl
-  })
-  Object.assign(webhookForm, saved)
-  message.success(webhookForm.enabled ? 'Webhook 配置已保存' : 'Webhook 已关闭')
+  savingWebhookSettings.value = true
+  try {
+    const saved = await api.updateNotificationWebhook({
+      url: webhookForm.url.trim(),
+      enabled: webhookForm.enabled,
+      requestMethod: webhookForm.requestMethod,
+      headers: webhookForm.headers.trim() || 'Content-Type: application/json',
+      payloadTemplate: webhookForm.payloadTemplate.trim() || DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
+      ignoreSsl: webhookForm.ignoreSsl
+    })
+    Object.assign(webhookForm, saved)
+    message.success(webhookForm.enabled ? 'Webhook 配置已保存' : 'Webhook 已关闭')
+  } finally {
+    savingWebhookSettings.value = false
+  }
 }
 
 async function testWebhook() {

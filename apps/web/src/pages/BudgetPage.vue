@@ -154,6 +154,7 @@ import { useRouter } from 'vue-router'
 import { NButton, NCard, NDataTable, NDivider, NEmpty, NGrid, NGridItem, NProgress, NSpace, NTag, useMessage } from 'naive-ui'
 import { WalletOutline } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
+import { SETTINGS_QUERY_KEY, useSettingsQuery } from '@/composables/settings-query'
 import ChartView from '@/components/ChartView.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import TagBudgetSettingsModal from '@/components/TagBudgetSettingsModal.vue'
@@ -171,10 +172,7 @@ const { data: budgetStats } = useQuery({
   queryFn: api.getBudgetStatistics
 })
 
-const { data: settings } = useQuery({
-  queryKey: ['settings-budget-page'],
-  queryFn: api.getSettings
-})
+const { data: settings } = useSettingsQuery()
 
 const { data: tags } = useQuery({
   queryKey: ['budget-page-tags'],
@@ -294,13 +292,11 @@ async function saveTagBudgets(tagBudgets: Record<string, number>) {
   await api.updateSettings({ tagBudgets })
   tagBudgetModalVisible.value = false
   message.success('标签月预算已保存')
-  await Promise.all([
-    queryClient.invalidateQueries({ queryKey: ['statistics-budgets'] }),
-    queryClient.invalidateQueries({ queryKey: ['statistics-overview'] }),
-    queryClient.invalidateQueries({ queryKey: ['settings-budget-page'] }),
-    queryClient.invalidateQueries({ queryKey: ['settings'] }),
-    queryClient.invalidateQueries({ queryKey: ['app-menu-settings'] })
-  ])
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['statistics-budgets'] }),
+      queryClient.invalidateQueries({ queryKey: ['statistics-overview'] }),
+      queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEY })
+    ])
 }
 
 function formatMoney(amount: number, currency: string) {

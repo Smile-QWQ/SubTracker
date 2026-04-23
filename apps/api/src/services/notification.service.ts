@@ -7,7 +7,7 @@ import {
   parseReminderRules,
   type ReminderRule
 } from './reminder-rules.service'
-import { getAppSettings } from './settings.service'
+import { getNotificationScanSettings } from './settings.service'
 
 export type ReminderPhase = 'upcoming' | 'due_today' | `overdue_day_${number}`
 
@@ -26,7 +26,7 @@ export type NotificationScanResult = {
 }
 
 export type NotificationScanOverrides = Partial<
-  Pick<Awaited<ReturnType<typeof getAppSettings>>, 'defaultAdvanceReminderRules' | 'defaultOverdueReminderRules' | 'mergeMultiSubscriptionNotifications'>
+  Awaited<ReturnType<typeof getNotificationScanSettings>>
 >
 
 type ReminderSubscriptionLike = {
@@ -185,7 +185,7 @@ function matchReminderRule(
 function resolveReminderMatches(
   now: dayjs.Dayjs,
   sub: ReminderSubscriptionLike,
-  settings: Awaited<ReturnType<typeof getAppSettings>>
+  settings: Awaited<ReturnType<typeof getNotificationScanSettings>>
 ) {
   const matches: ReminderMatch[] = []
 
@@ -297,7 +297,7 @@ export async function scanRenewalNotifications(
   overrides: NotificationScanOverrides = {}
 ): Promise<NotificationScanResult> {
   const appSettings = {
-    ...(await getAppSettings()),
+    ...(await getNotificationScanSettings()),
     ...overrides
   }
   const subscriptions = await prisma.subscription.findMany({
