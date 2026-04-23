@@ -1,7 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const settingsStore = new Map<string, unknown>()
-
 const { prismaMock, appendSubscriptionOrders } = vi.hoisted(() => ({
   prismaMock: {
     tag: {
@@ -22,18 +20,8 @@ vi.mock('../../src/db', () => ({
   prisma: prismaMock
 }))
 
-vi.mock('../../src/runtime', () => ({
-  getWorkerCache: vi.fn(() => undefined)
-}))
-
 vi.mock('../../src/services/settings.service', () => ({
-  getAppSettings: vi.fn(),
-  getSetting: vi.fn(async <T>(key: string, fallbackValue: T) =>
-    (settingsStore.has(key) ? (settingsStore.get(key) as T) : fallbackValue)
-  ),
-  setSetting: vi.fn(async (key: string, value: unknown) => {
-    settingsStore.set(key, value)
-  })
+  getAppSettings: vi.fn()
 }))
 
 vi.mock('../../src/services/subscription-order.service', () => ({
@@ -41,88 +29,93 @@ vi.mock('../../src/services/subscription-order.service', () => ({
   appendSubscriptionOrders
 }))
 
+const previewState = vi.hoisted(() => ({
+  getImportPreview: vi.fn(),
+  storeImportPreview: vi.fn(),
+  deleteImportPreview: vi.fn()
+}))
+
+vi.mock('../../src/services/worker-lite-state.service', () => previewState)
+
 import { commitWallosImport } from '../../src/services/wallos-import.service'
 
 describe('commitWallosImport', () => {
   beforeEach(() => {
-    settingsStore.clear()
     prismaMock.tag.findMany.mockReset()
     prismaMock.tag.createMany.mockReset()
     prismaMock.subscription.createMany.mockReset()
     prismaMock.subscriptionTag.createMany.mockReset()
     appendSubscriptionOrders.mockClear()
+    previewState.getImportPreview.mockReset()
+    previewState.deleteImportPreview.mockReset()
+    previewState.getImportPreview.mockResolvedValue({
+      importToken: 'token-1',
+      isWallos: true,
+      summary: {
+        fileType: 'json',
+        subscriptionsTotal: 2,
+        tagsTotal: 2,
+        usedTagsTotal: 2,
+        supportedSubscriptions: 2,
+        skippedSubscriptions: 0,
+        globalNotifyDays: 3,
+        zipLogoMatched: 0,
+        zipLogoMissing: 0
+      },
+      usedTags: [
+        { sourceId: 1, name: 'Video', sortOrder: 1 },
+        { sourceId: 2, name: 'Music', sortOrder: 2 }
+      ],
+      tags: [],
+      subscriptionsPreview: [
+        {
+          sourceId: 1,
+          name: 'Netflix',
+          amount: 10,
+          currency: 'USD',
+          status: 'active',
+          autoRenew: true,
+          billingIntervalCount: 1,
+          billingIntervalUnit: 'month',
+          startDate: '2026-04-01',
+          nextRenewalDate: '2026-05-01',
+          notifyDaysBefore: 3,
+          webhookEnabled: true,
+          notes: '',
+          description: '',
+          websiteUrl: 'https://netflix.com',
+          tagNames: ['Video'],
+          logoRef: null,
+          logoImportStatus: 'none',
+          warnings: []
+        },
+        {
+          sourceId: 2,
+          name: 'Spotify',
+          amount: 15,
+          currency: 'USD',
+          status: 'active',
+          autoRenew: true,
+          billingIntervalCount: 1,
+          billingIntervalUnit: 'month',
+          startDate: '2026-04-02',
+          nextRenewalDate: '2026-05-02',
+          notifyDaysBefore: 3,
+          webhookEnabled: true,
+          notes: '',
+          description: '',
+          websiteUrl: 'https://spotify.com',
+          tagNames: ['Music'],
+          logoRef: null,
+          logoImportStatus: 'none',
+          warnings: []
+        }
+      ],
+      warnings: []
+    })
   })
 
   it('batches imported tags, subscription tags and subscription order writes', async () => {
-    settingsStore.set('wallosImportPreview:token-1', {
-      expiresAt: Date.now() + 60_000,
-      preview: {
-        importToken: 'token-1',
-        isWallos: true,
-        summary: {
-          fileType: 'json',
-          subscriptionsTotal: 2,
-          tagsTotal: 2,
-          usedTagsTotal: 2,
-          supportedSubscriptions: 2,
-          skippedSubscriptions: 0,
-          globalNotifyDays: 3,
-          zipLogoMatched: 0,
-          zipLogoMissing: 0
-        },
-        usedTags: [
-          { sourceId: 1, name: 'Video', sortOrder: 1 },
-          { sourceId: 2, name: 'Music', sortOrder: 2 }
-        ],
-        tags: [],
-        subscriptionsPreview: [
-          {
-            sourceId: 1,
-            name: 'Netflix',
-            amount: 10,
-            currency: 'USD',
-            status: 'active',
-            autoRenew: true,
-            billingIntervalCount: 1,
-            billingIntervalUnit: 'month',
-            startDate: '2026-04-01',
-            nextRenewalDate: '2026-05-01',
-            notifyDaysBefore: 3,
-            webhookEnabled: true,
-            notes: '',
-            description: '',
-            websiteUrl: 'https://netflix.com',
-            tagNames: ['Video'],
-            logoRef: null,
-            logoImportStatus: 'none',
-            warnings: []
-          },
-          {
-            sourceId: 2,
-            name: 'Spotify',
-            amount: 15,
-            currency: 'USD',
-            status: 'active',
-            autoRenew: true,
-            billingIntervalCount: 1,
-            billingIntervalUnit: 'month',
-            startDate: '2026-04-02',
-            nextRenewalDate: '2026-05-02',
-            notifyDaysBefore: 3,
-            webhookEnabled: true,
-            notes: '',
-            description: '',
-            websiteUrl: 'https://spotify.com',
-            tagNames: ['Music'],
-            logoRef: null,
-            logoImportStatus: 'none',
-            warnings: []
-          }
-        ],
-        warnings: []
-      }
-    })
-
     prismaMock.tag.findMany
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
@@ -158,6 +151,6 @@ describe('commitWallosImport', () => {
       importedSubscriptions: 2,
       skippedSubscriptions: 0
     })
-    expect(settingsStore.get('wallosImportPreview:token-1')).toBeNull()
+    expect(previewState.deleteImportPreview).toHaveBeenCalledWith('token-1')
   })
 })

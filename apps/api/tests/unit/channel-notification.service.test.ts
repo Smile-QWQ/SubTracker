@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../src/runtime', () => ({
-  getWorkerCache: vi.fn(() => undefined)
-}))
-
 vi.mock('../../src/config', () => ({
   config: {
     resendApiUrl: 'https://api.resend.com/emails'
@@ -11,7 +7,7 @@ vi.mock('../../src/config', () => ({
 }))
 
 vi.mock('../../src/services/settings.service', () => ({
-  getAppSettings: vi.fn(async () => ({
+  getNotificationChannelSettings: vi.fn(async () => ({
     emailNotificationsEnabled: false,
     pushplusNotificationsEnabled: false,
     telegramNotificationsEnabled: false,
@@ -30,9 +26,7 @@ vi.mock('../../src/services/settings.service', () => ({
       botToken: '',
       chatId: ''
     }
-  })),
-  getSetting: vi.fn(async () => false),
-  setSetting: vi.fn(async () => undefined)
+  }))
 }))
 
 vi.mock('../../src/services/webhook.service', () => ({
@@ -41,6 +35,14 @@ vi.mock('../../src/services/webhook.service', () => ({
     status: 'skipped',
     reason: 'webhook_disabled'
   }))
+}))
+
+vi.mock('../../src/services/worker-lite-state.service', () => ({
+  claimNotificationDelivery: vi.fn(async () => true),
+  releaseNotificationDelivery: vi.fn(async () => undefined),
+  storeImportPreview: vi.fn(),
+  getImportPreview: vi.fn(),
+  deleteImportPreview: vi.fn()
 }))
 
 import { sendTestEmailNotificationWithConfig } from '../../src/services/channel-notification.service'

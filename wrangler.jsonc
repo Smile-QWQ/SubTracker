@@ -42,10 +42,5 @@
 		{
 			"binding": "DB"
 		}
-	],
-	"kv_namespaces": [
-		{
-			"binding": "SUBTRACKER_CACHE"
-		}
 	]
 }

@@ -1,12 +1,11 @@
 import crypto from 'node:crypto'
 import { prisma } from '../db'
 import type { LogoSearchInput, LogoSearchResultDto, LogoUploadInput } from '@subtracker/shared'
-import { getWorkerCache, getWorkerLogoBucket } from '../runtime'
+import { getWorkerLogoBucket } from '../runtime'
 
 const SEARCH_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36'
 const LOGO_REQUEST_TIMEOUT_MS = 20000
-const SEARCH_CACHE_TTL_SECONDS = 5 * 60
 const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000
 const SEARCH_CACHE_PREFIX = 'logo-search:worker-parity:'
 const MAX_DUCKDUCKGO_CANDIDATES = 12
@@ -135,15 +134,6 @@ function makeCandidate(
 }
 
 async function cacheGet(key: string) {
-  const kv = getWorkerCache()
-  if (kv) {
-    const raw = await kv.get(key, 'json')
-    if (!raw) return null
-    const entry = raw as SearchCacheEntry
-    if (entry.expiresAt <= Date.now()) return null
-    return entry
-  }
-
   const cached = searchCache.get(key)
   if (!cached || cached.expiresAt <= Date.now()) {
     searchCache.delete(key)
@@ -156,14 +146,6 @@ async function cacheSet(key: string, items: LogoSearchResultDto[]) {
   const entry: SearchCacheEntry = {
     expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,
     items
-  }
-
-  const kv = getWorkerCache()
-  if (kv) {
-    await kv.put(key, JSON.stringify(entry), {
-      expirationTtl: SEARCH_CACHE_TTL_SECONDS
-    })
-    return
   }
 
   searchCache.set(key, entry)

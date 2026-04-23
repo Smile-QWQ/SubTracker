@@ -84,11 +84,7 @@
 
 - `WORKER_NAME_PREFIX`
   - 默认值是：`subtracker`
-  - 用来决定 Worker 名称、KV / D1 / R2 资源名前缀
-- `ENABLE_KV`
-  - 默认值是：`true`
-  - 不填时默认启用 KV
-  - 如果明确填 `false`，部署时将不绑定 KV
+  - 用来决定 Worker 名称、D1 / R2 资源名前缀
 - `ENABLE_R2`
   - 填 `true` 时启用 R2
   - 不填或填其他值时，默认不开启
@@ -141,7 +137,6 @@
 就会继续复用原来的：
 
 - D1
-- KV
 - R2（如果启用了）
 
 不会因为同步代码就把数据重建掉。
@@ -153,25 +148,6 @@
 ### 必需
 
 - **D1**
-
-### 推荐
-
-- **KV**
-
-用途：
-
-- Logo 搜索缓存
-- 通知去重
-- 导入预览缓存
-
-默认会启用 KV。  
-如果你在仓库 Variables 里把 `ENABLE_KV` 明确设为 `false`，系统仍然可以运行，但会有功能退化。
-
-KV 关闭后的主要退化包括：
-
-- 读取类接口不再享受 Worker Lite 的短 TTL 缓存
-- Logo 搜索缓存失效，重复搜索会更慢
-- 通知去重与导入预览状态会退回到更重的数据库路径
 
 ### 可选
 
@@ -214,7 +190,7 @@ https://api.resend.com/emails
 
 这个分支面向 **Cloudflare Worker Free**，因此实现上做了明确的 Lite 化裁剪，而不是完全复刻 Docker 版的运行模型。
 
-### 1. 30 秒短 TTL 缓存
+### 1. isolate 内存短 TTL 缓存
 
 以下读取类接口默认会缓存 **30 秒**：
 
@@ -231,12 +207,13 @@ https://api.resend.com/emails
 - Worker Free 每次 HTTP 请求只有 **10ms CPU**
 - 同一页面会并发读取多份数据
 - 如果每次都实时重算，很容易撞上 `Worker exceeded CPU time limit`
+- 同时避免继续消耗 KV Free 的每日写入额度
 
 这 30 秒缓存的副作用是：
 
 - 刚修改完数据后，其他页面在极短时间内可能看到旧数据
 - 统计页、日历页、标签页在 30 秒窗口内可能不是绝对实时
-- 如果关闭 KV，只能退回到 isolate 内存缓存，跨实例缓存一致性会更弱
+- 这是 isolate 级缓存，不保证跨实例强一致
 
 当前实现已经对主要写操作做了主动失效，所以正常情况下：
 
@@ -249,7 +226,17 @@ https://api.resend.com/emails
 
 > **30 秒缓存带来的不是“数据一定延迟 30 秒”，而是“最多可能有短时间旧数据”。**
 
-### 2. Logo 搜索是 Lite 版
+### 2. 不使用 KV
+
+当前分支不绑定 KV，原因是 Cloudflare Workers Free 的 KV 写入额度只有 **1000/day**，对于本项目的缓存失效、通知去重和导入预览场景来说过于紧张。
+
+现在这些能力的处理方式是：
+
+- 读取类接口：使用 isolate 内存短缓存
+- 通知去重：回到 D1
+- 导入预览 token：回到 D1
+- Logo 搜索缓存：仅保留进程内短缓存
+### 3. Logo 搜索是 Lite 版
 
 Worker Lite 的 Logo 搜索只保留：
 
@@ -269,7 +256,7 @@ Worker Lite 的 Logo 搜索只保留：
 - 搜索结果质量不如 Docker / main 分支
 - 偶尔会混入不够理想的候选图
 
-### 3. Cron 已拆成 Lite 版职责
+### 4. Cron 已拆成 Lite 版职责
 
 当前默认触发器是：
 
@@ -286,7 +273,7 @@ Worker Lite 的 Logo 搜索只保留：
 - 而是采用 **5 分钟窗口命中**
 - 以换取更稳定的执行
 
-### 4. 错误提示会明确说明 Worker 限制
+### 5. 错误提示会明确说明 Worker 限制
 
 前端遇到：
 
@@ -318,13 +305,6 @@ npm run deploy:worker:r2
 
 - 优先读取环境变量里的 Cloudflare 凭据
 - 如果没有配置 `CLOUDFLARE_API_TOKEN`，会尝试走 `wrangler login` 浏览器授权
-
-如果你本地想关闭 KV，也可以临时设置：
-
-```powershell
-$env:ENABLE_KV='false'
-npm run deploy:worker
-```
 
 ---
 

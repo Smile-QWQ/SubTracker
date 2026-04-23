@@ -3,12 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const tagRouteMocks = vi.hoisted(() => ({
   prisma: {
-    $transaction: vi.fn(async (operations: unknown) => {
-      if (typeof operations === 'function') {
-        throw new Error('interactive transaction should not be used for tag deletion')
-      }
-      return operations
-    }),
     subscriptionTag: {
       deleteMany: vi.fn(async () => ({ count: 1 }))
     },
@@ -42,8 +36,12 @@ describe('tag routes D1 compatibility', () => {
     })
 
     expect(response.statusCode).toBe(200)
-    expect(tagRouteMocks.prisma.$transaction).toHaveBeenCalledTimes(1)
-    expect(typeof tagRouteMocks.prisma.$transaction.mock.calls[0]?.[0]).not.toBe('function')
+    expect(tagRouteMocks.prisma.subscriptionTag.deleteMany).toHaveBeenCalledWith({
+      where: { tagId: 'cksubtracker0000000000000tag1' }
+    })
+    expect(tagRouteMocks.prisma.tag.delete).toHaveBeenCalledWith({
+      where: { id: 'cksubtracker0000000000000tag1' }
+    })
 
     await app.close()
   })

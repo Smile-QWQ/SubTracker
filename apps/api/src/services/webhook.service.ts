@@ -220,7 +220,7 @@ export async function dispatchWebhookEvent(params: {
     payload: params.payload
   })
 
-  await prisma.webhookDelivery.upsert({
+  const existing = await prisma.webhookDelivery.findUnique({
     where: {
       eventType_resourceKey_periodKey: {
         eventType: params.eventType,
@@ -228,34 +228,45 @@ export async function dispatchWebhookEvent(params: {
         periodKey: params.periodKey
       }
     },
-    update: {
-      subscriptionId: params.subscriptionId ?? null,
-      targetUrl: endpoint.url,
-      requestMethod: endpoint.requestMethod,
-      payloadJson: params.payload as Prisma.InputJsonValue,
-      status: result.statusCode >= 400 ? 'failed' : 'success',
-      responseCode: result.statusCode,
-      responseBody: result.responseBody,
-      attemptCount: {
-        increment: 1
-      },
-      lastAttemptAt: new Date()
-    },
-    create: {
-      subscriptionId: params.subscriptionId ?? null,
-      eventType: params.eventType,
-      resourceKey: params.resourceKey,
-      periodKey: params.periodKey,
-      targetUrl: endpoint.url,
-      requestMethod: endpoint.requestMethod,
-      payloadJson: params.payload as Prisma.InputJsonValue,
-      status: result.statusCode >= 400 ? 'failed' : 'success',
-      responseCode: result.statusCode,
-      responseBody: result.responseBody,
-      attemptCount: 1,
-      lastAttemptAt: new Date()
+    select: {
+      id: true,
+      attemptCount: true
     }
   })
+
+  if (existing) {
+    await prisma.webhookDelivery.update({
+      where: { id: existing.id },
+      data: {
+        subscriptionId: params.subscriptionId ?? null,
+        targetUrl: endpoint.url,
+        requestMethod: endpoint.requestMethod,
+        payloadJson: params.payload as Prisma.InputJsonValue,
+        status: result.statusCode >= 400 ? 'failed' : 'success',
+        responseCode: result.statusCode,
+        responseBody: result.responseBody,
+        attemptCount: existing.attemptCount + 1,
+        lastAttemptAt: new Date()
+      }
+    })
+  } else {
+    await prisma.webhookDelivery.create({
+      data: {
+        subscriptionId: params.subscriptionId ?? null,
+        eventType: params.eventType,
+        resourceKey: params.resourceKey,
+        periodKey: params.periodKey,
+        targetUrl: endpoint.url,
+        requestMethod: endpoint.requestMethod,
+        payloadJson: params.payload as Prisma.InputJsonValue,
+        status: result.statusCode >= 400 ? 'failed' : 'success',
+        responseCode: result.statusCode,
+        responseBody: result.responseBody,
+        attemptCount: 1,
+        lastAttemptAt: new Date()
+      }
+    })
+  }
 
   if (result.statusCode >= 400) {
     throw new Error(`Webhook dispatch failed: HTTP ${result.statusCode}`)

@@ -9,13 +9,13 @@ import type {
   WallosImportTagDto
 } from '@subtracker/shared'
 import { prisma } from '../db'
-import { getWorkerCache } from '../runtime'
-import { getAppSettings, getSetting, setSetting } from './settings.service'
+import { isWorkerRuntime } from '../runtime'
+import { getAppSettings } from './settings.service'
 import { appendSubscriptionOrders } from './subscription-order.service'
+import { deleteImportPreview, getImportPreview, storeImportPreview } from './worker-lite-state.service'
 
 const IMPORT_TOKEN_TTL_SECONDS = 15 * 60
 const IMPORT_TOKEN_TTL_MS = IMPORT_TOKEN_TTL_SECONDS * 1000
-const IMPORT_PREVIEW_PREFIX = 'wallosImportPreview:'
 const IMPORT_TAG_COLORS = [
   '#3b82f6',
   '#8b5cf6',
@@ -30,10 +30,6 @@ const IMPORT_TAG_COLORS = [
 ]
 
 type WallosJsonRow = Record<string, unknown>
-type StoredPreviewEntry = {
-  expiresAt: number
-  preview: WallosImportInspectResultDto
-}
 
 function decodeBase64(value: string) {
   const binary = atob(value.trim())
@@ -56,37 +52,6 @@ function createImportId() {
   const random = crypto.randomUUID().replaceAll('-', '').slice(0, 16)
   const timestamp = Date.now().toString(36).slice(-8)
   return `c${timestamp}${random}`.slice(0, 25)
-}
-
-async function getStoredPreview(token: string) {
-  const kv = getWorkerCache()
-  if (kv) {
-    return (await kv.get(`${IMPORT_PREVIEW_PREFIX}${token}`, 'json')) as StoredPreviewEntry | null
-  }
-
-  return getSetting<StoredPreviewEntry | null>(`${IMPORT_PREVIEW_PREFIX}${token}`, null)
-}
-
-async function setStoredPreview(token: string, entry: StoredPreviewEntry) {
-  const kv = getWorkerCache()
-  if (kv) {
-    await kv.put(`${IMPORT_PREVIEW_PREFIX}${token}`, JSON.stringify(entry), {
-      expirationTtl: IMPORT_TOKEN_TTL_SECONDS
-    })
-    return
-  }
-
-  await setSetting(`${IMPORT_PREVIEW_PREFIX}${token}`, entry)
-}
-
-async function deleteStoredPreview(token: string) {
-  const kv = getWorkerCache()
-  if (kv) {
-    await kv.delete(`${IMPORT_PREVIEW_PREFIX}${token}`)
-    return
-  }
-
-  await setSetting(`${IMPORT_PREVIEW_PREFIX}${token}`, null)
 }
 
 function normalizeWallosTagName(name: string | null | undefined) {
@@ -416,23 +381,19 @@ export async function inspectWallosImportFile(input: WallosImportInspectInput): 
     importToken: token
   }
 
-  await setStoredPreview(token, {
-    expiresAt: Date.now() + IMPORT_TOKEN_TTL_MS,
-    preview
-  })
+  await storeImportPreview(token, preview, IMPORT_TOKEN_TTL_MS)
 
   return preview
 }
 
 export async function commitWallosImport(input: WallosImportCommitInput): Promise<WallosImportCommitResultDto> {
-  const entry = await getStoredPreview(input.importToken)
-  if (!entry || entry.expiresAt <= Date.now()) {
-    await deleteStoredPreview(input.importToken)
+  const preview = await getImportPreview(input.importToken)
+  if (!preview) {
+    await deleteImportPreview(input.importToken)
     throw new Error('导入令牌不存在或已失效，请重新生成预览')
   }
 
-  const preview = entry.preview
-  await deleteStoredPreview(input.importToken)
+  await deleteImportPreview(input.importToken)
 
   const existingTags = await prisma.tag.findMany({
     where: {
@@ -448,13 +409,25 @@ export async function commitWallosImport(input: WallosImportCommitInput): Promis
   const missingTags = preview.usedTags.filter((tag) => !tagIdByName.has(tag.name))
 
   if (missingTags.length > 0) {
-    await prisma.tag.createMany({
-      data: missingTags.map((tag) => ({
-        name: tag.name,
-        color: getImportedTagColor(tag.name),
-        sortOrder: tag.sortOrder
-      }))
-    })
+    if (isWorkerRuntime()) {
+      for (const tag of missingTags) {
+        await prisma.tag.create({
+          data: {
+            name: tag.name,
+            color: getImportedTagColor(tag.name),
+            sortOrder: tag.sortOrder
+          }
+        })
+      }
+    } else {
+      await prisma.tag.createMany({
+        data: missingTags.map((tag) => ({
+          name: tag.name,
+          color: getImportedTagColor(tag.name),
+          sortOrder: tag.sortOrder
+        }))
+      })
+    }
     importedTags = missingTags.length
 
     const refreshedTags = await prisma.tag.findMany({
@@ -524,15 +497,31 @@ export async function commitWallosImport(input: WallosImportCommitInput): Promis
   }
 
   if (subscriptionRows.length > 0) {
-    await prisma.subscription.createMany({
-      data: subscriptionRows
-    })
+    if (isWorkerRuntime()) {
+      for (const row of subscriptionRows) {
+        await prisma.subscription.create({
+          data: row
+        })
+      }
+    } else {
+      await prisma.subscription.createMany({
+        data: subscriptionRows
+      })
+    }
   }
 
   if (subscriptionTagRows.length > 0) {
-    await prisma.subscriptionTag.createMany({
-      data: subscriptionTagRows
-    })
+    if (isWorkerRuntime()) {
+      for (const row of subscriptionTagRows) {
+        await prisma.subscriptionTag.create({
+          data: row
+        })
+      }
+    } else {
+      await prisma.subscriptionTag.createMany({
+        data: subscriptionTagRows
+      })
+    }
   }
 
   await appendSubscriptionOrders(createdSubscriptionIds)

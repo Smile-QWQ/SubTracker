@@ -7,7 +7,6 @@ const cwd = process.cwd()
 const cliArgs = process.argv.slice(2)
 const args = new Set(cliArgs)
 const withR2 = args.has('--with-r2')
-const withoutKv = args.has('--without-kv')
 const skipBuild = args.has('--skip-build')
 const configPath = path.resolve(cwd, 'wrangler.jsonc')
 const generatedConfigPath = path.resolve(cwd, '.wrangler.generated.jsonc')
@@ -15,7 +14,6 @@ const generatedConfigPath = path.resolve(cwd, '.wrangler.generated.jsonc')
 function bindingResourceName(workerName, binding) {
   const suffixMap = {
     DB: 'db',
-    SUBTRACKER_CACHE: 'cache',
     SUBTRACKER_LOGOS: 'logos'
   }
 
@@ -51,12 +49,8 @@ function resolveBooleanFlag({
   return defaultValue
 }
 
-function applyOptionalBindings(config, { enableKv, enableR2 }) {
+function applyOptionalBindings(config, { enableR2 }) {
   const next = { ...config }
-
-  if (!enableKv) {
-    delete next.kv_namespaces
-  }
 
   if (enableR2) {
     return withProvisionedR2Binding(next)
@@ -268,13 +262,6 @@ async function buildGeneratedConfig() {
   let config = JSON.parse(raw)
   const packageJson = JSON.parse(await readFile(path.resolve(cwd, 'package.json'), 'utf8'))
   const gitSha = (await run('git', ['rev-parse', '--short', 'HEAD'], { captureOutput: true })).stdout.trim()
-  const enableKv = withoutKv
-    ? false
-    : resolveBooleanFlag({
-        envName: 'ENABLE_KV',
-        defaultValue: true
-      })
-
   config.name = resolveWorkerName({
     defaultName: config.name || 'subtracker',
     cliArgs
@@ -289,13 +276,12 @@ async function buildGeneratedConfig() {
   }
 
   config = applyOptionalBindings(config, {
-    enableKv,
     enableR2: withR2
   })
   config = syncCronTriggers(config)
 
   const inventory = await discoverExistingResources({
-    includeKv: enableKv
+    includeKv: false
   })
   attachExistingResources(config, inventory)
 

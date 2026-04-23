@@ -24,28 +24,39 @@ export async function renewSubscription(subscriptionId: string, paidAt?: Date, p
     subscription.billingIntervalUnit
   )
 
-  const [payment, updated] = await prisma.$transaction([
-    prisma.paymentRecord.create({
-      data: {
-        subscriptionId: subscription.id,
-        amount,
-        currency,
-        baseCurrency,
-        convertedAmount,
-        exchangeRate,
-        paidAt: paidAt ?? new Date(),
-        periodStart,
-        periodEnd
-      }
-    }),
-    prisma.subscription.update({
+  const payment = await prisma.paymentRecord.create({
+    data: {
+      subscriptionId: subscription.id,
+      amount,
+      currency,
+      baseCurrency,
+      convertedAmount,
+      exchangeRate,
+      paidAt: paidAt ?? new Date(),
+      periodStart,
+      periodEnd
+    }
+  })
+
+  let updated
+  try {
+    updated = await prisma.subscription.update({
       where: { id: subscription.id },
       data: {
         nextRenewalDate: periodEnd,
         status: 'active'
       }
     })
-  ])
+  } catch (error) {
+    try {
+      await prisma.paymentRecord.delete({
+        where: { id: payment.id }
+      })
+    } catch {
+      // ignore compensation failures and surface the original update error
+    }
+    throw error
+  }
 
   return {
     payment,
@@ -87,17 +98,26 @@ export async function autoRenewDueSubscriptions(today = new Date()) {
 
 export async function reconcileExpiredSubscriptions(today = new Date()) {
   const cutoff = dayjs(today).startOf('day').toDate()
-  const result = await prisma.subscription.updateMany({
+  const rows = await prisma.subscription.findMany({
     where: {
       status: 'active',
       nextRenewalDate: {
         lt: cutoff
       }
     },
-    data: {
-      status: 'expired'
+    select: {
+      id: true
     }
   })
 
-  return result.count
+  for (const row of rows) {
+    await prisma.subscription.update({
+      where: { id: row.id },
+      data: {
+        status: 'expired'
+      }
+    })
+  }
+
+  return rows.length
 }

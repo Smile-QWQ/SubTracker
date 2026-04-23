@@ -16,6 +16,7 @@ import {
   resolveDefaultAdvanceReminderRules,
   resolveDefaultOverdueReminderRules
 } from './reminder-rules.service'
+import { invalidateWorkerLiteCache } from './worker-lite-cache.service'
 import { getSettingLite, listSettingsLite, setSettingLite } from './worker-lite-repository.service'
 
 export async function getSetting<T>(key: string, fallback: T): Promise<T> {
@@ -24,6 +25,7 @@ export async function getSetting<T>(key: string, fallback: T): Promise<T> {
 
 export async function setSetting<T>(key: string, value: T): Promise<void> {
   await setSettingLite(key, value)
+  await invalidateWorkerLiteCache(['settings'])
 }
 
 function readSettingsValue<T>(settingsMap: Map<string, unknown>, key: string, fallback: T): T {

@@ -303,10 +303,8 @@ export async function updateTagLite(
 
 export async function deleteTagLite(id: string) {
   if (!getD1()) {
-    await prisma.$transaction([
-      prisma.subscriptionTag.deleteMany({ where: { tagId: id } }),
-      prisma.tag.delete({ where: { id } })
-    ])
+    await prisma.subscriptionTag.deleteMany({ where: { tagId: id } })
+    await prisma.tag.delete({ where: { id } })
     return
   }
 

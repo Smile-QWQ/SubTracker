@@ -122,6 +122,33 @@ const schemaStatements = [
   ON "WebhookDelivery"("status", "createdAt")
   `,
   `
+  CREATE TABLE IF NOT EXISTS "NotificationDelivery" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "channel" TEXT NOT NULL,
+    "eventType" TEXT NOT NULL,
+    "resourceKey" TEXT NOT NULL,
+    "periodKey" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )
+  `,
+  `
+  CREATE UNIQUE INDEX IF NOT EXISTS "NotificationDelivery_channel_eventType_resourceKey_periodKey_key"
+  ON "NotificationDelivery"("channel", "eventType", "resourceKey", "periodKey")
+  `,
+  `
+  CREATE TABLE IF NOT EXISTS "ImportPreview" (
+    "token" TEXT NOT NULL PRIMARY KEY,
+    "previewJson" TEXT NOT NULL,
+    "expiresAt" DATETIME NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )
+  `,
+  `
+  CREATE INDEX IF NOT EXISTS "ImportPreview_expiresAt_idx"
+  ON "ImportPreview"("expiresAt")
+  `,
+  `
   CREATE TABLE IF NOT EXISTS "Setting" (
     "key" TEXT NOT NULL PRIMARY KEY,
     "valueJson" TEXT NOT NULL,

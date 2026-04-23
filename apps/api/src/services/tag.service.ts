@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
+import { isWorkerRuntime } from '../runtime'
 
 type DbClient = Prisma.TransactionClient | PrismaClient
 
@@ -12,6 +13,18 @@ export async function replaceSubscriptionTags(db: DbClient, subscriptionId: stri
   })
 
   if (tagIds.length === 0) return
+
+  if (isWorkerRuntime()) {
+    for (const tagId of tagIds) {
+      await db.subscriptionTag.create({
+        data: {
+          subscriptionId,
+          tagId
+        }
+      })
+    }
+    return
+  }
 
   await db.subscriptionTag.createMany({
     data: tagIds.map((tagId) => ({

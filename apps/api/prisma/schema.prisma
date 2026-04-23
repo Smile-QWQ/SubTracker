@@ -126,6 +126,27 @@ model WebhookDelivery {
   @@index([status, createdAt])
 }
 
+model NotificationDelivery {
+  id          String   @id @default(cuid())
+  channel     String
+  eventType   String
+  resourceKey String
+  periodKey   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([channel, eventType, resourceKey, periodKey])
+}
+
+model ImportPreview {
+  token      String   @id
+  previewJson Json
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
 model Setting {
   key       String   @id
   valueJson Json

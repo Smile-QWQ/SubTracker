@@ -44,7 +44,8 @@
 
 这个分支面向 **Cloudflare Worker Free**，因此会主动做一些性能取舍来换稳定性：
 
-- 读取类接口默认使用 **30 秒短 TTL 缓存**
+- 读取类接口使用 **isolate 内存短 TTL 缓存**
+- **不使用 KV**
 - Logo 搜索是 Lite 版，只保留网站候选 + DuckDuckGo
 - Cron 已拆成更轻的 Worker 版职责
 - 遇到 `503` / CPU 超限时，前端会明确提示可能受 Worker 免费版限制影响
@@ -62,7 +63,7 @@
 ## 技术栈
 
 - **前端**：Vue 3、Vite、TypeScript、Naive UI、Pinia、TanStack Query、ECharts
-- **后端**：Cloudflare Worker、Hono、Prisma D1 Adapter、D1、KV、可选 R2
+- **后端**：Cloudflare Worker、Hono、Prisma D1 Adapter、D1、可选 R2
 
 ## 本地开发
 
@@ -114,7 +115,6 @@ npm test
 常用仓库 Variables：
 
 - `WORKER_NAME_PREFIX`
-- `ENABLE_KV`（默认开启）
 - `ENABLE_R2`（默认关闭）
 
 ## 工作流

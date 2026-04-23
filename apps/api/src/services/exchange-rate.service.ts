@@ -52,15 +52,24 @@ export async function refreshExchangeRates(baseCurrency?: string) {
       throw new Error('Rate payload is empty')
     }
 
-    return await prisma.exchangeRateSnapshot.upsert({
-      where: { baseCurrency: base },
-      update: {
-        ratesJson: rates,
-        provider: config.exchangeRateProvider,
-        fetchedAt: new Date(),
-        isStale: false
-      },
-      create: {
+    const existing = await prisma.exchangeRateSnapshot.findUnique({
+      where: { baseCurrency: base }
+    })
+
+    if (existing) {
+      return await prisma.exchangeRateSnapshot.update({
+        where: { baseCurrency: base },
+        data: {
+          ratesJson: rates,
+          provider: config.exchangeRateProvider,
+          fetchedAt: new Date(),
+          isStale: false
+        }
+      })
+    }
+
+    return await prisma.exchangeRateSnapshot.create({
+      data: {
         baseCurrency: base,
         ratesJson: rates,
         provider: config.exchangeRateProvider,

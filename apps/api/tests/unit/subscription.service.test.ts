@@ -2,18 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const serviceMocks = vi.hoisted(() => ({
   prisma: {
-    $transaction: vi.fn(async (operations: unknown) => {
-      if (typeof operations === 'function') {
-        throw new Error('interactive transaction should not be used in renewSubscription')
-      }
-      return Promise.all(operations as Promise<unknown>[])
-    }),
     subscription: {
       findUnique: vi.fn(),
       update: vi.fn()
     },
     paymentRecord: {
-      create: vi.fn()
+      create: vi.fn(),
+      delete: vi.fn()
     }
   },
   getBaseCurrency: vi.fn(async () => 'CNY'),
@@ -40,7 +35,7 @@ describe('subscription service D1 compatibility', () => {
     vi.clearAllMocks()
   })
 
-  it('renews subscriptions with batch-style transaction operations instead of interactive transactions', async () => {
+  it('renews subscriptions without relying on Prisma transactions', async () => {
     const nextRenewalDate = new Date('2026-04-22T00:00:00.000Z')
     const periodEnd = new Date('2026-05-22T00:00:00.000Z')
 
@@ -67,7 +62,30 @@ describe('subscription service D1 compatibility', () => {
       id: 'sub_1',
       status: 'active'
     })
-    expect(serviceMocks.prisma.$transaction).toHaveBeenCalledTimes(1)
-    expect(typeof serviceMocks.prisma.$transaction.mock.calls[0]?.[0]).not.toBe('function')
+    expect(serviceMocks.prisma.paymentRecord.create).toHaveBeenCalledTimes(1)
+    expect(serviceMocks.prisma.subscription.update).toHaveBeenCalledTimes(1)
+  })
+
+  it('rolls back the payment record when subscription update fails', async () => {
+    const nextRenewalDate = new Date('2026-04-22T00:00:00.000Z')
+
+    serviceMocks.prisma.subscription.findUnique.mockResolvedValue({
+      id: 'sub_1',
+      amount: 25,
+      currency: 'CNY',
+      billingIntervalCount: 1,
+      billingIntervalUnit: 'month',
+      nextRenewalDate
+    })
+    serviceMocks.prisma.paymentRecord.create.mockResolvedValue({ id: 'payment_1' })
+    serviceMocks.prisma.subscription.update.mockRejectedValue(new Error('update failed'))
+    serviceMocks.prisma.paymentRecord.delete.mockResolvedValue({ id: 'payment_1' })
+
+    const { renewSubscription } = await import('../../src/services/subscription.service')
+
+    await expect(renewSubscription('sub_1')).rejects.toThrow('update failed')
+    expect(serviceMocks.prisma.paymentRecord.delete).toHaveBeenCalledWith({
+      where: { id: 'payment_1' }
+    })
   })
 })
