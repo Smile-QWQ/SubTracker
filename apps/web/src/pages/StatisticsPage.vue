@@ -66,12 +66,11 @@
 <script setup lang="ts">
 import dayjs from 'dayjs'
 import { computed } from 'vue'
-import { useQuery } from '@tanstack/vue-query'
 import { useWindowSize } from '@vueuse/core'
 import { NCard, NEmpty, NGrid, NGridItem } from 'naive-ui'
 import { BarChartOutline } from '@vicons/ionicons5'
-import { api } from '@/composables/api'
 import { useSettingsQuery } from '@/composables/settings-query'
+import { useStatisticsOverviewQuery } from '@/composables/statistics-overview-query'
 import ChartView from '@/components/ChartView.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import type { StatisticsOverview, SubscriptionStatus } from '@/types/api'
@@ -80,11 +79,7 @@ import { buildTopSubscriptionsOption } from '@/utils/statistics-top-subscription
 const { width } = useWindowSize()
 const barChartOutline = BarChartOutline
 
-const { data: overview } = useQuery({
-  queryKey: ['statistics-overview'],
-  queryFn: api.getStatisticsOverview,
-  staleTime: 30_000
-})
+const { data: overview } = useStatisticsOverviewQuery()
 
 const { data: settings } = useSettingsQuery()
 

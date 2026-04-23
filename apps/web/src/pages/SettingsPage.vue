@@ -473,12 +473,15 @@ import {
 } from 'naive-ui'
 import { HelpCircleOutline, RefreshOutline, SaveOutline, SettingsOutline } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
+import { EXCHANGE_RATE_SNAPSHOT_QUERY_KEY, useExchangeRateSnapshotQuery } from '@/composables/exchange-rate-query'
+import { NOTIFICATION_WEBHOOK_QUERY_KEY, useNotificationWebhookQuery } from '@/composables/notification-webhook-query'
 import { SETTINGS_QUERY_KEY, useSettingsQuery } from '@/composables/settings-query'
 import PageHeader from '@/components/PageHeader.vue'
 import WallosImportModal from '@/components/WallosImportModal.vue'
 import { useAuthStore } from '@/stores/auth'
 import { isRememberedSession } from '@/utils/auth-storage'
 import { buildCurrencyOptions } from '@/utils/currency'
+import { cloneSettingsForForm } from '@/utils/settings-form'
 import { supportsManagedLogoLibrary } from '@/utils/worker-capabilities'
 import type { AiProviderPreset, ChangeCredentialsPayload, ExchangeRateSnapshot, NotificationWebhookSettings, Settings } from '@/types/api'
 
@@ -486,6 +489,8 @@ const message = useMessage()
 const authStore = useAuthStore()
 const queryClient = useQueryClient()
 const { data: settingsQueryData } = useSettingsQuery()
+const { data: snapshotQueryData } = useExchangeRateSnapshotQuery()
+const { data: webhookQueryData } = useNotificationWebhookQuery()
 const { width } = useWindowSize()
 const helpCircleOutline = HelpCircleOutline
 const settingsOutline = SettingsOutline
@@ -697,15 +702,11 @@ function validateAiSettings(action: 'save' | 'connection-test' | 'vision-test') 
   return false
 }
 
-onMounted(async () => {
-  await Promise.all([loadSnapshot(), loadWebhook()])
-})
-
 watch(
   settingsQueryData,
   (settings) => {
     if (!settings) return
-    Object.assign(settingsForm, settings)
+    Object.assign(settingsForm, cloneSettingsForForm(settings))
     aiPromptInput.value = settings.aiConfig.promptTemplate.trim() || DEFAULT_AI_SUBSCRIPTION_PROMPT
     credentialsForm.oldUsername = authStore.username
     credentialsForm.newUsername = authStore.username
@@ -714,13 +715,26 @@ watch(
   { immediate: true }
 )
 
-async function loadSnapshot() {
-  snapshot.value = await api.getExchangeRateSnapshot()
-}
+watch(
+  snapshotQueryData,
+  (value) => {
+    snapshot.value = value ?? null
+  },
+  { immediate: true }
+)
 
-async function loadWebhook() {
-  const current = await api.getNotificationWebhook()
-  Object.assign(webhookForm, current)
+watch(
+  webhookQueryData,
+  (value) => {
+    if (!value) return
+    Object.assign(webhookForm, value)
+  },
+  { immediate: true }
+)
+
+function applySavedSettings(result: Settings) {
+  Object.assign(settingsForm, cloneSettingsForForm(result))
+  queryClient.setQueryData(SETTINGS_QUERY_KEY, result)
 }
 
 async function saveBasicSettings() {
@@ -738,15 +752,14 @@ async function saveBasicSettings() {
       defaultOverdueReminderRules: settingsForm.defaultOverdueReminderRules,
       tagBudgets: settingsForm.tagBudgets
     })
-    Object.assign(settingsForm, result)
+    applySavedSettings(result)
     message.success('基础设置已保存')
     targetCurrency.value = settingsForm.baseCurrency.toUpperCase()
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: ['statistics-overview'] }),
       queryClient.invalidateQueries({ queryKey: ['statistics-budgets'] })
     ])
-    await loadSnapshot()
+    await queryClient.invalidateQueries({ queryKey: EXCHANGE_RATE_SNAPSHOT_QUERY_KEY })
   } catch (error) {
     message.error(error instanceof Error ? error.message : '基础设置保存失败')
   } finally {
@@ -759,10 +772,11 @@ async function saveEmailSettings() {
   if (!validateEmailSettings('save')) return
   savingEmailSettings.value = true
   try {
-    await api.updateSettings({
+    const result = await api.updateSettings({
       emailNotificationsEnabled: settingsForm.emailNotificationsEnabled,
       emailConfig: settingsForm.emailConfig
     })
+    applySavedSettings(result)
     message.success(settingsForm.emailNotificationsEnabled ? '邮箱通知配置已保存' : '邮箱通知已关闭')
   } finally {
     savingEmailSettings.value = false
@@ -774,10 +788,11 @@ async function savePushplusSettings() {
   if (!validatePushplusSettings('save')) return
   savingPushplusSettings.value = true
   try {
-    await api.updateSettings({
+    const result = await api.updateSettings({
       pushplusNotificationsEnabled: settingsForm.pushplusNotificationsEnabled,
       pushplusConfig: settingsForm.pushplusConfig
     })
+    applySavedSettings(result)
     message.success(settingsForm.pushplusNotificationsEnabled ? 'PushPlus 配置已保存' : 'PushPlus 已关闭')
   } finally {
     savingPushplusSettings.value = false
@@ -789,10 +804,11 @@ async function saveTelegramSettings() {
   if (!validateTelegramSettings('save')) return
   savingTelegramSettings.value = true
   try {
-    await api.updateSettings({
+    const result = await api.updateSettings({
       telegramNotificationsEnabled: settingsForm.telegramNotificationsEnabled,
       telegramConfig: settingsForm.telegramConfig
     })
+    applySavedSettings(result)
     message.success(settingsForm.telegramNotificationsEnabled ? 'Telegram 配置已保存' : 'Telegram 已关闭')
   } finally {
     savingTelegramSettings.value = false
@@ -807,7 +823,7 @@ async function saveAiSettings() {
   aiPromptInput.value = promptTemplate || DEFAULT_AI_SUBSCRIPTION_PROMPT
   savingAiSettings.value = true
   try {
-    await api.updateSettings({
+    const result = await api.updateSettings({
       aiConfig: {
         ...settingsForm.aiConfig,
         capabilities: {
@@ -816,6 +832,8 @@ async function saveAiSettings() {
         promptTemplate
       }
     })
+    applySavedSettings(result)
+    aiPromptInput.value = result.aiConfig.promptTemplate.trim() || DEFAULT_AI_SUBSCRIPTION_PROMPT
     message.success(settingsForm.aiConfig.enabled ? 'AI 识别配置已保存' : 'AI 识别已关闭')
   } finally {
     savingAiSettings.value = false
@@ -880,6 +898,7 @@ function handleAiPresetChange(value: AiProviderPreset) {
 
 async function refreshRates() {
   snapshot.value = await api.refreshExchangeRates()
+  queryClient.setQueryData(EXCHANGE_RATE_SNAPSHOT_QUERY_KEY, snapshot.value)
   message.success('汇率已刷新')
 }
 
@@ -967,6 +986,7 @@ async function saveWebhook() {
       ignoreSsl: false
     })
     Object.assign(webhookForm, saved)
+    queryClient.setQueryData(NOTIFICATION_WEBHOOK_QUERY_KEY, saved)
     message.success(webhookForm.enabled ? 'Webhook 配置已保存' : 'Webhook 已关闭')
   } finally {
     savingWebhookSettings.value = false

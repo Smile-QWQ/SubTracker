@@ -16,10 +16,10 @@
 
       <n-spin :show="loading" size="small">
         <template #description>
-          <n-space vertical size="small" align="center">
-            <div>{{ loadingStatusText }}</div>
-            <div class="card-muted">完成后会自动展示识别结果，无需重复点击。</div>
-          </n-space>
+          <div class="ai-loading-copy">
+            <div class="ai-loading-copy__primary">{{ loadingStatusText }}</div>
+            <div class="ai-loading-copy__secondary">完成后会自动展示识别结果，无需重复点击。</div>
+          </div>
         </template>
 
         <n-form label-placement="top">
@@ -296,6 +296,30 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   object-fit: contain;
   border: 1px solid #e5e7eb;
+}
+
+.ai-loading-copy {
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.ai-loading-copy__primary {
+  color: #0f172a;
+  line-height: 1.6;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+.ai-loading-copy__secondary {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: normal;
+  word-break: keep-all;
 }
 
 .ai-raw-text {

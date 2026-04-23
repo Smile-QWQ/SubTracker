@@ -12,11 +12,11 @@
         <stat-card label="当前月份" :value="panelMonthLabel" suffix="当前正在查看的月份" :icon="calendarClearOutline" />
       </n-grid-item>
       <n-grid-item>
-        <stat-card label="本月续订数量" :value="monthEventCount" suffix="当前月份内的订阅数" :icon="notificationsOutline" />
+        <stat-card label="本月应续订数量" :value="monthEventCount" suffix="当前月份内的订阅数" :icon="notificationsOutline" />
       </n-grid-item>
       <n-grid-item>
         <stat-card
-          label="本月预计支出"
+          label="本月预计需支出"
           :value="`${baseCurrency} ${monthConvertedAmount.toFixed(2)}`"
           suffix="已按汇率折算"
           :icon="walletOutline"
@@ -24,7 +24,7 @@
       </n-grid-item>
       <n-grid-item>
         <stat-card
-          label="选中日期续订"
+          label="选中日期订阅数"
           :value="selectedDateEvents.length"
           :suffix="`${selectedDateLabel} · ${baseCurrency} ${selectedDateConvertedAmount.toFixed(2)}`"
           :icon="todayOutline"
@@ -101,7 +101,7 @@ import {
   TodayOutline,
   WalletOutline
 } from '@vicons/ionicons5'
-import { api } from '@/composables/api'
+import { useCalendarEventsQuery } from '@/composables/calendar-events-query'
 import { useSettingsQuery } from '@/composables/settings-query'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
@@ -119,11 +119,17 @@ const events = ref<CalendarEvent[]>([])
 const tab = ref('month')
 const selectedDateTs = ref(dayjs().valueOf())
 const panelMonthTs = ref(dayjs().startOf('month').valueOf())
-let latestMonthRequestId = 0
 let ignoreSelectedDateWatch = false
-const monthEventsCache = new Map<string, CalendarEvent[]>()
 const { data: settings } = useSettingsQuery()
 const baseCurrency = computed(() => settings.value?.baseCurrency ?? 'CNY')
+const panelMonthRange = computed(() => {
+  const monthStart = dayjs(panelMonthTs.value).startOf('month')
+  return {
+    start: monthStart.format('YYYY-MM-DD'),
+    end: monthStart.endOf('month').format('YYYY-MM-DD')
+  }
+})
+const calendarEventsQuery = useCalendarEventsQuery(panelMonthRange)
 
 const summaryCols = computed(() => (width.value < 640 ? 1 : width.value < 1100 ? 2 : 4))
 const calendarCols = computed(() => (width.value < 1100 ? 1 : 2))
@@ -132,7 +138,6 @@ onMounted(async () => {
   if (width.value < 720) {
     tab.value = 'list'
   }
-  await loadEventsForMonth(panelMonthTs.value)
 })
 
 watch(selectedDateTs, async (value) => {
@@ -143,32 +148,17 @@ watch(selectedDateTs, async (value) => {
 
   const selectedMonth = dayjs(value).startOf('month')
   if (!selectedMonth.isSame(dayjs(panelMonthTs.value), 'month')) {
-    await loadEventsForMonth(value)
+    panelMonthTs.value = selectedMonth.valueOf()
   }
 })
 
-async function loadEventsForMonth(monthTs: number) {
-  const requestId = ++latestMonthRequestId
-  const monthStart = dayjs(monthTs).startOf('month')
-  const cacheKey = monthStart.format('YYYY-MM')
-  panelMonthTs.value = monthStart.valueOf()
-
-  const cached = monthEventsCache.get(cacheKey)
-  if (cached) {
-    events.value = cached
-    return
-  }
-
-  events.value = []
-  const start = monthStart.startOf('month').format('YYYY-MM-DD')
-  const end = monthStart.endOf('month').format('YYYY-MM-DD')
-  const rows = await api.getCalendarEvents({ start, end })
-
-  if (requestId !== latestMonthRequestId) return
-
-  monthEventsCache.set(cacheKey, rows)
-  events.value = rows
-}
+watch(
+  () => calendarEventsQuery.data.value,
+  (value) => {
+    events.value = value ?? []
+  },
+  { immediate: true }
+)
 
 const panelMonthLabel = computed(() => dayjs(panelMonthTs.value).format('YYYY 年 M 月'))
 const selectedDateLabel = computed(() => dayjs(selectedDateTs.value).format('YYYY-MM-DD'))
@@ -222,7 +212,7 @@ function handlePanelChange({ year, month }: { year: number; month: number }) {
 
   ignoreSelectedDateWatch = true
   selectedDateTs.value = targetSelectedDate.valueOf()
-  void loadEventsForMonth(targetMonth.valueOf())
+  panelMonthTs.value = targetMonth.valueOf()
 }
 
 function getDaySummary(year: number, month: number, date: number) {
