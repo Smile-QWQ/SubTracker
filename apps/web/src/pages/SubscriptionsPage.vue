@@ -249,6 +249,7 @@
 import dayjs from 'dayjs'
 import { computed, h, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useWindowSize } from '@vueuse/core'
+import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import {
   NButton,
   NCard,
@@ -274,7 +275,9 @@ import {
   SearchOutline
 } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
+import { useExchangeRateSnapshotQuery } from '@/composables/exchange-rate-query'
 import { useSettingsQuery } from '@/composables/settings-query'
+import { TAGS_QUERY_KEY, useTagsQuery } from '@/composables/tags-query'
 import TagManageModal from '@/components/TagManageModal.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import SubscriptionDetailDrawer from '@/components/SubscriptionDetailDrawer.vue'
@@ -295,12 +298,15 @@ type SortMode = 'custom' | 'renewal' | 'amount-desc' | 'name'
 
 const message = useMessage()
 const { width } = useWindowSize()
+const queryClient = useQueryClient()
 const layersOutline = LayersOutline
 const isMobile = computed(() => width.value < 960)
 
 const subscriptions = ref<Subscription[]>([])
 const tags = ref<Tag[]>([])
 const { data: settings } = useSettingsQuery()
+const { data: tagsQueryData } = useTagsQuery()
+const { data: snapshotQueryData } = useExchangeRateSnapshotQuery()
 const detail = ref<SubscriptionDetail | null>(null)
 const paymentRecords = ref<PaymentRecord[]>([])
 const currencies = ref<string[]>(['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'HKD'])
@@ -308,6 +314,11 @@ const defaultAdvanceReminderRules = ref('3&09:30;0&09:30;')
 const defaultOverdueReminderRules = ref('1&09:30;2&09:30;3&09:30;')
 
 const filters = reactive({
+  q: '',
+  status: null as string | null,
+  tagIds: [] as string[]
+})
+const appliedFilters = reactive({
   q: '',
   status: null as string | null,
   tagIds: [] as string[]
@@ -380,6 +391,18 @@ const canBatchCancel = computed(
 const canBatchDelete = computed(
   () => selectedCount.value > 0 && selectedSubscriptions.value.every((item) => item.status !== 'active')
 )
+const subscriptionQueryParams = computed(() => ({
+  q: appliedFilters.q || undefined,
+  status: appliedFilters.status || undefined,
+  tagIds: appliedFilters.tagIds.length ? appliedFilters.tagIds.join(',') : undefined
+}))
+const subscriptionsQuery = useQuery({
+  queryKey: computed(() => ['subscriptions', subscriptionQueryParams.value]),
+  queryFn: () => api.getSubscriptions(subscriptionQueryParams.value),
+  staleTime: 5_000,
+  gcTime: 5 * 60_000,
+  refetchOnWindowFocus: false
+})
 
 const orderedSubscriptions = computed(() => {
   const rows = [...subscriptions.value]
@@ -643,7 +666,6 @@ const tableRows = computed<SubscriptionTableRow[]>(() => buildSubscriptionTableR
 onMounted(async () => {
   desktopPageSize.value = getStoredSubscriptionPageSize()
   window.addEventListener('mouseup', resetArmedDrag)
-  await Promise.all([loadTags(), loadSubscriptions(), loadCurrencies()])
 })
 
 onBeforeUnmount(() => {
@@ -668,26 +690,51 @@ watch(
   }
 )
 
-async function loadTags() {
-  tags.value = await api.getTags()
-}
-
 async function loadSubscriptions() {
   resetDragState()
   currentPage.value = 1
-  subscriptions.value = await api.getSubscriptions({
-    q: filters.q || undefined,
-    status: filters.status || undefined,
-    tagIds: filters.tagIds.length ? filters.tagIds.join(',') : undefined
-  })
-  const existingIds = new Set(subscriptions.value.map((item) => item.id))
-  selectedSubscriptionIds.value = selectedSubscriptionIds.value.filter((id) => existingIds.has(id))
+  const nextTagIds = [...filters.tagIds]
+  const filtersChanged =
+    appliedFilters.q !== filters.q ||
+    appliedFilters.status !== filters.status ||
+    appliedFilters.tagIds.length !== nextTagIds.length ||
+    appliedFilters.tagIds.some((id, index) => id !== nextTagIds[index])
+
+  appliedFilters.q = filters.q
+  appliedFilters.status = filters.status
+  appliedFilters.tagIds = nextTagIds
+
+  if (!filtersChanged) {
+    await subscriptionsQuery.refetch()
+  }
 }
 
-async function loadCurrencies() {
-  const snapshot = await api.getExchangeRateSnapshot()
-  currencies.value = Array.from(new Set([snapshot.baseCurrency, ...Object.keys(snapshot.rates)])).sort()
-}
+watch(
+  () => subscriptionsQuery.data.value,
+  (value) => {
+    subscriptions.value = value ?? []
+    const existingIds = new Set(subscriptions.value.map((item) => item.id))
+    selectedSubscriptionIds.value = selectedSubscriptionIds.value.filter((id) => existingIds.has(id))
+  },
+  { immediate: true }
+)
+
+watch(
+  tagsQueryData,
+  (value) => {
+    tags.value = value ?? []
+  },
+  { immediate: true }
+)
+
+watch(
+  snapshotQueryData,
+  (value) => {
+    if (!value) return
+    currencies.value = Array.from(new Set([value.baseCurrency, ...Object.keys(value.rates)])).sort()
+  },
+  { immediate: true }
+)
 
 watch(
   settings,
@@ -698,6 +745,11 @@ watch(
   },
   { immediate: true }
 )
+
+async function refetchCurrentSubscriptions() {
+  await queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
+  await subscriptionsQuery.refetch()
+}
 
 function toggleTagFilter(tagId: string) {
   if (filters.tagIds.includes(tagId)) {
@@ -757,7 +809,7 @@ const submitSubscriptionTask = createSingleFlight(async (payload: Record<string,
     }
 
     closeModal()
-    await loadSubscriptions()
+    await refetchCurrentSubscriptions()
   } catch (error) {
     message.error(`保存失败：${error instanceof Error ? error.message : 'Unknown'}`)
   } finally {
@@ -773,7 +825,7 @@ async function createTag(payload: { name: string; color: string; icon: string; s
   try {
     await api.createTag(payload)
     message.success('标签已创建')
-    await Promise.all([loadTags(), loadSubscriptions()])
+    await Promise.all([queryClient.invalidateQueries({ queryKey: TAGS_QUERY_KEY }), refetchCurrentSubscriptions()])
   } catch (error) {
     message.error(`标签创建失败：${error instanceof Error ? error.message : 'Unknown'}`)
   }
@@ -783,7 +835,7 @@ async function updateTag(payload: { name: string; color: string; icon: string; s
   try {
     await api.updateTag(id, payload)
     message.success('标签已更新')
-    await Promise.all([loadTags(), loadSubscriptions()])
+    await Promise.all([queryClient.invalidateQueries({ queryKey: TAGS_QUERY_KEY }), refetchCurrentSubscriptions()])
   } catch (error) {
     message.error(`标签更新失败：${error instanceof Error ? error.message : 'Unknown'}`)
   }
@@ -794,7 +846,7 @@ async function deleteTag(tag: Tag) {
     await api.deleteTag(tag.id)
     message.success(`已删除标签：${tag.name}`)
     filters.tagIds = filters.tagIds.filter((item) => item !== tag.id)
-    await Promise.all([loadTags(), loadSubscriptions()])
+    await Promise.all([queryClient.invalidateQueries({ queryKey: TAGS_QUERY_KEY }), refetchCurrentSubscriptions()])
   } catch (error) {
     message.error(`标签删除失败：${error instanceof Error ? error.message : 'Unknown'}`)
   }
@@ -850,7 +902,7 @@ async function runBatchRenew() {
   const ids = [...selectedSubscriptionIds.value]
   const result = await api.batchRenewSubscriptions(ids)
   summarizeBatchResult('批量续订', result)
-  await loadSubscriptions()
+  await refetchCurrentSubscriptions()
   await refreshOpenDetailIfNeeded(ids)
 }
 
@@ -860,7 +912,7 @@ async function runBatchPause() {
   const ids = [...selectedSubscriptionIds.value]
   const result = await api.batchPauseSubscriptions(ids)
   summarizeBatchResult('批量暂停', result)
-  await loadSubscriptions()
+  await refetchCurrentSubscriptions()
   await refreshOpenDetailIfNeeded(ids)
 }
 
@@ -870,7 +922,7 @@ async function runBatchCancel() {
   const ids = [...selectedSubscriptionIds.value]
   const result = await api.batchCancelSubscriptions(ids)
   summarizeBatchResult('批量取消', result)
-  await loadSubscriptions()
+  await refetchCurrentSubscriptions()
   await refreshOpenDetailIfNeeded(ids)
 }
 
@@ -884,13 +936,13 @@ async function runBatchDelete() {
     showDetailDrawer.value = false
   }
   clearSelectedSubscriptions()
-  await loadSubscriptions()
+  await refetchCurrentSubscriptions()
 }
 
 async function quickRenew(row: Subscription) {
   await api.renewSubscription(row.id)
   message.success(`已续订：${row.name}`)
-  await loadSubscriptions()
+  await refetchCurrentSubscriptions()
   if (detail.value?.id === row.id) {
     detail.value = await api.getSubscription(row.id)
   }
@@ -899,7 +951,7 @@ async function quickRenew(row: Subscription) {
 async function pause(id: string) {
   await api.pauseSubscription(id)
   message.success('已暂停')
-  await loadSubscriptions()
+  await refetchCurrentSubscriptions()
   if (detail.value?.id === id) {
     detail.value = await api.getSubscription(id)
   }
@@ -908,7 +960,7 @@ async function pause(id: string) {
 async function cancel(id: string) {
   await api.cancelSubscription(id)
   message.success('已停用')
-  await loadSubscriptions()
+  await refetchCurrentSubscriptions()
   if (detail.value?.id === id) {
     detail.value = await api.getSubscription(id)
   }
@@ -917,7 +969,7 @@ async function cancel(id: string) {
 async function removeSubscription(id: string, name: string) {
   await api.deleteSubscription(id)
   message.success(`已删除：${name}`)
-  await loadSubscriptions()
+  await refetchCurrentSubscriptions()
   if (detail.value?.id === id) {
     detail.value = null
     showDetailDrawer.value = false
@@ -985,7 +1037,7 @@ async function handleDrop(event: DragEvent, targetId: string) {
   try {
     savingOrder.value = true
     await api.reorderSubscriptions(nextIds)
-    await loadSubscriptions()
+    await refetchCurrentSubscriptions()
     message.success('顺序已更新')
   } catch (error) {
     message.error(error instanceof Error ? error.message : '排序更新失败')

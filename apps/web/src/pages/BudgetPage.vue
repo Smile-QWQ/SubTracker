@@ -148,13 +148,15 @@
 
 <script setup lang="ts">
 import { computed, h, ref, watch } from 'vue'
-import { useQuery, useQueryClient } from '@tanstack/vue-query'
+import { useQueryClient } from '@tanstack/vue-query'
 import { useWindowSize } from '@vueuse/core'
 import { useRouter } from 'vue-router'
 import { NButton, NCard, NDataTable, NDivider, NEmpty, NGrid, NGridItem, NProgress, NSpace, NTag, useMessage } from 'naive-ui'
 import { WalletOutline } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
+import { BUDGET_STATISTICS_QUERY_KEY, useBudgetStatisticsQuery } from '@/composables/budget-statistics-query'
 import { SETTINGS_QUERY_KEY, useSettingsQuery } from '@/composables/settings-query'
+import { TAGS_QUERY_KEY, useTagsQuery } from '@/composables/tags-query'
 import ChartView from '@/components/ChartView.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import TagBudgetSettingsModal from '@/components/TagBudgetSettingsModal.vue'
@@ -167,18 +169,12 @@ const message = useMessage()
 const queryClient = useQueryClient()
 const tagBudgetModalVisible = ref(false)
 
-const { data: budgetStats } = useQuery({
-  queryKey: ['statistics-budgets'],
-  queryFn: api.getBudgetStatistics
-})
+const { data: budgetStats } = useBudgetStatisticsQuery()
 
 const { data: settings } = useSettingsQuery()
 
-const { data: tags } = useQuery({
-  queryKey: ['budget-page-tags'],
-  queryFn: api.getTags,
-  initialData: []
-})
+const { data: tagsData } = useTagsQuery()
+const tags = computed(() => tagsData.value ?? [])
 
 watch(
   () => settings.value?.enableTagBudgets,
@@ -292,11 +288,12 @@ async function saveTagBudgets(tagBudgets: Record<string, number>) {
   await api.updateSettings({ tagBudgets })
   tagBudgetModalVisible.value = false
   message.success('标签月预算已保存')
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['statistics-budgets'] }),
-      queryClient.invalidateQueries({ queryKey: ['statistics-overview'] }),
-      queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEY })
-    ])
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: BUDGET_STATISTICS_QUERY_KEY }),
+    queryClient.invalidateQueries({ queryKey: ['statistics-overview'] }),
+    queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEY }),
+    queryClient.invalidateQueries({ queryKey: TAGS_QUERY_KEY })
+  ])
 }
 
 function formatMoney(amount: number, currency: string) {

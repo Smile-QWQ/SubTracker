@@ -117,12 +117,11 @@
 <script setup lang="ts">
 import dayjs from 'dayjs'
 import { computed, h } from 'vue'
-import { useQuery } from '@tanstack/vue-query'
 import { useWindowSize } from '@vueuse/core'
 import { NCard, NDataTable, NEmpty, NGrid, NGridItem, NProgress, NTag } from 'naive-ui'
 import { CashOutline, GridOutline, LayersOutline, NotificationsOutline, WalletOutline } from '@vicons/ionicons5'
-import { api } from '@/composables/api'
 import { useSettingsQuery } from '@/composables/settings-query'
+import { useStatisticsOverviewQuery } from '@/composables/statistics-overview-query'
 import ChartView from '@/components/ChartView.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
@@ -132,10 +131,7 @@ import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils
 const { width } = useWindowSize()
 const gridOutline = GridOutline
 
-const { data: overview } = useQuery({
-  queryKey: ['statistics-overview'],
-  queryFn: api.getStatisticsOverview
-})
+const { data: overview } = useStatisticsOverviewQuery()
 
 const { data: settings } = useSettingsQuery()
 
