@@ -15,7 +15,7 @@ const mockedSettings: {
 }
 
 vi.mock('../../src/services/settings.service', () => ({
-  getAppSettings: vi.fn(async () => mockedSettings)
+  getAiConfig: vi.fn(async () => mockedSettings.aiConfig)
 }))
 
 import { recognizeSubscriptionByAi, testAiConnection, testAiVisionConnection } from '../../src/services/ai.service'

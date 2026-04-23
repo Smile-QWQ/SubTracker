@@ -30,10 +30,7 @@ const routeMocks = vi.hoisted(() => ({
   })),
   saveUploadedLogo: vi.fn(),
   searchSubscriptionLogos: vi.fn(async () => []),
-  getAppSettings: vi.fn(async () => ({
-    defaultAdvanceReminderRules: '3&09:30;0&09:30;',
-    defaultOverdueReminderRules: '1&09:30;'
-  }))
+  getDefaultAdvanceReminderRulesSetting: vi.fn(async () => '3&09:30;0&09:30;')
 }))
 
 vi.mock('../../src/db', () => ({
@@ -67,10 +64,12 @@ vi.mock('../../src/services/logo.service', () => ({
 }))
 
 vi.mock('../../src/services/settings.service', () => ({
-  getAppSettings: routeMocks.getAppSettings
+  getDefaultAdvanceReminderRulesSetting: routeMocks.getDefaultAdvanceReminderRulesSetting
 }))
 
 describe('subscription routes D1 compatibility', () => {
+  const validTagIds = ['cm0a5a6vla9d78e4cec174aa8']
+
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
@@ -104,13 +103,13 @@ describe('subscription routes D1 compatibility', () => {
         notifyDaysBefore: 3,
         webhookEnabled: true,
         notes: '',
-        tagIds: ['cksubtracker000000000000001']
+        tagIds: validTagIds
       }
     })
 
     expect(response.statusCode).toBe(201)
     expect(routeMocks.prisma.$transaction).not.toHaveBeenCalled()
-    expect(routeMocks.replaceSubscriptionTags).toHaveBeenCalledWith(routeMocks.prisma, 'sub_1', ['cksubtracker000000000000001'])
+    expect(routeMocks.replaceSubscriptionTags).toHaveBeenCalledWith(routeMocks.prisma, 'sub_1', validTagIds)
     expect(routeMocks.appendSubscriptionOrder).toHaveBeenCalledWith('sub_1')
 
     await app.close()
@@ -133,13 +132,13 @@ describe('subscription routes D1 compatibility', () => {
       url: '/subscriptions/sub_1',
       payload: {
         name: '哔哩哔哩年度大会员',
-        tagIds: ['cksubtracker000000000000002']
+        tagIds: validTagIds
       }
     })
 
     expect(response.statusCode).toBe(200)
     expect(routeMocks.prisma.$transaction).not.toHaveBeenCalled()
-    expect(routeMocks.replaceSubscriptionTags).toHaveBeenCalledWith(routeMocks.prisma, 'sub_1', ['cksubtracker000000000000002'])
+    expect(routeMocks.replaceSubscriptionTags).toHaveBeenCalledWith(routeMocks.prisma, 'sub_1', validTagIds)
 
     await app.close()
   })
