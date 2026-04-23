@@ -487,16 +487,20 @@ function buildTestReminderPayload() {
 }
 
 export async function sendTestEmailNotification() {
-  const result = await sendEmailNotification({
-    eventType: 'subscription.reminder_due',
-    resourceKey: 'test:email',
-    periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
-    payload: buildTestReminderPayload()
-  })
-
-  if (result.status !== 'success') {
+  const settings = await getNotificationChannelSettings()
+  if (!settings.emailNotificationsEnabled) {
     throw new Error('邮箱通知未启用或配置不完整')
   }
+
+  await sendEmailWithConfig(
+    {
+      eventType: 'subscription.reminder_due',
+      resourceKey: 'test:email',
+      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
+      payload: buildTestReminderPayload()
+    },
+    settings.emailConfig
+  )
 }
 
 export async function sendTestEmailNotificationWithConfig(config: EmailConfigInput) {
@@ -512,16 +516,20 @@ export async function sendTestEmailNotificationWithConfig(config: EmailConfigInp
 }
 
 export async function sendTestPushplusNotification() {
-  const result = await sendPushplusNotification({
-    eventType: 'subscription.reminder_due',
-    resourceKey: 'test:pushplus',
-    periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
-    payload: buildTestReminderPayload()
-  })
-
-  if (result.status !== 'success') {
+  const settings = await getNotificationChannelSettings()
+  if (!settings.pushplusNotificationsEnabled) {
     throw new Error('PushPlus 通知未启用或配置不完整')
   }
+
+  await sendPushplusWithConfig(
+    {
+      eventType: 'subscription.reminder_due',
+      resourceKey: 'test:pushplus',
+      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
+      payload: buildTestReminderPayload()
+    },
+    settings.pushplusConfig
+  )
 
   return {
     accepted: true,
@@ -542,16 +550,20 @@ export async function sendTestPushplusNotificationWithConfig(config: PushPlusCon
 }
 
 export async function sendTestTelegramNotification() {
-  const result = await sendTelegramNotification({
-    eventType: 'subscription.reminder_due',
-    resourceKey: 'test:telegram',
-    periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
-    payload: buildTestReminderPayload()
-  })
-
-  if (result.status !== 'success') {
+  const settings = await getNotificationChannelSettings()
+  if (!settings.telegramNotificationsEnabled) {
     throw new Error('Telegram 通知未启用或配置不完整')
   }
+
+  await sendTelegramWithConfig(
+    {
+      eventType: 'subscription.reminder_due',
+      resourceKey: 'test:telegram',
+      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
+      payload: buildTestReminderPayload()
+    },
+    settings.telegramConfig
+  )
 
   return { success: true }
 }

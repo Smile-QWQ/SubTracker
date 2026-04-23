@@ -966,6 +966,11 @@ async function exportSubscriptions(format: 'csv' | 'json') {
 }
 
 function handleWallosImported() {
+  queryClient.removeQueries({ queryKey: ['subscriptions'] })
+  queryClient.removeQueries({ queryKey: ['tags'] })
+  queryClient.removeQueries({ queryKey: ['statistics-overview'] })
+  queryClient.removeQueries({ queryKey: ['statistics-budgets'] })
+  queryClient.removeQueries({ queryKey: ['calendar-events'] })
   showWallosImportModal.value = false
   message.success('Wallos 数据已导入')
 }
