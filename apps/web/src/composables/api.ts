@@ -25,6 +25,7 @@ import type {
   Tag,
   TelegramConfig,
   WallosImportCommitResult,
+  WallosImportPreparedPayload,
   WallosImportInspectResult
 } from '@/types/api'
 import { clearAuthSession, getStoredToken } from '@/utils/auth-storage'
@@ -356,7 +357,7 @@ export const api = {
     }
   },
 
-  async inspectWallosImport(payload: { filename: string; contentType: string; base64: string }) {
+  async inspectWallosImport(payload: WallosImportPreparedPayload) {
     return postOnce<WallosImportInspectResult>('/import/wallos/inspect', payload, { timeout: 60000 })
   },
 

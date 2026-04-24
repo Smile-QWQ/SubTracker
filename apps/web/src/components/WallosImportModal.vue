@@ -2,7 +2,7 @@
   <n-modal :show="show" preset="card" title="导入 Wallos 数据" style="width: min(1080px, calc(100vw - 24px))" @update:show="handleShowUpdate">
     <n-space vertical :size="16" style="width: 100%">
       <n-alert type="info" :show-icon="false">
-        支持上传 Wallos 的 JSON、SQLite 数据库或 ZIP 包。当前只导入实际被订阅使用到的标签。
+        支持上传 Wallos 的 JSON、SQLite 数据库或 ZIP 包。SQLite / ZIP 会先在浏览器端解析，再提交给 Worker 持久化。当前只导入实际被订阅使用到的标签。
       </n-alert>
 
       <n-space align="center" wrap>
@@ -85,10 +85,13 @@ import { NAlert, NButton, NCard, NDataTable, NEmpty, NGrid, NGridItem, NModal, N
 import { api } from '@/composables/api'
 import type { WallosImportInspectResult, WallosImportSubscriptionPreview } from '@/types/api'
 import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils/subscription-status'
+import { buildPreparedWallosImportPayload } from '@/utils/wallos-import-client'
 import { JSON_IMPORT_WARNING_MESSAGE, shouldRecommendDbImport } from '@/utils/wallos-import'
 
 const props = defineProps<{
   show: boolean
+  defaultNotifyDays: number
+  baseCurrency: string
 }>()
 
 const emit = defineEmits<{
@@ -183,12 +186,11 @@ async function inspectFile() {
 
   inspecting.value = true
   try {
-    const base64 = await readFileAsBase64(selectedFile.value)
-    preview.value = await api.inspectWallosImport({
-      filename: selectedFile.value.name,
-      contentType: selectedFile.value.type || 'application/octet-stream',
-      base64
+    const prepared = await buildPreparedWallosImportPayload(selectedFile.value, {
+      defaultNotifyDays: props.defaultNotifyDays,
+      baseCurrency: props.baseCurrency
     })
+    preview.value = await api.inspectWallosImport(prepared)
     warningsExpanded.value = false
     message.success('已生成导入预览')
   } catch (error) {
@@ -223,18 +225,6 @@ function handleShowUpdate(value: boolean) {
   if (!value) {
     emit('close')
   }
-}
-
-function readFileAsBase64(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const raw = String(reader.result ?? '')
-      resolve(raw.includes(',') ? raw.split(',')[1] : raw)
-    }
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
 }
 
 function unitText(unit: WallosImportSubscriptionPreview['billingIntervalUnit']) {

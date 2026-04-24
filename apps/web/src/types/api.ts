@@ -358,6 +358,20 @@ export interface WallosImportInspectResult {
   importToken: string
 }
 
+export interface WallosImportLogoAsset {
+  filename: string
+  logoRef: string
+  contentType: string
+  base64: string
+}
+
+export interface WallosImportPreparedPayload {
+  filename: string
+  fileType: 'json' | 'db' | 'zip'
+  preview: Omit<WallosImportInspectResult, 'importToken'>
+  logoAssets: WallosImportLogoAsset[]
+}
+
 export interface WallosImportCommitResult {
   importedTags: number
   importedSubscriptions: number

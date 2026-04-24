@@ -257,10 +257,69 @@ export const AiRecognizeSubscriptionSchema = z.object({
   mimeType: z.string().max(100).optional()
 })
 
-export const WallosImportInspectSchema = z.object({
+const WallosImportSummarySchema = z.object({
+  fileType: z.enum(['json', 'db', 'zip']),
+  subscriptionsTotal: z.number().int().min(0),
+  tagsTotal: z.number().int().min(0),
+  usedTagsTotal: z.number().int().min(0),
+  supportedSubscriptions: z.number().int().min(0),
+  skippedSubscriptions: z.number().int().min(0),
+  globalNotifyDays: z.number().int().min(0).max(365),
+  zipLogoMatched: z.number().int().min(0),
+  zipLogoMissing: z.number().int().min(0)
+})
+
+const WallosImportTagSchema = z.object({
+  sourceId: z.number().int().nonnegative(),
+  name: z.string().min(1).max(120),
+  sortOrder: z.number().int().min(0)
+})
+
+const WallosImportSubscriptionPreviewSchema = z.object({
+  sourceId: z.number().int().nonnegative(),
+  name: z.string().min(1).max(200),
+  amount: z.number().finite(),
+  currency: z.string().length(3).transform((value) => value.toUpperCase()),
+  status: SubscriptionStatusSchema,
+  autoRenew: z.boolean(),
+  billingIntervalCount: z.number().int().positive(),
+  billingIntervalUnit: BillingIntervalUnitSchema,
+  startDate: z.string().min(10).max(30),
+  nextRenewalDate: z.string().min(10).max(30),
+  notifyDaysBefore: z.number().int().min(0).max(365),
+  advanceReminderRules: z.string().max(500).nullable().optional(),
+  overdueReminderRules: z.string().max(500).nullable().optional(),
+  webhookEnabled: z.boolean(),
+  notes: z.string().max(5000),
+  description: z.string().max(2000),
+  websiteUrl: z.string().url().nullable().optional(),
+  tagNames: z.array(z.string().min(1).max(120)).max(50),
+  logoRef: z.string().min(1).max(255).nullable().optional(),
+  logoImportStatus: z.enum(['none', 'pending-file-match', 'ready-from-zip']),
+  warnings: z.array(z.string().max(500)).max(200)
+})
+
+const WallosImportPreparedPreviewSchema = z.object({
+  isWallos: z.literal(true),
+  summary: WallosImportSummarySchema,
+  tags: z.array(WallosImportTagSchema).max(500),
+  usedTags: z.array(WallosImportTagSchema).max(500),
+  subscriptionsPreview: z.array(WallosImportSubscriptionPreviewSchema).max(5000),
+  warnings: z.array(z.string().max(500)).max(2000)
+})
+
+const WallosImportLogoAssetSchema = z.object({
   filename: z.string().min(1).max(255),
+  logoRef: z.string().min(1).max(255),
   contentType: z.string().min(1).max(120),
   base64: z.string().min(1)
+})
+
+export const WallosImportInspectSchema = z.object({
+  filename: z.string().min(1).max(255),
+  fileType: z.enum(['json', 'db', 'zip']),
+  preview: WallosImportPreparedPreviewSchema,
+  logoAssets: z.array(WallosImportLogoAssetSchema).max(500).default([])
 })
 
 export const WallosImportCommitSchema = z.object({

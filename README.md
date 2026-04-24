@@ -37,7 +37,7 @@
 - **通知能力**：Webhook、Resend 邮件、PushPlus、Telegram Bot
 - **Logo 能力**：上传（R2）、远程引用、网络搜索
 - **AI 识别**：支持文本 / 图片识别后自动填充订阅信息
-- **Wallos 导入**：支持 JSON、SQLite 数据库与 ZIP 备份导入；自动续订语义会按 Wallos 规则对齐
+- **Wallos 导入**：支持 JSON、SQLite 数据库与 ZIP 备份导入；SQLite / ZIP 会在浏览器端解析，再交给 Worker 持久化
 - **登录体验**：支持“记住我”、可配置的登录保留时长、默认密码修改提醒，以及登录失败限流保护
 
 ## Lite 版说明

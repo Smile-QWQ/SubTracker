@@ -245,6 +245,11 @@ https://api.resend.com/emails
 - Wallos SQLite 数据库导入（`.db` / `.sqlite` / `.sqlite3`）
 - Wallos ZIP 备份导入
 
+其中：
+
+- JSON / SQLite / ZIP 的文件解析发生在浏览器端
+- Worker 负责接收预览结果、暂存导入令牌、处理 ZIP Logo（若启用 R2）并最终写库
+
 并且会尽量对齐 Wallos 自己的运行时语义：
 
 - 对 `auto_renew = true` 且 `next_payment` 已落后的订阅，会先按 Wallos 的周期推进逻辑修正日期，再判定状态

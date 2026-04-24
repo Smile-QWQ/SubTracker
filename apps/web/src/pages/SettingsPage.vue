@@ -536,7 +536,13 @@
       </n-grid-item>
     </n-grid>
 
-    <wallos-import-modal :show="showWallosImportModal" @close="showWallosImportModal = false" @imported="handleWallosImported" />
+    <wallos-import-modal
+      :show="showWallosImportModal"
+      :default-notify-days="settingsForm.defaultNotifyDays"
+      :base-currency="settingsForm.baseCurrency"
+      @close="showWallosImportModal = false"
+      @imported="handleWallosImported"
+    />
   </div>
 </template>
 
