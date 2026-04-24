@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { prismaMock, appendSubscriptionOrders } = vi.hoisted(() => ({
   prismaMock: {
@@ -41,6 +41,8 @@ import { commitWallosImport } from '../../src/services/wallos-import.service'
 
 describe('commitWallosImport', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-25T00:00:00.000Z'))
     prismaMock.tag.findMany.mockReset()
     prismaMock.tag.createMany.mockReset()
     prismaMock.subscription.createMany.mockReset()
@@ -76,18 +78,18 @@ describe('commitWallosImport', () => {
           status: 'active',
           autoRenew: true,
           billingIntervalCount: 1,
-          billingIntervalUnit: 'month',
-          startDate: '2026-04-01',
-          nextRenewalDate: '2026-05-01',
+          billingIntervalUnit: 'year',
+          startDate: '2025-01-10',
+          nextRenewalDate: '2027-01-10',
           notifyDaysBefore: 3,
           webhookEnabled: true,
           notes: '',
           description: '',
-          websiteUrl: 'https://netflix.com',
+          websiteUrl: 'https://netflix.com/',
           tagNames: ['Video'],
           logoRef: null,
           logoImportStatus: 'none',
-          warnings: []
+          warnings: ['价格 "$10" 的币种符号存在歧义，已默认按 USD 导入']
         },
         {
           sourceId: 2,
@@ -115,6 +117,10 @@ describe('commitWallosImport', () => {
     })
   })
 
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('batches imported tags, subscription tags and subscription order writes', async () => {
     prismaMock.tag.findMany
       .mockResolvedValueOnce([])
@@ -137,7 +143,14 @@ describe('commitWallosImport', () => {
     })
     expect(prismaMock.subscription.createMany).toHaveBeenCalledTimes(1)
     expect(prismaMock.subscription.createMany.mock.calls[0][0].data).toHaveLength(2)
-    const createdIds = prismaMock.subscription.createMany.mock.calls[0][0].data.map((item: { id: string }) => item.id)
+    const createdRows = prismaMock.subscription.createMany.mock.calls[0][0].data
+    const createdIds = createdRows.map((item: { id: string }) => item.id)
+    expect(createdRows[0]).toMatchObject({
+      currency: 'USD',
+      websiteUrl: 'https://netflix.com/',
+      nextRenewalDate: new Date('2027-01-10T00:00:00.000Z'),
+      status: 'active'
+    })
     expect(prismaMock.subscriptionTag.createMany).toHaveBeenCalledWith({
       data: [
         { subscriptionId: createdIds[0], tagId: 'tag_video' },

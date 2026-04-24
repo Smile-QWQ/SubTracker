@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   mapWallosBillingInterval,
+  resolveWallosEffectiveNextPayment,
   mapWallosSubscriptionStatus,
   previewWallosImportFromBase64ForTest,
   resolveWallosNotifyDays
@@ -11,6 +12,15 @@ function encodeJson(rows: unknown[]) {
 }
 
 describe('wallos import helpers', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-25T00:00:00.000Z'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('maps standard billing intervals', () => {
     expect(mapWallosBillingInterval(30, 2)).toMatchObject({
       billingIntervalCount: 2,
@@ -29,7 +39,31 @@ describe('wallos import helpers', () => {
     expect(mapWallosSubscriptionStatus({ inactive: 0, cancellationDate: '2026-04-01', nextPayment: '2026-06-01' })).toBe(
       'cancelled'
     )
+    expect(
+      resolveWallosEffectiveNextPayment({
+        nextPayment: '2025-01-10',
+        autoRenew: true,
+        billingIntervalCount: 1,
+        billingIntervalUnit: 'year',
+        today: '2026-04-25T00:00:00.000Z'
+      })
+    ).toBe('2027-01-10')
+    expect(
+      mapWallosSubscriptionStatus({
+        inactive: 0,
+        cancellationDate: null,
+        nextPayment: '2025-01-10',
+        autoRenew: true,
+        billingIntervalCount: 1,
+        billingIntervalUnit: 'year',
+        today: '2026-04-25T00:00:00.000Z'
+      })
+    ).toBe('active')
     expect(resolveWallosNotifyDays({ notify: 1, notifyDaysBefore: -1, globalNotifyDays: 3 })).toEqual({
+      webhookEnabled: true,
+      notifyDaysBefore: 3
+    })
+    expect(resolveWallosNotifyDays({ notify: 1, notifyDaysBefore: 0, globalNotifyDays: 3 })).toEqual({
       webhookEnabled: true,
       notifyDaysBefore: 3
     })
@@ -87,5 +121,47 @@ describe('wallos import helpers', () => {
     expect(categorized?.tagNames).toEqual(['VPS'])
     expect(categorized?.autoRenew).toBe(true)
     expect(categorized?.logoImportStatus).toBe('none')
+  })
+
+  it('normalizes wallos json preview with wallos semantics and warnings', async () => {
+    const preview = await previewWallosImportFromBase64ForTest(
+      {
+        filename: 'wallos.json',
+        contentType: 'application/json',
+        base64: encodeJson([
+          {
+            Name: 'Legacy Auto Renew',
+            Price: '$10',
+            Category: 'Video',
+            'Payment Cycle': 'Yearly',
+            'Next Payment': '2025-01-10',
+            Renewal: 'Automatic',
+            URL: 'netflix.com',
+            Notes: ''
+          }
+        ])
+      },
+      {
+        defaultNotifyDays: 3,
+        baseCurrency: 'CNY'
+      }
+    )
+
+    const item = preview.subscriptionsPreview[0]
+    expect(item).toBeDefined()
+    expect(item?.nextRenewalDate).toBe('2027-01-10')
+    expect(item?.status).toBe('active')
+    expect(item?.websiteUrl).toBe('https://netflix.com/')
+    expect(item?.warnings).toEqual(
+      expect.arrayContaining([
+        '价格 "$10" 的币种符号存在歧义，已默认按 USD 导入',
+        'Wallos JSON 不包含 start_date，已使用 Next Payment 代填开始日期'
+      ])
+    )
+    expect(preview.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('网址 "netflix.com" 缺少协议')
+      ])
+    )
   })
 })
