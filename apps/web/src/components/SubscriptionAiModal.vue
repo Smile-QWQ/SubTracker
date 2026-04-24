@@ -278,9 +278,9 @@ onBeforeUnmount(() => {
 .ai-upload-box {
   width: 100%;
   padding: 12px;
-  border: 1px dashed #cbd5e1;
+  border: 1px dashed var(--app-border);
   border-radius: 12px;
-  background: #f8fafc;
+  background: var(--app-surface);
 }
 
 .ai-upload-box__preview {
@@ -288,7 +288,7 @@ onBeforeUnmount(() => {
   max-height: 240px;
   border-radius: 10px;
   object-fit: contain;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--app-border-soft);
 }
 
 .ai-loading-copy {
@@ -299,7 +299,7 @@ onBeforeUnmount(() => {
 }
 
 .ai-loading-copy__primary {
-  color: #0f172a;
+  color: var(--app-text-strong);
   line-height: 1.6;
   white-space: normal;
   word-break: keep-all;
@@ -308,7 +308,7 @@ onBeforeUnmount(() => {
 
 .ai-loading-copy__secondary {
   margin-top: 4px;
-  color: #64748b;
+  color: var(--app-text-secondary);
   font-size: 13px;
   line-height: 1.5;
   white-space: normal;
@@ -321,7 +321,7 @@ onBeforeUnmount(() => {
 
 .ai-raw-text__title {
   margin-bottom: 8px;
-  color: #64748b;
+  color: var(--app-text-secondary);
   font-size: 12px;
 }
 

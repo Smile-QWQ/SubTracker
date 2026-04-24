@@ -93,8 +93,8 @@
                 <div class="switch-row">
                   <div class="switch-group switch-group--single">
                     <div class="switch-group__item">
-                      <n-switch v-model:value="settingsForm.enableTagBudgets" />
                       <span class="switch-label">启用标签月预算</span>
+                      <n-switch v-model:value="settingsForm.enableTagBudgets" />
                     </div>
                   </div>
                 </div>
@@ -178,7 +178,7 @@
       <n-grid-item :span="gridSpanFull">
         <n-card title="通知设置" class="settings-card">
           <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
-            统一管理邮箱、PushPlus 与 Webhook。每个渠道都可以单独保存并单独测试。
+            统一管理邮箱、PushPlus、Telegram、Server 酱、Gotify 与 Webhook。每个渠道都可以单独保存并单独测试。
           </n-alert>
 
           <n-grid :cols="notificationGridCols" :x-gap="12" :y-gap="12">
@@ -189,33 +189,76 @@
                   <n-switch v-model:value="settingsForm.emailNotificationsEnabled" />
                 </div>
                 <n-form label-placement="top">
-                  <n-form-item label="SMTP Host">
-                    <n-input v-model:value="settingsForm.emailConfig.host" />
-                  </n-form-item>
                   <n-grid :cols="formCols" :x-gap="8">
                     <n-grid-item>
-                      <n-form-item label="端口">
-                        <n-input-number v-model:value="settingsForm.emailConfig.port" :min="1" :max="65535" style="width: 100%" />
+                      <n-form-item label="通知提供商">
+                        <n-select v-model:value="settingsForm.emailProvider" :options="emailProviderOptions" />
                       </n-form-item>
                     </n-grid-item>
                     <n-grid-item>
-                      <n-form-item label="Secure">
-                        <n-switch v-model:value="settingsForm.emailConfig.secure" />
+                      <n-form-item label="配置详情">
+                        <n-button quaternary class="email-details-toggle" @click="emailDetailsExpanded = !emailDetailsExpanded">
+                          <template #icon>
+                            <n-icon>
+                              <component :is="emailDetailsExpanded ? chevronUpOutline : chevronDownOutline" />
+                            </n-icon>
+                          </template>
+                          {{ emailDetailsExpanded ? '收起' : '展开' }}
+                        </n-button>
                       </n-form-item>
                     </n-grid-item>
                   </n-grid>
-                  <n-form-item label="用户名">
-                    <n-input v-model:value="settingsForm.emailConfig.username" />
-                  </n-form-item>
-                  <n-form-item label="密码">
-                    <n-input v-model:value="settingsForm.emailConfig.password" type="password" show-password-on="click" />
-                  </n-form-item>
-                  <n-form-item label="发件人">
-                    <n-input v-model:value="settingsForm.emailConfig.from" placeholder="SubTracker <noreply@example.com>" />
-                  </n-form-item>
-                  <n-form-item label="收件人">
-                    <n-input v-model:value="settingsForm.emailConfig.to" placeholder="多个邮箱请用英文逗号分隔" />
-                  </n-form-item>
+
+                  <div v-if="!emailDetailsExpanded" class="card-muted email-summary">
+                    {{ emailSummaryText }}
+                  </div>
+
+                  <n-collapse-transition :show="emailDetailsExpanded">
+                    <template v-if="settingsForm.emailProvider === 'smtp'">
+                      <n-form-item label="SMTP Host">
+                        <n-input v-model:value="settingsForm.smtpConfig.host" />
+                      </n-form-item>
+                      <n-grid :cols="formCols" :x-gap="8">
+                        <n-grid-item>
+                          <n-form-item label="端口">
+                            <n-input-number v-model:value="settingsForm.smtpConfig.port" :min="1" :max="65535" style="width: 100%" />
+                          </n-form-item>
+                        </n-grid-item>
+                        <n-grid-item>
+                          <n-form-item label="Secure">
+                            <n-switch v-model:value="settingsForm.smtpConfig.secure" />
+                          </n-form-item>
+                        </n-grid-item>
+                      </n-grid>
+                      <n-form-item label="用户名">
+                        <n-input v-model:value="settingsForm.smtpConfig.username" />
+                      </n-form-item>
+                      <n-form-item label="密码">
+                        <n-input v-model:value="settingsForm.smtpConfig.password" type="password" show-password-on="click" />
+                      </n-form-item>
+                      <n-form-item label="发件人">
+                        <n-input v-model:value="settingsForm.smtpConfig.from" placeholder="SubTracker <noreply@example.com>" />
+                      </n-form-item>
+                      <n-form-item label="收件人">
+                        <n-input v-model:value="settingsForm.smtpConfig.to" placeholder="多个邮箱请用英文逗号分隔" />
+                      </n-form-item>
+                    </template>
+                    <template v-else>
+                      <n-form-item label="Resend API URL">
+                        <n-input v-model:value="settingsForm.resendConfig.apiBaseUrl" />
+                      </n-form-item>
+                      <n-form-item label="Resend API Key">
+                        <n-input v-model:value="settingsForm.resendConfig.apiKey" type="password" show-password-on="click" placeholder="re_xxxxx" />
+                      </n-form-item>
+                      <n-form-item label="发件人">
+                        <n-input v-model:value="settingsForm.resendConfig.from" placeholder="SubTracker <noreply@example.com>" />
+                      </n-form-item>
+                      <n-form-item label="收件人">
+                        <n-input v-model:value="settingsForm.resendConfig.to" placeholder="多个邮箱请用英文逗号分隔" />
+                      </n-form-item>
+                    </template>
+                  </n-collapse-transition>
+
                   <n-space>
                     <n-button :loading="savingEmailSettings" :disabled="savingEmailSettings" @click="saveEmailSettings">保存</n-button>
                     <n-button type="primary" @click="testEmail">测试</n-button>
@@ -269,6 +312,49 @@
             <n-grid-item>
               <div class="channel-card">
                 <div class="channel-card__header">
+                  <span>Server 酱</span>
+                  <n-switch v-model:value="settingsForm.serverchanNotificationsEnabled" />
+                </div>
+                <n-form label-placement="top">
+                  <n-form-item label="SendKey">
+                    <n-input v-model:value="settingsForm.serverchanConfig.sendkey" />
+                  </n-form-item>
+                  <n-space>
+                    <n-button :loading="savingServerchanSettings" :disabled="savingServerchanSettings" @click="saveServerchanSettings">保存</n-button>
+                    <n-button type="primary" @click="testServerchan">测试</n-button>
+                  </n-space>
+                </n-form>
+              </div>
+            </n-grid-item>
+
+            <n-grid-item>
+              <div class="channel-card">
+                <div class="channel-card__header">
+                  <span>Gotify</span>
+                  <n-switch v-model:value="settingsForm.gotifyNotificationsEnabled" />
+                </div>
+                <n-form label-placement="top">
+                  <n-form-item label="URL">
+                    <n-input v-model:value="settingsForm.gotifyConfig.url" placeholder="https://gotify.example.com" />
+                  </n-form-item>
+                  <n-form-item label="Token">
+                    <n-input v-model:value="settingsForm.gotifyConfig.token" type="password" show-password-on="click" />
+                  </n-form-item>
+                  <div class="compact-switch-row">
+                    <n-switch v-model:value="settingsForm.gotifyConfig.ignoreSsl" />
+                    <span class="switch-inline-label">忽略 SSL 校验</span>
+                  </div>
+                  <n-space>
+                    <n-button :loading="savingGotifySettings" :disabled="savingGotifySettings" @click="saveGotifySettings">保存</n-button>
+                    <n-button type="primary" @click="testGotify">测试</n-button>
+                  </n-space>
+                </n-form>
+              </div>
+            </n-grid-item>
+
+            <n-grid-item>
+              <div class="channel-card">
+                <div class="channel-card__header">
                   <span>Webhook</span>
                   <n-switch v-model:value="webhookForm.enabled" />
                 </div>
@@ -284,12 +370,12 @@
                         <n-select v-model:value="webhookForm.requestMethod" :options="webhookMethodOptions" />
                       </n-form-item>
                     </n-grid-item>
-                    <n-grid-item>
-                      <n-form-item>
-                        <n-switch v-model:value="webhookForm.ignoreSsl" />
-                        <span class="switch-label">忽略 SSL 校验</span>
-                      </n-form-item>
-                    </n-grid-item>
+                      <n-grid-item>
+                        <n-form-item>
+                          <n-switch v-model:value="webhookForm.ignoreSsl" />
+                          <span class="switch-label">忽略 SSL 校验</span>
+                        </n-form-item>
+                      </n-grid-item>
                   </n-grid>
 
                   <n-collapse arrow-placement="right" class="webhook-advanced">
@@ -353,12 +439,12 @@
                   <n-input v-model:value="settingsForm.aiConfig.model" />
                 </n-form-item>
               </n-grid-item>
-              <n-grid-item>
-                <n-form-item>
-                  <n-switch v-model:value="settingsForm.aiConfig.capabilities.vision" />
-                  <span class="switch-label">模型视觉输入</span>
-                </n-form-item>
-              </n-grid-item>
+                <n-grid-item>
+                  <n-form-item>
+                    <n-switch v-model:value="settingsForm.aiConfig.capabilities.vision" />
+                    <span class="switch-label">模型视觉输入</span>
+                  </n-form-item>
+                </n-grid-item>
             </n-grid>
 
             <n-form-item label="API Base URL">
@@ -448,7 +534,8 @@ import {
   DEFAULT_AI_CONFIG,
   DEFAULT_AI_SUBSCRIPTION_PROMPT,
   DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
-  DEFAULT_OVERDUE_REMINDER_RULES
+  DEFAULT_OVERDUE_REMINDER_RULES,
+  DEFAULT_RESEND_API_URL
 } from '@subtracker/shared'
 import {
   NAlert,
@@ -456,6 +543,7 @@ import {
   NCard,
   NCollapse,
   NCollapseItem,
+  NCollapseTransition,
   NDataTable,
   NDescriptions,
   NDescriptionsItem,
@@ -473,7 +561,7 @@ import {
   NTooltip,
   useMessage
 } from 'naive-ui'
-import { HelpCircleOutline, RefreshOutline, SaveOutline, SettingsOutline } from '@vicons/ionicons5'
+import { ChevronDownOutline, ChevronUpOutline, HelpCircleOutline, RefreshOutline, SaveOutline, SettingsOutline } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
 import { EXCHANGE_RATE_SNAPSHOT_QUERY_KEY, useExchangeRateSnapshotQuery } from '@/composables/exchange-rate-query'
 import { NOTIFICATION_WEBHOOK_QUERY_KEY, useNotificationWebhookQuery } from '@/composables/notification-webhook-query'
@@ -493,6 +581,8 @@ const { data: settingsQueryData } = useSettingsQuery()
 const { data: snapshotQueryData } = useExchangeRateSnapshotQuery()
 const { data: webhookQueryData } = useNotificationWebhookQuery()
 const { width } = useWindowSize()
+const chevronDownOutline = ChevronDownOutline
+const chevronUpOutline = ChevronUpOutline
 const helpCircleOutline = HelpCircleOutline
 const settingsOutline = SettingsOutline
 const AI_PROVIDER_PRESETS: Record<
@@ -542,14 +632,23 @@ const settingsForm = reactive<Settings>({
   defaultOverdueReminderRules: DEFAULT_OVERDUE_REMINDER_RULES,
   tagBudgets: {},
   emailNotificationsEnabled: false,
+  emailProvider: 'smtp',
   pushplusNotificationsEnabled: false,
   telegramNotificationsEnabled: false,
-  emailConfig: {
+  serverchanNotificationsEnabled: false,
+  gotifyNotificationsEnabled: false,
+  smtpConfig: {
     host: '',
     port: 587,
     secure: false,
     username: '',
     password: '',
+    from: '',
+    to: ''
+  },
+  resendConfig: {
+    apiBaseUrl: DEFAULT_RESEND_API_URL,
+    apiKey: '',
     from: '',
     to: ''
   },
@@ -560,6 +659,14 @@ const settingsForm = reactive<Settings>({
   telegramConfig: {
     botToken: '',
     chatId: ''
+  },
+  serverchanConfig: {
+    sendkey: ''
+  },
+  gotifyConfig: {
+    url: '',
+    token: '',
+    ignoreSsl: false
   },
   aiConfig: {
     ...DEFAULT_AI_CONFIG,
@@ -591,6 +698,8 @@ const savingBasicSettings = ref(false)
 const savingEmailSettings = ref(false)
 const savingPushplusSettings = ref(false)
 const savingTelegramSettings = ref(false)
+const savingServerchanSettings = ref(false)
+const savingGotifySettings = ref(false)
 const savingWebhookSettings = ref(false)
 const savingAiSettings = ref(false)
 const savingCredentials = ref(false)
@@ -598,10 +707,15 @@ const sourceCurrency = ref('USD')
 const targetCurrency = ref('CNY')
 const converterAmount = ref(1)
 const showWallosImportModal = ref(false)
+const emailDetailsExpanded = ref(false)
 const isMobile = computed(() => width.value < 960)
 const formCols = computed(() => (width.value < 640 ? 1 : 2))
 const gridCols = computed(() => (isMobile.value ? 1 : 2))
-const notificationGridCols = computed(() => (isMobile.value ? 1 : 2))
+const notificationGridCols = computed(() => {
+  if (width.value < 640) return 1
+  if (width.value < 1200) return 2
+  return 3
+})
 const gridSpanFull = computed(() => (isMobile.value ? 1 : 2))
 const watchedCurrencies = ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'HKD']
 const webhookMethodOptions = [
@@ -618,6 +732,20 @@ const aiProviderPresetOptions = [
   { label: '腾讯混元', value: 'tencent-hunyuan' },
   { label: '火山方舟', value: 'volcengine-ark' }
 ] satisfies Array<{ label: string; value: AiProviderPreset }>
+const emailProviderOptions = [
+  { label: 'SMTP', value: 'smtp' },
+  { label: 'Resend', value: 'resend' }
+] satisfies Array<{ label: string; value: 'smtp' | 'resend' }>
+const emailSummaryText = computed(() => {
+  if (settingsForm.emailProvider === 'resend') {
+    const to = settingsForm.resendConfig.to.trim() || '未填写收件人'
+    return `Resend · 收件人：${to}`
+  }
+
+  const host = settingsForm.smtpConfig.host.trim() || '未填写 SMTP Host'
+  const to = settingsForm.smtpConfig.to.trim() || '未填写收件人'
+  return `Host：${host} · 收件人：${to}`
+})
 function getMissingRequiredFields(fields: Array<[string, unknown]>) {
   return fields
     .filter(([, value]) => {
@@ -632,14 +760,22 @@ function validateEmailSettings(action: 'save' | 'test') {
     return true
   }
 
-  const missing = getMissingRequiredFields([
-    ['SMTP Host', settingsForm.emailConfig.host],
-    ['端口', settingsForm.emailConfig.port],
-    ['用户名', settingsForm.emailConfig.username],
-    ['密码', settingsForm.emailConfig.password],
-    ['发件人', settingsForm.emailConfig.from],
-    ['收件人', settingsForm.emailConfig.to]
-  ])
+  const missing =
+    settingsForm.emailProvider === 'resend'
+      ? getMissingRequiredFields([
+          ['Resend API URL', settingsForm.resendConfig.apiBaseUrl],
+          ['Resend API Key', settingsForm.resendConfig.apiKey],
+          ['发件人', settingsForm.resendConfig.from],
+          ['收件人', settingsForm.resendConfig.to]
+        ])
+      : getMissingRequiredFields([
+          ['SMTP Host', settingsForm.smtpConfig.host],
+          ['端口', settingsForm.smtpConfig.port],
+          ['用户名', settingsForm.smtpConfig.username],
+          ['密码', settingsForm.smtpConfig.password],
+          ['发件人', settingsForm.smtpConfig.from],
+          ['收件人', settingsForm.smtpConfig.to]
+        ])
 
   if (!missing.length) return true
   message.error(`邮箱通知缺少必填项：${missing.join('、')}`)
@@ -668,6 +804,31 @@ function validateTelegramSettings(action: 'save' | 'test') {
   ])
   if (!missing.length) return true
   message.error(`Telegram 缺少必填项：${missing.join('、')}`)
+  return false
+}
+
+function validateServerchanSettings(action: 'save' | 'test') {
+  if (action === 'save' && !settingsForm.serverchanNotificationsEnabled) {
+    return true
+  }
+
+  const missing = getMissingRequiredFields([['SendKey', settingsForm.serverchanConfig.sendkey]])
+  if (!missing.length) return true
+  message.error(`Server 酱缺少必填项：${missing.join('、')}`)
+  return false
+}
+
+function validateGotifySettings(action: 'save' | 'test') {
+  if (action === 'save' && !settingsForm.gotifyNotificationsEnabled) {
+    return true
+  }
+
+  const missing = getMissingRequiredFields([
+    ['URL', settingsForm.gotifyConfig.url],
+    ['Token', settingsForm.gotifyConfig.token]
+  ])
+  if (!missing.length) return true
+  message.error(`Gotify 缺少必填项：${missing.join('、')}`)
   return false
 }
 
@@ -772,7 +933,9 @@ async function saveEmailSettings() {
   try {
     const result = await api.updateSettings({
       emailNotificationsEnabled: settingsForm.emailNotificationsEnabled,
-      emailConfig: settingsForm.emailConfig
+      emailProvider: settingsForm.emailProvider,
+      smtpConfig: settingsForm.smtpConfig,
+      resendConfig: settingsForm.resendConfig
     })
     applySavedSettings(result)
     message.success(settingsForm.emailNotificationsEnabled ? '邮箱通知配置已保存' : '邮箱通知已关闭')
@@ -810,6 +973,38 @@ async function saveTelegramSettings() {
     message.success(settingsForm.telegramNotificationsEnabled ? 'Telegram 配置已保存' : 'Telegram 已关闭')
   } finally {
     savingTelegramSettings.value = false
+  }
+}
+
+async function saveServerchanSettings() {
+  if (savingServerchanSettings.value) return
+  if (!validateServerchanSettings('save')) return
+  savingServerchanSettings.value = true
+  try {
+    const result = await api.updateSettings({
+      serverchanNotificationsEnabled: settingsForm.serverchanNotificationsEnabled,
+      serverchanConfig: settingsForm.serverchanConfig
+    })
+    applySavedSettings(result)
+    message.success(settingsForm.serverchanNotificationsEnabled ? 'Server 酱配置已保存' : 'Server 酱已关闭')
+  } finally {
+    savingServerchanSettings.value = false
+  }
+}
+
+async function saveGotifySettings() {
+  if (savingGotifySettings.value) return
+  if (!validateGotifySettings('save')) return
+  savingGotifySettings.value = true
+  try {
+    const result = await api.updateSettings({
+      gotifyNotificationsEnabled: settingsForm.gotifyNotificationsEnabled,
+      gotifyConfig: settingsForm.gotifyConfig
+    })
+    applySavedSettings(result)
+    message.success(settingsForm.gotifyNotificationsEnabled ? 'Gotify 配置已保存' : 'Gotify 已关闭')
+  } finally {
+    savingGotifySettings.value = false
   }
 }
 
@@ -919,7 +1114,11 @@ async function submitCredentialsChange() {
 async function testEmail() {
   if (!validateEmailSettings('test')) return
   try {
-    await api.testEmailNotificationWithPayload(settingsForm.emailConfig)
+    await api.testEmailNotificationWithPayload({
+      emailProvider: settingsForm.emailProvider,
+      smtpConfig: settingsForm.smtpConfig,
+      resendConfig: settingsForm.resendConfig
+    })
     message.success('测试邮件已发送')
   } catch (error) {
     message.error(error instanceof Error ? error.message : '邮箱测试失败')
@@ -947,6 +1146,26 @@ async function testTelegram() {
     message.success('Telegram 测试消息已发送')
   } catch (error) {
     message.error(error instanceof Error ? error.message : 'Telegram 测试失败')
+  }
+}
+
+async function testServerchan() {
+  if (!validateServerchanSettings('test')) return
+  try {
+    await api.testServerchanNotificationWithPayload(settingsForm.serverchanConfig)
+    message.success('Server 酱测试消息已发送')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : 'Server 酱测试失败')
+  }
+}
+
+async function testGotify() {
+  if (!validateGotifySettings('test')) return
+  try {
+    await api.testGotifyNotificationWithPayload(settingsForm.gotifyConfig)
+    message.success('Gotify 测试消息已发送')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : 'Gotify 测试失败')
   }
 }
 
@@ -1073,6 +1292,7 @@ const rateColumns = computed(() => [
 function formatTime(value: string) {
   return dayjs(value).format('YYYY-MM-DD HH:mm:ss')
 }
+
 </script>
 
 <style scoped>
@@ -1082,7 +1302,7 @@ function formatTime(value: string) {
 
 .switch-label {
   margin-left: 10px;
-  color: #475569;
+  color: var(--app-text-secondary);
 }
 
 .switch-row {
@@ -1090,7 +1310,7 @@ function formatTime(value: string) {
 }
 
 .switch-inline-label {
-  color: #475569;
+  color: var(--app-text-secondary);
 }
 
 .switch-group {
@@ -1118,7 +1338,7 @@ function formatTime(value: string) {
 }
 
 .label-with-tip__icon {
-  color: #94a3b8;
+  color: var(--app-text-muted);
   font-size: 15px;
   cursor: help;
 }
@@ -1131,15 +1351,15 @@ function formatTime(value: string) {
 
 .tag-budget-item {
   padding: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--app-border-soft);
   border-radius: 12px;
-  background: #f8fafc;
+  background: var(--app-surface-alt);
 }
 
 .tag-budget-item__name {
   margin-bottom: 8px;
   font-size: 13px;
-  color: #334155;
+  color: var(--app-text-primary);
   font-weight: 600;
 }
 
@@ -1153,12 +1373,12 @@ function formatTime(value: string) {
 .converter-main {
   font-size: 20px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--app-text-strong);
 }
 
 .converter-sub {
   margin-top: 6px;
-  color: #64748b;
+  color: var(--app-text-secondary);
 }
 
 .channel-card {
@@ -1167,9 +1387,9 @@ function formatTime(value: string) {
   height: 100%;
   box-sizing: border-box;
   padding: 14px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--app-border-soft);
   border-radius: 14px;
-  background: #f8fafc;
+  background: var(--app-surface-alt);
   overflow: hidden;
 }
 
@@ -1179,7 +1399,26 @@ function formatTime(value: string) {
   justify-content: space-between;
   margin-bottom: 12px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--app-text-strong);
+}
+
+.email-details-toggle {
+  width: 100%;
+  justify-content: center;
+}
+
+.compact-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 34px;
+  margin-top: -2px;
+  margin-bottom: 12px;
+}
+
+.email-summary {
+  margin: 2px 0 14px;
+  line-height: 1.5;
 }
 
 .webhook-advanced,

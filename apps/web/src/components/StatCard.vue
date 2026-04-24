@@ -33,7 +33,7 @@ withDefaults(
 
 <style scoped>
 .stat-card {
-  background: #fff;
+  background: var(--app-surface);
   border-radius: 16px;
 }
 
@@ -55,7 +55,7 @@ withDefaults(
 }
 
 .label {
-  color: #6b7280;
+  color: var(--app-text-secondary);
   font-size: 13px;
 }
 
@@ -69,6 +69,6 @@ withDefaults(
 .suffix {
   margin-top: 6px;
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--app-text-muted);
 }
 </style>

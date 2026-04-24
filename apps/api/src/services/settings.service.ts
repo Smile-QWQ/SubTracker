@@ -1,5 +1,6 @@
 import {
   AiConfigSchema,
+  DEFAULT_RESEND_API_URL,
   DEFAULT_AI_CONFIG,
   SettingsSchema,
   type SettingsInput
@@ -13,6 +14,33 @@ import {
   resolveDefaultAdvanceReminderRules,
   resolveDefaultOverdueReminderRules
 } from './reminder-rules.service'
+
+const DEFAULT_SMTP_CONFIG: SettingsInput['smtpConfig'] = {
+  host: '',
+  port: 587,
+  secure: false,
+  username: '',
+  password: '',
+  from: '',
+  to: ''
+}
+
+const DEFAULT_RESEND_CONFIG: SettingsInput['resendConfig'] = {
+  apiBaseUrl: DEFAULT_RESEND_API_URL,
+  apiKey: '',
+  from: '',
+  to: ''
+}
+
+const DEFAULT_SERVERCHAN_CONFIG: SettingsInput['serverchanConfig'] = {
+  sendkey: ''
+}
+
+const DEFAULT_GOTIFY_CONFIG: SettingsInput['gotifyConfig'] = {
+  url: '',
+  token: '',
+  ignoreSsl: false
+}
 
 export async function getSetting<T>(key: string, fallback: T): Promise<T> {
   const row = await prisma.setting.findUnique({ where: { key } })
@@ -56,17 +84,12 @@ export async function getAppSettings(): Promise<SettingsInput> {
   const overdueReminderDays = deriveOverdueReminderDaysFromRules(defaultOverdueReminderRules)
   const tagBudgets = readSettingsValue<Record<string, number>>(settingsMap, 'tagBudgets', {})
   const emailNotificationsEnabled = readSettingsValue(settingsMap, 'emailNotificationsEnabled', false)
+  const emailProvider = readSettingsValue<SettingsInput['emailProvider']>(settingsMap, 'emailProvider', 'smtp')
   const pushplusNotificationsEnabled = readSettingsValue(settingsMap, 'pushplusNotificationsEnabled', false)
   const telegramNotificationsEnabled = readSettingsValue(settingsMap, 'telegramNotificationsEnabled', false)
-  const emailConfig = readSettingsValue<SettingsInput['emailConfig']>(settingsMap, 'emailConfig', {
-    host: '',
-    port: 587,
-    secure: false,
-    username: '',
-    password: '',
-    from: '',
-    to: ''
-  })
+  const legacySmtpConfig = readSettingsValue<SettingsInput['smtpConfig'] | null>(settingsMap, 'emailConfig', null)
+  const smtpConfig = readSettingsValue<SettingsInput['smtpConfig']>(settingsMap, 'smtpConfig', legacySmtpConfig ?? DEFAULT_SMTP_CONFIG)
+  const resendConfig = readSettingsValue<SettingsInput['resendConfig']>(settingsMap, 'resendConfig', DEFAULT_RESEND_CONFIG)
   const pushplusConfig = readSettingsValue<SettingsInput['pushplusConfig']>(settingsMap, 'pushplusConfig', {
     token: '',
     topic: ''
@@ -75,6 +98,10 @@ export async function getAppSettings(): Promise<SettingsInput> {
     botToken: '',
     chatId: ''
   })
+  const serverchanNotificationsEnabled = readSettingsValue(settingsMap, 'serverchanNotificationsEnabled', false)
+  const gotifyNotificationsEnabled = readSettingsValue(settingsMap, 'gotifyNotificationsEnabled', false)
+  const serverchanConfig = readSettingsValue<SettingsInput['serverchanConfig']>(settingsMap, 'serverchanConfig', DEFAULT_SERVERCHAN_CONFIG)
+  const gotifyConfig = readSettingsValue<SettingsInput['gotifyConfig']>(settingsMap, 'gotifyConfig', DEFAULT_GOTIFY_CONFIG)
   const aiConfig = AiConfigSchema.parse(readSettingsValue<unknown>(settingsMap, 'aiConfig', DEFAULT_AI_CONFIG))
 
   return SettingsSchema.parse({
@@ -91,11 +118,17 @@ export async function getAppSettings(): Promise<SettingsInput> {
     defaultOverdueReminderRules,
     tagBudgets,
     emailNotificationsEnabled,
+    emailProvider,
     pushplusNotificationsEnabled,
     telegramNotificationsEnabled,
-    emailConfig,
+    serverchanNotificationsEnabled,
+    gotifyNotificationsEnabled,
+    smtpConfig,
+    resendConfig,
     pushplusConfig,
     telegramConfig,
+    serverchanConfig,
+    gotifyConfig,
     aiConfig
   })
 }
@@ -119,20 +152,31 @@ export async function getDefaultAdvanceReminderRulesSetting() {
 }
 
 export async function getNotificationChannelSettings() {
-  const [emailNotificationsEnabled, pushplusNotificationsEnabled, telegramNotificationsEnabled, emailConfig, pushplusConfig, telegramConfig] =
+  const [
+    emailNotificationsEnabled,
+    emailProvider,
+    pushplusNotificationsEnabled,
+    telegramNotificationsEnabled,
+    serverchanNotificationsEnabled,
+    gotifyNotificationsEnabled,
+    smtpConfig,
+    legacySmtpConfig,
+    resendConfig,
+    pushplusConfig,
+    telegramConfig,
+    serverchanConfig,
+    gotifyConfig
+  ] =
     await Promise.all([
       getSetting('emailNotificationsEnabled', false),
+      getSetting<SettingsInput['emailProvider']>('emailProvider', 'smtp'),
       getSetting('pushplusNotificationsEnabled', false),
       getSetting('telegramNotificationsEnabled', false),
-      getSetting<SettingsInput['emailConfig']>('emailConfig', {
-        host: '',
-        port: 587,
-        secure: false,
-        username: '',
-        password: '',
-        from: '',
-        to: ''
-      }),
+      getSetting('serverchanNotificationsEnabled', false),
+      getSetting('gotifyNotificationsEnabled', false),
+      getSetting<SettingsInput['smtpConfig']>('smtpConfig', DEFAULT_SMTP_CONFIG),
+      getSetting<SettingsInput['smtpConfig'] | null>('emailConfig', null),
+      getSetting<SettingsInput['resendConfig']>('resendConfig', DEFAULT_RESEND_CONFIG),
       getSetting<SettingsInput['pushplusConfig']>('pushplusConfig', {
         token: '',
         topic: ''
@@ -140,16 +184,24 @@ export async function getNotificationChannelSettings() {
       getSetting<SettingsInput['telegramConfig']>('telegramConfig', {
         botToken: '',
         chatId: ''
-      })
+      }),
+      getSetting<SettingsInput['serverchanConfig']>('serverchanConfig', DEFAULT_SERVERCHAN_CONFIG),
+      getSetting<SettingsInput['gotifyConfig']>('gotifyConfig', DEFAULT_GOTIFY_CONFIG)
     ])
 
   return {
     emailNotificationsEnabled,
+    emailProvider,
     pushplusNotificationsEnabled,
     telegramNotificationsEnabled,
-    emailConfig,
+    serverchanNotificationsEnabled,
+    gotifyNotificationsEnabled,
+    smtpConfig: legacySmtpConfig ? { ...DEFAULT_SMTP_CONFIG, ...legacySmtpConfig, ...smtpConfig } : smtpConfig,
+    resendConfig,
     pushplusConfig,
-    telegramConfig
+    telegramConfig,
+    serverchanConfig,
+    gotifyConfig
   }
 }
 

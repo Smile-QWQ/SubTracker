@@ -1,5 +1,5 @@
 <template>
-  <n-config-provider :locale="zhCN" :date-locale="dateZhCN">
+  <n-config-provider :locale="zhCN" :date-locale="dateZhCN" :theme="naiveTheme">
     <n-message-provider>
       <router-view v-if="isLoginPage" />
       <template v-else>
@@ -12,7 +12,25 @@
                   <span class="logo__version">{{ appVersion }}</span>
                 </div>
               </template>
-              <n-menu :options="menuOptions" :value="activeKey" @update:value="handleMobileMenuClick" />
+              <div class="sider-shell">
+                <div class="sider-menu">
+                  <n-menu :options="menuOptions" :value="activeKey" @update:value="handleMobileMenuClick" />
+                </div>
+                <div class="sider-footer">
+                  <n-tooltip trigger="hover">
+                    <template #trigger>
+                      <n-button quaternary circle class="theme-toggle" @click="cycleThemePreference">
+                        <template #icon>
+                          <n-icon>
+                            <component :is="themePreferenceIcon" />
+                          </n-icon>
+                        </template>
+                      </n-button>
+                    </template>
+                    <span>{{ themeToggleTooltip }}</span>
+                  </n-tooltip>
+                </div>
+              </div>
             </n-drawer-content>
           </n-drawer>
 
@@ -24,38 +42,42 @@
             :collapsed-width="64"
             :width="220"
           >
-            <div class="logo" :class="{ 'logo--collapsed': siderCollapsed }">
-              <template v-if="!siderCollapsed">
-                <div class="logo__brand">
-                  <div class="logo__icon">
-                    <n-icon :size="18">
-                      <wallet-outline />
-                    </n-icon>
-                  </div>
-                  <div class="logo__stack">
-                    <span class="logo__text">SubTracker</span>
-                    <span class="logo__version">{{ appVersion }}</span>
-                  </div>
+            <div class="sider-shell">
+              <div>
+                <div class="logo" :class="{ 'logo--collapsed': siderCollapsed }">
+                  <template v-if="!siderCollapsed">
+                    <div class="logo__brand">
+                      <div class="logo__icon">
+                        <n-icon :size="18">
+                          <wallet-outline />
+                        </n-icon>
+                      </div>
+                      <div class="logo__stack">
+                        <span class="logo__text">SubTracker</span>
+                        <span class="logo__version">{{ appVersion }}</span>
+                      </div>
+                    </div>
+                    <n-button quaternary circle class="logo__toggle" @click="siderCollapsed = !siderCollapsed">
+                      <template #icon>
+                        <n-icon>
+                          <chevron-back-outline />
+                        </n-icon>
+                      </template>
+                    </n-button>
+                  </template>
+                  <template v-else>
+                    <n-button quaternary circle class="logo__toggle logo__toggle--collapsed" @click="siderCollapsed = !siderCollapsed">
+                      <template #icon>
+                        <n-icon>
+                          <chevron-forward-outline />
+                        </n-icon>
+                      </template>
+                    </n-button>
+                  </template>
                 </div>
-                <n-button quaternary circle class="logo__toggle" @click="siderCollapsed = !siderCollapsed">
-                  <template #icon>
-                    <n-icon>
-                      <chevron-back-outline />
-                    </n-icon>
-                  </template>
-                </n-button>
-              </template>
-              <template v-else>
-                <n-button quaternary circle class="logo__toggle logo__toggle--collapsed" @click="siderCollapsed = !siderCollapsed">
-                  <template #icon>
-                    <n-icon>
-                      <chevron-forward-outline />
-                    </n-icon>
-                  </template>
-                </n-button>
-              </template>
+                <n-menu :collapsed="siderCollapsed" :collapsed-width="64" :options="menuOptions" :value="activeKey" @update:value="handleMenuClick" />
+              </div>
             </div>
-            <n-menu :collapsed="siderCollapsed" :collapsed-width="64" :options="menuOptions" :value="activeKey" @update:value="handleMenuClick" />
           </n-layout-sider>
 
           <n-layout>
@@ -90,6 +112,21 @@
           </n-layout>
         </n-layout>
 
+        <div v-if="!isMobile" class="theme-fab-shell">
+          <n-tooltip trigger="hover">
+            <template #trigger>
+              <n-button quaternary circle class="theme-toggle theme-toggle--floating" @click="cycleThemePreference">
+                <template #icon>
+                  <n-icon>
+                    <component :is="themePreferenceIcon" />
+                  </n-icon>
+                </template>
+              </n-button>
+            </template>
+            <span>{{ themeToggleTooltip }}</span>
+          </n-tooltip>
+        </div>
+
         <n-modal
           :show="authStore.mustChangePassword"
           preset="card"
@@ -122,7 +159,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, onMounted, reactive, ref } from 'vue'
+import { computed, h, onMounted, reactive, ref, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useWindowSize } from '@vueuse/core'
 import {
@@ -144,7 +181,9 @@ import {
   NModal,
   NSpace,
   NTag,
+  NTooltip,
   createDiscreteApi,
+  darkTheme,
   dateZhCN,
   zhCN
 } from 'naive-ui'
@@ -157,18 +196,22 @@ import {
   GridOutline,
   LayersOutline,
   MenuOutline,
+  MoonOutline,
   SettingsOutline,
   SparklesOutline,
+  SunnyOutline,
   WalletOutline
 } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
 import { useSettingsQuery } from '@/composables/settings-query'
+import { useThemePreference, type ThemePreference } from '@/composables/theme-preference'
 import { useAuthStore } from '@/stores/auth'
 import { isRememberedSession } from '@/utils/auth-storage'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const { resolvedTheme, setThemePreference } = useThemePreference()
 const { message } = createDiscreteApi(['message'])
 const appVersion = __APP_VERSION__
 const mobileMenuVisible = ref(false)
@@ -207,6 +250,18 @@ const isLoginPage = computed(() => route.path === '/login')
 const isMobile = computed(() => width.value < 960)
 const isCompact = computed(() => width.value < 640)
 const contentStyle = computed(() => (isMobile.value ? 'padding: 12px;' : 'padding: 20px 24px;'))
+const naiveTheme = computed(() => (resolvedTheme.value === 'dark' ? darkTheme : null))
+const themePreferenceIcon = computed(() => (resolvedTheme.value === 'dark' ? MoonOutline : SunnyOutline))
+const themeToggleTooltip = computed(() => {
+  const currentLabel = resolvedTheme.value === 'dark' ? '深色' : '浅色'
+  const nextLabel = currentLabel === '深色' ? '浅色' : '深色'
+  return `当前主题：${currentLabel}，点击切换到${nextLabel}`
+})
+
+watchEffect(() => {
+  if (typeof document === 'undefined') return
+  document.documentElement.dataset.theme = resolvedTheme.value
+})
 
 onMounted(async () => {
   if (!authStore.isAuthenticated) {
@@ -227,6 +282,11 @@ function handleMenuClick(key: string) {
 function handleMobileMenuClick(key: string) {
   mobileMenuVisible.value = false
   handleMenuClick(key)
+}
+
+function cycleThemePreference() {
+  const nextTheme: ThemePreference = resolvedTheme.value === 'dark' ? 'light' : 'dark'
+  setThemePreference(nextTheme)
 }
 
 async function logout() {
@@ -280,6 +340,48 @@ async function submitDefaultPasswordChange() {
   min-height: 100vh;
 }
 
+.sider-shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.sider-menu {
+  flex: 1;
+  min-height: 0;
+}
+
+.sider-footer {
+  display: flex;
+  justify-content: flex-start;
+  padding: 12px;
+  margin-top: auto;
+}
+
+.sider-footer--collapsed {
+  justify-content: center;
+}
+
+.theme-toggle {
+  box-shadow: inset 0 0 0 1px var(--app-border-soft);
+}
+
+.theme-toggle--floating {
+  position: fixed;
+  left: 12px;
+  bottom: 16px;
+  z-index: 30;
+  background: var(--app-surface);
+}
+
+.theme-fab-shell {
+  pointer-events: none;
+}
+
+.theme-fab-shell :deep(.n-button) {
+  pointer-events: auto;
+}
+
 .logo {
   height: 56px;
   display: flex;
@@ -288,7 +390,7 @@ async function submitDefaultPasswordChange() {
   padding: 0 18px;
   font-size: 18px;
   font-weight: 700;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--app-border);
   overflow: hidden;
 }
 
@@ -332,7 +434,7 @@ async function submitDefaultPasswordChange() {
   margin-top: 2px;
   font-size: 11px;
   font-weight: 500;
-  color: #64748b;
+  color: var(--app-text-secondary);
   white-space: nowrap;
 }
 
@@ -351,7 +453,7 @@ async function submitDefaultPasswordChange() {
   justify-content: space-between;
   gap: 12px;
   padding: 0 16px;
-  background: #fff;
+  background: var(--app-surface);
 }
 
 .header__left {
@@ -373,7 +475,7 @@ async function submitDefaultPasswordChange() {
   align-items: center;
   gap: 8px;
   font-size: 18px;
-  color: #0f172a;
+  color: var(--app-text-strong);
 }
 
 .header__right {
@@ -381,7 +483,7 @@ async function submitDefaultPasswordChange() {
 }
 
 .card-muted {
-  color: #64748b;
+  color: var(--app-text-secondary);
   font-size: 13px;
 }
 

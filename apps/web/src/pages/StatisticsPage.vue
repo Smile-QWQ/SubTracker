@@ -67,7 +67,7 @@
 import dayjs from 'dayjs'
 import { computed } from 'vue'
 import { useWindowSize } from '@vueuse/core'
-import { NCard, NEmpty, NGrid, NGridItem } from 'naive-ui'
+import { NCard, NEmpty, NGrid, NGridItem, useThemeVars } from 'naive-ui'
 import { BarChartOutline } from '@vicons/ionicons5'
 import { useSettingsQuery } from '@/composables/settings-query'
 import { useStatisticsOverviewQuery } from '@/composables/statistics-overview-query'
@@ -78,6 +78,7 @@ import { buildTopSubscriptionsOption } from '@/utils/statistics-top-subscription
 
 const { width } = useWindowSize()
 const barChartOutline = BarChartOutline
+const themeVars = useThemeVars()
 
 const { data: overview } = useStatisticsOverviewQuery()
 
@@ -104,13 +105,24 @@ const trendOption = computed(() => {
   if (!overview.value?.monthlyTrend.length) return null
 
   return {
-    tooltip: { trigger: 'axis' },
-    legend: { data: ['预测金额'] },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: themeVars.value.cardColor,
+      borderColor: themeVars.value.borderColor,
+      textStyle: { color: themeVars.value.textColor2 }
+    },
+    legend: { data: ['预测金额'], textStyle: { color: themeVars.value.textColor2 } },
     xAxis: {
       type: 'category',
-      data: overview.value.monthlyTrend.map((item) => item.month)
+      data: overview.value.monthlyTrend.map((item) => item.month),
+      axisLabel: { color: themeVars.value.textColor3 },
+      axisLine: { lineStyle: { color: themeVars.value.borderColor } }
     },
-    yAxis: { type: 'value' },
+    yAxis: {
+      type: 'value',
+      axisLabel: { color: themeVars.value.textColor3 },
+      splitLine: { lineStyle: { color: themeVars.value.dividerColor } }
+    },
     series: [
       {
         name: '预测金额',
@@ -128,8 +140,13 @@ const trendOption = computed(() => {
 const tagSpendOption = computed(() => {
   if (!overview.value?.tagSpend.length) return null
   return {
-    tooltip: { trigger: 'item' },
-    legend: { bottom: 0 },
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: themeVars.value.cardColor,
+      borderColor: themeVars.value.borderColor,
+      textStyle: { color: themeVars.value.textColor2 }
+    },
+    legend: { bottom: 0, textStyle: { color: themeVars.value.textColor2 } },
     series: [
       {
         type: 'pie',
@@ -145,11 +162,23 @@ const statusOption = computed(() => {
   if (!data.length) return null
 
   return {
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    xAxis: { type: 'value' },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      backgroundColor: themeVars.value.cardColor,
+      borderColor: themeVars.value.borderColor,
+      textStyle: { color: themeVars.value.textColor2 }
+    },
+    xAxis: {
+      type: 'value',
+      axisLabel: { color: themeVars.value.textColor3 },
+      splitLine: { lineStyle: { color: themeVars.value.dividerColor } }
+    },
     yAxis: {
       type: 'category',
-      data: data.map((item) => statusLabelMap[item.status])
+      data: data.map((item) => statusLabelMap[item.status]),
+      axisLabel: { color: themeVars.value.textColor3 },
+      axisLine: { lineStyle: { color: themeVars.value.borderColor } }
     },
     series: [
       {
@@ -174,7 +203,7 @@ const renewalModeOption = computed(() => {
       formatter: (params: { data: { count: number; amount: number; name: string } }) =>
         `${params.data.name}<br/>订阅数：${params.data.count}<br/>月度金额：${formatMoney(params.data.amount, baseCurrency.value)}`
     },
-    legend: { bottom: 0 },
+    legend: { bottom: 0, textStyle: { color: themeVars.value.textColor2 } },
     series: [
       {
         type: 'pie',
@@ -198,12 +227,24 @@ const currencyOption = computed(() => {
   if (!data.length) return null
 
   return {
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      backgroundColor: themeVars.value.cardColor,
+      borderColor: themeVars.value.borderColor,
+      textStyle: { color: themeVars.value.textColor2 }
+    },
     grid: { left: 80, right: 24, top: 20, bottom: 20 },
-    xAxis: { type: 'value' },
+    xAxis: {
+      type: 'value',
+      axisLabel: { color: themeVars.value.textColor3 },
+      splitLine: { lineStyle: { color: themeVars.value.dividerColor } }
+    },
     yAxis: {
       type: 'category',
-      data: data.map((item) => item.currency)
+      data: data.map((item) => item.currency),
+      axisLabel: { color: themeVars.value.textColor3 },
+      axisLine: { lineStyle: { color: themeVars.value.borderColor } }
     },
     series: [
       {
@@ -221,15 +262,33 @@ const upcoming30Option = computed(() => {
   if (!source.length) return null
 
   return {
-    tooltip: { trigger: 'axis' },
-    legend: { data: ['续订数', '金额'] },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: themeVars.value.cardColor,
+      borderColor: themeVars.value.borderColor,
+      textStyle: { color: themeVars.value.textColor2 }
+    },
+    legend: { data: ['续订数', '金额'], textStyle: { color: themeVars.value.textColor2 } },
     xAxis: {
       type: 'category',
-      data: source.map((item) => dayjs(item.date).format('MM-DD'))
+      data: source.map((item) => dayjs(item.date).format('MM-DD')),
+      axisLabel: { color: themeVars.value.textColor3 },
+      axisLine: { lineStyle: { color: themeVars.value.borderColor } }
     },
     yAxis: [
-      { type: 'value', name: '续订数' },
-      { type: 'value', name: `金额(${baseCurrency.value})` }
+      {
+        type: 'value',
+        name: '续订数',
+        nameTextStyle: { color: themeVars.value.textColor3 },
+        axisLabel: { color: themeVars.value.textColor3 },
+        splitLine: { lineStyle: { color: themeVars.value.dividerColor } }
+      },
+      {
+        type: 'value',
+        name: `金额(${baseCurrency.value})`,
+        nameTextStyle: { color: themeVars.value.textColor3 },
+        axisLabel: { color: themeVars.value.textColor3 }
+      }
     ],
     series: [
       {
@@ -253,7 +312,13 @@ const upcoming30Option = computed(() => {
 })
 
 const topSubscriptionsOption = computed(() =>
-  buildTopSubscriptionsOption(overview.value?.topSubscriptionsByMonthlyCost, baseCurrency.value)
+  buildTopSubscriptionsOption(overview.value?.topSubscriptionsByMonthlyCost, baseCurrency.value, {
+    textColor: themeVars.value.textColor2,
+    secondaryTextColor: themeVars.value.textColor3,
+    borderColor: themeVars.value.borderColor,
+    dividerColor: themeVars.value.dividerColor,
+    tooltipBackgroundColor: themeVars.value.cardColor
+  })
 )
 
 function formatMoney(amount: number, currency: string) {

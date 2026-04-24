@@ -108,13 +108,13 @@ async function submit() {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: linear-gradient(135deg, #eff6ff 0%, #eef2ff 100%);
+  background: var(--app-gradient-soft);
 }
 
 .login-card {
   width: min(420px, 100%);
   border-radius: 22px;
-  box-shadow: 0 20px 60px rgba(37, 99, 235, 0.14);
+  box-shadow: var(--app-shadow-strong);
 }
 
 .login-header {
@@ -142,16 +142,16 @@ async function submit() {
 
 .login-subtitle {
   margin: 6px 0 0;
-  color: #64748b;
+  color: var(--app-text-secondary);
 }
 
 .login-options {
   margin: -2px 0 14px;
-  color: #475569;
+  color: var(--app-text-secondary);
 }
 
 .login-options__hint {
-  color: #94a3b8;
+  color: var(--app-text-muted);
 }
 
 @media (max-width: 520px) {

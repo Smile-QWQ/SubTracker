@@ -53,12 +53,12 @@ withDefaults(
   margin: 0;
   font-size: 18px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--app-text-strong);
 }
 
 .page-subtitle {
   margin: 6px 0 0;
-  color: #64748b;
+  color: var(--app-text-secondary);
   font-size: 14px;
   line-height: 1.5;
 }

@@ -155,9 +155,9 @@ function renderIconOption(option: { label: string; value: string }) {
             width: '28px',
             height: '28px',
             borderRadius: '8px',
-            background: '#f8fafc',
-            border: '1px solid #e2e8f0',
-            color: '#334155',
+            background: 'var(--app-surface)',
+            border: '1px solid var(--app-border-soft)',
+            color: 'var(--app-text-primary)',
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -177,8 +177,8 @@ function renderIconOption(option: { label: string; value: string }) {
           }
         },
         [
-          h('span', { style: { color: '#0f172a', lineHeight: '1.2' } }, option.label),
-          h('span', { style: { color: '#94a3b8', fontSize: '12px', lineHeight: '1.2' } }, option.value)
+          h('span', { style: { color: 'var(--app-text-strong)', lineHeight: '1.2' } }, option.label),
+          h('span', { style: { color: 'var(--app-text-muted)', fontSize: '12px', lineHeight: '1.2' } }, option.value)
         ]
       )
     ]
@@ -223,12 +223,12 @@ function handleUpdateShow(value: boolean) {
 .icon-preview {
   height: 40px;
   padding: 0 12px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--app-border-soft);
   border-radius: 10px;
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  color: #334155;
-  background: #f8fafc;
+  color: var(--app-text-primary);
+  background: var(--app-surface);
 }
 </style>

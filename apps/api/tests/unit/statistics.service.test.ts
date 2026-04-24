@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { DEFAULT_RESEND_API_URL } from '@subtracker/shared'
 
 const { findManySubscriptionsMock, findManyTagsMock } = vi.hoisted(() => ({
   findManySubscriptionsMock: vi.fn(),
@@ -35,8 +36,12 @@ vi.mock('../../src/services/settings.service', () => ({
     overdueReminderDays: [1, 2, 3],
     tagBudgets: {},
     emailNotificationsEnabled: false,
+    emailProvider: 'smtp',
     pushplusNotificationsEnabled: false,
-    emailConfig: {
+    telegramNotificationsEnabled: false,
+    serverchanNotificationsEnabled: false,
+    gotifyNotificationsEnabled: false,
+    smtpConfig: {
       host: '',
       port: 587,
       secure: false,
@@ -45,9 +50,27 @@ vi.mock('../../src/services/settings.service', () => ({
       from: '',
       to: ''
     },
+    resendConfig: {
+      apiBaseUrl: DEFAULT_RESEND_API_URL,
+      apiKey: '',
+      from: '',
+      to: ''
+    },
     pushplusConfig: {
       token: '',
       topic: ''
+    },
+    telegramConfig: {
+      botToken: '',
+      chatId: ''
+    },
+    serverchanConfig: {
+      sendkey: ''
+    },
+    gotifyConfig: {
+      url: '',
+      token: '',
+      ignoreSsl: false
     },
     aiConfig: {
       enabled: false,

@@ -468,8 +468,8 @@ const logoImageStyle = {
   height: '28px',
   borderRadius: '8px',
   objectFit: 'contain',
-  border: '1px solid #e5e7eb',
-  background: '#fff',
+  border: '1px solid var(--app-border-soft)',
+  background: 'var(--app-surface)',
   flexShrink: '0'
 }
 
@@ -477,8 +477,8 @@ const logoFallbackStyle = {
   width: '28px',
   height: '28px',
   borderRadius: '8px',
-  background: '#eff6ff',
-  color: '#2563eb',
+  background: 'var(--app-accent-soft)',
+  color: 'var(--app-accent)',
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -494,16 +494,16 @@ const noteContainerStyle = {
   display: 'flex',
   alignItems: 'center',
   gap: '6px',
-  background: '#f8fafc',
-  border: '1px solid #eef2f7',
+  background: 'var(--app-surface)',
+  border: '1px solid var(--app-border-soft)',
   borderRadius: '6px',
-  color: '#334155',
+  color: 'var(--app-text-primary)',
   fontSize: '12px'
 } as const
 
 const noteLabelStyle = {
   fontWeight: '600',
-  color: '#475569',
+  color: 'var(--app-text-secondary)',
   flexShrink: '0'
 }
 
@@ -521,7 +521,7 @@ const nameCellStyle = {
 
 const nameTitleStyle = {
   fontWeight: '600',
-  color: '#0f172a'
+  color: 'var(--app-text-strong)'
 }
 
 const tagListStyle = {
@@ -1149,11 +1149,11 @@ function unitLabel(unit: string) {
 
 .mobile-subscription-card__title {
   font-weight: 700;
-  color: #0f172a;
+  color: var(--app-text-strong);
 }
 
 .mobile-subscription-card__meta {
-  color: #64748b;
+  color: var(--app-text-secondary);
   font-size: 12px;
   margin-top: 4px;
 }
@@ -1170,7 +1170,7 @@ function unitLabel(unit: string) {
   justify-content: space-between;
   gap: 12px;
   font-size: 13px;
-  color: #334155;
+  color: var(--app-text-primary);
 }
 
 .subscription-logo {
@@ -1178,16 +1178,16 @@ function unitLabel(unit: string) {
   height: 36px;
   border-radius: 10px;
   object-fit: contain;
-  border: 1px solid #e5e7eb;
-  background: #fff;
+  border: 1px solid var(--app-border-soft);
+  background: var(--app-surface);
 }
 
 .subscription-logo--placeholder {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #eff6ff;
-  color: #2563eb;
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
   font-weight: 700;
 }
 
@@ -1198,17 +1198,17 @@ function unitLabel(unit: string) {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: #f8fafc;
-  border: 1px solid #eef2f7;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border-soft);
   border-radius: 6px;
-  color: #334155;
+  color: var(--app-text-primary);
   font-size: 12px;
   margin-top: 12px;
 }
 
 .note-strip__label {
   font-weight: 600;
-  color: #475569;
+  color: var(--app-text-secondary);
   flex-shrink: 0;
 }
 
@@ -1219,7 +1219,7 @@ function unitLabel(unit: string) {
 }
 
 .muted-text {
-  color: #94a3b8;
+  color: var(--app-text-muted);
   font-size: 12px;
 }
 
@@ -1238,7 +1238,7 @@ function unitLabel(unit: string) {
 }
 
 :deep(.subscription-row--drag-over td) {
-  background: #eff6ff;
+  background: var(--app-accent-soft);
 }
 
 .drag-handle-cell {
@@ -1247,7 +1247,7 @@ function unitLabel(unit: string) {
   justify-content: center;
   width: 24px;
   height: 24px;
-  color: #64748b;
+  color: var(--app-text-secondary);
 }
 
 .drag-handle-cell--active {

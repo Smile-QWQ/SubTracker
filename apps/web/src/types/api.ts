@@ -168,6 +168,13 @@ export interface EmailConfig {
   to: string
 }
 
+export interface ResendConfig {
+  apiBaseUrl: string
+  apiKey: string
+  from: string
+  to: string
+}
+
 export interface PushplusConfig {
   token: string
   topic: string
@@ -178,6 +185,17 @@ export interface TelegramConfig {
   chatId: string
 }
 
+export interface ServerchanConfig {
+  sendkey: string
+}
+
+export interface GotifyConfig {
+  url: string
+  token: string
+  ignoreSsl: boolean
+}
+
+export type EmailProvider = 'smtp' | 'resend'
 export type AiProviderPreset = 'custom' | 'aliyun-bailian' | 'tencent-hunyuan' | 'volcengine-ark'
 
 export interface AiCapabilities {
@@ -218,11 +236,17 @@ export interface Settings {
   defaultOverdueReminderRules: string
   tagBudgets: Record<string, number>
   emailNotificationsEnabled: boolean
+  emailProvider: EmailProvider
   pushplusNotificationsEnabled: boolean
   telegramNotificationsEnabled: boolean
-  emailConfig: EmailConfig
+  serverchanNotificationsEnabled: boolean
+  gotifyNotificationsEnabled: boolean
+  smtpConfig: EmailConfig
+  resendConfig: ResendConfig
   pushplusConfig: PushplusConfig
   telegramConfig: TelegramConfig
+  serverchanConfig: ServerchanConfig
+  gotifyConfig: GotifyConfig
   aiConfig: AiConfig
 }
 
