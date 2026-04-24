@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client'
-import type { WallosImportInspectResultDto, WebhookEventType } from '@subtracker/shared'
+import type { WebhookEventType } from '@subtracker/shared'
 import { prisma } from '../db'
 import { getRuntimeD1Database, isWorkerRuntime } from '../runtime'
 
@@ -137,7 +137,7 @@ export async function releaseNotificationDelivery(params: {
   )
 }
 
-export async function storeImportPreview(token: string, preview: WallosImportInspectResultDto, ttlMs: number) {
+export async function storeImportPreview<T>(token: string, preview: T, ttlMs: number) {
   const expiresAt = new Date(Date.now() + ttlMs)
 
   if (!getD1()) {
@@ -164,15 +164,24 @@ export async function storeImportPreview(token: string, preview: WallosImportIns
   )
 }
 
-export async function getImportPreview(token: string) {
+export async function getImportPreview<T>(
+  token: string,
+  options?: {
+    onExpired?: (payload: T | null) => Promise<void> | void
+  }
+) {
   if (!getD1()) {
     const row = await prisma.importPreview.findUnique({ where: { token } })
     if (!row) return null
     if (row.expiresAt.getTime() <= Date.now()) {
-      await prisma.importPreview.deleteMany({ where: { token } })
+      const payload = row.previewJson as unknown as T
+      await deleteImportPreview(token, {
+        payload,
+        onDelete: options?.onExpired
+      })
       return null
     }
-    return row.previewJson as unknown as WallosImportInspectResultDto
+    return row.previewJson as unknown as T
   }
 
   const row = await d1First<ImportPreviewRow>(
@@ -185,14 +194,28 @@ export async function getImportPreview(token: string) {
   if (!row) return null
 
   if (new Date(row.expiresAt).getTime() <= Date.now()) {
-    await deleteImportPreview(token)
+    const payload = parseJsonValue<T>(row.previewJson)
+    await deleteImportPreview(token, {
+      payload,
+      onDelete: options?.onExpired
+    })
     return null
   }
 
-  return parseJsonValue<WallosImportInspectResultDto>(row.previewJson)
+  return parseJsonValue<T>(row.previewJson)
 }
 
-export async function deleteImportPreview(token: string) {
+export async function deleteImportPreview<T>(
+  token: string,
+  options?: {
+    payload?: T | null
+    onDelete?: (payload: T | null) => Promise<void> | void
+  }
+) {
+  if (options?.onDelete) {
+    await options.onDelete(options.payload ?? null)
+  }
+
   if (!getD1()) {
     await prisma.importPreview.deleteMany({ where: { token } })
     return

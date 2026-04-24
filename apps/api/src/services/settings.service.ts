@@ -64,7 +64,7 @@ function buildStorageCapabilities() {
     kvEnabled: Boolean(getWorkerCache()),
     r2Enabled: Boolean(getWorkerLogoBucket()),
     logoStorageEnabled: Boolean(getWorkerLogoBucket()),
-    wallosImportMode: 'json-only'
+    wallosImportMode: 'json-db-zip'
   })
 }
 

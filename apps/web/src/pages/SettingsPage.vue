@@ -11,7 +11,7 @@
       当前运行时：Cloudflare Worker。
       KV 不使用；
       R2 {{ settingsForm.storageCapabilities.r2Enabled ? '已启用' : '未启用，仅支持远程 Logo 引用' }}；
-      Wallos 导入模式：仅 JSON。
+      Wallos 导入模式：JSON / SQLite / ZIP。
     </n-alert>
 
     <n-grid :cols="gridCols" :x-gap="12" :y-gap="12">
@@ -521,9 +521,9 @@
           <n-space vertical style="width: 100%">
             <n-alert type="info" :show-icon="false">
               可导出全部订阅为 CSV / JSON，也可在这里导入 Wallos 数据。
-              当前 Cloudflare Worker 版本仅支持 JSON 导入。
+              当前 Cloudflare Worker 版本支持 JSON、SQLite 与 ZIP 导入。
               <template v-if="!settingsForm.storageCapabilities.r2Enabled">
-                当前未启用 R2，Logo 只支持远程引用，不支持本地库持久化。
+                当前未启用 R2，ZIP 中的 Logo 会被忽略，但仍可导入其中的数据库内容。
               </template>
             </n-alert>
             <n-space wrap>
@@ -689,7 +689,7 @@ const settingsForm = reactive<Settings>({
     kvEnabled: false,
     r2Enabled: false,
     logoStorageEnabled: false,
-    wallosImportMode: 'json-only'
+    wallosImportMode: 'json-db-zip'
   },
   aiConfig: {
     ...DEFAULT_AI_CONFIG,

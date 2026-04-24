@@ -60,7 +60,7 @@ export const useAppStore = defineStore('app', () => {
       kvEnabled: false,
       r2Enabled: false,
       logoStorageEnabled: false,
-      wallosImportMode: 'json-only'
+      wallosImportMode: 'json-db-zip'
     },
     aiConfig: {
       ...DEFAULT_AI_CONFIG,

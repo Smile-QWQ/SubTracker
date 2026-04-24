@@ -10,7 +10,7 @@ describe('worker capabilities helpers', () => {
           kvEnabled: true,
           r2Enabled: true,
           logoStorageEnabled: true,
-          wallosImportMode: 'json-only'
+          wallosImportMode: 'json-db-zip'
         }
       })
     ).toBe(true)
@@ -25,7 +25,7 @@ describe('worker capabilities helpers', () => {
           kvEnabled: false,
           r2Enabled: false,
           logoStorageEnabled: false,
-          wallosImportMode: 'json-only'
+          wallosImportMode: 'json-db-zip'
         }
       })
     ).toBe(false)

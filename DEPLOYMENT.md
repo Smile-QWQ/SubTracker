@@ -236,7 +236,30 @@ https://api.resend.com/emails
 - 通知去重：回到 D1
 - 导入预览 token：回到 D1
 - Logo 搜索缓存：仅保留进程内短缓存
-### 3. Logo 搜索是 Lite 版
+
+### 3. Wallos 导入能力
+
+当前 Worker 分支支持：
+
+- Wallos JSON 导入
+- Wallos SQLite 数据库导入（`.db` / `.sqlite` / `.sqlite3`）
+- Wallos ZIP 备份导入
+
+并且会尽量对齐 Wallos 自己的运行时语义：
+
+- 对 `auto_renew = true` 且 `next_payment` 已落后的订阅，会先按 Wallos 的周期推进逻辑修正日期，再判定状态
+- ZIP 预览阶段会先处理其中可匹配的 Logo 资产
+
+关于 ZIP Logo：
+
+- **启用 R2 时**
+  - 预览阶段会先把匹配到的 Logo 写入 R2 临时对象
+  - 确认导入时直接复用这些对象，不重复上传
+- **未启用 R2 时**
+  - 仍可导入 ZIP 中的数据库内容
+  - 但会忽略 ZIP 中的 Logo，并在预览中给出 warning
+
+### 4. Logo 搜索是 Lite 版
 
 Worker Lite 的 Logo 搜索只保留：
 
@@ -256,7 +279,7 @@ Worker Lite 的 Logo 搜索只保留：
 - 搜索结果质量不如 Docker / main 分支
 - 偶尔会混入不够理想的候选图
 
-### 4. Cron 已拆成 Lite 版职责
+### 5. Cron 已拆成 Lite 版职责
 
 当前默认触发器是：
 
@@ -273,7 +296,7 @@ Worker Lite 的 Logo 搜索只保留：
 - 只在规则命中的那一分钟发送提醒
 - 相比旧的 `*/5` 版本，提醒更实时，但不再做 5 分钟补偿命中
 
-### 5. 错误提示会明确说明 Worker 限制
+### 6. 错误提示会明确说明 Worker 限制
 
 前端遇到：
 
@@ -341,10 +364,9 @@ http://127.0.0.1:8787
 - Telegram
 - Resend 邮件
 - AI 文本 / 图片识别
-- Wallos JSON 导入
+- Wallos JSON / SQLite / ZIP 导入
 
 ### 不支持
 
 - 本地 OCR
-- Wallos SQLite / ZIP 导入
 - 原生 SMTP

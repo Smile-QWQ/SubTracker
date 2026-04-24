@@ -192,7 +192,7 @@ export const StorageCapabilitiesSchema = z.object({
   kvEnabled: z.boolean().default(false),
   r2Enabled: z.boolean().default(false),
   logoStorageEnabled: z.boolean().default(false),
-  wallosImportMode: z.literal('json-only').default('json-only')
+  wallosImportMode: z.enum(['json-only', 'json-db-zip']).default('json-db-zip')
 })
 
 export const SettingsSchema = z.object({

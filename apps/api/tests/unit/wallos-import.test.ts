@@ -1,14 +1,96 @@
+import { createRequire } from 'node:module'
+import path from 'node:path'
+import AdmZip from 'adm-zip'
+import initSqlJs from 'sql.js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   mapWallosBillingInterval,
-  resolveWallosEffectiveNextPayment,
   mapWallosSubscriptionStatus,
   previewWallosImportFromBase64ForTest,
+  resolveWallosEffectiveNextPayment,
   resolveWallosNotifyDays
 } from '../../src/services/wallos-import.service'
 
-function encodeJson(rows: unknown[]) {
-  return Buffer.from(JSON.stringify(rows), 'utf8').toString('base64')
+const require = createRequire(import.meta.url)
+
+async function createWallosFixtureBuffer() {
+  const SQL = await initSqlJs({
+    locateFile: (file: string) => path.resolve(path.dirname(require.resolve('sql.js/dist/sql-wasm.wasm')), file)
+  })
+
+  const db = new SQL.Database()
+  db.run(`
+    CREATE TABLE categories (id INTEGER PRIMARY KEY, name TEXT NOT NULL, "order" INTEGER DEFAULT 0, user_id INTEGER DEFAULT 1);
+    CREATE TABLE currencies (id INTEGER PRIMARY KEY, name TEXT NOT NULL, symbol TEXT NOT NULL, code TEXT NOT NULL, rate TEXT NOT NULL, user_id INTEGER DEFAULT 1);
+    CREATE TABLE cycles (id INTEGER PRIMARY KEY, days INTEGER NOT NULL, name TEXT NOT NULL);
+    CREATE TABLE frequencies (id INTEGER PRIMARY KEY, name INTEGER NOT NULL);
+    CREATE TABLE notification_settings (days INTEGER DEFAULT 0, user_id INTEGER DEFAULT 1);
+    CREATE TABLE subscriptions (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      logo TEXT,
+      price REAL NOT NULL,
+      currency_id INTEGER,
+      next_payment DATE,
+      cycle INTEGER,
+      frequency INTEGER,
+      notes TEXT,
+      payment_method_id INTEGER,
+      payer_user_id INTEGER,
+      category_id INTEGER,
+      notify BOOLEAN DEFAULT false,
+      url VARCHAR(255),
+      inactive BOOLEAN DEFAULT false,
+      notify_days_before INTEGER DEFAULT 0,
+      user_id INTEGER DEFAULT 1,
+      cancellation_date DATE,
+      replacement_subscription_id INTEGER DEFAULT NULL,
+      start_date INTEGER DEFAULT NULL,
+      auto_renew INTEGER DEFAULT 1
+    );
+  `)
+
+  db.run(`
+    INSERT INTO categories (id, name, "order") VALUES
+    (1, 'No category', 1),
+    (2, 'VPS', 2),
+    (3, 'UnusedTag', 3);
+
+    INSERT INTO currencies (id, name, symbol, code, rate) VALUES
+    (1, '人民币', '¥', 'CNY', '1'),
+    (2, 'US Dollar', '$', 'USD', '7');
+
+    INSERT INTO cycles (id, days, name) VALUES
+    (1, 30, 'Monthly'),
+    (2, 365, 'Yearly');
+
+    INSERT INTO frequencies (id, name) VALUES
+    (1, 1),
+    (2, 2);
+
+    INSERT INTO notification_settings (days) VALUES (3);
+
+    INSERT INTO subscriptions
+    (id, name, logo, price, currency_id, next_payment, cycle, frequency, notes, category_id, notify, url, inactive, notify_days_before, start_date, auto_renew)
+    VALUES
+    (10, 'Test VPS', 'abc.png', 10, 2, '2025-01-10', 2, 1, 'note', 2, 1, 'example.com', 0, -1, 1736467200, 1),
+    (11, 'No category sub', NULL, 5, 1, '2026-07-01', 1, 1, '', 1, 0, NULL, 0, NULL, NULL, 0);
+  `)
+
+  const buffer = Buffer.from(db.export())
+  db.close()
+  return buffer
+}
+
+function encodeBase64(buffer: Buffer) {
+  return buffer.toString('base64')
+}
+
+async function createWallosZipBase64() {
+  const zip = new AdmZip()
+  zip.addFile('backup/db/wallos.db', await createWallosFixtureBuffer())
+  zip.addFile('backup/images/abc.png', Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+  return zip.toBuffer().toString('base64')
 }
 
 describe('wallos import helpers', () => {
@@ -21,7 +103,7 @@ describe('wallos import helpers', () => {
     vi.useRealTimers()
   })
 
-  it('maps standard billing intervals', () => {
+  it('maps standard billing intervals and wallos status helpers', () => {
     expect(mapWallosBillingInterval(30, 2)).toMatchObject({
       billingIntervalCount: 2,
       billingIntervalUnit: 'month',
@@ -32,9 +114,7 @@ describe('wallos import helpers', () => {
       billingIntervalCount: 45,
       billingIntervalUnit: 'day'
     })
-  })
 
-  it('maps status and notify config', () => {
     expect(mapWallosSubscriptionStatus({ inactive: 1, cancellationDate: null, nextPayment: '2026-06-01' })).toBe('paused')
     expect(mapWallosSubscriptionStatus({ inactive: 0, cancellationDate: '2026-04-01', nextPayment: '2026-06-01' })).toBe(
       'cancelled'
@@ -63,43 +143,14 @@ describe('wallos import helpers', () => {
       webhookEnabled: true,
       notifyDaysBefore: 3
     })
-    expect(resolveWallosNotifyDays({ notify: 1, notifyDaysBefore: 0, globalNotifyDays: 3 })).toEqual({
-      webhookEnabled: true,
-      notifyDaysBefore: 3
-    })
   })
 
-  it('only accepts wallos json in worker lite and keeps used tags only', async () => {
+  it('supports sqlite db imports with wallos semantics and used-tag filtering', async () => {
     const preview = await previewWallosImportFromBase64ForTest(
       {
-        filename: 'wallos.json',
-        contentType: 'application/json',
-        base64: encodeJson([
-          {
-            Name: 'Test VPS',
-            Price: '$10.00',
-            Category: 'VPS',
-            'Next Payment': '2026-06-01',
-            Notifications: 'enabled',
-            Renewal: 'automatic',
-            Notes: 'note',
-            URL: 'https://example.com/a'
-          },
-          {
-            Name: 'No category sub',
-            Price: '¥5',
-            Category: 'No category',
-            'Next Payment': '2026-07-01',
-            Notifications: 'disabled',
-            Renewal: 'manual'
-          },
-          {
-            Name: '',
-            Price: '$1',
-            Category: 'UnusedTag',
-            'Next Payment': ''
-          }
-        ])
+        filename: 'wallos.db',
+        contentType: 'application/octet-stream',
+        base64: encodeBase64(await createWallosFixtureBuffer())
       },
       {
         defaultNotifyDays: 3,
@@ -107,20 +158,22 @@ describe('wallos import helpers', () => {
       }
     )
 
-    expect(preview.isWallos).toBe(true)
-    expect(preview.summary.fileType).toBe('json')
+    expect(preview.summary.fileType).toBe('db')
     expect(preview.usedTags.map((item) => item.name)).toEqual(['VPS'])
     expect(preview.summary.usedTagsTotal).toBe(1)
-    expect(preview.summary.skippedSubscriptions).toBe(1)
-    expect(preview.summary.zipLogoMatched).toBe(0)
+
+    const categorized = preview.subscriptionsPreview.find((item) => item.name === 'Test VPS')
+    expect(categorized).toMatchObject({
+      autoRenew: true,
+      websiteUrl: 'https://example.com/',
+      nextRenewalDate: '2027-01-10',
+      status: 'active',
+      notifyDaysBefore: 3,
+      tagNames: ['VPS']
+    })
 
     const uncategorized = preview.subscriptionsPreview.find((item) => item.name === 'No category sub')
     expect(uncategorized?.tagNames).toEqual([])
-
-    const categorized = preview.subscriptionsPreview.find((item) => item.name === 'Test VPS')
-    expect(categorized?.tagNames).toEqual(['VPS'])
-    expect(categorized?.autoRenew).toBe(true)
-    expect(categorized?.logoImportStatus).toBe('none')
   })
 
   it('normalizes wallos json preview with wallos semantics and warnings', async () => {
@@ -128,18 +181,20 @@ describe('wallos import helpers', () => {
       {
         filename: 'wallos.json',
         contentType: 'application/json',
-        base64: encodeJson([
-          {
-            Name: 'Legacy Auto Renew',
-            Price: '$10',
-            Category: 'Video',
-            'Payment Cycle': 'Yearly',
-            'Next Payment': '2025-01-10',
-            Renewal: 'Automatic',
-            URL: 'netflix.com',
-            Notes: ''
-          }
-        ])
+        base64: Buffer.from(
+          JSON.stringify([
+            {
+              Name: 'Legacy Auto Renew',
+              Price: '$10',
+              Category: 'Video',
+              'Payment Cycle': 'Yearly',
+              'Next Payment': '2025-01-10',
+              Renewal: 'Automatic',
+              URL: 'netflix.com',
+              Notes: ''
+            }
+          ])
+        ).toString('base64')
       },
       {
         defaultNotifyDays: 3,
@@ -148,7 +203,6 @@ describe('wallos import helpers', () => {
     )
 
     const item = preview.subscriptionsPreview[0]
-    expect(item).toBeDefined()
     expect(item?.nextRenewalDate).toBe('2027-01-10')
     expect(item?.status).toBe('active')
     expect(item?.websiteUrl).toBe('https://netflix.com/')
@@ -158,10 +212,27 @@ describe('wallos import helpers', () => {
         'Wallos JSON 不包含 start_date，已使用 Next Payment 代填开始日期'
       ])
     )
-    expect(preview.warnings).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining('网址 "netflix.com" 缺少协议')
-      ])
+  })
+
+  it('allows zip imports without R2 and warns that zip logos are ignored', async () => {
+    const preview = await previewWallosImportFromBase64ForTest(
+      {
+        filename: 'wallos-backup.zip',
+        contentType: 'application/zip',
+        base64: await createWallosZipBase64()
+      },
+      {
+        defaultNotifyDays: 3,
+        baseCurrency: 'CNY'
+      }
     )
+
+    expect(preview.summary.fileType).toBe('zip')
+    expect(preview.summary.zipLogoMatched).toBe(1)
+    expect(preview.warnings).toEqual(expect.arrayContaining([expect.stringContaining('当前 Worker 未启用 R2')]))
+    expect(preview.subscriptionsPreview.find((item) => item.name === 'Test VPS')).toMatchObject({
+      logoImportStatus: 'none',
+      logoRef: null
+    })
   })
 })

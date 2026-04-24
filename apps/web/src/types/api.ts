@@ -227,7 +227,7 @@ export interface StorageCapabilities {
   kvEnabled: boolean
   r2Enabled: boolean
   logoStorageEnabled: boolean
-  wallosImportMode: 'json-only'
+  wallosImportMode: 'json-only' | 'json-db-zip'
 }
 
 export interface Settings {

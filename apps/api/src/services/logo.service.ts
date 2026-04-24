@@ -611,17 +611,30 @@ function isLocalLogoUrl(url?: string | null) {
   return Boolean(url && url.startsWith('/static/logos/'))
 }
 
-function createLogoUrl(key: string) {
+export function createLogoUrl(key: string) {
   return `/static/logos/${encodeURIComponent(key)}`
 }
 
-async function writeLogoBuffer(buffer: Buffer | Uint8Array, contentType: string, logoSource: string) {
+export function extractLogoStorageKey(logoUrl?: string | null) {
+  if (!isLocalLogoUrl(logoUrl)) return null
+  return decodeURIComponent(String(logoUrl).slice('/static/logos/'.length))
+}
+
+async function writeLogoBuffer(
+  buffer: Buffer | Uint8Array,
+  contentType: string,
+  logoSource: string,
+  options?: {
+    key?: string
+  }
+) {
   const bucket = getWorkerLogoBucket()
   if (!bucket) {
     throw new Error('对象存储未启用，无法保存 Logo 文件')
   }
 
-  const filename = `logos/${Date.now()}-${crypto.randomBytes(6).toString('hex')}${extensionMap[contentType] ?? '.png'}`
+  const filename =
+    options?.key?.trim() || `logos/${Date.now()}-${crypto.randomBytes(6).toString('hex')}${extensionMap[contentType] ?? '.png'}`
   await bucket.put(filename, buffer, {
     httpMetadata: {
       contentType
@@ -642,6 +655,26 @@ export async function saveImportedLogoBuffer(buffer: Buffer, contentType: string
     throw new Error('Logo 图片内容为空')
   }
   return writeLogoBuffer(buffer, contentType, logoSource)
+}
+
+export async function saveImportedLogoBufferToKey(
+  buffer: Buffer,
+  contentType: string,
+  key: string,
+  logoSource = 'wallos-zip'
+) {
+  if (!allowedTypes.has(contentType)) {
+    throw new Error('不支持的 Logo 图片类型')
+  }
+  if (!buffer.length) {
+    throw new Error('Logo 图片内容为空')
+  }
+  if (!key.trim()) {
+    throw new Error('Logo 存储 key 不能为空')
+  }
+  return writeLogoBuffer(buffer, contentType, logoSource, {
+    key
+  })
 }
 
 export async function saveUploadedLogo(input: LogoUploadInput) {
@@ -813,4 +846,16 @@ export async function deleteLocalLogoFromLibrary(filename: string) {
     logoUrl,
     deleted: true
   }
+}
+
+export async function deleteLogoStorageObject(filename: string) {
+  const bucket = getWorkerLogoBucket()
+  if (!bucket) {
+    return
+  }
+  const safeName = filename.trim()
+  if (!safeName) {
+    return
+  }
+  await bucket.delete(safeName)
 }
