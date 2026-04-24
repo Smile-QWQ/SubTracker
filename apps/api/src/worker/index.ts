@@ -111,10 +111,8 @@ export default {
         case env.CRON_REFRESH_RATES ?? '0 2 * * *':
           await refreshExchangeRates()
           break
-        case env.CRON_SCAN ?? '*/5 * * * *':
-          await scanRenewalNotifications(new Date(), {
-            scanWindowMinutes: 5
-          })
+        case env.CRON_SCAN ?? '* * * * *':
+          await scanRenewalNotifications(new Date())
           break
         case env.CRON_AUTO_RENEW ?? '2 * * * *':
           await autoRenewDueSubscriptions()

@@ -102,11 +102,11 @@ describe('scanRenewalNotifications merge behavior', () => {
     }
   })
 
-  it('still matches reminders inside the default 5-minute scan window', async () => {
+  it('does not backfill reminders outside the exact trigger minute', async () => {
     notificationState.mergeMultiSubscriptionNotifications = false
 
     await scanRenewalNotifications(new Date('2026-04-23T09:34:00'))
 
-    expect(notificationState.dispatchMock).toHaveBeenCalledTimes(3)
+    expect(notificationState.dispatchMock).not.toHaveBeenCalled()
   })
 })

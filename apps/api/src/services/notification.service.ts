@@ -27,16 +27,7 @@ export type NotificationScanResult = {
 
 export type NotificationScanOverrides = Partial<
   Awaited<ReturnType<typeof getNotificationScanSettings>>
-> & {
-  scanWindowMinutes?: number
-}
-
-const DEFAULT_NOTIFICATION_SCAN_WINDOW_MINUTES = 5
-
-function isReminderWithinWindow(now: dayjs.Dayjs, trigger: dayjs.Dayjs, scanWindowMinutes: number) {
-  if (now.isBefore(trigger)) return false
-  return now.diff(trigger, 'minute') < scanWindowMinutes
-}
+>
 
 type ReminderSubscriptionLike = {
   id: string
@@ -161,11 +152,10 @@ function matchReminderRule(
   now: dayjs.Dayjs,
   nextRenewalDate: Date,
   rule: ReminderRule,
-  direction: 'advance' | 'overdue',
-  scanWindowMinutes: number
+  direction: 'advance' | 'overdue'
 ): ReminderMatch | null {
   const trigger = resolveRuleTriggerMoment(nextRenewalDate, rule, direction)
-  if (!isReminderWithinWindow(now, trigger, scanWindowMinutes)) {
+  if (!now.isSame(trigger, 'minute')) {
     return null
   }
 
@@ -195,20 +185,19 @@ function matchReminderRule(
 function resolveReminderMatches(
   now: dayjs.Dayjs,
   sub: ReminderSubscriptionLike,
-  settings: Awaited<ReturnType<typeof getNotificationScanSettings>>,
-  scanWindowMinutes: number
+  settings: Awaited<ReturnType<typeof getNotificationScanSettings>>
 ) {
   const matches: ReminderMatch[] = []
 
   for (const rule of resolveAdvanceRules(sub, settings.defaultAdvanceReminderRules)) {
-    const match = matchReminderRule(now, sub.nextRenewalDate, rule, 'advance', scanWindowMinutes)
+    const match = matchReminderRule(now, sub.nextRenewalDate, rule, 'advance')
     if (match) {
       matches.push(match)
     }
   }
 
   for (const rule of resolveOverdueRules(sub, settings.defaultOverdueReminderRules)) {
-    const match = matchReminderRule(now, sub.nextRenewalDate, rule, 'overdue', scanWindowMinutes)
+    const match = matchReminderRule(now, sub.nextRenewalDate, rule, 'overdue')
     if (match) {
       matches.push(match)
     }
@@ -312,7 +301,6 @@ export async function scanRenewalNotifications(
   today = new Date(),
   overrides: NotificationScanOverrides = {}
 ): Promise<NotificationScanResult> {
-  const scanWindowMinutes = Math.max(1, overrides.scanWindowMinutes ?? DEFAULT_NOTIFICATION_SCAN_WINDOW_MINUTES)
   const appSettings = {
     ...(await getNotificationScanSettings()),
     ...overrides
@@ -332,7 +320,7 @@ export async function scanRenewalNotifications(
   const notifications: NotificationScanResult['notifications'] = []
 
   for (const sub of notificationEligibleSubscriptions) {
-    const matches = resolveReminderMatches(now, sub, appSettings, scanWindowMinutes)
+    const matches = resolveReminderMatches(now, sub, appSettings)
     for (const match of matches) {
       dispatchEntries.push(buildDispatchEntry(sub, match))
     }
