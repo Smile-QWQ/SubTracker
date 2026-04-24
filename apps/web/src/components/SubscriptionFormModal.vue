@@ -760,9 +760,9 @@ function formatLogoSource(source: string) {
   width: 104px;
   height: 42px;
   padding: 6px 8px;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--app-border-soft);
   border-radius: 12px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  background: var(--app-gradient-soft);
   box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
   display: flex;
   align-items: center;
@@ -772,7 +772,7 @@ function formatLogoSource(source: string) {
 }
 
 .logo-dock__preview:hover {
-  border-color: #94a3b8;
+  border-color: var(--app-border);
   transform: translateY(-1px);
 }
 
@@ -786,8 +786,8 @@ function formatLogoSource(source: string) {
   width: 100%;
   height: 100%;
   border-radius: 8px;
-  background: linear-gradient(135deg, #eff6ff 0%, #eef2ff 100%);
-  color: #1d4ed8;
+  background: color-mix(in srgb, var(--app-accent) 16%, var(--app-surface) 84%);
+  color: var(--app-accent);
   font-size: 12px;
   font-weight: 600;
   display: flex;
@@ -802,10 +802,10 @@ function formatLogoSource(source: string) {
   right: -7px;
   width: 20px;
   height: 20px;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--app-border-soft);
   border-radius: 999px;
-  background: #fff;
-  color: #64748b;
+  background: var(--app-surface);
+  color: var(--app-text-secondary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -820,9 +820,9 @@ function formatLogoSource(source: string) {
   width: min(320px, calc(100vw - 48px));
   max-height: 440px;
   padding: 10px;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--app-border-soft);
   border-radius: 16px;
-  background: #ffffff;
+  background: var(--app-surface);
   box-shadow: 0 16px 40px rgba(15, 23, 42, 0.16);
   z-index: 20;
   overflow: hidden;
@@ -833,16 +833,16 @@ function formatLogoSource(source: string) {
   align-items: center;
   justify-content: space-between;
   padding: 2px 2px 10px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--app-border-soft);
   font-size: 14px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--app-text-strong);
 }
 
 .logo-panel__close {
   border: none;
   background: transparent;
-  color: #64748b;
+  color: var(--app-text-secondary);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -861,7 +861,7 @@ function formatLogoSource(source: string) {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #64748b;
+  color: var(--app-text-secondary);
   font-size: 13px;
 }
 
@@ -880,9 +880,9 @@ function formatLogoSource(source: string) {
 
 .logo-panel__item {
   width: 100%;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--app-border-soft);
   border-radius: 14px;
-  background: #fff;
+  background: var(--app-surface-alt);
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -899,10 +899,10 @@ function formatLogoSource(source: string) {
   z-index: 1;
   width: 22px;
   height: 22px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--app-border-soft);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.96);
-  color: #64748b;
+  background: color-mix(in srgb, var(--app-surface) 92%, transparent);
+  color: var(--app-text-secondary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -911,7 +911,7 @@ function formatLogoSource(source: string) {
 }
 
 .logo-panel__item:hover {
-  border-color: #93c5fd;
+  border-color: color-mix(in srgb, var(--app-accent) 55%, var(--app-border-soft) 45%);
   box-shadow: 0 10px 24px rgba(59, 130, 246, 0.12);
   transform: translateY(-1px);
 }
@@ -926,7 +926,7 @@ function formatLogoSource(source: string) {
   width: 100%;
   font-size: 13px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--app-text-strong);
   text-align: center;
   line-height: 1.4;
   word-break: break-word;
@@ -935,12 +935,12 @@ function formatLogoSource(source: string) {
 .logo-panel__item-meta,
 .logo-panel__item-related {
   font-size: 12px;
-  color: #64748b;
+  color: var(--app-text-secondary);
   text-align: center;
 }
 
 .logo-panel__item-related {
-  color: #94a3b8;
+  color: var(--app-text-muted);
 }
 
 .logo-panel__empty {
@@ -962,7 +962,7 @@ function formatLogoSource(source: string) {
 }
 
 .label-with-tip__icon {
-  color: #94a3b8;
+  color: var(--app-text-muted);
   font-size: 15px;
   cursor: help;
 }

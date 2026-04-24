@@ -243,12 +243,12 @@ function fileTypeText(type: WallosImportInspectResult['summary']['fileType']) {
 }
 
 .file-name {
-  color: #64748b;
+  color: var(--app-text-secondary);
   font-size: 13px;
 }
 
 .summary-label {
-  color: #64748b;
+  color: var(--app-text-secondary);
   font-size: 13px;
 }
 
@@ -256,13 +256,13 @@ function fileTypeText(type: WallosImportInspectResult['summary']['fileType']) {
   margin-top: 6px;
   font-size: 22px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--app-text-strong);
 }
 
 .warning-list {
   margin: 0;
   padding-left: 18px;
-  color: #475569;
+  color: var(--app-text-secondary);
   display: grid;
   gap: 8px;
 }

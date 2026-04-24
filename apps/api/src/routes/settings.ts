@@ -8,6 +8,7 @@ import { prisma } from '../db'
 import { sendError, sendOk } from '../http'
 import { invalidateWorkerLiteCache } from '../services/worker-lite-cache.service'
 import { getAppSettings, setSetting } from '../services/settings.service'
+import { validateNotificationTargetUrl } from '../services/notification-url.service'
 import {
   buildAdvanceReminderRulesFromLegacy,
   buildOverdueReminderRules,
@@ -18,17 +19,35 @@ import {
 } from '../services/reminder-rules.service'
 
 function validateSettingsPayload(settings: Awaited<ReturnType<typeof getAppSettings>>) {
-  const missingEmailFields = [
-    ['Resend API URL', settings.emailConfig.apiBaseUrl],
-    ['Resend API Key', settings.emailConfig.apiKey],
-    ['发件人', settings.emailConfig.from],
-    ['收件人', settings.emailConfig.to]
-  ]
-    .filter(([, value]) => !String(value ?? '').trim())
-    .map(([label]) => label)
+  if (settings.emailNotificationsEnabled) {
+    if (settings.emailProvider === 'smtp') {
+      throw new Error('Cloudflare Worker 运行时暂不支持 SMTP，请改用 Resend')
+    }
 
-  if (settings.emailNotificationsEnabled && missingEmailFields.length) {
-    throw new Error(`启用邮箱通知时必须填写：${missingEmailFields.join('、')}`)
+    const missingEmailFields =
+      settings.emailProvider === 'resend'
+        ? [
+            ['Resend API URL', settings.resendConfig.apiBaseUrl],
+            ['Resend API Key', settings.resendConfig.apiKey],
+            ['发件人', settings.resendConfig.from],
+            ['收件人', settings.resendConfig.to]
+          ]
+        : [
+            ['SMTP Host', settings.smtpConfig.host],
+            ['端口', settings.smtpConfig.port],
+            ['用户名', settings.smtpConfig.username],
+            ['密码', settings.smtpConfig.password],
+            ['发件人', settings.smtpConfig.from],
+            ['收件人', settings.smtpConfig.to]
+          ]
+
+    const missingEmailLabels = missingEmailFields
+      .filter(([, value]) => !String(value ?? '').trim())
+      .map(([label]) => label)
+
+    if (missingEmailLabels.length) {
+      throw new Error(`启用邮箱通知时必须填写：${missingEmailLabels.join('、')}`)
+    }
   }
 
   if (settings.pushplusNotificationsEnabled && !settings.pushplusConfig.token.trim()) {
@@ -44,6 +63,25 @@ function validateSettingsPayload(settings: Awaited<ReturnType<typeof getAppSetti
 
   if (settings.telegramNotificationsEnabled && missingTelegramFields.length) {
     throw new Error(`启用 Telegram 通知时必须填写：${missingTelegramFields.join('、')}`)
+  }
+
+  if (settings.serverchanNotificationsEnabled && !settings.serverchanConfig.sendkey.trim()) {
+    throw new Error('启用 Server 酱时必须填写 SendKey')
+  }
+
+  if (settings.gotifyNotificationsEnabled) {
+    const missingGotifyFields = [
+      ['URL', settings.gotifyConfig.url],
+      ['Token', settings.gotifyConfig.token]
+    ]
+      .filter(([, value]) => !String(value ?? '').trim())
+      .map(([label]) => label)
+
+    if (missingGotifyFields.length) {
+      throw new Error(`启用 Gotify 时必须填写：${missingGotifyFields.join('、')}`)
+    }
+
+    validateNotificationTargetUrl(settings.gotifyConfig.url.trim(), 'Gotify URL')
   }
 
   const missingAiFields = [
@@ -241,11 +279,19 @@ export async function settingsRoutes(app: FastifyInstance) {
       ...currentSettings,
       ...parsed.data,
       ...normalizedReminderSettings,
-      emailConfig: parsed.data.emailConfig ? { ...currentSettings.emailConfig, ...parsed.data.emailConfig } : currentSettings.emailConfig,
+      emailProvider: parsed.data.emailProvider ?? currentSettings.emailProvider,
+      smtpConfig: parsed.data.smtpConfig ? { ...currentSettings.smtpConfig, ...parsed.data.smtpConfig } : currentSettings.smtpConfig,
+      resendConfig: parsed.data.resendConfig ? { ...currentSettings.resendConfig, ...parsed.data.resendConfig } : currentSettings.resendConfig,
       pushplusConfig: parsed.data.pushplusConfig ? { ...currentSettings.pushplusConfig, ...parsed.data.pushplusConfig } : currentSettings.pushplusConfig,
       telegramConfig: parsed.data.telegramConfig
         ? { ...currentSettings.telegramConfig, ...parsed.data.telegramConfig }
         : currentSettings.telegramConfig,
+      serverchanNotificationsEnabled: parsed.data.serverchanNotificationsEnabled ?? currentSettings.serverchanNotificationsEnabled,
+      gotifyNotificationsEnabled: parsed.data.gotifyNotificationsEnabled ?? currentSettings.gotifyNotificationsEnabled,
+      serverchanConfig: parsed.data.serverchanConfig
+        ? { ...currentSettings.serverchanConfig, ...parsed.data.serverchanConfig }
+        : currentSettings.serverchanConfig,
+      gotifyConfig: parsed.data.gotifyConfig ? { ...currentSettings.gotifyConfig, ...parsed.data.gotifyConfig } : currentSettings.gotifyConfig,
       aiConfig: parsed.data.aiConfig
         ? {
             ...currentSettings.aiConfig,
@@ -283,8 +329,8 @@ export async function settingsRoutes(app: FastifyInstance) {
     )
 
     await Promise.all(filteredEntries.map(([key, value]) => setSetting(key, value)))
-
     await invalidateWorkerLiteCache(['settings', 'statistics', 'exchange-rates'])
+
     const settings = await getAppSettings()
     return sendOk(reply, settings)
   })

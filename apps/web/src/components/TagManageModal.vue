@@ -72,7 +72,7 @@ const columns = computed(() => [
             NIcon,
             {
               size: 18,
-              color: '#475569'
+              color: 'var(--app-text-secondary)'
             },
             { default: () => h(resolveTagIcon(row.icon)) }
           ),
@@ -91,7 +91,7 @@ const columns = computed(() => [
                 {
                   style: {
                     fontWeight: '600',
-                    color: '#0f172a'
+                    color: 'var(--app-text-strong)'
                   }
                 },
                 row.name
@@ -101,7 +101,7 @@ const columns = computed(() => [
                 {
                   style: {
                     fontSize: '12px',
-                    color: '#94a3b8'
+                    color: 'var(--app-text-muted)'
                   }
                 },
                 row.icon

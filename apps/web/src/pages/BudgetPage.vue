@@ -151,7 +151,7 @@ import { computed, h, ref, watch } from 'vue'
 import { useQueryClient } from '@tanstack/vue-query'
 import { useWindowSize } from '@vueuse/core'
 import { useRouter } from 'vue-router'
-import { NButton, NCard, NDataTable, NDivider, NEmpty, NGrid, NGridItem, NProgress, NSpace, NTag, useMessage } from 'naive-ui'
+import { NButton, NCard, NDataTable, NDivider, NEmpty, NGrid, NGridItem, NProgress, NSpace, NTag, useMessage, useThemeVars } from 'naive-ui'
 import { WalletOutline } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
 import { useBudgetStatisticsQuery } from '@/composables/budget-statistics-query'
@@ -168,6 +168,7 @@ const router = useRouter()
 const message = useMessage()
 const queryClient = useQueryClient()
 const tagBudgetModalVisible = ref(false)
+const themeVars = useThemeVars()
 
 const { data: budgetStats } = useBudgetStatisticsQuery()
 
@@ -208,6 +209,9 @@ const tagBudgetOption = computed(() => {
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
+      backgroundColor: themeVars.value.cardColor,
+      borderColor: themeVars.value.borderColor,
+      textStyle: { color: themeVars.value.textColor2 },
       formatter: (params: Array<{ data: number; axisValue: string }>) => {
         const row = usage.find((item) => item.name === params[0]?.axisValue)
         if (!row) return ''
@@ -220,10 +224,16 @@ const tagBudgetOption = computed(() => {
       }
     },
     grid: { left: 80, right: 24, top: 20, bottom: 20 },
-    xAxis: { type: 'value' },
+    xAxis: {
+      type: 'value',
+      axisLabel: { color: themeVars.value.textColor3 },
+      splitLine: { lineStyle: { color: themeVars.value.dividerColor } }
+    },
     yAxis: {
       type: 'category',
-      data: usage.map((item) => item.name)
+      data: usage.map((item) => item.name),
+      axisLabel: { color: themeVars.value.textColor3 },
+      axisLine: { lineStyle: { color: themeVars.value.borderColor } }
     },
     series: [
       {
@@ -339,13 +349,13 @@ function usedValueClass(status: BudgetStatistics['budgetSummary']['monthly']['st
 .budget-progress-value {
   min-width: 64px;
   text-align: right;
-  color: #334155;
+  color: var(--app-text-primary);
   font-variant-numeric: tabular-nums;
 }
 
 .budget-meta {
   margin-top: 10px;
-  color: #64748b;
+  color: var(--app-text-secondary);
   line-height: 1.5;
 }
 
@@ -360,7 +370,7 @@ function usedValueClass(status: BudgetStatistics['budgetSummary']['monthly']['st
 }
 
 .section-hint {
-  color: #64748b;
+  color: var(--app-text-secondary);
   line-height: 1.6;
 }
 
@@ -371,13 +381,13 @@ function usedValueClass(status: BudgetStatistics['budgetSummary']['monthly']['st
 }
 
 .summary-card__label {
-  color: #64748b;
+  color: var(--app-text-secondary);
 }
 
 .summary-card__value {
   font-size: 28px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--app-text-strong);
 }
 
 .summary-list {
@@ -395,7 +405,7 @@ function usedValueClass(status: BudgetStatistics['budgetSummary']['monthly']['st
 .top-tags__title {
   margin-bottom: 12px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--app-text-strong);
 }
 
 .top-tags__list {
@@ -410,18 +420,18 @@ function usedValueClass(status: BudgetStatistics['budgetSummary']['monthly']['st
   gap: 12px;
   padding: 10px 12px;
   border-radius: 12px;
-  background: #f8fafc;
+  background: var(--app-surface);
 }
 
 .top-tags__name {
   font-weight: 600;
-  color: #0f172a;
+  color: var(--app-text-strong);
 }
 
 .top-tags__meta {
   display: flex;
   gap: 12px;
-  color: #64748b;
+  color: var(--app-text-secondary);
   flex-wrap: wrap;
   justify-content: flex-end;
 }

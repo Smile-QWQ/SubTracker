@@ -118,23 +118,23 @@ function handleShowUpdate(value: boolean) {
   height: 52px;
   border-radius: 14px;
   object-fit: contain;
-  border: 1px solid #e5e7eb;
-  background: #fff;
+  border: 1px solid var(--app-border-soft);
+  background: var(--app-surface);
 }
 
 .detail-logo--fallback {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #eff6ff;
-  color: #2563eb;
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
   font-weight: 700;
 }
 
 .detail-title {
   font-size: 18px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--app-text-strong);
 }
 
 .detail-site a {

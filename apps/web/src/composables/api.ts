@@ -8,12 +8,16 @@ import type {
   CalendarEvent,
   BudgetStatistics,
   ChangeCredentialsPayload,
+  EmailProvider,
   ExchangeRateSnapshot,
+  GotifyConfig,
   LoginOptions,
   LoginPayload,
   LogoSearchResult,
   NotificationWebhookSettings,
   PaymentRecord,
+  ResendConfig,
+  ServerchanConfig,
   Settings,
   StatisticsOverview,
   Subscription,
@@ -292,7 +296,11 @@ export const api = {
     return postOnce<{ success: boolean }>('/notifications/test/email')
   },
 
-  async testEmailNotificationWithPayload(payload: Settings['emailConfig']) {
+  async testEmailNotificationWithPayload(payload: {
+    emailProvider: EmailProvider
+    smtpConfig: Settings['smtpConfig']
+    resendConfig: ResendConfig
+  }) {
     return postOnce<{ success: boolean }>('/notifications/test/email', payload)
   },
 
@@ -306,6 +314,14 @@ export const api = {
 
   async testTelegramNotificationWithPayload(payload: TelegramConfig) {
     return postOnce<{ success: boolean }>('/notifications/test/telegram', payload)
+  },
+
+  async testServerchanNotificationWithPayload(payload: ServerchanConfig) {
+    return postOnce<{ success: boolean }>('/notifications/test/serverchan', payload)
+  },
+
+  async testGotifyNotificationWithPayload(payload: GotifyConfig) {
+    return postOnce<{ success: boolean }>('/notifications/test/gotify', payload)
   },
 
   async getNotificationWebhook() {

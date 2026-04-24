@@ -242,9 +242,9 @@ function getDaySummary(year: number, month: number, date: number) {
 
 .day-event-item {
   padding: 10px 12px;
-  border: 1px solid #eef2f7;
+  border: 1px solid var(--app-border-soft);
   border-radius: 10px;
-  background: #fafcff;
+  background: var(--app-surface);
 }
 
 .day-event-item__title-row {
@@ -258,12 +258,12 @@ function getDaySummary(year: number, month: number, date: number) {
 .day-event-item__title {
   min-width: 0;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--app-text-strong);
 }
 
 .day-event-item__meta {
   font-size: 12px;
-  color: #64748b;
+  color: var(--app-text-secondary);
   line-height: 1.5;
 }
 
@@ -277,17 +277,17 @@ function getDaySummary(year: number, month: number, date: number) {
 }
 
 .calendar-cell-summary__count {
-  color: #2563eb;
+  color: var(--app-accent);
   font-weight: 600;
 }
 
 .calendar-cell-summary__amount {
-  color: #6b7280;
+  color: var(--app-text-secondary);
 }
 
 .day-summary-inline {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--app-text-secondary);
 }
 
 :deep(.n-calendar .n-calendar-header) {

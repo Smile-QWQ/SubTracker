@@ -1,7 +1,16 @@
 import dayjs from 'dayjs'
-import type { EmailConfigInput, PushPlusConfigInput, TelegramConfigInput, WebhookEventType } from '@subtracker/shared'
-import { config } from '../config'
+import {
+  DEFAULT_RESEND_API_URL,
+  type EmailConfigInput,
+  type GotifyConfigInput,
+  type ResendConfigInput,
+  type PushPlusConfigInput,
+  type ServerchanConfigInput,
+  type TelegramConfigInput,
+  type WebhookEventType
+} from '@subtracker/shared'
 import { dispatchWebhookEvent } from './webhook.service'
+import { validateNotificationTargetUrl } from './notification-url.service'
 import { getNotificationChannelSettings } from './settings.service'
 import { claimNotificationDelivery, releaseNotificationDelivery } from './worker-lite-state.service'
 
@@ -52,7 +61,7 @@ export type PushplusSendResult = {
 }
 
 export type NotificationChannelResult = {
-  channel: 'webhook' | 'email' | 'pushplus' | 'telegram'
+  channel: 'webhook' | 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify'
   status: 'success' | 'skipped' | 'failed'
   message?: string
 }
@@ -120,9 +129,7 @@ function buildSummarySectionBody(section: NotificationSummarySection) {
         subscription.daysUntilRenewal !== undefined && subscription.daysUntilRenewal > 0
           ? `还有 ${subscription.daysUntilRenewal} 天`
           : null,
-        subscription.daysOverdue !== undefined && subscription.daysOverdue > 0
-          ? `过期 ${subscription.daysOverdue} 天`
-          : null
+        subscription.daysOverdue !== undefined && subscription.daysOverdue > 0 ? `过期 ${subscription.daysOverdue} 天` : null
       ]
         .filter(Boolean)
         .join(' / ')
@@ -144,11 +151,7 @@ function buildMergedNotificationBody(params: NotificationDispatchParams) {
   const mergedSubscriptions = getMergedSubscriptions(params)
 
   if (mergedSections.length > 0) {
-    const lines = [
-      `提醒类型：${getPhaseLabel(params)}`,
-      `订阅数量：${mergedSubscriptions.length} 项`,
-      ''
-    ]
+    const lines = [`提醒类型：${getPhaseLabel(params)}`, `订阅数量：${mergedSubscriptions.length} 项`, '']
 
     for (const section of mergedSections) {
       lines.push(buildSummarySectionBody(section), '')
@@ -167,9 +170,7 @@ function buildMergedNotificationBody(params: NotificationDispatchParams) {
         subscription.daysUntilRenewal !== undefined && subscription.daysUntilRenewal > 0
           ? `还有 ${subscription.daysUntilRenewal} 天`
           : null,
-        subscription.daysOverdue !== undefined && subscription.daysOverdue > 0
-          ? `过期 ${subscription.daysOverdue} 天`
-          : null
+        subscription.daysOverdue !== undefined && subscription.daysOverdue > 0 ? `过期 ${subscription.daysOverdue} 天` : null
       ]
         .filter(Boolean)
         .join(' / ')
@@ -205,11 +206,49 @@ function buildNotificationBody(params: NotificationDispatchParams) {
   return lines.filter((line) => !line.endsWith('：')).join('\n')
 }
 
-async function sendEmailWithConfig(params: NotificationDispatchParams, emailConfig: EmailConfigInput) {
-  const apiBaseUrl = emailConfig.apiBaseUrl?.trim() || config.resendApiUrl
-  const apiKey = emailConfig.apiKey?.trim()
-  const from = emailConfig.from?.trim()
-  const to = emailConfig.to?.trim()
+async function withDeliveryClaim(
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify',
+  params: NotificationDispatchParams,
+  send: () => Promise<void>
+): Promise<NotificationChannelResult> {
+  const claimed = await claimNotificationDelivery({
+    channel,
+    eventType: params.eventType,
+    resourceKey: params.resourceKey,
+    periodKey: params.periodKey
+  })
+
+  if (!claimed) {
+    return {
+      channel,
+      status: 'skipped',
+      message: `${channel}_already_sent`
+    }
+  }
+
+  try {
+    await send()
+  } catch (error) {
+    await releaseNotificationDelivery({
+      channel,
+      eventType: params.eventType,
+      resourceKey: params.resourceKey,
+      periodKey: params.periodKey
+    })
+    throw error
+  }
+
+  return {
+    channel,
+    status: 'success'
+  }
+}
+
+async function sendResendEmailWithConfig(params: NotificationDispatchParams, config: ResendConfigInput) {
+  const apiBaseUrl = config.apiBaseUrl?.trim() || DEFAULT_RESEND_API_URL
+  const apiKey = config.apiKey?.trim()
+  const from = config.from?.trim()
+  const to = config.to?.trim()
 
   if (!apiBaseUrl || !apiKey || !from || !to) {
     throw new Error('邮箱通知未启用或配置不完整')
@@ -238,6 +277,19 @@ async function sendEmailWithConfig(params: NotificationDispatchParams, emailConf
   }
 }
 
+async function sendEmailWithProvider(
+  params: NotificationDispatchParams,
+  provider: 'smtp' | 'resend',
+  _smtpConfig: EmailConfigInput,
+  resendConfig: ResendConfigInput
+) {
+  if (provider === 'smtp') {
+    throw new Error('Cloudflare Worker 运行时暂不支持 SMTP，请改用 Resend')
+  }
+
+  await sendResendEmailWithConfig(params, resendConfig)
+}
+
 async function sendEmailNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
   const settings = await getNotificationChannelSettings()
   if (!settings.emailNotificationsEnabled) {
@@ -248,36 +300,9 @@ async function sendEmailNotification(params: NotificationDispatchParams): Promis
     }
   }
 
-  const claimed = await claimNotificationDelivery({
-    channel: 'email',
-    eventType: params.eventType,
-    resourceKey: params.resourceKey,
-    periodKey: params.periodKey
-  })
-  if (!claimed) {
-    return {
-      channel: 'email',
-      status: 'skipped',
-      message: 'email_already_sent'
-    }
-  }
-
-  try {
-    await sendEmailWithConfig(params, settings.emailConfig)
-  } catch (error) {
-    await releaseNotificationDelivery({
-      channel: 'email',
-      eventType: params.eventType,
-      resourceKey: params.resourceKey,
-      periodKey: params.periodKey
-    })
-    throw error
-  }
-
-  return {
-    channel: 'email',
-    status: 'success'
-  }
+  return withDeliveryClaim('email', params, () =>
+    sendEmailWithProvider(params, settings.emailProvider, settings.smtpConfig, settings.resendConfig)
+  )
 }
 
 function extractPushplusShortCode(data: unknown): string | undefined {
@@ -356,36 +381,9 @@ async function sendPushplusNotification(params: NotificationDispatchParams): Pro
     }
   }
 
-  const claimed = await claimNotificationDelivery({
-    channel: 'pushplus',
-    eventType: params.eventType,
-    resourceKey: params.resourceKey,
-    periodKey: params.periodKey
-  })
-  if (!claimed) {
-    return {
-      channel: 'pushplus',
-      status: 'skipped',
-      message: 'pushplus_already_sent'
-    }
-  }
-
-  try {
+  return withDeliveryClaim('pushplus', params, async () => {
     await sendPushplusWithConfig(params, settings.pushplusConfig)
-  } catch (error) {
-    await releaseNotificationDelivery({
-      channel: 'pushplus',
-      eventType: params.eventType,
-      resourceKey: params.resourceKey,
-      periodKey: params.periodKey
-    })
-    throw error
-  }
-
-  return {
-    channel: 'pushplus',
-    status: 'success'
-  }
+  })
 }
 
 async function sendTelegramWithConfig(params: NotificationDispatchParams, config: TelegramConfigInput) {
@@ -432,36 +430,113 @@ async function sendTelegramNotification(params: NotificationDispatchParams): Pro
     }
   }
 
-  const claimed = await claimNotificationDelivery({
-    channel: 'telegram',
-    eventType: params.eventType,
-    resourceKey: params.resourceKey,
-    periodKey: params.periodKey
+  return withDeliveryClaim('telegram', params, async () => {
+    await sendTelegramWithConfig(params, settings.telegramConfig)
   })
-  if (!claimed) {
-    return {
-      channel: 'telegram',
-      status: 'skipped',
-      message: 'telegram_already_sent'
+}
+
+function resolveServerchanUrl(sendkey: string) {
+  const trimmed = sendkey.trim()
+  if (!trimmed) {
+    throw new Error('Server 酱通知未启用或配置不完整')
+  }
+
+  if (trimmed.startsWith('sctp')) {
+    const matches = trimmed.match(/^sctp(\d+)t/i)
+    const shard = matches?.[1]
+    if (shard) {
+      return `https://${shard}.push.ft07.com/send/${trimmed}.send`
     }
   }
 
-  try {
-    await sendTelegramWithConfig(params, settings.telegramConfig)
-  } catch (error) {
-    await releaseNotificationDelivery({
-      channel: 'telegram',
-      eventType: params.eventType,
-      resourceKey: params.resourceKey,
-      periodKey: params.periodKey
-    })
-    throw error
+  return `https://sctapi.ftqq.com/${trimmed}.send`
+}
+
+async function sendServerchanWithConfig(params: NotificationDispatchParams, config: ServerchanConfigInput) {
+  const url = resolveServerchanUrl(config.sendkey)
+  const body = new URLSearchParams({
+    text: buildNotificationTitle(params),
+    desp: buildNotificationBody(params)
+  })
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body
+  })
+
+  const rawText = await response.text()
+  if (!response.ok) {
+    throw new Error(`Server 酱请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
   }
 
-  return {
-    channel: 'telegram',
-    status: 'success'
+  let parsed: { code?: number; message?: string } | null = null
+  try {
+    parsed = rawText ? (JSON.parse(rawText) as { code?: number; message?: string }) : null
+  } catch {
+    throw new Error(`Server 酱返回了无法解析的响应：${rawText || 'empty response'}`)
   }
+
+  if (!parsed || parsed.code !== 0) {
+    throw new Error(`Server 酱请求被拒绝：${parsed?.message || rawText || 'unknown error'}`)
+  }
+}
+
+async function sendServerchanNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
+  const settings = await getNotificationChannelSettings()
+  if (!settings.serverchanNotificationsEnabled) {
+    return {
+      channel: 'serverchan',
+      status: 'skipped',
+      message: 'serverchan_disabled'
+    }
+  }
+
+  return withDeliveryClaim('serverchan', params, async () => {
+    await sendServerchanWithConfig(params, settings.serverchanConfig)
+  })
+}
+
+async function sendGotifyWithConfig(params: NotificationDispatchParams, config: GotifyConfigInput) {
+  const target = validateNotificationTargetUrl(config.url.trim(), 'Gotify URL')
+  const token = config.token?.trim()
+  if (!token) {
+    throw new Error('Gotify 通知未启用或配置不完整')
+  }
+
+  const response = await fetch(new URL(`/message?token=${encodeURIComponent(token)}`, target.toString()), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: new URLSearchParams({
+      title: buildNotificationTitle(params),
+      message: buildNotificationBody(params),
+      priority: '5'
+    }).toString()
+  })
+
+  const rawText = await response.text()
+  if (!response.ok) {
+    throw new Error(`Gotify 请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
+  }
+}
+
+async function sendGotifyNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
+  const settings = await getNotificationChannelSettings()
+  if (!settings.gotifyNotificationsEnabled) {
+    return {
+      channel: 'gotify',
+      status: 'skipped',
+      message: 'gotify_disabled'
+    }
+  }
+
+  return withDeliveryClaim('gotify', params, async () => {
+    await sendGotifyWithConfig(params, settings.gotifyConfig)
+  })
 }
 
 export async function dispatchNotificationEvent(params: NotificationDispatchParams) {
@@ -499,6 +574,20 @@ export async function dispatchNotificationEvent(params: NotificationDispatchPara
   }))) as NotificationChannelResult
   results.push(telegramResult)
 
+  const serverchanResult = (await Promise.resolve(sendServerchanNotification(params)).catch((error) => ({
+    channel: 'serverchan',
+    status: 'failed',
+    message: error instanceof Error ? error.message : 'serverchan_dispatch_failed'
+  }))) as NotificationChannelResult
+  results.push(serverchanResult)
+
+  const gotifyResult = (await Promise.resolve(sendGotifyNotification(params)).catch((error) => ({
+    channel: 'gotify',
+    status: 'failed',
+    message: error instanceof Error ? error.message : 'gotify_dispatch_failed'
+  }))) as NotificationChannelResult
+  results.push(gotifyResult)
+
   return results
 }
 
@@ -523,26 +612,34 @@ export async function sendTestEmailNotification() {
     throw new Error('邮箱通知未启用或配置不完整')
   }
 
-  await sendEmailWithConfig(
+  await sendEmailWithProvider(
     {
       eventType: 'subscription.reminder_due',
       resourceKey: 'test:email',
       periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
       payload: buildTestReminderPayload()
     },
-    settings.emailConfig
+    settings.emailProvider,
+    settings.smtpConfig,
+    settings.resendConfig
   )
 }
 
-export async function sendTestEmailNotificationWithConfig(config: EmailConfigInput) {
-  await sendEmailWithConfig(
+export async function sendTestEmailNotificationWithConfig(config: {
+  emailProvider: 'smtp' | 'resend'
+  smtpConfig: EmailConfigInput
+  resendConfig: ResendConfigInput
+}) {
+  await sendEmailWithProvider(
     {
       eventType: 'subscription.reminder_due',
       resourceKey: 'test:email',
       periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
       payload: buildTestReminderPayload()
     },
-    config
+    config.emailProvider,
+    config.smtpConfig,
+    config.resendConfig
   )
 }
 
@@ -604,6 +701,72 @@ export async function sendTestTelegramNotificationWithConfig(config: TelegramCon
     {
       eventType: 'subscription.reminder_due',
       resourceKey: 'test:telegram',
+      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
+      payload: buildTestReminderPayload()
+    },
+    config
+  )
+
+  return { success: true }
+}
+
+export async function sendTestServerchanNotification() {
+  const settings = await getNotificationChannelSettings()
+  if (!settings.serverchanNotificationsEnabled) {
+    throw new Error('Server 酱通知未启用或配置不完整')
+  }
+
+  await sendServerchanWithConfig(
+    {
+      eventType: 'subscription.reminder_due',
+      resourceKey: 'test:serverchan',
+      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
+      payload: buildTestReminderPayload()
+    },
+    settings.serverchanConfig
+  )
+
+  return { success: true }
+}
+
+export async function sendTestServerchanNotificationWithConfig(config: ServerchanConfigInput) {
+  await sendServerchanWithConfig(
+    {
+      eventType: 'subscription.reminder_due',
+      resourceKey: 'test:serverchan',
+      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
+      payload: buildTestReminderPayload()
+    },
+    config
+  )
+
+  return { success: true }
+}
+
+export async function sendTestGotifyNotification() {
+  const settings = await getNotificationChannelSettings()
+  if (!settings.gotifyNotificationsEnabled) {
+    throw new Error('Gotify 通知未启用或配置不完整')
+  }
+
+  await sendGotifyWithConfig(
+    {
+      eventType: 'subscription.reminder_due',
+      resourceKey: 'test:gotify',
+      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
+      payload: buildTestReminderPayload()
+    },
+    settings.gotifyConfig
+  )
+
+  return { success: true }
+}
+
+export async function sendTestGotifyNotificationWithConfig(config: GotifyConfigInput) {
+  await sendGotifyWithConfig(
+    {
+      eventType: 'subscription.reminder_due',
+      resourceKey: 'test:gotify',
       periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
       payload: buildTestReminderPayload()
     },

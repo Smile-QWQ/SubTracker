@@ -1,16 +1,25 @@
 import { FastifyInstance } from 'fastify'
+import { z } from 'zod'
 import {
   EmailConfigSchema,
+  EmailProviderSchema,
+  GotifyConfigSchema,
   NotificationWebhookSettingsSchema,
   PushPlusConfigSchema,
+  ResendConfigSchema,
+  ServerchanConfigSchema,
   TelegramConfigSchema
 } from '@subtracker/shared'
 import { sendError, sendOk } from '../http'
 import {
   sendTestEmailNotification,
   sendTestEmailNotificationWithConfig,
+  sendTestGotifyNotification,
+  sendTestGotifyNotificationWithConfig,
   sendTestPushplusNotification,
   sendTestPushplusNotificationWithConfig,
+  sendTestServerchanNotification,
+  sendTestServerchanNotificationWithConfig,
   sendTestTelegramNotification,
   sendTestTelegramNotificationWithConfig
 } from '../services/channel-notification.service'
@@ -20,6 +29,12 @@ import {
   sendTestWebhookNotificationWithConfig,
   upsertPrimaryWebhookEndpoint
 } from '../services/webhook.service'
+
+const EmailNotificationTestSchema = z.object({
+  emailProvider: EmailProviderSchema.default('smtp'),
+  smtpConfig: EmailConfigSchema.partial().default({}),
+  resendConfig: ResendConfigSchema.partial().default({})
+})
 
 export async function notificationRoutes(app: FastifyInstance) {
   app.get('/notifications/webhook', async (_, reply) => {
@@ -44,16 +59,27 @@ export async function notificationRoutes(app: FastifyInstance) {
   app.post('/notifications/test/email', async (request, reply) => {
     try {
       if (request.body) {
-        const parsed = EmailConfigSchema.partial().safeParse(request.body)
+        const parsed = EmailNotificationTestSchema.safeParse(request.body)
         if (!parsed.success) {
           return sendError(reply, 422, 'validation_error', 'Invalid email config payload', parsed.error.flatten())
         }
         await sendTestEmailNotificationWithConfig({
-          provider: 'resend',
-          apiBaseUrl: parsed.data.apiBaseUrl ?? '',
-          apiKey: parsed.data.apiKey ?? '',
-          from: parsed.data.from ?? '',
-          to: parsed.data.to ?? ''
+          emailProvider: parsed.data.emailProvider,
+          smtpConfig: {
+            host: parsed.data.smtpConfig.host ?? '',
+            port: parsed.data.smtpConfig.port ?? 587,
+            secure: parsed.data.smtpConfig.secure ?? false,
+            username: parsed.data.smtpConfig.username ?? '',
+            password: parsed.data.smtpConfig.password ?? '',
+            from: parsed.data.smtpConfig.from ?? '',
+            to: parsed.data.smtpConfig.to ?? ''
+          },
+          resendConfig: {
+            apiBaseUrl: parsed.data.resendConfig.apiBaseUrl ?? 'https://api.resend.com/emails',
+            apiKey: parsed.data.resendConfig.apiKey ?? '',
+            from: parsed.data.resendConfig.from ?? '',
+            to: parsed.data.resendConfig.to ?? ''
+          }
         })
       } else {
         await sendTestEmailNotification()
@@ -106,6 +132,48 @@ export async function notificationRoutes(app: FastifyInstance) {
     }
   })
 
+  app.post('/notifications/test/serverchan', async (request, reply) => {
+    try {
+      if (request.body) {
+        const parsed = ServerchanConfigSchema.partial().safeParse(request.body)
+        if (!parsed.success) {
+          return sendError(reply, 422, 'validation_error', 'Invalid Server 酱 config payload', parsed.error.flatten())
+        }
+        const result = await sendTestServerchanNotificationWithConfig({
+          sendkey: parsed.data.sendkey ?? ''
+        })
+        return sendOk(reply, result)
+      }
+
+      const result = await sendTestServerchanNotification()
+      return sendOk(reply, result)
+    } catch (error) {
+      return sendError(reply, 400, 'serverchan_test_failed', error instanceof Error ? error.message : 'Serverchan test failed')
+    }
+  })
+
+  app.post('/notifications/test/gotify', async (request, reply) => {
+    try {
+      if (request.body) {
+        const parsed = GotifyConfigSchema.partial().safeParse(request.body)
+        if (!parsed.success) {
+          return sendError(reply, 422, 'validation_error', 'Invalid Gotify config payload', parsed.error.flatten())
+        }
+        const result = await sendTestGotifyNotificationWithConfig({
+          url: parsed.data.url ?? '',
+          token: parsed.data.token ?? '',
+          ignoreSsl: parsed.data.ignoreSsl ?? false
+        })
+        return sendOk(reply, result)
+      }
+
+      const result = await sendTestGotifyNotification()
+      return sendOk(reply, result)
+    } catch (error) {
+      return sendError(reply, 400, 'gotify_test_failed', error instanceof Error ? error.message : 'Gotify test failed')
+    }
+  })
+
   app.post('/notifications/test/webhook', async (request, reply) => {
     try {
       if (request.body) {
@@ -123,5 +191,4 @@ export async function notificationRoutes(app: FastifyInstance) {
       return sendError(reply, 400, 'webhook_test_failed', error instanceof Error ? error.message : 'Webhook test failed')
     }
   })
-
 }

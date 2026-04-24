@@ -19,13 +19,24 @@ export const useAppStore = defineStore('app', () => {
     defaultOverdueReminderRules: DEFAULT_OVERDUE_REMINDER_RULES,
     tagBudgets: {},
     emailNotificationsEnabled: false,
+    emailProvider: 'smtp',
     pushplusNotificationsEnabled: false,
     telegramNotificationsEnabled: false,
-    emailConfig: {
-      provider: 'resend',
+    serverchanNotificationsEnabled: false,
+    gotifyNotificationsEnabled: false,
+    smtpConfig: {
+      host: '',
+      port: 587,
+      secure: false,
+      username: '',
+      password: '',
+      from: '',
+      to: ''
+    },
+    resendConfig: {
       apiBaseUrl: DEFAULT_RESEND_API_URL,
       apiKey: '',
-      from: 'SubTracker Lite <noreply@example.com>',
+      from: '',
       to: ''
     },
     pushplusConfig: {
@@ -36,18 +47,19 @@ export const useAppStore = defineStore('app', () => {
       botToken: '',
       chatId: ''
     },
+    serverchanConfig: {
+      sendkey: ''
+    },
+    gotifyConfig: {
+      url: '',
+      token: '',
+      ignoreSsl: false
+    },
     aiConfig: {
       ...DEFAULT_AI_CONFIG,
       capabilities: {
         ...DEFAULT_AI_CONFIG.capabilities
       }
-    },
-    storageCapabilities: {
-      runtime: 'worker-lite',
-      kvEnabled: false,
-      r2Enabled: false,
-      logoStorageEnabled: false,
-      wallosImportMode: 'json-only'
     }
   })
 

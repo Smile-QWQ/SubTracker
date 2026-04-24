@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify'
+import { DEFAULT_RESEND_API_URL } from '@subtracker/shared'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const store = new Map<string, unknown>()
@@ -18,15 +19,27 @@ vi.mock('../../src/services/settings.service', () => ({
     defaultOverdueReminderRules: '1&09:30;2&09:30;3&09:30;',
     tagBudgets: {},
     emailNotificationsEnabled: (store.get('emailNotificationsEnabled') as boolean) ?? false,
+    emailProvider: (store.get('emailProvider') as 'smtp' | 'resend' | undefined) ?? 'smtp',
     pushplusNotificationsEnabled: (store.get('pushplusNotificationsEnabled') as boolean) ?? false,
     telegramNotificationsEnabled: (store.get('telegramNotificationsEnabled') as boolean) ?? false,
-    emailConfig: {
-      provider: 'resend',
-      apiBaseUrl: 'https://api.resend.com/emails',
-      apiKey: '',
-      from: 'SubTracker Lite <noreply@example.com>',
+    serverchanNotificationsEnabled: (store.get('serverchanNotificationsEnabled') as boolean) ?? false,
+    gotifyNotificationsEnabled: (store.get('gotifyNotificationsEnabled') as boolean) ?? false,
+    smtpConfig: {
+      host: '',
+      port: 587,
+      secure: false,
+      username: '',
+      password: '',
+      from: '',
       to: '',
-      ...(store.get('emailConfig') as Record<string, unknown> | undefined)
+      ...(store.get('smtpConfig') as Record<string, unknown> | undefined)
+    },
+    resendConfig: {
+      apiBaseUrl: DEFAULT_RESEND_API_URL,
+      apiKey: '',
+      from: '',
+      to: '',
+      ...(store.get('resendConfig') as Record<string, unknown> | undefined)
     },
     pushplusConfig: {
       token: '',
@@ -37,6 +50,16 @@ vi.mock('../../src/services/settings.service', () => ({
       botToken: '',
       chatId: '',
       ...(store.get('telegramConfig') as Record<string, unknown> | undefined)
+    },
+    serverchanConfig: {
+      sendkey: '',
+      ...(store.get('serverchanConfig') as Record<string, unknown> | undefined)
+    },
+    gotifyConfig: {
+      url: '',
+      token: '',
+      ignoreSsl: false,
+      ...(store.get('gotifyConfig') as Record<string, unknown> | undefined)
     },
     aiConfig: {
       enabled: false,
@@ -52,13 +75,6 @@ vi.mock('../../src/services/settings.service', () => ({
         structuredOutput: true
       },
       ...(store.get('aiConfig') as Record<string, unknown> | undefined)
-    },
-    storageCapabilities: {
-      runtime: 'worker-lite',
-      kvEnabled: true,
-      r2Enabled: false,
-      logoStorageEnabled: false,
-      wallosImportMode: 'json-only'
     }
   })),
   setSetting: vi.fn(async (key: string, value: unknown) => {
@@ -113,9 +129,32 @@ describe('settings routes validation', () => {
       url: '/settings',
       payload: {
         emailNotificationsEnabled: true,
-        emailConfig: {
-          provider: 'resend',
-          apiBaseUrl: 'https://api.resend.com/emails',
+        emailProvider: 'smtp',
+        smtpConfig: {
+          host: '',
+          port: 587,
+          secure: false,
+          username: '',
+          password: '',
+          from: '',
+          to: ''
+        }
+      }
+    })
+
+    expect(res.statusCode).toBe(422)
+    expect(res.json().error.message).toContain('启用邮箱通知时必须填写')
+  })
+
+  it('rejects incomplete resend config when enabling email notifications with resend', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      payload: {
+        emailNotificationsEnabled: true,
+        emailProvider: 'resend',
+        resendConfig: {
+          apiBaseUrl: DEFAULT_RESEND_API_URL,
           apiKey: '',
           from: '',
           to: ''
@@ -125,7 +164,40 @@ describe('settings routes validation', () => {
 
     expect(res.statusCode).toBe(422)
     expect(res.json().error.message).toContain('启用邮箱通知时必须填写')
-    expect(res.json().error.message).toContain('Resend API Key')
+  })
+
+  it('rejects incomplete serverchan config when enabling serverchan notifications', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      payload: {
+        serverchanNotificationsEnabled: true,
+        serverchanConfig: {
+          sendkey: ''
+        }
+      }
+    })
+
+    expect(res.statusCode).toBe(422)
+    expect(res.json().error.message).toContain('启用 Server 酱时必须填写')
+  })
+
+  it('rejects invalid gotify url when enabling gotify notifications', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      payload: {
+        gotifyNotificationsEnabled: true,
+        gotifyConfig: {
+          url: 'http://127.0.0.1:8080',
+          token: 'token',
+          ignoreSsl: false
+        }
+      }
+    })
+
+    expect(res.statusCode).toBe(422)
+    expect(res.json().error.message).toContain('Gotify URL')
   })
 
   it('rejects invalid reminder rules', async () => {

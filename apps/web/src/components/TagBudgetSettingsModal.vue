@@ -102,7 +102,7 @@ function handleSave() {
 <style scoped>
 .modal-intro {
   margin-bottom: 12px;
-  color: #64748b;
+  color: var(--app-text-secondary);
   line-height: 1.6;
 }
 
@@ -121,7 +121,7 @@ function handleSave() {
   gap: 16px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: #f8fafc;
+  background: var(--app-surface);
 }
 
 .budget-item__meta {
@@ -140,7 +140,7 @@ function handleSave() {
 
 .budget-item__name {
   min-width: 0;
-  color: #0f172a;
+  color: var(--app-text-strong);
   font-weight: 600;
 }
 

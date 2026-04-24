@@ -123,7 +123,7 @@ export function getWorkerPublicConfig() {
     webOrigin: getBindingOrEnv('WEB_ORIGIN', 'http://localhost:5173'),
     baseCurrency: getBindingOrEnv('BASE_CURRENCY', 'CNY').toUpperCase(),
     defaultNotifyDays: Number(getBindingOrEnv('DEFAULT_NOTIFY_DAYS', '3')),
-    exchangeRateProvider: getBindingOrEnv('EXCHANGE_RATE_PROVIDER', 'er-api'),
+    exchangeRateProvider: getBindingOrEnv('EXCHANGE_RATE_PROVIDER', 'ExchangeRate-API'),
     exchangeRateUrl: getBindingOrEnv('EXCHANGE_RATE_URL', 'https://open.er-api.com/v6/latest'),
     cronScan: getBindingOrEnv('CRON_SCAN', '*/5 * * * *'),
     cronAutoRenew: getBindingOrEnv('CRON_AUTO_RENEW', '2 * * * *'),

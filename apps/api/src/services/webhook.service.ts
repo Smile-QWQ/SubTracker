@@ -7,6 +7,7 @@ import {
 } from '@subtracker/shared'
 import { prisma } from '../db'
 import { getSetting, setSetting } from './settings.service'
+import { validateNotificationTargetUrl } from './notification-url.service'
 
 type DeliveryPayload = Record<string, unknown>
 
@@ -68,41 +69,6 @@ function parseHeaders(headersText: string) {
   }
 }
 
-function isPrivateHostname(hostname: string) {
-  const normalized = hostname.toLowerCase()
-  if (['localhost', '0.0.0.0', '::1'].includes(normalized) || normalized.endsWith('.local')) return true
-
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(normalized)) {
-    const [a, b] = normalized.split('.').map(Number)
-    if (a === 10 || a === 127 || a === 0) return true
-    if (a === 169 && b === 254) return true
-    if (a === 192 && b === 168) return true
-    if (a === 172 && b >= 16 && b <= 31) return true
-  }
-
-  if (normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80:')) return true
-  return false
-}
-
-function validateWebhookUrl(rawUrl: string) {
-  let parsed: URL
-  try {
-    parsed = new URL(rawUrl)
-  } catch {
-    throw new Error('Webhook URL 格式无效')
-  }
-
-  if (!['http:', 'https:'].includes(parsed.protocol)) {
-    throw new Error('Webhook 仅支持 http 或 https')
-  }
-
-  if (isPrivateHostname(parsed.hostname)) {
-    throw new Error('Webhook URL 不允许指向本地或内网地址')
-  }
-
-  return parsed
-}
-
 function buildTemplateValues(params: { eventType: WebhookEventType | 'test'; payload: DeliveryPayload }) {
   const payload = params.payload
   return {
@@ -129,7 +95,7 @@ async function sendWebhookRequest(
   input: NotificationWebhookSettingsInput,
   params: { eventType: WebhookEventType | 'test'; payload: DeliveryPayload }
 ) {
-  const target = validateWebhookUrl(input.url.trim())
+  const target = validateNotificationTargetUrl(input.url.trim(), 'Webhook URL')
   const headers = parseHeaders(input.headers)
   const requestBody = applyPayloadTemplate(input.payloadTemplate, params)
 

@@ -99,8 +99,19 @@ export const RenewSubscriptionSchema = z.object({
 
 export const DEFAULT_RESEND_API_URL = 'https://api.resend.com/emails'
 
+export const EmailProviderSchema = z.enum(['smtp', 'resend'])
+
 export const EmailConfigSchema = z.object({
-  provider: z.literal('resend').default('resend'),
+  host: z.string().max(200).default(''),
+  port: z.number().int().min(1).max(65535).default(587),
+  secure: z.boolean().default(false),
+  username: z.string().max(200).default(''),
+  password: z.string().max(500).default(''),
+  from: z.string().max(200).default(''),
+  to: z.string().max(500).default('')
+})
+
+export const ResendConfigSchema = z.object({
   apiBaseUrl: z.string().url().default(DEFAULT_RESEND_API_URL),
   apiKey: z.string().max(500).default(''),
   from: z.string().max(200).default(''),
@@ -115,6 +126,16 @@ export const PushPlusConfigSchema = z.object({
 export const TelegramConfigSchema = z.object({
   botToken: z.string().max(500).default(''),
   chatId: z.string().max(200).default('')
+})
+
+export const ServerchanConfigSchema = z.object({
+  sendkey: z.string().max(200).default('')
+})
+
+export const GotifyConfigSchema = z.object({
+  url: z.string().trim().max(500).default(''),
+  token: z.string().max(500).default(''),
+  ignoreSsl: z.boolean().default(false)
 })
 
 export const AiProviderPresetSchema = z.enum(['custom', 'aliyun-bailian', 'tencent-hunyuan', 'volcengine-ark'])
@@ -166,14 +187,6 @@ export const AiConfigSchema = z.object({
   })
 })
 
-export const StorageCapabilitiesSchema = z.object({
-  runtime: z.literal('worker-lite').default('worker-lite'),
-  kvEnabled: z.boolean().default(false),
-  r2Enabled: z.boolean().default(false),
-  logoStorageEnabled: z.boolean().default(false),
-  wallosImportMode: z.literal('json-only').default('json-only')
-})
-
 export const SettingsSchema = z.object({
   baseCurrency: z.string().length(3).default('CNY').transform((v) => v.toUpperCase()),
   defaultNotifyDays: z.number().int().min(0).max(365).default(3),
@@ -188,13 +201,18 @@ export const SettingsSchema = z.object({
   defaultOverdueReminderRules: z.string().max(500).default(DEFAULT_OVERDUE_REMINDER_RULES),
   tagBudgets: z.record(z.string(), z.number().nonnegative()).default({}),
   emailNotificationsEnabled: z.boolean().default(false),
+  emailProvider: EmailProviderSchema.default('smtp'),
   pushplusNotificationsEnabled: z.boolean().default(false),
   telegramNotificationsEnabled: z.boolean().default(false),
-  emailConfig: EmailConfigSchema.default({}),
+  serverchanNotificationsEnabled: z.boolean().default(false),
+  gotifyNotificationsEnabled: z.boolean().default(false),
+  smtpConfig: EmailConfigSchema.default({}),
+  resendConfig: ResendConfigSchema.default({}),
   pushplusConfig: PushPlusConfigSchema.default({}),
   telegramConfig: TelegramConfigSchema.default({}),
-  aiConfig: AiConfigSchema.default({}),
-  storageCapabilities: StorageCapabilitiesSchema.default({})
+  serverchanConfig: ServerchanConfigSchema.default({}),
+  gotifyConfig: GotifyConfigSchema.default({}),
+  aiConfig: AiConfigSchema.default({})
 })
 
 export const LoginSchema = z.object({
@@ -250,14 +268,17 @@ export type RenewSubscriptionInput = z.infer<typeof RenewSubscriptionSchema>
 export type SettingsInput = z.infer<typeof SettingsSchema>
 export type LoginInput = z.infer<typeof LoginSchema>
 export type ChangeCredentialsInput = z.infer<typeof ChangeCredentialsSchema>
+export type EmailProvider = z.infer<typeof EmailProviderSchema>
 export type EmailConfigInput = z.infer<typeof EmailConfigSchema>
+export type ResendConfigInput = z.infer<typeof ResendConfigSchema>
 export type PushPlusConfigInput = z.infer<typeof PushPlusConfigSchema>
 export type TelegramConfigInput = z.infer<typeof TelegramConfigSchema>
+export type ServerchanConfigInput = z.infer<typeof ServerchanConfigSchema>
+export type GotifyConfigInput = z.infer<typeof GotifyConfigSchema>
 export type NotificationWebhookSettingsInput = z.infer<typeof NotificationWebhookSettingsSchema>
 export type AiProviderPreset = z.infer<typeof AiProviderPresetSchema>
 export type AiCapabilitiesInput = z.infer<typeof AiCapabilitiesSchema>
 export type AiConfigInput = z.infer<typeof AiConfigSchema>
-export type StorageCapabilitiesInput = z.infer<typeof StorageCapabilitiesSchema>
 export type LogoSearchInput = z.infer<typeof LogoSearchSchema>
 export type LogoUploadInput = z.infer<typeof LogoUploadSchema>
 export type AiRecognizeSubscriptionInput = z.infer<typeof AiRecognizeSubscriptionSchema>

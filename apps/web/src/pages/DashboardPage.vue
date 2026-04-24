@@ -118,7 +118,7 @@
 import dayjs from 'dayjs'
 import { computed, h } from 'vue'
 import { useWindowSize } from '@vueuse/core'
-import { NCard, NDataTable, NEmpty, NGrid, NGridItem, NProgress, NTag } from 'naive-ui'
+import { NCard, NDataTable, NEmpty, NGrid, NGridItem, NProgress, NTag, useThemeVars } from 'naive-ui'
 import { CashOutline, GridOutline, LayersOutline, NotificationsOutline, WalletOutline } from '@vicons/ionicons5'
 import { useSettingsQuery } from '@/composables/settings-query'
 import { useStatisticsOverviewQuery } from '@/composables/statistics-overview-query'
@@ -130,6 +130,7 @@ import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils
 
 const { width } = useWindowSize()
 const gridOutline = GridOutline
+const themeVars = useThemeVars()
 
 const { data: overview } = useStatisticsOverviewQuery()
 
@@ -163,8 +164,13 @@ const summaryCards = computed(() => [
 const tagSpendOption = computed(() => {
   if (!overview.value?.tagSpend?.length) return null
   return {
-    tooltip: { trigger: 'item' },
-    legend: { bottom: 0 },
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: themeVars.value.cardColor,
+      borderColor: themeVars.value.borderColor,
+      textStyle: { color: themeVars.value.textColor2 }
+    },
+    legend: { bottom: 0, textStyle: { color: themeVars.value.textColor2 } },
     series: [
       {
         type: 'pie',
@@ -178,12 +184,23 @@ const tagSpendOption = computed(() => {
 const trendOption = computed(() => {
   if (!overview.value?.monthlyTrend?.length) return null
   return {
-    tooltip: { trigger: 'axis' },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: themeVars.value.cardColor,
+      borderColor: themeVars.value.borderColor,
+      textStyle: { color: themeVars.value.textColor2 }
+    },
     xAxis: {
       type: 'category',
-      data: overview.value.monthlyTrend.map((item) => item.month)
+      data: overview.value.monthlyTrend.map((item) => item.month),
+      axisLabel: { color: themeVars.value.textColor3 },
+      axisLine: { lineStyle: { color: themeVars.value.borderColor } }
     },
-    yAxis: { type: 'value' },
+    yAxis: {
+      type: 'value',
+      axisLabel: { color: themeVars.value.textColor3 },
+      splitLine: { lineStyle: { color: themeVars.value.dividerColor } }
+    },
     series: [
       {
         data: overview.value.monthlyTrend.map((item) => item.amount),
@@ -265,13 +282,13 @@ function usedValueClass(status?: 'normal' | 'warning' | 'over') {
   flex-shrink: 0;
   min-width: 56px;
   text-align: right;
-  color: #334155;
+  color: var(--app-text-primary);
   font-variant-numeric: tabular-nums;
 }
 
 .budget-meta {
   margin-top: 10px;
-  color: #64748b;
+  color: var(--app-text-secondary);
   line-height: 1.5;
 }
 
@@ -301,14 +318,14 @@ function usedValueClass(status?: 'normal' | 'warning' | 'over') {
 .tag-budget-summary__stat {
   padding: 14px 16px;
   border-radius: 14px;
-  background: #f8fafc;
+  background: var(--app-surface-alt);
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
 .tag-budget-summary__label {
-  color: #64748b;
+  color: var(--app-text-secondary);
 }
 
 .tag-budget-summary__top {
@@ -318,7 +335,7 @@ function usedValueClass(status?: 'normal' | 'warning' | 'over') {
 .tag-budget-summary__title {
   margin-bottom: 10px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--app-text-strong);
 }
 
 .tag-budget-summary__items {
@@ -333,12 +350,12 @@ function usedValueClass(status?: 'normal' | 'warning' | 'over') {
   gap: 12px;
   padding: 10px 12px;
   border-radius: 12px;
-  background: #f8fafc;
+  background: var(--app-surface-alt);
 }
 
 .tag-budget-summary__name {
   font-weight: 600;
-  color: #0f172a;
+  color: var(--app-text-strong);
 }
 
 .text-danger {
