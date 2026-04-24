@@ -232,6 +232,7 @@ export interface StorageCapabilities {
 
 export interface Settings {
   baseCurrency: string
+  timezone: string
   defaultNotifyDays: number
   defaultAdvanceReminderRules: string
   rememberSessionDays: number

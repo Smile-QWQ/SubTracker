@@ -64,7 +64,6 @@
 </template>
 
 <script setup lang="ts">
-import dayjs from 'dayjs'
 import { computed } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { NCard, NEmpty, NGrid, NGridItem, useThemeVars } from 'naive-ui'
@@ -74,6 +73,7 @@ import { useStatisticsOverviewQuery } from '@/composables/statistics-overview-qu
 import ChartView from '@/components/ChartView.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import type { StatisticsOverview, SubscriptionStatus } from '@/types/api'
+import { formatDateInTimezone } from '@/utils/timezone'
 import { buildTopSubscriptionsOption } from '@/utils/statistics-top-subscriptions'
 
 const { width } = useWindowSize()
@@ -271,7 +271,7 @@ const upcoming30Option = computed(() => {
     legend: { data: ['续订数', '金额'], textStyle: { color: themeVars.value.textColor2 } },
     xAxis: {
       type: 'category',
-      data: source.map((item) => dayjs(item.date).format('MM-DD')),
+      data: source.map((item) => formatDateInTimezone(item.date, settings.value?.timezone).slice(5)),
       axisLabel: { color: themeVars.value.textColor3 },
       axisLine: { lineStyle: { color: themeVars.value.borderColor } }
     },

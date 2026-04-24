@@ -10,7 +10,8 @@ vi.mock('../../src/services/settings.service', () => ({
   getNotificationScanSettings: vi.fn(async () => ({
     defaultAdvanceReminderRules: '3&09:30;0&09:30;',
     defaultOverdueReminderRules: '1&09:30;2&09:30;3&09:30;',
-    mergeMultiSubscriptionNotifications: notificationState.mergeMultiSubscriptionNotifications
+    mergeMultiSubscriptionNotifications: notificationState.mergeMultiSubscriptionNotifications,
+    timezone: 'Asia/Shanghai'
   }))
 }))
 
@@ -32,7 +33,7 @@ describe('scanRenewalNotifications merge behavior', () => {
       {
         id: 'sub-1',
         name: 'Netflix',
-        nextRenewalDate: new Date('2026-04-23T00:00:00'),
+        nextRenewalDate: new Date('2026-04-22T16:00:00.000Z'),
         notifyDaysBefore: 3,
         advanceReminderRules: '',
         overdueReminderRules: '',
@@ -47,7 +48,7 @@ describe('scanRenewalNotifications merge behavior', () => {
       {
         id: 'sub-2',
         name: 'Spotify',
-        nextRenewalDate: new Date('2026-04-22T00:00:00'),
+        nextRenewalDate: new Date('2026-04-21T16:00:00.000Z'),
         notifyDaysBefore: 5,
         advanceReminderRules: '',
         overdueReminderRules: '',
@@ -62,7 +63,7 @@ describe('scanRenewalNotifications merge behavior', () => {
       {
         id: 'sub-3',
         name: 'Notion',
-        nextRenewalDate: new Date('2026-04-26T00:00:00'),
+        nextRenewalDate: new Date('2026-04-25T16:00:00.000Z'),
         notifyDaysBefore: 3,
         advanceReminderRules: '',
         overdueReminderRules: '',
@@ -80,7 +81,7 @@ describe('scanRenewalNotifications merge behavior', () => {
   it('merges all reminders from the same scan into a single summary notification by default', async () => {
     notificationState.mergeMultiSubscriptionNotifications = true
 
-    await scanRenewalNotifications(new Date('2026-04-23T09:30:00'))
+    await scanRenewalNotifications(new Date('2026-04-23T01:30:00.000Z'))
 
     expect(notificationState.dispatchMock).toHaveBeenCalledTimes(1)
     const payload = notificationState.dispatchMock.mock.calls[0][0].payload
@@ -89,12 +90,17 @@ describe('scanRenewalNotifications merge behavior', () => {
     expect(payload.subscriptions).toHaveLength(3)
     expect(payload.mergedSections).toHaveLength(3)
     expect(payload.mergedSections.map((section: { title: string }) => section.title)).toEqual(['即将到期', '今天到期', '已过期第 1 天'])
+    expect(payload.subscriptions.map((item: { nextRenewalDate: string }) => item.nextRenewalDate)).toEqual([
+      '2026-04-26',
+      '2026-04-23',
+      '2026-04-22'
+    ])
   })
 
   it('sends notifications separately when merging is disabled', async () => {
     notificationState.mergeMultiSubscriptionNotifications = false
 
-    await scanRenewalNotifications(new Date('2026-04-23T09:30:00'))
+    await scanRenewalNotifications(new Date('2026-04-23T01:30:00.000Z'))
 
     expect(notificationState.dispatchMock).toHaveBeenCalledTimes(3)
     for (const call of notificationState.dispatchMock.mock.calls) {
@@ -105,7 +111,7 @@ describe('scanRenewalNotifications merge behavior', () => {
   it('does not backfill reminders outside the exact trigger minute', async () => {
     notificationState.mergeMultiSubscriptionNotifications = false
 
-    await scanRenewalNotifications(new Date('2026-04-23T09:34:00'))
+    await scanRenewalNotifications(new Date('2026-04-23T01:34:00.000Z'))
 
     expect(notificationState.dispatchMock).not.toHaveBeenCalled()
   })

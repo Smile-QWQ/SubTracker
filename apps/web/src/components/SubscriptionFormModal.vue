@@ -227,7 +227,6 @@
 </template>
 
 <script setup lang="ts">
-import dayjs from 'dayjs'
 import { computed, reactive, ref, watch } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import {
@@ -253,10 +252,12 @@ import {
 } from 'naive-ui'
 import { CloseOutline, HelpCircleOutline, SearchOutline } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
+import { useSettingsQuery } from '@/composables/settings-query'
 import SubscriptionAiModal from '@/components/SubscriptionAiModal.vue'
 import { buildCurrencyOptions } from '@/utils/currency'
 import { resolveLogoUrl } from '@/utils/logo'
 import { resolveRemoteLogoApplication } from '@/utils/logo-selection'
+import { addIntervalToPickerTs, businessDateToPickerTs, currentBusinessDatePickerTs, pickerTsToDateString } from '@/utils/timezone'
 import type { AiRecognitionResult, LogoSearchResult, Subscription, Tag } from '@/types/api'
 
 const LOGO_TAB_WEB = 'web'
@@ -282,6 +283,7 @@ const logoStorageEnabled = computed(() => props.logoStorageEnabled ?? false)
 
 const { width } = useWindowSize()
 const message = useMessage()
+const { data: settings } = useSettingsQuery()
 const helpCircleOutline = HelpCircleOutline
 const showAiModal = ref(false)
 const showLogoPanel = ref(false)
@@ -333,8 +335,8 @@ const form = reactive({
   billingIntervalCount: 1,
   billingIntervalUnit: 'month',
   autoRenew: false,
-  startDateTs: dayjs().valueOf(),
-  nextRenewalDateTs: dayjs().add(1, 'month').valueOf(),
+  startDateTs: currentBusinessDatePickerTs(settings.value?.timezone),
+  nextRenewalDateTs: addIntervalToPickerTs(currentBusinessDatePickerTs(settings.value?.timezone), 1, 'month'),
   advanceReminderRules: '',
   overdueReminderRules: '',
   webhookEnabled: true,
@@ -391,8 +393,8 @@ function resetForm() {
   form.billingIntervalCount = 1
   form.billingIntervalUnit = 'month'
   form.autoRenew = false
-  form.startDateTs = dayjs().valueOf()
-  form.nextRenewalDateTs = dayjs().add(1, 'month').valueOf()
+  form.startDateTs = currentBusinessDatePickerTs(settings.value?.timezone)
+  form.nextRenewalDateTs = addIntervalToPickerTs(form.startDateTs, 1, 'month')
   form.advanceReminderRules = ''
   form.overdueReminderRules = ''
   form.webhookEnabled = true
@@ -414,8 +416,8 @@ function hydrateFromModel(model: Subscription) {
   form.billingIntervalCount = model.billingIntervalCount
   form.billingIntervalUnit = model.billingIntervalUnit
   form.autoRenew = model.autoRenew ?? false
-  form.startDateTs = dayjs(model.startDate).valueOf()
-  form.nextRenewalDateTs = dayjs(model.nextRenewalDate).valueOf()
+  form.startDateTs = businessDateToPickerTs(model.startDate, settings.value?.timezone)
+  form.nextRenewalDateTs = businessDateToPickerTs(model.nextRenewalDate, settings.value?.timezone)
   nextRenewalDirty.value = true
   form.advanceReminderRules = model.advanceReminderRules ?? ''
   form.overdueReminderRules = model.overdueReminderRules ?? ''
@@ -440,23 +442,8 @@ function handleReset() {
 }
 
 function calculateNextRenewalTs(startDateTs: number, intervalCount: number, unit: Subscription['billingIntervalUnit']) {
-  const start = dayjs(startDateTs)
   const count = Math.max(Number(intervalCount) || 1, 1)
-
-  switch (unit) {
-    case 'day':
-      return start.add(count, 'day').valueOf()
-    case 'week':
-      return start.add(count, 'week').valueOf()
-    case 'month':
-      return start.add(count, 'month').valueOf()
-    case 'quarter':
-      return start.add(count * 3, 'month').valueOf()
-    case 'year':
-      return start.add(count, 'year').valueOf()
-    default:
-      return start.add(1, 'month').valueOf()
-  }
+  return addIntervalToPickerTs(startDateTs, count, unit)
 }
 
 function handleNextRenewalDateChange(value: number | null) {
@@ -645,9 +632,9 @@ function applyAiResult(result: AiRecognitionResult) {
   if (result.currency) form.currency = result.currency
   if (result.billingIntervalCount) form.billingIntervalCount = result.billingIntervalCount
   if (result.billingIntervalUnit) form.billingIntervalUnit = result.billingIntervalUnit
-  if (result.startDate) form.startDateTs = dayjs(result.startDate).valueOf()
+  if (result.startDate) form.startDateTs = businessDateToPickerTs(result.startDate, settings.value?.timezone)
   if (result.nextRenewalDate) {
-    form.nextRenewalDateTs = dayjs(result.nextRenewalDate).valueOf()
+    form.nextRenewalDateTs = businessDateToPickerTs(result.nextRenewalDate, settings.value?.timezone)
     nextRenewalDirty.value = true
   }
   if (result.websiteUrl) form.websiteUrl = result.websiteUrl
@@ -675,8 +662,8 @@ function submit() {
       billingIntervalCount: Number(form.billingIntervalCount),
       billingIntervalUnit: form.billingIntervalUnit,
       autoRenew: form.autoRenew,
-      startDate: dayjs(form.startDateTs).format('YYYY-MM-DD'),
-      nextRenewalDate: dayjs(form.nextRenewalDateTs).format('YYYY-MM-DD'),
+      startDate: pickerTsToDateString(form.startDateTs),
+      nextRenewalDate: pickerTsToDateString(form.nextRenewalDateTs),
       advanceReminderRules: form.advanceReminderRules.trim() || '',
       overdueReminderRules: form.overdueReminderRules.trim() || '',
       webhookEnabled: form.webhookEnabled,

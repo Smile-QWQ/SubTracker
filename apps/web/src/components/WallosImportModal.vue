@@ -78,15 +78,16 @@
 </template>
 
 <script setup lang="ts">
-import dayjs from 'dayjs'
 import { computed, h, ref } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { NAlert, NButton, NCard, NDataTable, NEmpty, NGrid, NGridItem, NModal, NSpace, NTag, useMessage } from 'naive-ui'
 import { api } from '@/composables/api'
+import { useSettingsQuery } from '@/composables/settings-query'
 import type { WallosImportInspectResult, WallosImportSubscriptionPreview } from '@/types/api'
 import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils/subscription-status'
 import { buildPreparedWallosImportPayload } from '@/utils/wallos-import-client'
 import { JSON_IMPORT_WARNING_MESSAGE, shouldRecommendDbImport } from '@/utils/wallos-import'
+import { formatDateInTimezone } from '@/utils/timezone'
 
 const props = defineProps<{
   show: boolean
@@ -102,6 +103,7 @@ const emit = defineEmits<{
 const { width } = useWindowSize()
 const message = useMessage()
 const fileInputRef = ref<HTMLInputElement | null>(null)
+const { data: settings } = useSettingsQuery()
 const selectedFile = ref<File | null>(null)
 const selectedFileName = ref('')
 const preview = ref<WallosImportInspectResult | null>(null)
@@ -139,7 +141,7 @@ const subscriptionColumns = [
   {
     title: '下次续订',
     key: 'nextRenewalDate',
-    render: (row: WallosImportSubscriptionPreview) => dayjs(row.nextRenewalDate).format('YYYY-MM-DD')
+    render: (row: WallosImportSubscriptionPreview) => formatDateInTimezone(row.nextRenewalDate, settings.value?.timezone)
   },
   {
     title: '标签',

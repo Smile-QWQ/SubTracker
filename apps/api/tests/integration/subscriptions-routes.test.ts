@@ -30,7 +30,8 @@ const routeMocks = vi.hoisted(() => ({
   })),
   saveUploadedLogo: vi.fn(),
   searchSubscriptionLogos: vi.fn(async () => []),
-  getDefaultAdvanceReminderRulesSetting: vi.fn(async () => '3&09:30;0&09:30;')
+  getDefaultAdvanceReminderRulesSetting: vi.fn(async () => '3&09:30;0&09:30;'),
+  getAppTimezone: vi.fn(async () => 'Asia/Shanghai')
 }))
 
 vi.mock('../../src/db', () => ({
@@ -64,7 +65,8 @@ vi.mock('../../src/services/logo.service', () => ({
 }))
 
 vi.mock('../../src/services/settings.service', () => ({
-  getDefaultAdvanceReminderRulesSetting: routeMocks.getDefaultAdvanceReminderRulesSetting
+  getDefaultAdvanceReminderRulesSetting: routeMocks.getDefaultAdvanceReminderRulesSetting,
+  getAppTimezone: routeMocks.getAppTimezone
 }))
 
 describe('subscription routes D1 compatibility', () => {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_RESEND_API_URL } from '@subtracker/shared'
 
 const { findManySubscriptionsMock, findManyTagsMock } = vi.hoisted(() => ({
@@ -27,6 +27,7 @@ vi.mock('../../src/services/exchange-rate.service', () => ({
 vi.mock('../../src/services/settings.service', () => ({
   getAppSettings: vi.fn(async () => ({
     baseCurrency: 'CNY',
+    timezone: 'Asia/Shanghai',
     defaultNotifyDays: 3,
     rememberSessionDays: 7,
     notifyOnDueDay: true,
@@ -132,6 +133,11 @@ describe('statistics service', () => {
     findManyTagsMock.mockReset()
     findManySubscriptionsMock.mockReset()
     findManyTagsMock.mockResolvedValue([])
+    vi.useRealTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('returns top subscriptions sorted by monthly normalized cost and limited to 10', async () => {
@@ -162,5 +168,20 @@ describe('statistics service', () => {
     await getOverviewStatistics()
 
     expect(findManyTagsMock).not.toHaveBeenCalled()
+  })
+
+  it('formats upcoming renewal dates in configured timezone', async () => {
+    vi.setSystemTime(new Date('2026-04-25T01:00:00.000Z'))
+    findManySubscriptionsMock.mockResolvedValue([
+      createSubscription('upcoming', {
+        nextRenewalDate: new Date('2026-04-29T16:00:00.000Z')
+      })
+    ])
+
+    const result = await getOverviewStatistics()
+
+    expect(result.upcomingRenewals[0]).toMatchObject({
+      nextRenewalDate: '2026-04-30'
+    })
   })
 })

@@ -107,6 +107,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
 import type { CalendarEvent } from '@/types/api'
 import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils/subscription-status'
+import { currentBusinessDatePickerTs, formatDateInTimezone, formatMonthLabelInTimezone, pickerTsToDateString } from '@/utils/timezone'
 
 const { width } = useWindowSize()
 const calendarOutline = CalendarOutline
@@ -117,10 +118,10 @@ const todayOutline = TodayOutline
 
 const events = ref<CalendarEvent[]>([])
 const tab = ref('month')
-const selectedDateTs = ref(dayjs().valueOf())
-const panelMonthTs = ref(dayjs().startOf('month').valueOf())
-let ignoreSelectedDateWatch = false
 const { data: settings } = useSettingsQuery()
+const selectedDateTs = ref(currentBusinessDatePickerTs(settings.value?.timezone))
+const panelMonthTs = ref(dayjs(selectedDateTs.value).startOf('month').valueOf())
+let ignoreSelectedDateWatch = false
 const baseCurrency = computed(() => settings.value?.baseCurrency ?? 'CNY')
 const panelMonthRange = computed(() => {
   const monthStart = dayjs(panelMonthTs.value).startOf('month')
@@ -160,13 +161,23 @@ watch(
   { immediate: true }
 )
 
-const panelMonthLabel = computed(() => dayjs(panelMonthTs.value).format('YYYY 年 M 月'))
-const selectedDateLabel = computed(() => dayjs(selectedDateTs.value).format('YYYY-MM-DD'))
+watch(
+  () => settings.value?.timezone,
+  (timezone) => {
+    if (!timezone) return
+    const currentDateString = pickerTsToDateString(selectedDateTs.value)
+    selectedDateTs.value = currentBusinessDatePickerTs(timezone, `${currentDateString}T00:00:00`)
+    panelMonthTs.value = dayjs(selectedDateTs.value).startOf('month').valueOf()
+  }
+)
+
+const panelMonthLabel = computed(() => formatMonthLabelInTimezone(new Date(panelMonthTs.value), settings.value?.timezone))
+const selectedDateLabel = computed(() => pickerTsToDateString(selectedDateTs.value))
 
 const eventMap = computed(() => {
   const map = new Map<string, CalendarEvent[]>()
   for (const event of events.value) {
-    const key = dayjs(event.date).format('YYYY-MM-DD')
+    const key = formatDateInTimezone(event.date, settings.value?.timezone)
     const list = map.get(key) ?? []
     list.push(event)
     map.set(key, list)
@@ -175,7 +186,7 @@ const eventMap = computed(() => {
 })
 
 const selectedDateEvents = computed(() =>
-  events.value.filter((item) => dayjs(item.date).format('YYYY-MM-DD') === selectedDateLabel.value)
+  events.value.filter((item) => formatDateInTimezone(item.date, settings.value?.timezone) === selectedDateLabel.value)
 )
 const selectedDateConvertedAmount = computed(() => selectedDateEvents.value.reduce((sum, item) => sum + item.convertedAmount, 0))
 const monthEventCount = computed(() => events.value.length)
@@ -186,7 +197,7 @@ const columns = [
   {
     title: '日期',
     key: 'date',
-    render: (row: CalendarEvent) => dayjs(row.date).format('YYYY-MM-DD')
+    render: (row: CalendarEvent) => formatDateInTimezone(row.date, settings.value?.timezone)
   },
   {
     title: '原始金额',

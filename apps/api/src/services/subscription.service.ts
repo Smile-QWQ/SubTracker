@@ -2,13 +2,22 @@ import { prisma } from '../db'
 import { addInterval } from '../utils/date'
 import { ensureExchangeRates, getBaseCurrency } from './exchange-rate.service'
 import { convertAmount } from '../utils/money'
-import dayjs from 'dayjs'
+import { getAppTimezone } from './settings.service'
+import { endOfDayDateInTimezone, startOfDayDateInTimezone, toTimezonedDayjs } from '../utils/timezone'
 
-export async function renewSubscription(subscriptionId: string, paidAt?: Date, paidAmount?: number, paidCurrency?: string) {
+export async function renewSubscription(
+  subscriptionId: string,
+  paidAt?: Date,
+  paidAmount?: number,
+  paidCurrency?: string,
+  timezone?: string
+) {
   const subscription = await prisma.subscription.findUnique({ where: { id: subscriptionId } })
   if (!subscription) {
     throw new Error('Subscription not found')
   }
+
+  const appTimezone = timezone ?? (await getAppTimezone())
 
   const amount = paidAmount ?? subscription.amount
   const currency = (paidCurrency ?? subscription.currency).toUpperCase()
@@ -21,7 +30,8 @@ export async function renewSubscription(subscriptionId: string, paidAt?: Date, p
   const periodEnd = addInterval(
     subscription.nextRenewalDate,
     subscription.billingIntervalCount,
-    subscription.billingIntervalUnit
+    subscription.billingIntervalUnit,
+    appTimezone
   )
 
   const payment = await prisma.paymentRecord.create({
@@ -65,15 +75,14 @@ export async function renewSubscription(subscriptionId: string, paidAt?: Date, p
 }
 
 export async function autoRenewDueSubscriptions(today = new Date()) {
-  const windowStart = dayjs(today).startOf('hour').toDate()
-  const windowEnd = dayjs(today).endOf('hour').toDate()
+  const timezone = await getAppTimezone()
+  const cutoff = endOfDayDateInTimezone(today, timezone)
   const dueSubscriptions = await prisma.subscription.findMany({
     where: {
       autoRenew: true,
       status: { in: ['active', 'expired'] },
       nextRenewalDate: {
-        gte: windowStart,
-        lte: windowEnd
+        lte: cutoff
       }
     },
     orderBy: { nextRenewalDate: 'asc' }
@@ -84,9 +93,10 @@ export async function autoRenewDueSubscriptions(today = new Date()) {
   for (const subscription of dueSubscriptions) {
     let currentNextRenewalDate = subscription.nextRenewalDate
     let guard = 0
+    const todayEnd = toTimezonedDayjs(today, timezone).endOf('day')
 
-    while (!dayjs(currentNextRenewalDate).isAfter(dayjs(today).endOf('day')) && guard < 24) {
-      const result = await renewSubscription(subscription.id)
+    while (!toTimezonedDayjs(currentNextRenewalDate, timezone).isAfter(todayEnd) && guard < 24) {
+      const result = await renewSubscription(subscription.id, undefined, undefined, undefined, timezone)
       renewedCount += 1
       currentNextRenewalDate = result.subscription.nextRenewalDate
       guard += 1
@@ -97,7 +107,8 @@ export async function autoRenewDueSubscriptions(today = new Date()) {
 }
 
 export async function reconcileExpiredSubscriptions(today = new Date()) {
-  const cutoff = dayjs(today).startOf('day').toDate()
+  const timezone = await getAppTimezone()
+  const cutoff = startOfDayDateInTimezone(today, timezone)
   const rows = await prisma.subscription.findMany({
     where: {
       status: 'active',

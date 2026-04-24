@@ -1,9 +1,9 @@
-import dayjs from 'dayjs'
 import { ensureExchangeRates } from './exchange-rate.service'
 import { convertAmount } from '../utils/money'
 import { getAppSettings } from './settings.service'
 import { projectRenewalEvents } from './projected-renewal.service'
 import { listStatisticsSubscriptionsLite, listTagsLite } from './worker-lite-repository.service'
+import { formatDateInTimezone, monthKeyInTimezone, startOfDayDateInTimezone, startOfMonthDateInTimezone, toTimezonedDayjs } from '../utils/timezone'
 
 type BudgetStatus = 'normal' | 'warning' | 'over'
 
@@ -83,9 +83,10 @@ function buildBudgetEntry(spent: number, budget: number | null | undefined): Bud
 function buildProjectedMonthlyTrend(
   subscriptions: StatisticsSubscription[],
   baseCurrency: string,
-  rates: Awaited<ReturnType<typeof ensureExchangeRates>>
+  rates: Awaited<ReturnType<typeof ensureExchangeRates>>,
+  timezone: string
 ) {
-  const startMonth = dayjs().startOf('month')
+  const startMonth = toTimezonedDayjs(startOfMonthDateInTimezone(new Date(), timezone), timezone)
   const endMonth = startMonth.add(11, 'month').endOf('month')
   const monthlyTrendMap = new Map<string, number>()
 
@@ -96,12 +97,13 @@ function buildProjectedMonthlyTrend(
   const projectedEvents = projectRenewalEvents(subscriptions, {
     start: startMonth.toDate(),
     end: endMonth.toDate(),
-    statuses: ['active', 'expired']
+    statuses: ['active', 'expired'],
+    timezone
   })
 
   for (const event of projectedEvents) {
     const convertedAmount = convertAmount(event.amount, event.currency, baseCurrency, rates.baseCurrency, rates.rates)
-    const key = dayjs(event.date).format('YYYY-MM')
+    const key = monthKeyInTimezone(event.date, timezone)
     monthlyTrendMap.set(key, (monthlyTrendMap.get(key) ?? 0) + convertedAmount)
   }
 
@@ -114,9 +116,10 @@ function buildProjectedMonthlyTrend(
 function buildUpcomingByDay(
   subscriptions: StatisticsSubscription[],
   baseCurrency: string,
-  rates: Awaited<ReturnType<typeof ensureExchangeRates>>
+  rates: Awaited<ReturnType<typeof ensureExchangeRates>>,
+  timezone: string
 ) {
-  const startDay = dayjs().startOf('day')
+  const startDay = toTimezonedDayjs(startOfDayDateInTimezone(new Date(), timezone), timezone)
   const endDay = startDay.add(89, 'day').endOf('day')
   const upcomingMap = new Map<string, { count: number; amount: number }>()
 
@@ -127,12 +130,13 @@ function buildUpcomingByDay(
   const projectedEvents = projectRenewalEvents(subscriptions, {
     start: startDay.toDate(),
     end: endDay.toDate(),
-    statuses: ['active', 'expired']
+    statuses: ['active', 'expired'],
+    timezone
   })
 
   for (const event of projectedEvents) {
     const convertedAmount = convertAmount(event.amount, event.currency, baseCurrency, rates.baseCurrency, rates.rates)
-    const key = dayjs(event.date).format('YYYY-MM-DD')
+    const key = formatDateInTimezone(event.date, timezone)
     const current = upcomingMap.get(key) ?? { count: 0, amount: 0 }
     current.count += 1
     current.amount += convertedAmount
@@ -153,7 +157,8 @@ async function buildStatisticsState() {
   ])
   const tags = appSettings.enableTagBudgets ? await listTagsLite() : []
 
-  const today = dayjs()
+  const timezone = appSettings.timezone
+  const today = toTimezonedDayjs(new Date(), timezone)
   const next7 = today.add(7, 'day')
   const next30 = today.add(30, 'day')
 
@@ -237,19 +242,19 @@ async function buildStatisticsState() {
     }
   }
 
-  const monthlyTrend = buildProjectedMonthlyTrend(projectedSubscriptions, baseCurrency, rates)
-  const upcomingByDay = buildUpcomingByDay(projectedSubscriptions, baseCurrency, rates)
+  const monthlyTrend = buildProjectedMonthlyTrend(projectedSubscriptions, baseCurrency, rates, timezone)
+  const upcomingByDay = buildUpcomingByDay(projectedSubscriptions, baseCurrency, rates, timezone)
 
   const upcomingRenewals = projectedSubscriptions
     .filter((subscription) => {
-      const renewalDate = dayjs(subscription.nextRenewalDate)
+      const renewalDate = toTimezonedDayjs(subscription.nextRenewalDate, timezone)
       return (renewalDate.isAfter(today) || renewalDate.isSame(today, 'day')) && renewalDate.isBefore(next30)
     })
     .sort((a, b) => a.nextRenewalDate.getTime() - b.nextRenewalDate.getTime())
     .map((item) => ({
       id: item.id,
       name: item.name,
-      nextRenewalDate: item.nextRenewalDate.toISOString(),
+      nextRenewalDate: formatDateInTimezone(item.nextRenewalDate, timezone),
       amount: item.amount,
       currency: item.currency,
       convertedAmount: convertAmount(item.amount, item.currency, baseCurrency, rates.baseCurrency, rates.rates),
@@ -347,7 +352,7 @@ async function buildStatisticsState() {
       .slice(0, 10),
     activeSubscriptionCount: activeSubscriptions.length,
     upcoming7DaysCount: projectedSubscriptions.filter((item) => {
-      const renewalDate = dayjs(item.nextRenewalDate)
+      const renewalDate = toTimezonedDayjs(item.nextRenewalDate, timezone)
       return (renewalDate.isAfter(today) || renewalDate.isSame(today, 'day')) && renewalDate.isBefore(next7)
     }).length,
     upcoming30DaysCount: upcomingRenewals.length

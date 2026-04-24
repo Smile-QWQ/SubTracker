@@ -31,10 +31,16 @@ describe('shared schema', () => {
     expect(parsed.mergeMultiSubscriptionNotifications).toBe(true)
     expect(parsed.overdueReminderDays).toEqual([1, 2, 3])
     expect(parsed.defaultOverdueReminderRules).toBe(DEFAULT_OVERDUE_REMINDER_RULES)
+    expect(parsed.timezone).toBe('Asia/Shanghai')
     expect(parsed.telegramNotificationsEnabled).toBe(false)
     expect(parsed.telegramConfig).toEqual({
       botToken: '',
       chatId: ''
     })
+  })
+
+  it('should validate timezone values', () => {
+    expect(() => SettingsSchema.parse({ timezone: 'Mars/Olympus' })).toThrow()
+    expect(SettingsSchema.parse({ timezone: 'America/Los_Angeles' }).timezone).toBe('America/Los_Angeles')
   })
 })

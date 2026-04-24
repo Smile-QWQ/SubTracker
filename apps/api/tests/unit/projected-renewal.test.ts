@@ -113,4 +113,29 @@ describe('projectRenewalEvents', () => {
 
     expect(events).toHaveLength(0)
   })
+
+  it('should project renewal ids by configured timezone business date', () => {
+    const events = projectRenewalEvents(
+      [
+        {
+          id: 'sub_tz',
+          name: 'Timezone Service',
+          amount: 88,
+          currency: 'USD',
+          status: 'active' as const,
+          billingIntervalCount: 1,
+          billingIntervalUnit: 'month' as const,
+          nextRenewalDate: new Date('2026-04-09T16:00:00.000Z')
+        }
+      ],
+      {
+        start: '2026-04-01',
+        end: '2026-04-30',
+        timezone: 'Asia/Shanghai'
+      }
+    )
+
+    expect(events).toHaveLength(1)
+    expect(events[0]?.id).toBe('sub_tz:2026-04-10')
+  })
 })

@@ -2,6 +2,7 @@ import {
   AiConfigSchema,
   DEFAULT_AI_CONFIG,
   DEFAULT_RESEND_API_URL,
+  DEFAULT_TIMEZONE,
   StorageCapabilitiesSchema,
   SettingsSchema,
   type SettingsInput
@@ -88,6 +89,7 @@ export async function getAppSettings(): Promise<SettingsInput> {
       const settingsMap = await listSettingsLite()
 
       const baseCurrency = readSettingsValue(settingsMap, 'baseCurrency', config.baseCurrency)
+      const timezone = readSettingsValue(settingsMap, 'timezone', DEFAULT_TIMEZONE)
       const defaultNotifyDays = readSettingsValue(settingsMap, 'defaultNotifyDays', config.defaultNotifyDays)
       const defaultAdvanceReminderRules = resolveDefaultAdvanceReminderRules(
         readSettingsValue<string | null>(settingsMap, 'defaultAdvanceReminderRules', null),
@@ -136,6 +138,7 @@ export async function getAppSettings(): Promise<SettingsInput> {
 
       return SettingsSchema.parse({
         baseCurrency,
+        timezone,
         defaultNotifyDays: deriveNotifyDaysBeforeFromAdvanceRules(defaultAdvanceReminderRules) || defaultNotifyDays,
         defaultAdvanceReminderRules,
         rememberSessionDays,
@@ -169,6 +172,10 @@ export async function getAppSettings(): Promise<SettingsInput> {
 
 export async function getRememberSessionDays(): Promise<number> {
   return getSetting('rememberSessionDays', 7)
+}
+
+export async function getAppTimezone(): Promise<string> {
+  return (await getAppSettings()).timezone
 }
 
 export async function getAiConfig() {
@@ -237,7 +244,7 @@ export async function getNotificationChannelSettings() {
 }
 
 export async function getNotificationScanSettings() {
-  const [defaultAdvanceReminderRules, defaultOverdueReminderRules, mergeMultiSubscriptionNotifications] = await Promise.all([
+  const [defaultAdvanceReminderRules, defaultOverdueReminderRules, mergeMultiSubscriptionNotifications, timezone] = await Promise.all([
     getDefaultAdvanceReminderRulesSetting(),
     (async () => {
       const overdueReminderDays = await getSetting<Array<1 | 2 | 3>>('overdueReminderDays', [1, 2, 3])
@@ -246,12 +253,14 @@ export async function getNotificationScanSettings() {
         overdueReminderDays
       )
     })(),
-    getSetting('mergeMultiSubscriptionNotifications', true)
+    getSetting('mergeMultiSubscriptionNotifications', true),
+    getSetting('timezone', DEFAULT_TIMEZONE)
   ])
 
   return {
     defaultAdvanceReminderRules,
     defaultOverdueReminderRules,
-    mergeMultiSubscriptionNotifications
+    mergeMultiSubscriptionNotifications,
+    timezone
   }
 }

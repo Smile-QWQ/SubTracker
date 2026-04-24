@@ -287,6 +287,7 @@ import SubscriptionPaymentRecordsDrawer from '@/components/SubscriptionPaymentRe
 import type { PaymentRecord, Settings, Subscription, SubscriptionDetail, Tag } from '@/types/api'
 import { resolveLogoUrl } from '@/utils/logo'
 import { createSingleFlight } from '@/utils/single-flight'
+import { formatDateInTimezone } from '@/utils/timezone'
 import {
   DEFAULT_SUBSCRIPTION_PAGE_SIZE,
   SUBSCRIPTION_PAGE_SIZE_OPTIONS,
@@ -412,7 +413,7 @@ const orderedSubscriptions = computed(() => {
     case 'renewal':
       return rows.sort(
         (a, b) =>
-          dayjs(a.nextRenewalDate).valueOf() - dayjs(b.nextRenewalDate).valueOf() ||
+          formatDate(a.nextRenewalDate).localeCompare(formatDate(b.nextRenewalDate), 'zh-CN') ||
           dayjs(a.createdAt).valueOf() - dayjs(b.createdAt).valueOf()
       )
     case 'amount-desc':
@@ -1091,7 +1092,7 @@ function statusTagType(status: Subscription['status']) {
 }
 
 function formatDate(value: string) {
-  return dayjs(value).format('YYYY-MM-DD')
+  return formatDateInTimezone(value, settings.value?.timezone)
 }
 
 function unitLabel(unit: string) {

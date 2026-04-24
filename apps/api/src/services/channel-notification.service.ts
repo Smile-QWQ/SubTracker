@@ -11,8 +11,10 @@ import {
 } from '@subtracker/shared'
 import { dispatchWebhookEvent } from './webhook.service'
 import { validateNotificationTargetUrl } from './notification-url.service'
-import { getNotificationChannelSettings } from './settings.service'
+import { getAppTimezone, getNotificationChannelSettings } from './settings.service'
 import { claimNotificationDelivery, releaseNotificationDelivery } from './worker-lite-state.service'
+import { toIsoDate } from '../utils/date'
+import { formatDateInTimezone } from '../utils/timezone'
 
 type NotificationDispatchParams = {
   eventType: WebhookEventType
@@ -78,6 +80,9 @@ function getMergedSections(params: NotificationDispatchParams) {
 
 export function formatNotificationDate(value: string | undefined) {
   if (!value) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value
+  }
   const isoDateMatch = value.match(/^(\d{4}-\d{2}-\d{2})T/)
   if (isoDateMatch) {
     return isoDateMatch[1]
@@ -594,7 +599,7 @@ export async function dispatchNotificationEvent(params: NotificationDispatchPara
 function buildTestReminderPayload() {
   return {
     name: '测试订阅',
-    nextRenewalDate: new Date().toISOString(),
+    nextRenewalDate: '',
     amount: 19.9,
     currency: 'CNY',
     tagNames: ['测试标签'],
@@ -611,13 +616,17 @@ export async function sendTestEmailNotification() {
   if (!settings.emailNotificationsEnabled) {
     throw new Error('邮箱通知未启用或配置不完整')
   }
+  const timezone = await getAppTimezone()
 
   await sendEmailWithProvider(
     {
       eventType: 'subscription.reminder_due',
       resourceKey: 'test:email',
-      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
-      payload: buildTestReminderPayload()
+      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
+      payload: {
+        ...buildTestReminderPayload(),
+        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
+      }
     },
     settings.emailProvider,
     settings.smtpConfig,
@@ -630,12 +639,16 @@ export async function sendTestEmailNotificationWithConfig(config: {
   smtpConfig: EmailConfigInput
   resendConfig: ResendConfigInput
 }) {
+  const timezone = await getAppTimezone()
   await sendEmailWithProvider(
     {
       eventType: 'subscription.reminder_due',
       resourceKey: 'test:email',
-      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
-      payload: buildTestReminderPayload()
+      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
+      payload: {
+        ...buildTestReminderPayload(),
+        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
+      }
     },
     config.emailProvider,
     config.smtpConfig,
@@ -649,12 +662,16 @@ export async function sendTestPushplusNotification() {
     throw new Error('PushPlus 通知未启用或配置不完整')
   }
 
+  const timezone = await getAppTimezone()
   await sendPushplusWithConfig(
     {
       eventType: 'subscription.reminder_due',
       resourceKey: 'test:pushplus',
-      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
-      payload: buildTestReminderPayload()
+      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
+      payload: {
+        ...buildTestReminderPayload(),
+        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
+      }
     },
     settings.pushplusConfig
   )
@@ -666,12 +683,16 @@ export async function sendTestPushplusNotification() {
 }
 
 export async function sendTestPushplusNotificationWithConfig(config: PushPlusConfigInput) {
+  const timezone = await getAppTimezone()
   return sendPushplusWithConfig(
     {
       eventType: 'subscription.reminder_due',
       resourceKey: 'test:pushplus',
-      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
-      payload: buildTestReminderPayload()
+      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
+      payload: {
+        ...buildTestReminderPayload(),
+        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
+      }
     },
     config
   )
@@ -683,12 +704,16 @@ export async function sendTestTelegramNotification() {
     throw new Error('Telegram 通知未启用或配置不完整')
   }
 
+  const timezone = await getAppTimezone()
   await sendTelegramWithConfig(
     {
       eventType: 'subscription.reminder_due',
       resourceKey: 'test:telegram',
-      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
-      payload: buildTestReminderPayload()
+      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
+      payload: {
+        ...buildTestReminderPayload(),
+        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
+      }
     },
     settings.telegramConfig
   )
@@ -697,12 +722,16 @@ export async function sendTestTelegramNotification() {
 }
 
 export async function sendTestTelegramNotificationWithConfig(config: TelegramConfigInput) {
+  const timezone = await getAppTimezone()
   await sendTelegramWithConfig(
     {
       eventType: 'subscription.reminder_due',
       resourceKey: 'test:telegram',
-      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
-      payload: buildTestReminderPayload()
+      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
+      payload: {
+        ...buildTestReminderPayload(),
+        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
+      }
     },
     config
   )
@@ -716,12 +745,16 @@ export async function sendTestServerchanNotification() {
     throw new Error('Server 酱通知未启用或配置不完整')
   }
 
+  const timezone = await getAppTimezone()
   await sendServerchanWithConfig(
     {
       eventType: 'subscription.reminder_due',
       resourceKey: 'test:serverchan',
-      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
-      payload: buildTestReminderPayload()
+      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
+      payload: {
+        ...buildTestReminderPayload(),
+        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
+      }
     },
     settings.serverchanConfig
   )
@@ -730,12 +763,16 @@ export async function sendTestServerchanNotification() {
 }
 
 export async function sendTestServerchanNotificationWithConfig(config: ServerchanConfigInput) {
+  const timezone = await getAppTimezone()
   await sendServerchanWithConfig(
     {
       eventType: 'subscription.reminder_due',
       resourceKey: 'test:serverchan',
-      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
-      payload: buildTestReminderPayload()
+      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
+      payload: {
+        ...buildTestReminderPayload(),
+        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
+      }
     },
     config
   )
@@ -749,12 +786,16 @@ export async function sendTestGotifyNotification() {
     throw new Error('Gotify 通知未启用或配置不完整')
   }
 
+  const timezone = await getAppTimezone()
   await sendGotifyWithConfig(
     {
       eventType: 'subscription.reminder_due',
       resourceKey: 'test:gotify',
-      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
-      payload: buildTestReminderPayload()
+      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
+      payload: {
+        ...buildTestReminderPayload(),
+        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
+      }
     },
     settings.gotifyConfig
   )
@@ -763,12 +804,16 @@ export async function sendTestGotifyNotification() {
 }
 
 export async function sendTestGotifyNotificationWithConfig(config: GotifyConfigInput) {
+  const timezone = await getAppTimezone()
   await sendGotifyWithConfig(
     {
       eventType: 'subscription.reminder_due',
       resourceKey: 'test:gotify',
-      periodKey: `${new Date().toISOString().slice(0, 10)}:upcoming`,
-      payload: buildTestReminderPayload()
+      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
+      payload: {
+        ...buildTestReminderPayload(),
+        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
+      }
     },
     config
   )

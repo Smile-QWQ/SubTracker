@@ -7,6 +7,7 @@ vi.mock('../../src/config', () => ({
 }))
 
 vi.mock('../../src/services/settings.service', () => ({
+  getAppTimezone: vi.fn(async () => 'Asia/Shanghai'),
   getNotificationChannelSettings: vi.fn(async () => ({
     emailNotificationsEnabled: false,
     emailProvider: 'resend',

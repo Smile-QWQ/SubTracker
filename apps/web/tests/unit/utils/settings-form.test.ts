@@ -7,6 +7,7 @@ describe('cloneSettingsForForm', () => {
   it('deep clones nested settings objects used by SettingsPage forms', () => {
     const original: Settings = {
       baseCurrency: 'CNY',
+      timezone: 'Asia/Shanghai',
       defaultNotifyDays: 3,
       defaultAdvanceReminderRules: '3&09:30;0&09:30;',
       rememberSessionDays: 7,

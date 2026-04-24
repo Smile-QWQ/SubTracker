@@ -1,4 +1,4 @@
-﻿import dayjs from 'dayjs'
+import dayjs from 'dayjs'
 import { toIsoDate } from '../utils/date'
 import { dispatchNotificationEvent, type NotificationChannelResult } from './channel-notification.service'
 import {
@@ -8,6 +8,7 @@ import {
 } from './reminder-rules.service'
 import { getNotificationScanSettings } from './settings.service'
 import { listSubscriptionsLite } from './worker-lite-repository.service'
+import { endOfDayDateInTimezone, formatDateInTimezone, getNowInTimezone, startOfDayDateInTimezone, toTimezonedDayjs } from '../utils/timezone'
 
 export type ReminderPhase = 'upcoming' | 'due_today' | `overdue_day_${number}`
 
@@ -142,8 +143,13 @@ function resolveOverdueRules(sub: ReminderSubscriptionLike, defaultOverdueRemind
   return parseReminderRules(defaultOverdueReminderRules, 'overdue')
 }
 
-function resolveRuleTriggerMoment(nextRenewalDate: Date, rule: ReminderRule, direction: 'advance' | 'overdue') {
-  const renewalDay = dayjs(nextRenewalDate).startOf('day')
+function resolveRuleTriggerMoment(
+  nextRenewalDate: Date,
+  rule: ReminderRule,
+  direction: 'advance' | 'overdue',
+  timezone: string
+) {
+  const renewalDay = toTimezonedDayjs(nextRenewalDate, timezone).startOf('day')
   const base = direction === 'advance' ? renewalDay.subtract(rule.days, 'day') : renewalDay.add(rule.days, 'day')
   return base.hour(rule.hour).minute(rule.minute).second(0).millisecond(0)
 }
@@ -152,9 +158,10 @@ function matchReminderRule(
   now: dayjs.Dayjs,
   nextRenewalDate: Date,
   rule: ReminderRule,
-  direction: 'advance' | 'overdue'
+  direction: 'advance' | 'overdue',
+  timezone: string
 ): ReminderMatch | null {
-  const trigger = resolveRuleTriggerMoment(nextRenewalDate, rule, direction)
+  const trigger = resolveRuleTriggerMoment(nextRenewalDate, rule, direction, timezone)
   if (!now.isSame(trigger, 'minute')) {
     return null
   }
@@ -190,14 +197,14 @@ function resolveReminderMatches(
   const matches: ReminderMatch[] = []
 
   for (const rule of resolveAdvanceRules(sub, settings.defaultAdvanceReminderRules)) {
-    const match = matchReminderRule(now, sub.nextRenewalDate, rule, 'advance')
+    const match = matchReminderRule(now, sub.nextRenewalDate, rule, 'advance', settings.timezone)
     if (match) {
       matches.push(match)
     }
   }
 
   for (const rule of resolveOverdueRules(sub, settings.defaultOverdueReminderRules)) {
-    const match = matchReminderRule(now, sub.nextRenewalDate, rule, 'overdue')
+    const match = matchReminderRule(now, sub.nextRenewalDate, rule, 'overdue', settings.timezone)
     if (match) {
       matches.push(match)
     }
@@ -211,18 +218,22 @@ function getMaxAdvanceReminderDays(defaultAdvanceReminderRules: string) {
   return rules.reduce((max, rule) => Math.max(max, rule.days), 0)
 }
 
-function buildDispatchEntry(sub: ReminderSubscriptionLike, resolved: ReminderMatch): ReminderDispatchEntry {
+function buildDispatchEntry(
+  sub: ReminderSubscriptionLike,
+  resolved: ReminderMatch,
+  timezone: string
+): ReminderDispatchEntry {
   return {
     eventType: resolved.eventType,
     phase: resolved.phase,
     title: resolved.title,
     resourceKey: `subscription:${sub.id}`,
-    periodKey: `${toIsoDate(sub.nextRenewalDate)}:${resolved.phase}:${resolved.ruleKey}`,
+    periodKey: `${toIsoDate(sub.nextRenewalDate, timezone)}:${resolved.phase}:${resolved.ruleKey}`,
     subscriptionId: sub.id,
     payload: {
       id: sub.id,
       name: sub.name,
-      nextRenewalDate: sub.nextRenewalDate.toISOString(),
+      nextRenewalDate: formatDateInTimezone(sub.nextRenewalDate, timezone),
       notifyDaysBefore: sub.notifyDaysBefore,
       amount: sub.amount,
       currency: sub.currency,
@@ -280,7 +291,7 @@ function buildMergedPayload(entries: ReminderDispatchEntry[]) {
     mergedCount: flattenedSubscriptions.length,
     mergedSections: sections,
     name: `共 ${flattenedSubscriptions.length} 项订阅`,
-    nextRenewalDate: flattenedSubscriptions[0]?.nextRenewalDate ?? new Date().toISOString(),
+    nextRenewalDate: flattenedSubscriptions[0]?.nextRenewalDate ?? '',
     notifyDaysBefore: 0,
     amount: flattenedSubscriptions.reduce((sum, item) => sum + item.amount, 0),
     currency: flattenedSubscriptions[0]?.currency ?? 'CNY',
@@ -305,11 +316,11 @@ export async function scanRenewalNotifications(
     ...(await getNotificationScanSettings()),
     ...overrides
   }
-  const now = dayjs(today).second(0).millisecond(0)
+  const now = getNowInTimezone(today, appSettings.timezone).second(0).millisecond(0)
   const currentDay = now.startOf('day')
   const maxAdvanceDays = getMaxAdvanceReminderDays(appSettings.defaultAdvanceReminderRules)
-  const queryStart = currentDay.subtract(7, 'day').toDate()
-  const queryEnd = currentDay.add(maxAdvanceDays, 'day').endOf('day').toDate()
+  const queryStart = startOfDayDateInTimezone(currentDay.subtract(7, 'day').toDate(), appSettings.timezone)
+  const queryEnd = endOfDayDateInTimezone(currentDay.add(maxAdvanceDays, 'day').toDate(), appSettings.timezone)
   const subscriptions = await listSubscriptionsLite({
     statuses: ['active', 'expired'],
     nextRenewalDateGte: queryStart,
@@ -322,7 +333,7 @@ export async function scanRenewalNotifications(
   for (const sub of notificationEligibleSubscriptions) {
     const matches = resolveReminderMatches(now, sub, appSettings)
     for (const match of matches) {
-      dispatchEntries.push(buildDispatchEntry(sub, match))
+      dispatchEntries.push(buildDispatchEntry(sub, match, appSettings.timezone))
     }
   }
 
@@ -361,7 +372,7 @@ export async function scanRenewalNotifications(
   const channelResults = await dispatchNotificationEvent({
     eventType: mergedEventType,
     resourceKey: 'subscriptions:scan-summary',
-    periodKey: `${toIsoDate(now.toDate())}:summary:${now.format('HH:mm')}`,
+    periodKey: `${toIsoDate(now.toDate(), appSettings.timezone)}:summary:${now.format('HH:mm')}`,
     payload: mergedPayload
   })
 

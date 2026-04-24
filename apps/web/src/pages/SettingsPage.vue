@@ -25,8 +25,21 @@
                 </n-form-item>
               </n-grid-item>
               <n-grid-item>
+                <n-form-item label="业务时区">
+                  <n-select v-model:value="settingsForm.timezone" :options="timeZoneOptions" filterable />
+                </n-form-item>
+              </n-grid-item>
+            </n-grid>
+
+            <n-grid :cols="formCols" :x-gap="12">
+              <n-grid-item>
                 <n-form-item label="记住登录天数">
                   <n-input-number v-model:value="settingsForm.rememberSessionDays" :min="1" :max="365" style="width: 100%" />
+                </n-form-item>
+              </n-grid-item>
+              <n-grid-item>
+                <n-form-item label="当前时区示例">
+                  <n-input :value="formatTime(new Date().toISOString())" readonly />
                 </n-form-item>
               </n-grid-item>
             </n-grid>
@@ -547,7 +560,6 @@
 </template>
 
 <script setup lang="ts">
-import dayjs from 'dayjs'
 import { computed, reactive, ref, watch } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { useQueryClient } from '@tanstack/vue-query'
@@ -594,6 +606,7 @@ import { useAuthStore } from '@/stores/auth'
 import { isRememberedSession } from '@/utils/auth-storage'
 import { buildCurrencyOptions } from '@/utils/currency'
 import { cloneSettingsForForm } from '@/utils/settings-form'
+import { buildTimeZoneOptions, formatDateTimeInTimezone, normalizeAppTimezone } from '@/utils/timezone'
 import type { AiProviderPreset, ChangeCredentialsPayload, ExchangeRateSnapshot, NotificationWebhookSettings, Settings } from '@/types/api'
 
 const message = useMessage()
@@ -642,6 +655,7 @@ const AI_PROVIDER_PRESETS: Record<
 
 const settingsForm = reactive<Settings>({
   baseCurrency: 'CNY',
+  timezone: 'Asia/Shanghai',
   defaultNotifyDays: 3,
   defaultAdvanceReminderRules: DEFAULT_ADVANCE_REMINDER_RULES,
   rememberSessionDays: 7,
@@ -947,6 +961,7 @@ async function saveBasicSettings() {
   try {
     const result = await api.updateSettings({
       baseCurrency: settingsForm.baseCurrency.toUpperCase(),
+      timezone: normalizeAppTimezone(settingsForm.timezone),
       defaultAdvanceReminderRules: settingsForm.defaultAdvanceReminderRules,
       rememberSessionDays: settingsForm.rememberSessionDays,
       mergeMultiSubscriptionNotifications: settingsForm.mergeMultiSubscriptionNotifications,
@@ -1286,6 +1301,7 @@ const supportedCurrencies = computed(() => {
 
 const supportedCurrencyCount = computed(() => supportedCurrencies.value.length)
 const allCurrencyOptions = computed(() => buildCurrencyOptions(supportedCurrencies.value))
+const timeZoneOptions = computed(() => buildTimeZoneOptions())
 
 const currentRates = computed(() => {
   if (!snapshot.value) return []
@@ -1336,7 +1352,7 @@ const rateColumns = computed(() => [
 ])
 
 function formatTime(value: string) {
-  return dayjs(value).format('YYYY-MM-DD HH:mm:ss')
+  return formatDateTimeInTimezone(value, settingsForm.timezone)
 }
 
 </script>

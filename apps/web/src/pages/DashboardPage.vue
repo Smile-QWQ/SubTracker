@@ -115,7 +115,6 @@
 </template>
 
 <script setup lang="ts">
-import dayjs from 'dayjs'
 import { computed, h } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { NCard, NDataTable, NEmpty, NGrid, NGridItem, NProgress, NTag, useThemeVars } from 'naive-ui'
@@ -125,6 +124,7 @@ import { useStatisticsOverviewQuery } from '@/composables/statistics-overview-qu
 import ChartView from '@/components/ChartView.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
+import { formatDateInTimezone } from '@/utils/timezone'
 import type { StatisticsOverview } from '@/types/api'
 import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils/subscription-status'
 
@@ -217,7 +217,7 @@ const columns = [
   {
     title: '下次续订',
     key: 'nextRenewalDate',
-    render: (row: StatisticsOverview['upcomingRenewals'][number]) => dayjs(row.nextRenewalDate).format('YYYY-MM-DD')
+    render: (row: StatisticsOverview['upcomingRenewals'][number]) => formatDateInTimezone(row.nextRenewalDate, settings.value?.timezone)
   },
   {
     title: '原始金额',
