@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { prismaMock, appendSubscriptionOrdersMock, appendSubscriptionOrderMock, replaceSubscriptionTagsMock, saveImportedLogoBufferMock } =
   vi.hoisted(() => ({
@@ -52,6 +52,8 @@ function encodeJson(value: unknown) {
 
 describe('commitWallosImport', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-25T00:00:00.000Z'))
     prismaMock.tag.findMany.mockReset()
     prismaMock.tag.createMany.mockReset()
     prismaMock.subscription.createMany.mockReset()
@@ -60,6 +62,10 @@ describe('commitWallosImport', () => {
     appendSubscriptionOrderMock.mockReset()
     replaceSubscriptionTagsMock.mockReset()
     saveImportedLogoBufferMock.mockReset()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('batches imported tags, subscriptions, tag joins, and order writes', async () => {
@@ -73,9 +79,10 @@ describe('commitWallosImport', () => {
           Name: 'Netflix',
           Price: '$10',
           Category: 'Video',
-          'Payment Cycle': 'Monthly',
-          'Next Payment': '2026-05-01',
-          URL: 'https://netflix.com',
+          'Payment Cycle': 'Yearly',
+          'Next Payment': '2025-01-10',
+          Renewal: 'Automatic',
+          URL: 'netflix.com',
           Notes: ''
         },
         {
@@ -113,7 +120,14 @@ describe('commitWallosImport', () => {
     })
     expect(prismaMock.subscription.createMany).toHaveBeenCalledTimes(1)
     expect(prismaMock.subscription.createMany.mock.calls[0][0].data).toHaveLength(2)
-    const createdIds = prismaMock.subscription.createMany.mock.calls[0][0].data.map((item: { id: string }) => item.id)
+    const createdRows = prismaMock.subscription.createMany.mock.calls[0][0].data
+    const createdIds = createdRows.map((item: { id: string }) => item.id)
+    expect(createdRows[0]).toMatchObject({
+      currency: 'USD',
+      websiteUrl: 'https://netflix.com/',
+      nextRenewalDate: new Date('2027-01-10T00:00:00.000Z'),
+      status: 'active'
+    })
     expect(prismaMock.subscriptionTag.createMany).toHaveBeenCalledWith({
       data: [
         { subscriptionId: createdIds[0], tagId: 'tag_video' },

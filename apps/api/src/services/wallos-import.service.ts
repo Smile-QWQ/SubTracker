@@ -15,6 +15,7 @@ import type {
   WallosImportTagDto
 } from '@subtracker/shared'
 import { prisma } from '../db'
+import { addInterval } from '../utils/date'
 import { getAppSettings } from './settings.service'
 import { appendSubscriptionOrders } from './subscription-order.service'
 import { saveImportedLogoBuffer } from './logo.service'
@@ -158,6 +159,12 @@ function parseDate(value: unknown) {
   return date.toISOString().slice(0, 10)
 }
 
+function startOfUtcDay(value: Date | string = new Date()) {
+  const date = new Date(value)
+  date.setUTCHours(0, 0, 0, 0)
+  return date
+}
+
 function detectImportFileType(input: WallosImportInspectInput, buffer: Buffer): ImportFileType {
   const filename = input.filename.toLowerCase()
   const trimmed = buffer.toString('utf8', 0, Math.min(buffer.length, 80)).trimStart()
@@ -213,19 +220,58 @@ export function mapWallosBillingInterval(days: number | null | undefined, freque
   }
 }
 
+export function resolveWallosEffectiveNextPayment(input: {
+  nextPayment?: string | null
+  autoRenew?: boolean | null
+  billingIntervalCount?: number | null
+  billingIntervalUnit?: BillingIntervalUnit | null
+  inactive?: number | boolean | null
+  cancellationDate?: string | null
+  today?: Date | string
+}) {
+  const parsedNextPayment = parseDate(input.nextPayment)
+  if (!parsedNextPayment) return null
+
+  let effectiveDate = startOfUtcDay(`${parsedNextPayment}T00:00:00Z`)
+  const today = startOfUtcDay(input.today ?? new Date())
+  const canAutoAdvance =
+    Boolean(input.autoRenew) &&
+    !input.inactive &&
+    !parseDate(input.cancellationDate) &&
+    Number(input.billingIntervalCount) > 0 &&
+    input.billingIntervalUnit
+
+  if (!canAutoAdvance) {
+    return effectiveDate.toISOString().slice(0, 10)
+  }
+
+  let guard = 0
+  while (effectiveDate.getTime() < today.getTime() && guard < 3660) {
+    effectiveDate = startOfUtcDay(
+      addInterval(effectiveDate, Number(input.billingIntervalCount), input.billingIntervalUnit as BillingIntervalUnit)
+    )
+    guard += 1
+  }
+
+  return effectiveDate.toISOString().slice(0, 10)
+}
+
 export function mapWallosSubscriptionStatus(input: {
   inactive?: number | null
   cancellationDate?: string | null
   nextPayment?: string | null
+  autoRenew?: boolean | null
+  billingIntervalCount?: number | null
+  billingIntervalUnit?: BillingIntervalUnit | null
+  today?: Date | string
 }) {
   if (input.inactive) return 'paused' as SubscriptionStatus
   if (parseDate(input.cancellationDate)) return 'cancelled' as SubscriptionStatus
 
-  const nextPayment = parseDate(input.nextPayment)
+  const nextPayment = resolveWallosEffectiveNextPayment(input)
   if (nextPayment) {
-    const nextDate = new Date(`${nextPayment}T00:00:00Z`)
-    const today = new Date()
-    today.setUTCHours(0, 0, 0, 0)
+    const nextDate = startOfUtcDay(`${nextPayment}T00:00:00Z`)
+    const today = startOfUtcDay(input.today ?? new Date())
     if (nextDate.getTime() < today.getTime()) {
       return 'expired' as SubscriptionStatus
     }
@@ -244,7 +290,7 @@ export function resolveWallosNotifyDays(input: {
     return { webhookEnabled: false, notifyDaysBefore: Math.max(input.globalNotifyDays, 0) }
   }
 
-  if (input.notifyDaysBefore === null || input.notifyDaysBefore === undefined || input.notifyDaysBefore < 0) {
+  if (input.notifyDaysBefore === null || input.notifyDaysBefore === undefined || input.notifyDaysBefore <= 0) {
     return { webhookEnabled: true, notifyDaysBefore: Math.max(input.globalNotifyDays, 0) }
   }
 
@@ -352,10 +398,61 @@ function parsePriceString(input: unknown) {
   else if (/£|gbp/i.test(normalized)) currency = 'GBP'
   else if (/jpy|yen|￥/i.test(normalized)) currency = 'JPY'
 
+  let warning: string | null = null
+  if (!amountMatch) {
+    warning = `价格 "${text}" 无法完整解析，已回退为 0 ${currency}`
+  } else if (/\$/.test(normalized) && !/usd|dollar/i.test(normalized)) {
+    warning = `价格 "${text}" 的币种符号存在歧义，已默认按 USD 导入`
+  } else if (/¥/.test(normalized) && !/yuan|cny|rmb/i.test(normalized)) {
+    warning = `价格 "${text}" 的币种符号存在歧义，已默认按 CNY 导入`
+  } else if (!/[a-z￥¥€£$]/i.test(normalized)) {
+    warning = `价格 "${text}" 未包含明确币种，已默认按 CNY 导入`
+  }
+
   return {
     amount: Number.isFinite(amount) ? amount : 0,
     currency,
-    warning: amountMatch ? null : `价格 "${text}" 无法完整解析，已回退为 0 ${currency}`
+    warning
+  }
+}
+
+function normalizeWallosWebsiteUrl(input: unknown) {
+  const raw = String(input ?? '')
+    .replace(/&amp;/g, '&')
+    .trim()
+  if (!raw) {
+    return { websiteUrl: null, warning: null as string | null }
+  }
+
+  const tryParse = (value: string) => {
+    try {
+      const parsed = new URL(value)
+      if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) return null
+      return parsed.toString()
+    } catch {
+      return null
+    }
+  }
+
+  const direct = tryParse(raw)
+  if (direct) {
+    return { websiteUrl: direct, warning: null as string | null }
+  }
+
+  const looksLikeDomain = /^[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:[/?#].*)?$/i.test(raw)
+  if (looksLikeDomain) {
+    const withHttps = tryParse(`https://${raw}`)
+    if (withHttps) {
+      return {
+        websiteUrl: withHttps,
+        warning: `网址 "${raw}" 缺少协议，已自动补全为 ${withHttps}`
+      }
+    }
+  }
+
+  return {
+    websiteUrl: null,
+    warning: `网址 "${raw}" 无法识别为合法链接，已忽略`
   }
 }
 
@@ -416,15 +513,24 @@ function mapJsonStatus(row: WallosJsonRow) {
   const state = String(row.State ?? '').trim().toLowerCase()
   const cancellationDate = parseDate(row['Cancellation Date'])
   const nextPayment = parseDate(row['Next Payment'])
+  const cycle = parsePaymentCycle(row['Payment Cycle'])
+  const autoRenew = mapJsonAutoRenew(row)
 
   if (cancellationDate) return 'cancelled' as SubscriptionStatus
   if (active === 'no' || state === 'disabled') return 'paused' as SubscriptionStatus
 
   if (nextPayment) {
-    const nextDate = new Date(`${nextPayment}T00:00:00Z`)
-    const today = new Date()
-    today.setUTCHours(0, 0, 0, 0)
-    if (nextDate.getTime() < today.getTime()) {
+    const effectiveNextPayment = resolveWallosEffectiveNextPayment({
+      nextPayment,
+      autoRenew,
+      billingIntervalCount: cycle.billingIntervalCount,
+      billingIntervalUnit: cycle.billingIntervalUnit,
+      inactive: active === 'no' || state === 'disabled',
+      cancellationDate
+    })
+    const nextDate = effectiveNextPayment ? startOfUtcDay(`${effectiveNextPayment}T00:00:00Z`) : null
+    const today = startOfUtcDay(new Date())
+    if (nextDate && nextDate.getTime() < today.getTime()) {
       return 'expired' as SubscriptionStatus
     }
   }
@@ -432,12 +538,62 @@ function mapJsonStatus(row: WallosJsonRow) {
   return 'active' as SubscriptionStatus
 }
 
-function mapJsonWebhookEnabled(row: WallosJsonRow) {
-  return String(row.Notifications ?? '').trim().toLowerCase() === 'enabled'
+function resolveJsonEffectiveNextPayment(row: WallosJsonRow) {
+  const nextPayment = parseDate(row['Next Payment'])
+  if (!nextPayment) return null
+
+  const active = String(row.Active ?? '').trim().toLowerCase()
+  const state = String(row.State ?? '').trim().toLowerCase()
+  const cycle = parsePaymentCycle(row['Payment Cycle'])
+  return resolveWallosEffectiveNextPayment({
+    nextPayment,
+    autoRenew: mapJsonAutoRenew(row),
+    billingIntervalCount: cycle.billingIntervalCount,
+    billingIntervalUnit: cycle.billingIntervalUnit,
+    inactive: active === 'no' || state === 'disabled',
+    cancellationDate: parseDate(row['Cancellation Date'])
+  })
 }
 
-function mapJsonAutoRenew(row: WallosJsonRow) {
-  return String(row.Renewal ?? '').trim().toLowerCase() === 'automatic'
+function resolveDbEffectiveNextPayment(
+  row: WallosSubscriptionRow,
+  mappedInterval: { billingIntervalCount: number; billingIntervalUnit: BillingIntervalUnit }
+) {
+  return resolveWallosEffectiveNextPayment({
+    nextPayment: row.next_payment,
+    autoRenew: Boolean(row.auto_renew),
+    billingIntervalCount: mappedInterval.billingIntervalCount,
+    billingIntervalUnit: mappedInterval.billingIntervalUnit,
+    inactive: row.inactive,
+    cancellationDate: row.cancellation_date
+  })
+}
+
+function pushRowWarning(warnings: string[], rowWarnings: string[], prefix: string, warning: string | null | undefined) {
+  if (!warning) return
+  warnings.push(`${prefix} ${warning}`)
+  rowWarnings.push(warning)
+}
+
+function buildJsonStartDateWarning() {
+  return 'Wallos JSON 不包含 start_date，已使用 Next Payment 代填开始日期'
+}
+
+function buildJsonDerivedWarnings(row: WallosJsonRow) {
+  const warnings: string[] = []
+  const price = parsePriceString(row.Price)
+  if (price.warning) warnings.push(price.warning)
+  const cycle = parsePaymentCycle(row['Payment Cycle'])
+  if (cycle.warning) warnings.push(cycle.warning)
+  warnings.push(buildJsonStartDateWarning())
+  const normalizedUrl = normalizeWallosWebsiteUrl(row.URL)
+  if (normalizedUrl.warning) warnings.push(normalizedUrl.warning)
+  return {
+    price,
+    cycle,
+    normalizedUrl,
+    warnings
+  }
 }
 
 function buildJsonPreview(
@@ -458,19 +614,13 @@ function buildJsonPreview(
       return
     }
 
-    const price = parsePriceString(row.Price)
-    const cycle = parsePaymentCycle(row['Payment Cycle'])
     const tagName = normalizeWallosTagName(String(row.Category ?? ''))
     const rowWarnings: string[] = []
+    const derived = buildJsonDerivedWarnings(row)
 
-    if (price.warning) {
-      warnings.push(`json#${index + 1} ${price.warning}`)
-      rowWarnings.push(price.warning)
-    }
-    if (cycle.warning) {
-      warnings.push(`json#${index + 1} ${cycle.warning}`)
-      rowWarnings.push(cycle.warning)
-    }
+    derived.warnings.forEach((warning) => {
+      pushRowWarning(warnings, rowWarnings, `json#${index + 1}`, warning)
+    })
 
     if (tagName) {
       tags.add(tagName, index + 1, index + 1)
@@ -479,19 +629,19 @@ function buildJsonPreview(
     previewSubscriptions.push({
       sourceId: index + 1,
       name,
-      amount: price.amount,
-      currency: price.currency,
+      amount: derived.price.amount,
+      currency: derived.price.currency,
       status: mapJsonStatus(row),
       autoRenew: mapJsonAutoRenew(row),
-      billingIntervalCount: cycle.billingIntervalCount,
-      billingIntervalUnit: cycle.billingIntervalUnit,
+      billingIntervalCount: derived.cycle.billingIntervalCount,
+      billingIntervalUnit: derived.cycle.billingIntervalUnit,
       startDate: nextPayment,
-      nextRenewalDate: nextPayment,
+      nextRenewalDate: resolveJsonEffectiveNextPayment(row) ?? nextPayment,
       notifyDaysBefore: settings.defaultNotifyDays,
       webhookEnabled: mapJsonWebhookEnabled(row),
       notes: String(row.Notes ?? ''),
       description: '',
-      websiteUrl: row.URL ? String(row.URL).replace(/&amp;/g, '&') : null,
+      websiteUrl: derived.normalizedUrl.websiteUrl,
       tagNames: tagName ? [tagName] : [],
       logoRef: null,
       logoImportStatus: 'none',
@@ -521,6 +671,14 @@ function buildJsonPreview(
   }
 }
 
+function mapJsonWebhookEnabled(row: WallosJsonRow) {
+  return String(row.Notifications ?? '').trim().toLowerCase() === 'enabled'
+}
+
+function mapJsonAutoRenew(row: WallosJsonRow) {
+  return String(row.Renewal ?? '').trim().toLowerCase() === 'automatic'
+}
+
 function buildDbPreview(
   rows: WallosSubscriptionRow[],
   settings: { defaultNotifyDays: number; baseCurrency: string },
@@ -543,10 +701,14 @@ function buildDbPreview(
     }
 
     const mappedInterval = mapWallosBillingInterval(row.cycle_days, row.frequency_name)
+    const effectiveNextRenewalDate = resolveDbEffectiveNextPayment(row, mappedInterval)
     const mappedStatus = mapWallosSubscriptionStatus({
       inactive: row.inactive,
       cancellationDate: row.cancellation_date,
-      nextPayment: row.next_payment
+      nextPayment: row.next_payment,
+      autoRenew: Boolean(row.auto_renew),
+      billingIntervalCount: mappedInterval.billingIntervalCount,
+      billingIntervalUnit: mappedInterval.billingIntervalUnit
     })
     const notifyConfig = resolveWallosNotifyDays({
       notify: row.notify,
@@ -555,11 +717,13 @@ function buildDbPreview(
     })
     const normalizedTag = normalizeWallosTagName(row.category_name)
     const rowWarnings: string[] = []
+    const normalizedUrl = normalizeWallosWebsiteUrl(row.url)
 
     if (mappedInterval.warning) {
       warnings.push(`subscription#${row.id} ${mappedInterval.warning}`)
       rowWarnings.push(mappedInterval.warning)
     }
+    pushRowWarning(warnings, rowWarnings, `subscription#${row.id}`, normalizedUrl.warning)
 
     if (normalizedTag) {
       tags.add(normalizedTag, row.category_id, row.category_sort_order)
@@ -591,12 +755,12 @@ function buildDbPreview(
       billingIntervalCount: mappedInterval.billingIntervalCount,
       billingIntervalUnit: mappedInterval.billingIntervalUnit,
       startDate: parseDate(row.start_date) ?? parseDate(row.next_payment) ?? new Date().toISOString().slice(0, 10),
-      nextRenewalDate: parseDate(row.next_payment) ?? new Date().toISOString().slice(0, 10),
+      nextRenewalDate: effectiveNextRenewalDate ?? parseDate(row.next_payment) ?? new Date().toISOString().slice(0, 10),
       notifyDaysBefore: notifyConfig.notifyDaysBefore,
       webhookEnabled: notifyConfig.webhookEnabled,
       notes: String(row.notes || ''),
       description: '',
-      websiteUrl: row.url ? String(row.url).replace(/&amp;/g, '&') : null,
+      websiteUrl: normalizedUrl.websiteUrl,
       tagNames: normalizedTag ? [normalizedTag] : [],
       logoRef: effectiveLogoRef,
       logoImportStatus,

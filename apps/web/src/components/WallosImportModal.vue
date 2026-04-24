@@ -12,6 +12,10 @@
         <n-button type="primary" :disabled="!selectedFile" :loading="inspecting" @click="inspectFile">生成预览</n-button>
       </n-space>
 
+      <n-alert v-if="showJsonImportWarning" type="warning" :show-icon="false">
+        {{ JSON_IMPORT_WARNING_MESSAGE }}
+      </n-alert>
+
       <template v-if="preview">
         <n-grid :cols="summaryCols" :x-gap="12" :y-gap="12">
           <n-grid-item>
@@ -51,9 +55,17 @@
 
         <n-card title="警告信息" size="small">
           <n-empty v-if="previewWarnings.length === 0" description="没有额外警告" />
-          <ul v-else class="warning-list">
-            <li v-for="item in previewWarnings" :key="item">{{ item }}</li>
-          </ul>
+          <template v-else>
+            <div class="warning-header">
+              <span>共 {{ previewWarnings.length }} 条警告</span>
+              <n-button text type="primary" @click="warningsExpanded = !warningsExpanded">
+                {{ warningsExpanded ? '收起' : '展开查看' }}
+              </n-button>
+            </div>
+            <ul v-if="warningsExpanded" class="warning-list">
+              <li v-for="item in previewWarnings" :key="item">{{ item }}</li>
+            </ul>
+          </template>
         </n-card>
       </template>
 
@@ -73,6 +85,7 @@ import { NAlert, NButton, NCard, NDataTable, NEmpty, NGrid, NGridItem, NModal, N
 import { api } from '@/composables/api'
 import type { WallosImportInspectResult, WallosImportSubscriptionPreview } from '@/types/api'
 import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils/subscription-status'
+import { JSON_IMPORT_WARNING_MESSAGE, shouldRecommendDbImport } from '@/utils/wallos-import'
 
 const props = defineProps<{
   show: boolean
@@ -91,8 +104,12 @@ const selectedFileName = ref('')
 const preview = ref<WallosImportInspectResult | null>(null)
 const inspecting = ref(false)
 const committing = ref(false)
+const warningsExpanded = ref(false)
 
 const summaryCols = computed(() => (width.value < 700 ? 2 : 4))
+const showJsonImportWarning = computed(() =>
+  shouldRecommendDbImport(selectedFileName.value, preview.value?.summary.fileType)
+)
 const previewWarnings = computed(() => {
   if (!preview.value) return []
   return Array.from(new Set([...preview.value.warnings, ...preview.value.subscriptionsPreview.flatMap((item) => item.warnings)]))
@@ -158,6 +175,7 @@ function handleFileChange(event: Event) {
   selectedFile.value = file ?? null
   selectedFileName.value = file?.name ?? ''
   preview.value = null
+  warningsExpanded.value = false
 }
 
 async function inspectFile() {
@@ -171,6 +189,7 @@ async function inspectFile() {
       contentType: selectedFile.value.type || 'application/octet-stream',
       base64
     })
+    warningsExpanded.value = false
     message.success('已生成导入预览')
   } catch (error) {
     preview.value = null
@@ -260,10 +279,21 @@ function fileTypeText(type: WallosImportInspectResult['summary']['fileType']) {
 }
 
 .warning-list {
-  margin: 0;
+  margin-top: 12px;
+  margin-bottom: 0;
   padding-left: 18px;
   color: var(--app-text-secondary);
   display: grid;
   gap: 8px;
 }
+
+.warning-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--app-text-secondary);
+  font-size: 13px;
+}
+
 </style>

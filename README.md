@@ -32,7 +32,8 @@
 - **预算能力**：总月预算、总年预算、标签月预算、独立的预算统计页
 - **统计分析**：未来 12 个月支付趋势、标签支出占比、状态分布、自动续订占比、未来 30 天续订分布
 - **多币种支持**：基准货币换算、汇率快照、货币转换器
-- **通知能力**：Webhook、SMTP 邮件、PushPlus、Telegram Bot
+- **通知能力**：Webhook、SMTP / Resend 邮件、PushPlus、Telegram Bot、Server 酱、Gotify
+- **界面主题**：支持浅色、深色与跟随系统，并在当前浏览器记忆偏好
 - **Logo 能力**：上传、本地复用、网络搜索、Wallos ZIP 导入匹配
 - **AI 识别**：支持文本 / 图片识别后自动填充订阅信息
 - **Wallos 导入**：兼容 JSON、SQLite、ZIP
