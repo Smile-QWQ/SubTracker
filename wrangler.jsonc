@@ -13,7 +13,7 @@
 		"WEB_ORIGIN": "http://127.0.0.1:8787",
 		"BASE_CURRENCY": "CNY",
 		"DEFAULT_NOTIFY_DAYS": "3",
-		"EXCHANGE_RATE_PROVIDER": "er-api",
+		"EXCHANGE_RATE_PROVIDER": "ExchangeRate-API",
 		"EXCHANGE_RATE_URL": "https://open.er-api.com/v6/latest",
 		"CRON_SCAN": "* * * * *",
 		"CRON_AUTO_RENEW": "2 * * * *",
