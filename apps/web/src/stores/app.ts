@@ -36,7 +36,7 @@ export const useAppStore = defineStore('app', () => {
     resendConfig: {
       apiBaseUrl: DEFAULT_RESEND_API_URL,
       apiKey: '',
-      from: '',
+      from: 'SubTracker Lite <noreply@example.com>',
       to: ''
     },
     pushplusConfig: {
@@ -54,6 +54,13 @@ export const useAppStore = defineStore('app', () => {
       url: '',
       token: '',
       ignoreSsl: false
+    },
+    storageCapabilities: {
+      runtime: 'worker-lite',
+      kvEnabled: false,
+      r2Enabled: false,
+      logoStorageEnabled: false,
+      wallosImportMode: 'json-only'
     },
     aiConfig: {
       ...DEFAULT_AI_CONFIG,

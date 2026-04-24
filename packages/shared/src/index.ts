@@ -187,6 +187,14 @@ export const AiConfigSchema = z.object({
   })
 })
 
+export const StorageCapabilitiesSchema = z.object({
+  runtime: z.literal('worker-lite').default('worker-lite'),
+  kvEnabled: z.boolean().default(false),
+  r2Enabled: z.boolean().default(false),
+  logoStorageEnabled: z.boolean().default(false),
+  wallosImportMode: z.literal('json-only').default('json-only')
+})
+
 export const SettingsSchema = z.object({
   baseCurrency: z.string().length(3).default('CNY').transform((v) => v.toUpperCase()),
   defaultNotifyDays: z.number().int().min(0).max(365).default(3),
@@ -212,7 +220,8 @@ export const SettingsSchema = z.object({
   telegramConfig: TelegramConfigSchema.default({}),
   serverchanConfig: ServerchanConfigSchema.default({}),
   gotifyConfig: GotifyConfigSchema.default({}),
-  aiConfig: AiConfigSchema.default({})
+  aiConfig: AiConfigSchema.default({}),
+  storageCapabilities: StorageCapabilitiesSchema.default({})
 })
 
 export const LoginSchema = z.object({
@@ -279,6 +288,7 @@ export type NotificationWebhookSettingsInput = z.infer<typeof NotificationWebhoo
 export type AiProviderPreset = z.infer<typeof AiProviderPresetSchema>
 export type AiCapabilitiesInput = z.infer<typeof AiCapabilitiesSchema>
 export type AiConfigInput = z.infer<typeof AiConfigSchema>
+export type StorageCapabilitiesInput = z.infer<typeof StorageCapabilitiesSchema>
 export type LogoSearchInput = z.infer<typeof LogoSearchSchema>
 export type LogoUploadInput = z.infer<typeof LogoUploadSchema>
 export type AiRecognizeSubscriptionInput = z.infer<typeof AiRecognizeSubscriptionSchema>

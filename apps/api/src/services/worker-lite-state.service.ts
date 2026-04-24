@@ -3,7 +3,7 @@ import type { WallosImportInspectResultDto, WebhookEventType } from '@subtracker
 import { prisma } from '../db'
 import { getRuntimeD1Database, isWorkerRuntime } from '../runtime'
 
-type NotificationChannel = 'email' | 'pushplus' | 'telegram'
+type NotificationChannel = 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify'
 
 type ImportPreviewRow = {
   token: string

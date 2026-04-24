@@ -7,6 +7,13 @@
       icon-background="linear-gradient(135deg, #64748b 0%, #334155 100%)"
     />
 
+    <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
+      当前运行时：Cloudflare Worker。
+      KV 不使用；
+      R2 {{ settingsForm.storageCapabilities.r2Enabled ? '已启用' : '未启用，仅支持远程 Logo 引用' }}；
+      Wallos 导入模式：仅 JSON。
+    </n-alert>
+
     <n-grid :cols="gridCols" :x-gap="12" :y-gap="12">
       <n-grid-item>
         <n-card title="基础设置" class="settings-card">
@@ -179,6 +186,7 @@
         <n-card title="通知设置" class="settings-card">
           <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
             统一管理邮箱、PushPlus、Telegram、Server 酱、Gotify 与 Webhook。每个渠道都可以单独保存并单独测试。
+            Cloudflare Worker 运行时仅支持 Resend 邮件，Webhook / Gotify 的忽略 SSL 校验不可用。
           </n-alert>
 
           <n-grid :cols="notificationGridCols" :x-gap="12" :y-gap="12">
@@ -192,7 +200,11 @@
                   <n-grid :cols="formCols" :x-gap="8">
                     <n-grid-item>
                       <n-form-item label="通知提供商">
-                        <n-select v-model:value="settingsForm.emailProvider" :options="emailProviderOptions" />
+                        <n-select
+                          v-model:value="settingsForm.emailProvider"
+                          :options="emailProviderOptions"
+                          :disabled="isWorkerLiteRuntime"
+                        />
                       </n-form-item>
                     </n-grid-item>
                     <n-grid-item>
@@ -237,7 +249,7 @@
                         <n-input v-model:value="settingsForm.smtpConfig.password" type="password" show-password-on="click" />
                       </n-form-item>
                       <n-form-item label="发件人">
-                        <n-input v-model:value="settingsForm.smtpConfig.from" placeholder="SubTracker <noreply@example.com>" />
+                        <n-input v-model:value="settingsForm.smtpConfig.from" placeholder="SubTracker Lite <noreply@example.com>" />
                       </n-form-item>
                       <n-form-item label="收件人">
                         <n-input v-model:value="settingsForm.smtpConfig.to" placeholder="多个邮箱请用英文逗号分隔" />
@@ -251,7 +263,7 @@
                         <n-input v-model:value="settingsForm.resendConfig.apiKey" type="password" show-password-on="click" placeholder="re_xxxxx" />
                       </n-form-item>
                       <n-form-item label="发件人">
-                        <n-input v-model:value="settingsForm.resendConfig.from" placeholder="SubTracker <noreply@example.com>" />
+                        <n-input v-model:value="settingsForm.resendConfig.from" placeholder="SubTracker Lite <noreply@example.com>" />
                       </n-form-item>
                       <n-form-item label="收件人">
                         <n-input v-model:value="settingsForm.resendConfig.to" placeholder="多个邮箱请用英文逗号分隔" />
@@ -341,7 +353,7 @@
                     <n-input v-model:value="settingsForm.gotifyConfig.token" type="password" show-password-on="click" />
                   </n-form-item>
                   <div class="compact-switch-row">
-                    <n-switch v-model:value="settingsForm.gotifyConfig.ignoreSsl" />
+                    <n-switch v-model:value="settingsForm.gotifyConfig.ignoreSsl" :disabled="isWorkerLiteRuntime" />
                     <span class="switch-inline-label">忽略 SSL 校验</span>
                   </div>
                   <n-space>
@@ -372,7 +384,7 @@
                     </n-grid-item>
                       <n-grid-item>
                         <n-form-item>
-                          <n-switch v-model:value="webhookForm.ignoreSsl" />
+                          <n-switch v-model:value="webhookForm.ignoreSsl" :disabled="isWorkerLiteRuntime" />
                           <span class="switch-label">忽略 SSL 校验</span>
                         </n-form-item>
                       </n-grid-item>
@@ -385,7 +397,7 @@
                           v-model:value="webhookForm.headers"
                           type="textarea"
                           :autosize="{ minRows: 3, maxRows: 6 }"
-                          placeholder="支持 JSON 对象或每行一个 Header，例如：&#10;Content-Type: application/json&#10;X-App: SubTracker"
+                          placeholder="支持 JSON 对象或每行一个 Header，例如：&#10;Content-Type: application/json&#10;X-App: SubTracker Lite"
                         />
                       </n-form-item>
                       <n-form-item label="Payload 模板">
@@ -509,6 +521,10 @@
           <n-space vertical style="width: 100%">
             <n-alert type="info" :show-icon="false">
               可导出全部订阅为 CSV / JSON，也可在这里导入 Wallos 数据。
+              当前 Cloudflare Worker 版本仅支持 JSON 导入。
+              <template v-if="!settingsForm.storageCapabilities.r2Enabled">
+                当前未启用 R2，Logo 只支持远程引用，不支持本地库持久化。
+              </template>
             </n-alert>
             <n-space wrap>
               <n-button type="success" @click="showWallosImportModal = true">导入 Wallos</n-button>
@@ -649,7 +665,7 @@ const settingsForm = reactive<Settings>({
   resendConfig: {
     apiBaseUrl: DEFAULT_RESEND_API_URL,
     apiKey: '',
-    from: '',
+    from: 'SubTracker Lite <noreply@example.com>',
     to: ''
   },
   pushplusConfig: {
@@ -667,6 +683,13 @@ const settingsForm = reactive<Settings>({
     url: '',
     token: '',
     ignoreSsl: false
+  },
+  storageCapabilities: {
+    runtime: 'worker-lite',
+    kvEnabled: false,
+    r2Enabled: false,
+    logoStorageEnabled: false,
+    wallosImportMode: 'json-only'
   },
   aiConfig: {
     ...DEFAULT_AI_CONFIG,
@@ -716,6 +739,7 @@ const notificationGridCols = computed(() => {
   if (width.value < 1200) return 2
   return 3
 })
+const isWorkerLiteRuntime = computed(() => settingsForm.storageCapabilities?.runtime === 'worker-lite')
 const gridSpanFull = computed(() => (isMobile.value ? 1 : 2))
 const watchedCurrencies = ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'HKD']
 const webhookMethodOptions = [
@@ -733,7 +757,7 @@ const aiProviderPresetOptions = [
   { label: '火山方舟', value: 'volcengine-ark' }
 ] satisfies Array<{ label: string; value: AiProviderPreset }>
 const emailProviderOptions = computed(() =>
-  settingsForm.storageCapabilities?.runtime === 'worker-lite'
+  isWorkerLiteRuntime.value
     ? ([{ label: 'Resend', value: 'resend' }] satisfies Array<{ label: string; value: 'smtp' | 'resend' }>)
     : ([
         { label: 'SMTP', value: 'smtp' },
@@ -742,8 +766,12 @@ const emailProviderOptions = computed(() =>
 )
 
 function normalizeWorkerEmailProvider() {
-  if (settingsForm.storageCapabilities?.runtime === 'worker-lite' && settingsForm.emailProvider !== 'resend') {
+  if (isWorkerLiteRuntime.value && settingsForm.emailProvider !== 'resend') {
     settingsForm.emailProvider = 'resend'
+  }
+  if (isWorkerLiteRuntime.value) {
+    settingsForm.gotifyConfig.ignoreSsl = false
+    webhookForm.ignoreSsl = false
   }
 }
 const emailSummaryText = computed(() => {

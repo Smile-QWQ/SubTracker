@@ -8,8 +8,11 @@
             <n-drawer-content closable body-content-style="padding: 8px 0;">
               <template #header>
                 <div class="logo__stack">
-                  <span class="logo__text">SubTracker</span>
-                  <span class="logo__version">{{ appVersion }}</span>
+                  <span class="logo__text">{{ appDisplayName }}</span>
+                  <span class="logo__meta">
+                    <span class="logo__version">{{ appVersion }}</span>
+                    <span class="logo__variant">{{ appVariant }}</span>
+                  </span>
                 </div>
               </template>
               <div class="sider-shell">
@@ -53,8 +56,11 @@
                         </n-icon>
                       </div>
                       <div class="logo__stack">
-                        <span class="logo__text">SubTracker</span>
-                        <span class="logo__version">{{ appVersion }}</span>
+                        <span class="logo__text">{{ appDisplayName }}</span>
+                        <span class="logo__meta">
+                          <span class="logo__version">{{ appVersion }}</span>
+                          <span class="logo__variant">{{ appVariant }}</span>
+                        </span>
                       </div>
                     </div>
                     <n-button quaternary circle class="logo__toggle" @click="siderCollapsed = !siderCollapsed">
@@ -213,7 +219,9 @@ const router = useRouter()
 const authStore = useAuthStore()
 const { resolvedTheme, setThemePreference } = useThemePreference()
 const { message } = createDiscreteApi(['message'])
+const appDisplayName = 'SubTracker'
 const appVersion = __APP_VERSION__
+const appVariant = 'Lite'
 const mobileMenuVisible = ref(false)
 const siderCollapsed = ref(false)
 const { width } = useWindowSize()
@@ -436,6 +444,35 @@ async function submitDefaultPasswordChange() {
   font-weight: 500;
   color: var(--app-text-secondary);
   white-space: nowrap;
+}
+
+.logo__meta {
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+
+.logo__variant {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 16px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--app-accent) 20%, transparent);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--app-accent);
+  white-space: nowrap;
+  margin-left: auto;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .logo__toggle {

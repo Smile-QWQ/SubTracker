@@ -19,7 +19,7 @@ vi.mock('../../src/services/settings.service', () => ({
     defaultOverdueReminderRules: '1&09:30;2&09:30;3&09:30;',
     tagBudgets: {},
     emailNotificationsEnabled: (store.get('emailNotificationsEnabled') as boolean) ?? false,
-    emailProvider: (store.get('emailProvider') as 'smtp' | 'resend' | undefined) ?? 'smtp',
+    emailProvider: (store.get('emailProvider') as 'smtp' | 'resend' | undefined) ?? 'resend',
     pushplusNotificationsEnabled: (store.get('pushplusNotificationsEnabled') as boolean) ?? false,
     telegramNotificationsEnabled: (store.get('telegramNotificationsEnabled') as boolean) ?? false,
     serverchanNotificationsEnabled: (store.get('serverchanNotificationsEnabled') as boolean) ?? false,
@@ -123,7 +123,7 @@ describe('settings routes validation', () => {
     expect(res.json().error.message).toContain('启用 AI 识别时必须填写')
   })
 
-  it('rejects incomplete email config when enabling email notifications', async () => {
+  it('rejects smtp email notifications in worker runtime', async () => {
     const res = await app.inject({
       method: 'PATCH',
       url: '/settings',
@@ -143,7 +143,7 @@ describe('settings routes validation', () => {
     })
 
     expect(res.statusCode).toBe(422)
-    expect(res.json().error.message).toContain('启用邮箱通知时必须填写')
+    expect(res.json().error.message).toContain('暂不支持 SMTP')
   })
 
   it('rejects incomplete resend config when enabling email notifications with resend', async () => {

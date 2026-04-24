@@ -159,9 +159,11 @@ export interface CalendarEvent {
 }
 
 export interface EmailConfig {
-  provider: 'resend'
-  apiBaseUrl: string
-  apiKey: string
+  host: string
+  port: number
+  secure: boolean
+  username: string
+  password: string
   from: string
   to: string
 }

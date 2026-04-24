@@ -9,10 +9,21 @@ vi.mock('../../src/config', () => ({
 vi.mock('../../src/services/settings.service', () => ({
   getNotificationChannelSettings: vi.fn(async () => ({
     emailNotificationsEnabled: false,
+    emailProvider: 'resend',
     pushplusNotificationsEnabled: false,
     telegramNotificationsEnabled: false,
-    emailConfig: {
-      provider: 'resend',
+    serverchanNotificationsEnabled: false,
+    gotifyNotificationsEnabled: false,
+    smtpConfig: {
+      host: '',
+      port: 587,
+      secure: false,
+      username: '',
+      password: '',
+      from: '',
+      to: ''
+    },
+    resendConfig: {
       apiBaseUrl: 'https://api.resend.com/emails',
       apiKey: '',
       from: '',
@@ -66,11 +77,22 @@ describe('channel notification service', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await sendTestEmailNotificationWithConfig({
-      provider: 'resend',
-      apiBaseUrl: 'https://api.resend.com/emails',
-      apiKey: 're_test_123',
-      from: 'SubTracker Lite <noreply@example.com>',
-      to: 'user@example.com'
+      emailProvider: 'resend',
+      smtpConfig: {
+        host: '',
+        port: 587,
+        secure: false,
+        username: '',
+        password: '',
+        from: '',
+        to: ''
+      },
+      resendConfig: {
+        apiBaseUrl: 'https://api.resend.com/emails',
+        apiKey: 're_test_123',
+        from: 'SubTracker Lite <noreply@example.com>',
+        to: 'user@example.com'
+      }
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
