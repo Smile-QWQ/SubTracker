@@ -3,6 +3,7 @@ import {
   CreateSubscriptionSchema,
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_OVERDUE_REMINDER_RULES,
+  normalizeWebsiteUrlInput,
   SettingsSchema
 } from '../src/index'
 
@@ -35,6 +36,28 @@ describe('shared schema', () => {
     expect(parsed.telegramConfig).toEqual({
       botToken: '',
       chatId: ''
+    })
+  })
+
+  it('normalizes website urls without protocol', () => {
+    expect(normalizeWebsiteUrlInput('example.com')).toEqual({
+      value: 'https://example.com',
+      error: null
+    })
+    expect(normalizeWebsiteUrlInput('www.example.com/path?q=1')).toEqual({
+      value: 'https://www.example.com/path?q=1',
+      error: null
+    })
+    expect(normalizeWebsiteUrlInput('127.0.0.1:8080/demo')).toEqual({
+      value: 'https://127.0.0.1:8080/demo',
+      error: null
+    })
+  })
+
+  it('rejects invalid website urls', () => {
+    expect(normalizeWebsiteUrlInput('not a url')).toEqual({
+      value: null,
+      error: '请输入合法网址，例如 https://example.com'
     })
   })
 })

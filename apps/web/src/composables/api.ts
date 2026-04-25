@@ -55,7 +55,12 @@ client.interceptors.response.use(
       }
     }
 
-    const message = error?.response?.data?.error?.message
+    const errorPayload = error?.response?.data?.error
+    const fieldErrors = errorPayload?.details?.fieldErrors as Record<string, string[] | undefined> | undefined
+    const firstFieldError = fieldErrors
+      ? Object.values(fieldErrors).flatMap((messages) => messages ?? []).find(Boolean)
+      : null
+    const message = firstFieldError || errorPayload?.message
     return Promise.reject(new Error(message || error.message || '请求失败'))
   }
 )

@@ -3,7 +3,7 @@
     <n-spin :show="saving" description="保存中，请稍候...">
     <n-form :model="form" label-placement="top">
       <div class="name-logo-row">
-        <n-form-item label="名称" class="name-logo-row__name">
+        <n-form-item label="名称" class="name-logo-row__name" :validation-status="validationStatusOf('name')" :feedback="formErrors.name">
           <n-input v-model:value="form.name" placeholder="例如：GitHub Pro" />
         </n-form-item>
 
@@ -111,39 +111,40 @@
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
-          <n-form-item label="官网 / 平台地址">
-            <n-input v-model:value="form.websiteUrl" placeholder="https://example.com" />
+          <n-form-item label="官网 / 平台地址" :validation-status="validationStatusOf('websiteUrl')" :feedback="formErrors.websiteUrl">
+            <n-input v-model:value="form.websiteUrl" placeholder="https://example.com" @blur="handleWebsiteUrlBlur" />
           </n-form-item>
         </n-grid-item>
       </n-grid>
 
-      <n-form-item label="描述">
+      <n-form-item label="描述" :validation-status="validationStatusOf('description')" :feedback="formErrors.description">
         <n-input
           v-model:value="form.description"
           type="textarea"
           :autosize="{ minRows: 2, maxRows: 4 }"
+          :maxlength="500"
           placeholder="可选，简单记录订阅用途"
         />
       </n-form-item>
 
       <n-grid :cols="moneyCols" :x-gap="16" :y-gap="8">
         <n-grid-item>
-          <n-form-item label="金额">
+          <n-form-item label="金额" :validation-status="validationStatusOf('amount')" :feedback="formErrors.amount">
             <n-input-number v-model:value="form.amount" :min="0" :precision="2" style="width: 100%" placeholder="输入金额，免费可填 0" />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
-          <n-form-item label="货币">
+          <n-form-item label="货币" :validation-status="validationStatusOf('currency')" :feedback="formErrors.currency">
             <n-select v-model:value="form.currency" :options="currencyOptions" filterable placeholder="选择货币" />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
-          <n-form-item label="频率">
+          <n-form-item label="频率" :validation-status="validationStatusOf('billingIntervalCount')" :feedback="formErrors.billingIntervalCount">
             <n-select v-model:value="form.billingIntervalCount" :options="frequencyOptions" placeholder="选择频率" />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
-          <n-form-item label="单位">
+          <n-form-item label="单位" :validation-status="validationStatusOf('billingIntervalUnit')" :feedback="formErrors.billingIntervalUnit">
             <n-select v-model:value="form.billingIntervalUnit" :options="intervalOptions" placeholder="选择单位" />
           </n-form-item>
         </n-grid-item>
@@ -151,13 +152,35 @@
 
       <n-grid :cols="dateCols" :x-gap="16" :y-gap="8">
         <n-grid-item>
-          <n-form-item label="开始日期">
+          <n-form-item label="开始日期" :validation-status="validationStatusOf('startDateTs')" :feedback="formErrors.startDateTs">
             <n-date-picker v-model:value="form.startDateTs" type="date" style="width: 100%" clearable />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
-          <n-form-item label="下次续订">
-            <n-date-picker v-model:value="form.nextRenewalDateTs" type="date" style="width: 100%" clearable @update:value="handleNextRenewalDateChange" />
+          <n-form-item :validation-status="validationStatusOf('nextRenewalDateTs')" :feedback="formErrors.nextRenewalDateTs">
+            <template #label>
+              <span class="label-with-action">
+                <span>下次续订</span>
+                <n-tooltip trigger="hover">
+                  <template #trigger>
+                    <n-button
+                      quaternary
+                      circle
+                      size="tiny"
+                      type="primary"
+                      :disabled="!canCalculateNextRenewal"
+                      @click.stop="handleRecalculateNextRenewal"
+                    >
+                      <template #icon>
+                        <n-icon :component="ColorWandOutline" />
+                      </template>
+                    </n-button>
+                  </template>
+                  <span>按开始日期和频率重新计算下次续订</span>
+                </n-tooltip>
+              </span>
+            </template>
+            <n-date-picker v-model:value="form.nextRenewalDateTs" type="date" style="width: 100%" clearable />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
@@ -194,11 +217,12 @@
         </n-grid-item>
       </n-grid>
 
-      <n-form-item label="备注">
+      <n-form-item label="备注" :validation-status="validationStatusOf('notes')" :feedback="formErrors.notes">
         <n-input
           v-model:value="form.notes"
           type="textarea"
           :autosize="{ minRows: 2, maxRows: 4 }"
+          :maxlength="1000"
           placeholder="可选，记录账号、套餐或特别说明"
         />
       </n-form-item>
@@ -249,11 +273,17 @@ import {
   NTooltip,
   useMessage
 } from 'naive-ui'
-import { CloseOutline, HelpCircleOutline, SearchOutline } from '@vicons/ionicons5'
+import { CloseOutline, ColorWandOutline, HelpCircleOutline, SearchOutline } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
 import SubscriptionAiModal from '@/components/SubscriptionAiModal.vue'
 import { buildCurrencyOptions } from '@/utils/currency'
 import { resolveLogoUrl } from '@/utils/logo'
+import {
+  calculateNextRenewalDateTs,
+  canRecalculateNextRenewal,
+  type SubscriptionFormErrors,
+  validateSubscriptionForm
+} from '@/utils/subscription-form'
 import type { AiRecognitionResult, LogoSearchResult, Subscription, Tag } from '@/types/api'
 
 const LOGO_TAB_WEB = 'web'
@@ -285,8 +315,7 @@ const loadingLocalLogoLibrary = ref(false)
 const logoCandidates = ref<LogoSearchResult[]>([])
 const localLogoLibrary = ref<LogoSearchResult[]>([])
 const logoFileInputRef = ref<HTMLInputElement | null>(null)
-const nextRenewalDirty = ref(false)
-const syncingNextRenewal = ref(false)
+const formErrors = reactive<SubscriptionFormErrors>({})
 
 const layoutCols = computed(() => (width.value < 700 ? 1 : 2))
 const moneyCols = computed(() => (width.value < 900 ? 2 : 4))
@@ -323,10 +352,10 @@ const form = reactive({
   amount: null as number | null,
   currency: 'CNY',
   billingIntervalCount: 1,
-  billingIntervalUnit: 'month',
+  billingIntervalUnit: 'month' as Subscription['billingIntervalUnit'] | '',
   autoRenew: false,
-  startDateTs: dayjs().valueOf(),
-  nextRenewalDateTs: dayjs().add(1, 'month').valueOf(),
+  startDateTs: dayjs().valueOf() as number | null,
+  nextRenewalDateTs: dayjs().add(1, 'month').valueOf() as number | null,
   advanceReminderRules: '',
   overdueReminderRules: '',
   webhookEnabled: true,
@@ -335,6 +364,14 @@ const form = reactive({
   logoUrl: '',
   logoSource: ''
 })
+
+const canCalculateNextRenewal = computed(() =>
+  canRecalculateNextRenewal({
+    startDateTs: form.startDateTs,
+    billingIntervalCount: Number(form.billingIntervalCount),
+    billingIntervalUnit: form.billingIntervalUnit as Subscription['billingIntervalUnit'] | ''
+  })
+)
 
 const resolvedLogoUrl = computed(() => (form.logoUrl ? resolveLogoUrl(form.logoUrl) : ''))
 
@@ -360,21 +397,6 @@ watch(
   }
 )
 
-watch(
-  () => [form.startDateTs, form.billingIntervalCount, form.billingIntervalUnit, props.model?.id] as const,
-  () => {
-    if (props.model || nextRenewalDirty.value || !form.startDateTs) return
-
-    syncingNextRenewal.value = true
-    form.nextRenewalDateTs = calculateNextRenewalTs(
-      form.startDateTs,
-      Number(form.billingIntervalCount),
-      form.billingIntervalUnit as Subscription['billingIntervalUnit']
-    )
-    syncingNextRenewal.value = false
-  }
-)
-
 function resetForm() {
   form.name = ''
   form.tagIds = []
@@ -393,9 +415,9 @@ function resetForm() {
   form.websiteUrl = ''
   form.logoUrl = ''
   form.logoSource = ''
-  nextRenewalDirty.value = false
   logoCandidates.value = []
   showLogoPanel.value = false
+  clearFormErrors()
 }
 
 function hydrateFromModel(model: Subscription) {
@@ -409,7 +431,6 @@ function hydrateFromModel(model: Subscription) {
   form.autoRenew = model.autoRenew ?? false
   form.startDateTs = dayjs(model.startDate).valueOf()
   form.nextRenewalDateTs = dayjs(model.nextRenewalDate).valueOf()
-  nextRenewalDirty.value = true
   form.advanceReminderRules = model.advanceReminderRules ?? ''
   form.overdueReminderRules = model.overdueReminderRules ?? ''
   form.webhookEnabled = model.webhookEnabled
@@ -419,6 +440,7 @@ function hydrateFromModel(model: Subscription) {
   form.logoSource = model.logoSource ?? ''
   logoCandidates.value = []
   showLogoPanel.value = false
+  clearFormErrors()
 }
 
 function handleReset() {
@@ -430,35 +452,6 @@ function handleReset() {
 
   resetForm()
   message.success('已重置表单')
-}
-
-function calculateNextRenewalTs(startDateTs: number, intervalCount: number, unit: Subscription['billingIntervalUnit']) {
-  const start = dayjs(startDateTs)
-  const count = Math.max(Number(intervalCount) || 1, 1)
-
-  switch (unit) {
-    case 'day':
-      return start.add(count, 'day').valueOf()
-    case 'week':
-      return start.add(count, 'week').valueOf()
-    case 'month':
-      return start.add(count, 'month').valueOf()
-    case 'quarter':
-      return start.add(count * 3, 'month').valueOf()
-    case 'year':
-      return start.add(count, 'year').valueOf()
-    default:
-      return start.add(1, 'month').valueOf()
-  }
-}
-
-function handleNextRenewalDateChange(value: number | null) {
-  if (value === null) return
-
-  form.nextRenewalDateTs = value
-  if (!syncingNextRenewal.value) {
-    nextRenewalDirty.value = true
-  }
 }
 
 async function openLogoPanel() {
@@ -602,21 +595,87 @@ function applyAiResult(result: AiRecognitionResult) {
   if (result.startDate) form.startDateTs = dayjs(result.startDate).valueOf()
   if (result.nextRenewalDate) {
     form.nextRenewalDateTs = dayjs(result.nextRenewalDate).valueOf()
-    nextRenewalDirty.value = true
   }
   if (result.websiteUrl) form.websiteUrl = result.websiteUrl
   if (result.notes) form.notes = result.notes
 }
 
+function clearFormErrors() {
+  Object.keys(formErrors).forEach((key) => {
+    delete formErrors[key as keyof SubscriptionFormErrors]
+  })
+}
+
+function setFieldError(field: keyof SubscriptionFormErrors, feedback: string | undefined) {
+  if (feedback) {
+    formErrors[field] = feedback
+    return
+  }
+
+  delete formErrors[field]
+}
+
+function validationStatusOf(field: keyof SubscriptionFormErrors) {
+  return formErrors[field] ? 'error' : undefined
+}
+
+function handleWebsiteUrlBlur() {
+  const validation = validateSubscriptionForm({
+    name: form.name,
+    description: form.description,
+    amount: form.amount,
+    currency: form.currency,
+    billingIntervalCount: Number(form.billingIntervalCount),
+    billingIntervalUnit: form.billingIntervalUnit as Subscription['billingIntervalUnit'] | '',
+    startDateTs: form.startDateTs,
+    nextRenewalDateTs: form.nextRenewalDateTs,
+    websiteUrl: form.websiteUrl,
+    notes: form.notes
+  })
+
+  setFieldError('websiteUrl', validation.errors.websiteUrl)
+  if (!validation.errors.websiteUrl) {
+    form.websiteUrl = validation.normalizedWebsiteUrl ?? ''
+  }
+}
+
+function handleRecalculateNextRenewal() {
+  if (!canCalculateNextRenewal.value || form.startDateTs === null) return
+
+  form.nextRenewalDateTs = calculateNextRenewalDateTs(
+    form.startDateTs,
+    Number(form.billingIntervalCount),
+    form.billingIntervalUnit as Subscription['billingIntervalUnit']
+  )
+  delete formErrors.nextRenewalDateTs
+}
+
 function submit() {
-  if (!form.name.trim()) {
-    message.warning('请填写名称')
+  const validation = validateSubscriptionForm({
+    name: form.name,
+    description: form.description,
+    amount: form.amount,
+    currency: form.currency,
+    billingIntervalCount: Number(form.billingIntervalCount),
+    billingIntervalUnit: form.billingIntervalUnit as Subscription['billingIntervalUnit'] | '',
+    startDateTs: form.startDateTs,
+    nextRenewalDateTs: form.nextRenewalDateTs,
+    websiteUrl: form.websiteUrl,
+    notes: form.notes
+  })
+
+  clearFormErrors()
+  Object.entries(validation.errors).forEach(([field, feedback]) => {
+    setFieldError(field as keyof SubscriptionFormErrors, feedback)
+  })
+
+  const firstError = Object.values(validation.errors)[0]
+  if (firstError) {
+    message.warning(firstError)
     return
   }
-  if (form.amount === null || form.amount === undefined || Number(form.amount) < 0) {
-    message.warning('请填写有效金额')
-    return
-  }
+
+  form.websiteUrl = validation.normalizedWebsiteUrl ?? ''
 
   emit(
     'submit',
@@ -635,7 +694,7 @@ function submit() {
       overdueReminderRules: form.overdueReminderRules.trim() || '',
       webhookEnabled: form.webhookEnabled,
       notes: form.notes,
-      websiteUrl: form.websiteUrl || null,
+      websiteUrl: validation.normalizedWebsiteUrl,
       logoUrl: form.logoUrl || null,
       logoSource: form.logoSource || null
     },
@@ -913,6 +972,12 @@ function formatLogoSource(source: string) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+.label-with-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .label-with-tip__icon {
