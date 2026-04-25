@@ -155,7 +155,13 @@
       <n-grid :cols="dateCols" :x-gap="16" :y-gap="8">
         <n-grid-item>
           <n-form-item label="开始日期" :validation-status="validationStatusOf('startDateTs')" :feedback="formErrors.startDateTs">
-            <n-date-picker v-model:value="form.startDateTs" type="date" style="width: 100%" clearable />
+            <n-date-picker
+              v-model:value="form.startDateTs"
+              type="date"
+              style="width: 100%"
+              clearable
+              @update:value="handleStartDateUpdate"
+            />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
@@ -182,7 +188,13 @@
                 </n-tooltip>
               </span>
             </template>
-            <n-date-picker v-model:value="form.nextRenewalDateTs" type="date" style="width: 100%" clearable />
+            <n-date-picker
+              v-model:value="form.nextRenewalDateTs"
+              type="date"
+              style="width: 100%"
+              clearable
+              @update:value="handleNextRenewalDateUpdate"
+            />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
@@ -326,6 +338,7 @@ const logoCandidates = ref<LogoSearchResult[]>([])
 const localLogoLibrary = ref<LogoSearchResult[]>([])
 const logoFileInputRef = ref<HTMLInputElement | null>(null)
 const formErrors = reactive<SubscriptionFormErrors>({})
+const dateFieldMode = ref<'default' | 'model' | 'manual'>('default')
 
 const layoutCols = computed(() => (width.value < 700 ? 1 : 2))
 const moneyCols = computed(() => (width.value < 900 ? 2 : 4))
@@ -364,8 +377,8 @@ const form = reactive({
   billingIntervalCount: 1,
   billingIntervalUnit: 'month',
   autoRenew: false,
-  startDateTs: currentBusinessDatePickerTs(settings.value?.timezone),
-  nextRenewalDateTs: addIntervalToPickerTs(currentBusinessDatePickerTs(settings.value?.timezone), 1, 'month'),
+  startDateTs: currentBusinessDatePickerTs(settings.value?.timezone) as number | null,
+  nextRenewalDateTs: addIntervalToPickerTs(currentBusinessDatePickerTs(settings.value?.timezone), 1, 'month') as number | null,
   advanceReminderRules: '',
   overdueReminderRules: '',
   webhookEnabled: true,
@@ -402,9 +415,51 @@ watch(
     if (!value) {
       showLogoPanel.value = false
       searchingLogoCandidates.value = false
+      return
+    }
+
+    if (dateFieldMode.value === 'default') {
+      applyDefaultDateValues()
+    } else if (dateFieldMode.value === 'model' && props.model) {
+      applyModelDateValues(props.model)
     }
   }
 )
+
+watch(
+  () => settings.value?.timezone,
+  (timezone) => {
+    if (!timezone || !props.show) return
+
+    if (dateFieldMode.value === 'default') {
+      applyDefaultDateValues(timezone)
+      return
+    }
+
+    if (dateFieldMode.value === 'model' && props.model) {
+      applyModelDateValues(props.model, timezone)
+      return
+    }
+
+    if (form.startDateTs !== null) {
+      form.startDateTs = businessDateToPickerTs(pickerTsToDateString(form.startDateTs), timezone)
+    }
+
+    if (form.nextRenewalDateTs !== null) {
+      form.nextRenewalDateTs = businessDateToPickerTs(pickerTsToDateString(form.nextRenewalDateTs), timezone)
+    }
+  }
+)
+
+function applyDefaultDateValues(timezone = settings.value?.timezone) {
+  form.startDateTs = currentBusinessDatePickerTs(timezone)
+  form.nextRenewalDateTs = addIntervalToPickerTs(form.startDateTs, 1, 'month')
+}
+
+function applyModelDateValues(model: Subscription, timezone = settings.value?.timezone) {
+  form.startDateTs = businessDateToPickerTs(model.startDate, timezone)
+  form.nextRenewalDateTs = businessDateToPickerTs(model.nextRenewalDate, timezone)
+}
 
 function resetForm() {
   form.name = ''
@@ -415,8 +470,8 @@ function resetForm() {
   form.billingIntervalCount = 1
   form.billingIntervalUnit = 'month'
   form.autoRenew = false
-  form.startDateTs = currentBusinessDatePickerTs(settings.value?.timezone)
-  form.nextRenewalDateTs = addIntervalToPickerTs(form.startDateTs, 1, 'month')
+  dateFieldMode.value = 'default'
+  applyDefaultDateValues()
   form.advanceReminderRules = ''
   form.overdueReminderRules = ''
   form.webhookEnabled = true
@@ -438,8 +493,8 @@ function hydrateFromModel(model: Subscription) {
   form.billingIntervalCount = model.billingIntervalCount
   form.billingIntervalUnit = model.billingIntervalUnit
   form.autoRenew = model.autoRenew ?? false
-  form.startDateTs = businessDateToPickerTs(model.startDate, settings.value?.timezone)
-  form.nextRenewalDateTs = businessDateToPickerTs(model.nextRenewalDate, settings.value?.timezone)
+  dateFieldMode.value = 'model'
+  applyModelDateValues(model)
   form.advanceReminderRules = model.advanceReminderRules ?? ''
   form.overdueReminderRules = model.overdueReminderRules ?? ''
   form.webhookEnabled = model.webhookEnabled
@@ -640,9 +695,13 @@ function applyAiResult(result: AiRecognitionResult) {
   if (result.currency) form.currency = result.currency
   if (result.billingIntervalCount) form.billingIntervalCount = result.billingIntervalCount
   if (result.billingIntervalUnit) form.billingIntervalUnit = result.billingIntervalUnit
-  if (result.startDate) form.startDateTs = businessDateToPickerTs(result.startDate, settings.value?.timezone)
+  if (result.startDate) {
+    form.startDateTs = businessDateToPickerTs(result.startDate, settings.value?.timezone)
+    dateFieldMode.value = 'manual'
+  }
   if (result.nextRenewalDate) {
     form.nextRenewalDateTs = businessDateToPickerTs(result.nextRenewalDate, settings.value?.timezone)
+    dateFieldMode.value = 'manual'
   }
   if (result.websiteUrl) form.websiteUrl = result.websiteUrl
   if (result.notes) form.notes = result.notes
@@ -695,7 +754,18 @@ function handleRecalculateNextRenewal() {
     Number(form.billingIntervalCount),
     form.billingIntervalUnit as Subscription['billingIntervalUnit']
   )
+  dateFieldMode.value = 'manual'
   delete formErrors.nextRenewalDateTs
+}
+
+function handleStartDateUpdate(value: number | null) {
+  form.startDateTs = value
+  dateFieldMode.value = 'manual'
+}
+
+function handleNextRenewalDateUpdate(value: number | null) {
+  form.nextRenewalDateTs = value
+  dateFieldMode.value = 'manual'
 }
 
 function submit() {
@@ -736,8 +806,8 @@ function submit() {
       billingIntervalCount: Number(form.billingIntervalCount),
       billingIntervalUnit: form.billingIntervalUnit,
       autoRenew: form.autoRenew,
-      startDate: pickerTsToDateString(form.startDateTs),
-      nextRenewalDate: pickerTsToDateString(form.nextRenewalDateTs),
+      startDate: pickerTsToDateString(form.startDateTs!),
+      nextRenewalDate: pickerTsToDateString(form.nextRenewalDateTs!),
       advanceReminderRules: form.advanceReminderRules.trim() || '',
       overdueReminderRules: form.overdueReminderRules.trim() || '',
       webhookEnabled: form.webhookEnabled,

@@ -607,6 +607,7 @@ function buildDbPreview(
   zipLogos = new Map<string, ZipLogoAsset>()
 ) {
   const warnings: string[] = []
+  const fallbackToday = currentBusinessDateString(normalizeAppTimezone(options.sourceTimezone), options.today ?? new Date())
   let skippedSubscriptions = 0
   let zipLogoMatched = 0
   let zipLogoMissing = 0
@@ -676,8 +677,8 @@ function buildDbPreview(
       autoRenew: Boolean(row.auto_renew),
       billingIntervalCount: mappedInterval.billingIntervalCount,
       billingIntervalUnit: mappedInterval.billingIntervalUnit,
-      startDate: parseDate(row.start_date) ?? parseDate(row.next_payment) ?? new Date().toISOString().slice(0, 10),
-      nextRenewalDate: effectiveNextRenewalDate ?? parseDate(row.next_payment) ?? new Date().toISOString().slice(0, 10),
+      startDate: parseDate(row.start_date) ?? parseDate(row.next_payment) ?? fallbackToday,
+      nextRenewalDate: effectiveNextRenewalDate ?? parseDate(row.next_payment) ?? fallbackToday,
       notifyDaysBefore: notifyConfig.notifyDaysBefore,
       webhookEnabled: notifyConfig.webhookEnabled,
       notes: String(row.notes || ''),
