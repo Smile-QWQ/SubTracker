@@ -264,6 +264,7 @@ export interface ExchangeRateSnapshot {
   rates: Record<string, number>
   fetchedAt: string
   provider: string
+  providerUrl: string
   isStale: boolean
 }
 

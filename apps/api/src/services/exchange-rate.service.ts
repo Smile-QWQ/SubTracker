@@ -31,6 +31,7 @@ export async function getLatestSnapshot(baseCurrency?: string): Promise<Exchange
     rates: snapshot.ratesJson as Record<string, number>,
     fetchedAt: snapshot.fetchedAt.toISOString(),
     provider: snapshot.provider,
+    providerUrl: config.exchangeRateUrl,
     isStale: snapshot.isStale
   }
 }

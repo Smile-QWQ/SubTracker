@@ -402,6 +402,7 @@ export interface ExchangeRateSnapshotDto {
   rates: Record<string, number>
   fetchedAt: string
   provider: string
+  providerUrl: string
   isStale: boolean
 }
 

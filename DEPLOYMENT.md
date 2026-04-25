@@ -254,6 +254,10 @@ WEB_ORIGIN=https://subtracker.example.com
 LOG_LEVEL=warn
 ```
 
+说明：
+
+- 以上列的是常见需要调整的字段；其余带默认值的配置通常保持默认即可
+
 完整部署还会多一个：
 
 ```bash
