@@ -9,6 +9,7 @@ const routeMocks = vi.hoisted(() => ({
     subscription: {
       create: vi.fn(),
       update: vi.fn(),
+      findUnique: vi.fn(),
       findUniqueOrThrow: vi.fn()
     }
   },
@@ -75,6 +76,7 @@ describe('subscription routes D1 compatibility', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
+    routeMocks.prisma.subscription.findUnique.mockReset()
   })
 
   it('creates subscriptions without using Prisma interactive transactions', async () => {
@@ -141,6 +143,152 @@ describe('subscription routes D1 compatibility', () => {
     expect(response.statusCode).toBe(200)
     expect(routeMocks.prisma.$transaction).not.toHaveBeenCalled()
     expect(routeMocks.replaceSubscriptionTags).toHaveBeenCalledWith(routeMocks.prisma, 'sub_1', validTagIds)
+
+    await app.close()
+  })
+
+  it('accepts websiteUrl without protocol and normalizes it on create', async () => {
+    const { subscriptionRoutes } = await import('../../src/routes/subscriptions')
+    const app = Fastify()
+    await subscriptionRoutes(app)
+
+    routeMocks.prisma.subscription.create.mockResolvedValue({ id: 'sub_2' })
+    routeMocks.prisma.subscription.findUniqueOrThrow.mockResolvedValue({
+      id: 'sub_2',
+      name: 'Netflix',
+      websiteUrl: 'https://bilibili.com',
+      tags: []
+    })
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/subscriptions',
+      payload: {
+        name: 'Netflix',
+        amount: 10,
+        currency: 'USD',
+        billingIntervalCount: 1,
+        billingIntervalUnit: 'month',
+        autoRenew: false,
+        startDate: '2026-04-22',
+        nextRenewalDate: '2026-05-22',
+        notifyDaysBefore: 3,
+        webhookEnabled: true,
+        notes: '',
+        websiteUrl: 'bilibili.com',
+        tagIds: []
+      }
+    })
+
+    expect(response.statusCode).toBe(201)
+    expect(routeMocks.prisma.subscription.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          websiteUrl: 'https://bilibili.com'
+        })
+      })
+    )
+
+    await app.close()
+  })
+
+  it('returns a specific validation message for invalid websiteUrl', async () => {
+    const { subscriptionRoutes } = await import('../../src/routes/subscriptions')
+    const app = Fastify()
+    await subscriptionRoutes(app)
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/subscriptions',
+      payload: {
+        name: 'Netflix',
+        amount: 10,
+        currency: 'USD',
+        billingIntervalCount: 1,
+        billingIntervalUnit: 'month',
+        autoRenew: false,
+        startDate: '2026-04-22',
+        nextRenewalDate: '2026-05-22',
+        notifyDaysBefore: 3,
+        webhookEnabled: true,
+        notes: '',
+        websiteUrl: 'not a url',
+        tagIds: []
+      }
+    })
+
+    expect(response.statusCode).toBe(422)
+    expect(response.json().error.message).toBe('websiteUrl 格式无效，请填写合法网址')
+
+    await app.close()
+  })
+
+  it('restores expired subscriptions to active when future nextRenewalDate is submitted', async () => {
+    const { subscriptionRoutes } = await import('../../src/routes/subscriptions')
+    const app = Fastify()
+    await subscriptionRoutes(app)
+
+    routeMocks.prisma.subscription.findUnique.mockResolvedValue({
+      status: 'expired'
+    })
+    routeMocks.prisma.subscription.update.mockResolvedValue({ id: 'sub_1' })
+    routeMocks.prisma.subscription.findUniqueOrThrow.mockResolvedValue({
+      id: 'sub_1',
+      status: 'active',
+      tags: []
+    })
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/subscriptions/sub_1',
+      payload: {
+        nextRenewalDate: '2027-01-01'
+      }
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(routeMocks.prisma.subscription.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'active'
+        })
+      })
+    )
+
+    await app.close()
+  })
+
+  it('does not auto-reactivate paused subscriptions when future nextRenewalDate is submitted', async () => {
+    const { subscriptionRoutes } = await import('../../src/routes/subscriptions')
+    const app = Fastify()
+    await subscriptionRoutes(app)
+
+    routeMocks.prisma.subscription.findUnique.mockResolvedValue({
+      status: 'paused'
+    })
+    routeMocks.prisma.subscription.update.mockResolvedValue({ id: 'sub_1' })
+    routeMocks.prisma.subscription.findUniqueOrThrow.mockResolvedValue({
+      id: 'sub_1',
+      status: 'paused',
+      tags: []
+    })
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/subscriptions/sub_1',
+      payload: {
+        nextRenewalDate: '2027-01-01'
+      }
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(routeMocks.prisma.subscription.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.not.objectContaining({
+          status: 'active'
+        })
+      })
+    )
 
     await app.close()
   })

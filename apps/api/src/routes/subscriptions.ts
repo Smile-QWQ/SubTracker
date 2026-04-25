@@ -33,7 +33,8 @@ import {
   deriveNotifyDaysBeforeFromAdvanceRules,
   normalizeOptionalReminderRules
 } from '../services/reminder-rules.service'
-import { parseDateInTimezone } from '../utils/timezone'
+import { parseDateInTimezone, startOfDayDateInTimezone } from '../utils/timezone'
+import { normalizeWebsiteUrlInput } from '../utils/website-url'
 
 const subscriptionInclude = {
   tags: { include: { tag: true } }
@@ -83,6 +84,27 @@ function parseBatchIds(input: unknown) {
       ids: z.array(z.string()).min(1)
     })
     .safeParse(input)
+}
+
+function normalizeSubscriptionPayloadWebsiteUrl<T extends Record<string, unknown>>(
+  payload: T
+): { payload: T; websiteUrlError: string | null } {
+  if (!Object.prototype.hasOwnProperty.call(payload, 'websiteUrl')) {
+    return { payload, websiteUrlError: null }
+  }
+
+  const normalizedWebsite = normalizeWebsiteUrlInput(payload.websiteUrl as string | null | undefined)
+  if (normalizedWebsite.error) {
+    return { payload, websiteUrlError: normalizedWebsite.error }
+  }
+
+  return {
+    payload: {
+      ...payload,
+      websiteUrl: normalizedWebsite.value
+    },
+    websiteUrlError: null
+  }
 }
 
 async function runBatchAction(
@@ -408,7 +430,16 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   })
 
   app.post('/subscriptions', async (request, reply) => {
-    const parsed = CreateSubscriptionSchema.safeParse(request.body)
+    const normalizedPayload = normalizeSubscriptionPayloadWebsiteUrl((request.body ?? {}) as Record<string, unknown>)
+    if (normalizedPayload.websiteUrlError) {
+      return sendError(reply, 422, 'validation_error', 'websiteUrl 格式无效，请填写合法网址', {
+        fieldErrors: {
+          websiteUrl: [normalizedPayload.websiteUrlError]
+        }
+      })
+    }
+
+    const parsed = CreateSubscriptionSchema.safeParse(normalizedPayload.payload)
     if (!parsed.success) {
       return sendError(reply, 422, 'validation_error', 'Invalid subscription payload', parsed.error.flatten())
     }
@@ -475,7 +506,16 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       return sendError(reply, 422, 'validation_error', 'Invalid subscription id')
     }
 
-    const parsed = UpdateSubscriptionSchema.safeParse(request.body)
+    const normalizedPayload = normalizeSubscriptionPayloadWebsiteUrl((request.body ?? {}) as Record<string, unknown>)
+    if (normalizedPayload.websiteUrlError) {
+      return sendError(reply, 422, 'validation_error', 'websiteUrl 格式无效，请填写合法网址', {
+        fieldErrors: {
+          websiteUrl: [normalizedPayload.websiteUrlError]
+        }
+      })
+    }
+
+    const parsed = UpdateSubscriptionSchema.safeParse(normalizedPayload.payload)
     if (!parsed.success) {
       return sendError(reply, 422, 'validation_error', 'Invalid update payload', parsed.error.flatten())
     }
@@ -494,22 +534,34 @@ export async function subscriptionRoutes(app: FastifyInstance) {
 
       const tagIds = payload.tagIds !== undefined ? normalizeTagIds(payload.tagIds) : null
       const timezone = await getAppTimezone()
+      const existing =
+        payload.nextRenewalDate !== undefined && payload.status === undefined
+          ? await prisma.subscription.findUnique({
+              where: { id: params.data.id },
+              select: { status: true }
+            })
+          : null
+      const normalizedNextRenewalDate =
+        payload.nextRenewalDate !== undefined ? parseDateInTimezone(payload.nextRenewalDate, timezone) : undefined
+      const shouldRestoreActive =
+        payload.status === undefined &&
+        existing?.status === 'expired' &&
+        normalizedNextRenewalDate !== undefined &&
+        normalizedNextRenewalDate.getTime() >= startOfDayDateInTimezone(new Date(), timezone).getTime()
 
       const subscription = await prisma.subscription.update({
         where: { id: params.data.id },
         data: {
           ...(payload.name !== undefined ? { name: payload.name } : {}),
           ...(payload.description !== undefined ? { description: payload.description } : {}),
-          ...(payload.status !== undefined ? { status: payload.status } : {}),
+          ...(payload.status !== undefined ? { status: payload.status } : shouldRestoreActive ? { status: 'active' } : {}),
           ...(payload.amount !== undefined ? { amount: payload.amount } : {}),
           ...(payload.currency !== undefined ? { currency: payload.currency } : {}),
           ...(payload.billingIntervalCount !== undefined ? { billingIntervalCount: payload.billingIntervalCount } : {}),
           ...(payload.billingIntervalUnit !== undefined ? { billingIntervalUnit: payload.billingIntervalUnit } : {}),
           ...(payload.autoRenew !== undefined ? { autoRenew: payload.autoRenew } : {}),
           ...(payload.startDate !== undefined ? { startDate: parseDateInTimezone(payload.startDate, timezone) } : {}),
-          ...(payload.nextRenewalDate !== undefined
-            ? { nextRenewalDate: parseDateInTimezone(payload.nextRenewalDate, timezone) }
-            : {}),
+          ...(normalizedNextRenewalDate !== undefined ? { nextRenewalDate: normalizedNextRenewalDate } : {}),
           ...(reminderFields.notifyDaysBefore !== undefined ? { notifyDaysBefore: reminderFields.notifyDaysBefore } : {}),
           ...(reminderFields.advanceReminderRules !== undefined
             ? { advanceReminderRules: reminderFields.advanceReminderRules }

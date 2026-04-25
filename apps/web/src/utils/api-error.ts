@@ -5,6 +5,9 @@ type ApiErrorLike = {
     data?: {
       error?: {
         message?: string
+        details?: {
+          fieldErrors?: Record<string, string[] | undefined>
+        }
       }
     }
   }
@@ -14,9 +17,13 @@ const WORKER_LIMIT_HINT = '当前请求可能触发了 Cloudflare Worker 免费�
 
 export function normalizeApiErrorMessage(error: ApiErrorLike) {
   const responseMessage = error.response?.data?.error?.message?.trim()
+  const fieldErrors = error.response?.data?.error?.details?.fieldErrors
+  const firstFieldError = fieldErrors
+    ? Object.values(fieldErrors).flatMap((messages) => messages ?? []).find(Boolean)
+    : null
   const fallbackMessage = error.message?.trim()
   const status = error.response?.status
-  const rawMessage = responseMessage || fallbackMessage || '请求失败'
+  const rawMessage = firstFieldError || responseMessage || fallbackMessage || '请求失败'
 
   if (/Worker exceeded CPU time limit/i.test(rawMessage)) {
     return `请求失败：Worker 执行超出 CPU 限制。${WORKER_LIMIT_HINT}`

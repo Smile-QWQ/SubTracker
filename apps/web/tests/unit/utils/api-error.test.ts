@@ -34,4 +34,25 @@ describe('normalizeApiErrorMessage', () => {
       })
     ).toBe('字段校验失败')
   })
+
+  it('prefers backend fieldErrors over generic validation messages', () => {
+    expect(
+      normalizeApiErrorMessage({
+        message: 'Request failed with status code 422',
+        response: {
+          status: 422,
+          data: {
+            error: {
+              message: 'Invalid subscription payload',
+              details: {
+                fieldErrors: {
+                  websiteUrl: ['请输入合法网址，例如 https://example.com']
+                }
+              }
+            }
+          }
+        }
+      })
+    ).toBe('请输入合法网址，例如 https://example.com')
+  })
 })
