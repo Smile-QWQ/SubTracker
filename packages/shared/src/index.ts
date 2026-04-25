@@ -340,7 +340,8 @@ export const WallosImportInspectSchema = z.object({
 })
 
 export const WallosImportCommitSchema = z.object({
-  importToken: z.string().min(10).max(200)
+  importToken: z.string().min(10).max(200),
+  preview: WallosImportPreparedPreviewSchema.optional()
 })
 
 export type SubscriptionStatus = z.infer<typeof SubscriptionStatusSchema>

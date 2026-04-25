@@ -361,7 +361,7 @@ export const api = {
     return postOnce<WallosImportInspectResult>('/import/wallos/inspect', payload, { timeout: 60000 })
   },
 
-  async commitWallosImport(importToken: string) {
-    return postOnce<WallosImportCommitResult>('/import/wallos/commit', { importToken })
+  async commitWallosImport(payload: { importToken: string; preview?: Omit<WallosImportInspectResult, 'importToken'> }) {
+    return postOnce<WallosImportCommitResult>('/import/wallos/commit', payload)
   }
 }

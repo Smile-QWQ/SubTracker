@@ -9,7 +9,7 @@ import type {
   WallosImportTagDto
 } from '@subtracker/shared'
 import { prisma } from '../db'
-import { getWorkerLogoBucket, isWorkerRuntime } from '../runtime'
+import { getRuntimeD1Database, getWorkerLogoBucket, isWorkerRuntime } from '../runtime'
 import { appendSubscriptionOrders } from './subscription-order.service'
 import { deleteLogoStorageObject, saveImportedLogoBufferToKey } from './logo.service'
 import { deleteImportPreview, getImportPreview, storeImportPreview } from './worker-lite-state.service'
@@ -37,7 +37,7 @@ type ZipLogoManifestEntry = {
 }
 
 type StoredImportPreviewState = {
-  preview: WallosImportInspectResultDto
+  preview?: WallosImportInspectResultDto
   logoManifest: Record<string, ZipLogoManifestEntry>
 }
 
@@ -175,31 +175,88 @@ async function cleanupStoredImportAssets(state: StoredImportPreviewState | null)
   await Promise.all(entries.map((item) => deleteLogoStorageObject(item.r2Key)))
 }
 
+async function cleanupStoredImportAssetsByToken(importToken: string) {
+  const bucket = getWorkerLogoBucket()
+  if (!bucket) return
+
+  const prefix = `logos/imports/wallos/${importToken}/`
+  const listed = await bucket.list()
+  const targets = listed.objects.filter((item) => item.key.startsWith(prefix))
+  if (!targets.length) return
+
+  await Promise.all(targets.map((item) => deleteLogoStorageObject(item.key)))
+}
+
+async function cleanupImportAssets(state: StoredImportPreviewState | null, importToken: string) {
+  if (state) {
+    await cleanupStoredImportAssets(state)
+    return
+  }
+
+  await cleanupStoredImportAssetsByToken(importToken)
+}
+
+function toSqlBoolean(value: boolean) {
+  return value ? 1 : 0
+}
+
+function toSqlDateTime(value: Date | null) {
+  return value ? value.toISOString() : null
+}
+
+async function runD1StatementBatch(
+  statements: Array<ReturnType<ReturnType<typeof getRuntimeD1Database>['prepare']>>,
+  chunkSize = 50
+) {
+  if (!statements.length) return
+  const db = getRuntimeD1Database()
+
+  for (let index = 0; index < statements.length; index += chunkSize) {
+    const chunk = statements.slice(index, index + chunkSize)
+    if (db.batch) {
+      await db.batch(chunk)
+      continue
+    }
+
+    for (const statement of chunk) {
+      await statement.run()
+    }
+  }
+}
+
 export async function inspectWallosImportFile(input: WallosImportInspectInput): Promise<WallosImportInspectResultDto> {
   const importToken = crypto.randomBytes(24).toString('hex')
   const preview = clonePreparedPreview(input.preview, input.fileType)
   const logoManifest = await uploadPreparedLogoManifest(importToken, preview, input.logoAssets)
   const storedState: StoredImportPreviewState = {
-    preview: {
-      ...preview,
-      importToken
-    },
+    preview: undefined,
     logoManifest
   }
 
   await storeImportPreview(importToken, storedState, IMPORT_TOKEN_TTL_MS)
-  return storedState.preview
+  return {
+    ...preview,
+    importToken
+  }
 }
 
 export async function commitWallosImport(input: WallosImportCommitInput): Promise<WallosImportCommitResultDto> {
   const state = await getImportPreview<StoredImportPreviewState>(input.importToken, {
-    onExpired: cleanupStoredImportAssets
+    onExpired: cleanupImportAssets
   })
   if (!state) {
     throw new Error('导入令牌不存在或已失效，请重新生成预览')
   }
 
-  const preview = state.preview
+  const preview = input.preview
+    ? {
+        ...input.preview,
+        importToken: input.importToken
+      }
+    : state.preview
+  if (!preview) {
+    throw new Error('导入预览缺失，请重新生成预览')
+  }
   const logoManifest = state.logoManifest ?? {}
 
   const existingTags = await prisma.tag.findMany({
@@ -218,15 +275,21 @@ export async function commitWallosImport(input: WallosImportCommitInput): Promis
   const missingTags = preview.usedTags.filter((tag) => !tagIdByName.has(tag.name))
   if (missingTags.length > 0) {
     if (isWorkerRuntime()) {
-      for (const tag of missingTags) {
-        await prisma.tag.create({
-          data: {
-            name: tag.name,
-            color: getImportedTagColor(tag.name),
-            sortOrder: tag.sortOrder
-          }
-        })
-      }
+      const db = getRuntimeD1Database()
+      const preparedTags = missingTags.map((tag) => ({
+        id: createImportId(),
+        name: tag.name,
+        color: getImportedTagColor(tag.name),
+        sortOrder: tag.sortOrder
+      }))
+
+      await runD1StatementBatch(
+        preparedTags.map((tag) =>
+          db
+            .prepare(`INSERT INTO "Tag" ("id", "name", "color", "sortOrder") VALUES (?, ?, ?, ?)`)
+            .bind(tag.id, tag.name, tag.color, tag.sortOrder)
+        )
+      )
     } else {
       await prisma.tag.createMany({
         data: missingTags.map((tag) => ({
@@ -317,11 +380,41 @@ export async function commitWallosImport(input: WallosImportCommitInput): Promis
 
   if (subscriptionRows.length > 0) {
     if (isWorkerRuntime()) {
-      for (const row of subscriptionRows) {
-        await prisma.subscription.create({
-          data: row
-        })
-      }
+      const db = getRuntimeD1Database()
+      await runD1StatementBatch(
+        subscriptionRows.map((row) =>
+          db
+            .prepare(
+              `INSERT INTO "Subscription" (
+                "id", "name", "description", "websiteUrl", "logoUrl", "logoSource", "logoFetchedAt",
+                "status", "amount", "currency", "billingIntervalCount", "billingIntervalUnit",
+                "autoRenew", "startDate", "nextRenewalDate", "notifyDaysBefore",
+                "webhookEnabled", "notes"
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            )
+            .bind(
+              row.id,
+              row.name,
+              row.description,
+              row.websiteUrl,
+              row.logoUrl,
+              row.logoSource,
+              toSqlDateTime(row.logoFetchedAt),
+              row.status,
+              row.amount,
+              row.currency,
+              row.billingIntervalCount,
+              row.billingIntervalUnit,
+              toSqlBoolean(row.autoRenew),
+              row.startDate.toISOString(),
+              row.nextRenewalDate.toISOString(),
+              row.notifyDaysBefore,
+              toSqlBoolean(row.webhookEnabled),
+              row.notes
+            )
+        ),
+        25
+      )
     } else {
       await prisma.subscription.createMany({
         data: subscriptionRows
@@ -331,11 +424,14 @@ export async function commitWallosImport(input: WallosImportCommitInput): Promis
 
   if (subscriptionTagRows.length > 0) {
     if (isWorkerRuntime()) {
-      for (const row of subscriptionTagRows) {
-        await prisma.subscriptionTag.create({
-          data: row
-        })
-      }
+      const db = getRuntimeD1Database()
+      await runD1StatementBatch(
+        subscriptionTagRows.map((row) =>
+          db
+            .prepare(`INSERT INTO "SubscriptionTag" ("subscriptionId", "tagId") VALUES (?, ?)`)
+            .bind(row.subscriptionId, row.tagId)
+        )
+      )
     } else {
       await prisma.subscriptionTag.createMany({
         data: subscriptionTagRows

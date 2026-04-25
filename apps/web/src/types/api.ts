@@ -381,6 +381,11 @@ export interface WallosImportCommitResult {
   warnings: string[]
 }
 
+export interface WallosImportCommitPayload {
+  importToken: string
+  preview?: Omit<WallosImportInspectResult, 'importToken'>
+}
+
 export interface PaymentRecord {
   id: string
   subscriptionId: string

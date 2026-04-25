@@ -208,7 +208,11 @@ async function commitImport() {
 
   committing.value = true
   try {
-    const result = await api.commitWallosImport(preview.value.importToken)
+    const { importToken, ...preparedPreview } = preview.value
+    const result = await api.commitWallosImport({
+      importToken,
+      preview: preparedPreview
+    })
     message.success(`导入完成：${result.importedSubscriptions} 条订阅，${result.importedTags} 个标签，${result.importedLogos} 个 Logo`)
     emit('imported')
     close()
