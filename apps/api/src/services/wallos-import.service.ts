@@ -10,8 +10,10 @@ import type {
 } from '@subtracker/shared'
 import { prisma } from '../db'
 import { getRuntimeD1Database, getWorkerLogoBucket, isWorkerRuntime } from '../runtime'
+import { parseDateInTimezone } from '../utils/timezone'
 import { appendSubscriptionOrders } from './subscription-order.service'
 import { deleteLogoStorageObject, saveImportedLogoBufferToKey } from './logo.service'
+import { getAppTimezone } from './settings.service'
 import { deleteImportPreview, getImportPreview, storeImportPreview } from './worker-lite-state.service'
 
 const IMPORT_TOKEN_TTL_MS = 15 * 60 * 1000
@@ -258,6 +260,7 @@ export async function commitWallosImport(input: WallosImportCommitInput): Promis
     throw new Error('导入预览缺失，请重新生成预览')
   }
   const logoManifest = state.logoManifest ?? {}
+  const appTimezone = await getAppTimezone()
 
   const existingTags = await prisma.tag.findMany({
     where: {
@@ -358,8 +361,8 @@ export async function commitWallosImport(input: WallosImportCommitInput): Promis
       billingIntervalCount: item.billingIntervalCount,
       billingIntervalUnit: item.billingIntervalUnit,
       autoRenew: item.autoRenew,
-      startDate: new Date(`${item.startDate}T00:00:00.000Z`),
-      nextRenewalDate: new Date(`${item.nextRenewalDate}T00:00:00.000Z`),
+      startDate: parseDateInTimezone(item.startDate, appTimezone),
+      nextRenewalDate: parseDateInTimezone(item.nextRenewalDate, appTimezone),
       notifyDaysBefore: item.notifyDaysBefore,
       webhookEnabled: item.webhookEnabled,
       notes: item.notes,

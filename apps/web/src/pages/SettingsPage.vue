@@ -139,7 +139,7 @@
             <n-descriptions-item label="基准货币">{{ snapshot.baseCurrency }}</n-descriptions-item>
             <n-descriptions-item label="来源名称">{{ snapshot.provider }}</n-descriptions-item>
             <n-descriptions-item label="接口地址">
-              <a :href="providerUrl" target="_blank" rel="noreferrer" class="provider-link">{{ providerUrl }}</a>
+              <a :href="snapshot.providerUrl" target="_blank" rel="noreferrer" class="provider-link">{{ snapshot.providerUrl }}</a>
             </n-descriptions-item>
             <n-descriptions-item label="拉取时间">{{ formatTime(snapshot.fetchedAt) }}</n-descriptions-item>
             <n-descriptions-item label="数据状态">
@@ -1340,8 +1340,6 @@ const converterRateDisplay = computed(() => {
   if (!converterAmount.value) return '0.0000'
   return Number((convertedPreview.value / Number(converterAmount.value || 1)).toFixed(4)).toFixed(4)
 })
-
-const providerUrl = 'https://open.er-api.com/v6/latest'
 
 const rateColumns = computed(() => [
   { title: '货币', key: 'currency' },
