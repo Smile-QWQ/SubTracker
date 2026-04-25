@@ -17,8 +17,8 @@
 		"EXCHANGE_RATE_URL": "https://open.er-api.com/v6/latest",
 		"CRON_SCAN": "* * * * *",
 		"CRON_AUTO_RENEW": "2 * * * *",
-		"CRON_RECONCILE_EXPIRED": "10 2 * * *",
-		"CRON_REFRESH_RATES": "0 2 * * *",
+		"CRON_RECONCILE_EXPIRED": "10 * * * *",
+		"CRON_REFRESH_RATES": "0 * * * *",
 		"RESEND_API_URL": "https://api.resend.com/emails"
 	},
 	"assets": {
@@ -34,8 +34,8 @@
 		"crons": [
 			"* * * * *",
 			"2 * * * *",
-			"10 2 * * *",
-			"0 2 * * *"
+			"10 * * * *",
+			"0 * * * *"
 		]
 	},
 	"d1_databases": [

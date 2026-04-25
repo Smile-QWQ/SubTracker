@@ -553,6 +553,7 @@
       :show="showWallosImportModal"
       :default-notify-days="settingsForm.defaultNotifyDays"
       :base-currency="settingsForm.baseCurrency"
+      :app-timezone="settingsForm.timezone"
       @close="showWallosImportModal = false"
       @imported="handleWallosImported"
     />

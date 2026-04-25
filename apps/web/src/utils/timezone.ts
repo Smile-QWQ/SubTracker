@@ -80,8 +80,36 @@ export function currentBusinessDatePickerTs(timezoneValue = DEFAULT_APP_TIMEZONE
   return businessDateToPickerTs(now, timezoneValue)
 }
 
+export function currentBusinessDateString(timezoneValue = DEFAULT_APP_TIMEZONE, now: Date | string = new Date()) {
+  return formatDateInTimezone(now, timezoneValue)
+}
+
 export function pickerTsToDateString(timestamp: number) {
   return dayjs(timestamp).format('YYYY-MM-DD')
+}
+
+export function pickerTsToMonthKey(timestamp: number) {
+  return pickerTsToDateString(timestamp).slice(0, 7)
+}
+
+export function monthKeyToPickerTs(monthKey: string) {
+  return dateStringToLocalNoonTs(`${monthKey}-01`)
+}
+
+export function shiftMonthKey(monthKey: string, delta: number) {
+  return dayjs.utc(`${monthKey}-01`, 'YYYY-MM-DD', true).add(delta, 'month').format('YYYY-MM')
+}
+
+export function daysInMonthFromMonthKey(monthKey: string) {
+  return dayjs.utc(`${monthKey}-01`, 'YYYY-MM-DD', true).daysInMonth()
+}
+
+export function monthRangeFromMonthKey(monthKey: string) {
+  const base = dayjs.utc(`${monthKey}-01`, 'YYYY-MM-DD', true)
+  return {
+    start: base.format('YYYY-MM-DD'),
+    end: base.endOf('month').format('YYYY-MM-DD')
+  }
 }
 
 export function addIntervalToPickerTs(
@@ -108,4 +136,26 @@ export function addIntervalToPickerTs(
 
 export function formatMonthLabelInTimezone(value: Date | string | number, timezoneValue = DEFAULT_APP_TIMEZONE) {
   return toTimezonedDayjs(typeof value === 'number' ? new Date(value) : value, timezoneValue).format('YYYY 年 M 月')
+}
+
+export function addIntervalToBusinessDateString(
+  dateString: string,
+  count: number,
+  unit: 'day' | 'week' | 'month' | 'quarter' | 'year'
+) {
+  const base = dayjs.utc(dateString, 'YYYY-MM-DD', true)
+  switch (unit) {
+    case 'day':
+      return base.add(count, 'day').format('YYYY-MM-DD')
+    case 'week':
+      return base.add(count, 'week').format('YYYY-MM-DD')
+    case 'month':
+      return base.add(count, 'month').format('YYYY-MM-DD')
+    case 'quarter':
+      return base.add(count * 3, 'month').format('YYYY-MM-DD')
+    case 'year':
+      return base.add(count, 'year').format('YYYY-MM-DD')
+    default:
+      return base.format('YYYY-MM-DD')
+  }
 }

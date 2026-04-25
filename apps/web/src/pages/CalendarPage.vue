@@ -90,7 +90,6 @@
 </template>
 
 <script setup lang="ts">
-import dayjs from 'dayjs'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { NCalendar, NCard, NDataTable, NEmpty, NGrid, NGridItem, NSpace, NTabPane, NTabs, NTag } from 'naive-ui'
@@ -107,7 +106,17 @@ import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
 import type { CalendarEvent } from '@/types/api'
 import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils/subscription-status'
-import { currentBusinessDatePickerTs, formatDateInTimezone, formatMonthLabelInTimezone, pickerTsToDateString } from '@/utils/timezone'
+import {
+  businessDateToPickerTs,
+  currentBusinessDatePickerTs,
+  daysInMonthFromMonthKey,
+  formatDateInTimezone,
+  formatMonthLabelInTimezone,
+  monthKeyToPickerTs,
+  monthRangeFromMonthKey,
+  pickerTsToDateString,
+  pickerTsToMonthKey
+} from '@/utils/timezone'
 
 const { width } = useWindowSize()
 const calendarOutline = CalendarOutline
@@ -120,15 +129,11 @@ const events = ref<CalendarEvent[]>([])
 const tab = ref('month')
 const { data: settings } = useSettingsQuery()
 const selectedDateTs = ref(currentBusinessDatePickerTs(settings.value?.timezone))
-const panelMonthTs = ref(dayjs(selectedDateTs.value).startOf('month').valueOf())
+const panelMonthKey = ref(pickerTsToMonthKey(selectedDateTs.value))
 let ignoreSelectedDateWatch = false
 const baseCurrency = computed(() => settings.value?.baseCurrency ?? 'CNY')
 const panelMonthRange = computed(() => {
-  const monthStart = dayjs(panelMonthTs.value).startOf('month')
-  return {
-    start: monthStart.format('YYYY-MM-DD'),
-    end: monthStart.endOf('month').format('YYYY-MM-DD')
-  }
+  return monthRangeFromMonthKey(panelMonthKey.value)
 })
 const calendarEventsQuery = useCalendarEventsQuery(panelMonthRange)
 
@@ -147,9 +152,9 @@ watch(selectedDateTs, async (value) => {
     return
   }
 
-  const selectedMonth = dayjs(value).startOf('month')
-  if (!selectedMonth.isSame(dayjs(panelMonthTs.value), 'month')) {
-    panelMonthTs.value = selectedMonth.valueOf()
+  const selectedMonthKey = pickerTsToMonthKey(value)
+  if (selectedMonthKey !== panelMonthKey.value) {
+    panelMonthKey.value = selectedMonthKey
   }
 })
 
@@ -166,12 +171,12 @@ watch(
   (timezone) => {
     if (!timezone) return
     const currentDateString = pickerTsToDateString(selectedDateTs.value)
-    selectedDateTs.value = currentBusinessDatePickerTs(timezone, `${currentDateString}T00:00:00`)
-    panelMonthTs.value = dayjs(selectedDateTs.value).startOf('month').valueOf()
+    selectedDateTs.value = businessDateToPickerTs(currentDateString, timezone)
+    panelMonthKey.value = pickerTsToMonthKey(selectedDateTs.value)
   }
 )
 
-const panelMonthLabel = computed(() => formatMonthLabelInTimezone(new Date(panelMonthTs.value), settings.value?.timezone))
+const panelMonthLabel = computed(() => formatMonthLabelInTimezone(`${panelMonthKey.value}-01`, settings.value?.timezone))
 const selectedDateLabel = computed(() => pickerTsToDateString(selectedDateTs.value))
 
 const eventMap = computed(() => {
@@ -217,17 +222,18 @@ const columns = [
 ]
 
 function handlePanelChange({ year, month }: { year: number; month: number }) {
-  const targetMonth = dayjs(`${year}-${String(month).padStart(2, '0')}-01`)
-  const currentSelectedDay = dayjs(selectedDateTs.value).date()
-  const targetSelectedDate = targetMonth.date(Math.min(currentSelectedDay, targetMonth.daysInMonth()))
+  const targetMonthKey = `${year}-${String(month).padStart(2, '0')}`
+  const currentSelectedDay = Number(selectedDateLabel.value.slice(8, 10))
+  const clampedDay = Math.min(currentSelectedDay, daysInMonthFromMonthKey(targetMonthKey))
+  const targetSelectedDate = `${targetMonthKey}-${String(clampedDay).padStart(2, '0')}`
 
   ignoreSelectedDateWatch = true
-  selectedDateTs.value = targetSelectedDate.valueOf()
-  panelMonthTs.value = targetMonth.valueOf()
+  selectedDateTs.value = businessDateToPickerTs(targetSelectedDate, settings.value?.timezone)
+  panelMonthKey.value = targetMonthKey
 }
 
 function getDaySummary(year: number, month: number, date: number) {
-  const key = dayjs(`${year}-${String(month).padStart(2, '0')}-${String(date).padStart(2, '0')}`).format('YYYY-MM-DD')
+  const key = `${year}-${String(month).padStart(2, '0')}-${String(date).padStart(2, '0')}`
   const items = eventMap.value.get(key)
   if (!items?.length) return null
 

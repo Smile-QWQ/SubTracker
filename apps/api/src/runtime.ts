@@ -127,8 +127,8 @@ export function getWorkerPublicConfig() {
     exchangeRateUrl: getBindingOrEnv('EXCHANGE_RATE_URL', 'https://open.er-api.com/v6/latest'),
     cronScan: getBindingOrEnv('CRON_SCAN', '* * * * *'),
     cronAutoRenew: getBindingOrEnv('CRON_AUTO_RENEW', '2 * * * *'),
-    cronReconcileExpired: getBindingOrEnv('CRON_RECONCILE_EXPIRED', '10 2 * * *'),
-    cronRefreshRates: getBindingOrEnv('CRON_REFRESH_RATES', '0 2 * * *'),
+    cronReconcileExpired: getBindingOrEnv('CRON_RECONCILE_EXPIRED', '10 * * * *'),
+    cronRefreshRates: getBindingOrEnv('CRON_REFRESH_RATES', '0 * * * *'),
     resendApiUrl
   }
 }

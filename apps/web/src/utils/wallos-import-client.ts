@@ -7,6 +7,7 @@ import type {
   WallosImportPreparedPayload,
   WallosImportSubscriptionPreview
 } from '@/types/api'
+import { addIntervalToBusinessDateString, currentBusinessDateString, normalizeAppTimezone } from './timezone'
 
 type BillingIntervalUnit = WallosImportSubscriptionPreview['billingIntervalUnit']
 type SubscriptionStatus = WallosImportSubscriptionPreview['status']
@@ -46,6 +47,7 @@ type PreparedImportOptions = {
   defaultNotifyDays: number
   baseCurrency: string
   today?: Date | string
+  sourceTimezone?: string
 }
 
 let sqlJsPromise: Promise<SqlJsStatic> | null = null
@@ -112,22 +114,6 @@ function parseDate(value: unknown) {
   return date.toISOString().slice(0, 10)
 }
 
-function startOfUtcDay(value: Date | string = new Date()) {
-  const date = new Date(value)
-  date.setUTCHours(0, 0, 0, 0)
-  return date
-}
-
-function addInterval(dateValue: Date | string, count: number, unit: BillingIntervalUnit) {
-  const date = new Date(dateValue)
-  if (unit === 'day') date.setUTCDate(date.getUTCDate() + count)
-  if (unit === 'week') date.setUTCDate(date.getUTCDate() + count * 7)
-  if (unit === 'month') date.setUTCMonth(date.getUTCMonth() + count)
-  if (unit === 'quarter') date.setUTCMonth(date.getUTCMonth() + count * 3)
-  if (unit === 'year') date.setUTCFullYear(date.getUTCFullYear() + count)
-  return date
-}
-
 function mapWallosBillingInterval(days: number | null | undefined, frequency: number | null | undefined) {
   const freq = Math.max(Number(frequency || 1), 1)
   if (!days) {
@@ -169,12 +155,13 @@ function resolveWallosEffectiveNextPayment(input: {
   inactive?: number | boolean | null
   cancellationDate?: string | null
   today?: Date | string
+  sourceTimezone?: string
 }) {
   const parsedNextPayment = parseDate(input.nextPayment)
   if (!parsedNextPayment) return null
 
-  let effectiveDate = startOfUtcDay(`${parsedNextPayment}T00:00:00Z`)
-  const today = startOfUtcDay(input.today ?? new Date())
+  let effectiveDate = parsedNextPayment
+  const today = currentBusinessDateString(normalizeAppTimezone(input.sourceTimezone), input.today ?? new Date())
   const canAutoAdvance =
     Boolean(input.autoRenew) &&
     !input.inactive &&
@@ -183,18 +170,20 @@ function resolveWallosEffectiveNextPayment(input: {
     input.billingIntervalUnit
 
   if (!canAutoAdvance) {
-    return effectiveDate.toISOString().slice(0, 10)
+    return effectiveDate
   }
 
   let guard = 0
-  while (effectiveDate.getTime() < today.getTime() && guard < 3660) {
-    effectiveDate = startOfUtcDay(
-      addInterval(effectiveDate, Number(input.billingIntervalCount), input.billingIntervalUnit as BillingIntervalUnit)
+  while (effectiveDate < today && guard < 3660) {
+    effectiveDate = addIntervalToBusinessDateString(
+      effectiveDate,
+      Number(input.billingIntervalCount),
+      input.billingIntervalUnit as BillingIntervalUnit
     )
     guard += 1
   }
 
-  return effectiveDate.toISOString().slice(0, 10)
+  return effectiveDate
 }
 
 function mapWallosSubscriptionStatus(input: {
@@ -205,15 +194,15 @@ function mapWallosSubscriptionStatus(input: {
   billingIntervalCount?: number | null
   billingIntervalUnit?: BillingIntervalUnit | null
   today?: Date | string
+  sourceTimezone?: string
 }) {
   if (input.inactive) return 'paused' as SubscriptionStatus
   if (parseDate(input.cancellationDate)) return 'cancelled' as SubscriptionStatus
 
   const nextPayment = resolveWallosEffectiveNextPayment(input)
   if (nextPayment) {
-    const nextDate = startOfUtcDay(`${nextPayment}T00:00:00Z`)
-    const today = startOfUtcDay(input.today ?? new Date())
-    if (nextDate.getTime() < today.getTime()) {
+    const today = currentBusinessDateString(normalizeAppTimezone(input.sourceTimezone), input.today ?? new Date())
+    if (nextPayment < today) {
       return 'expired' as SubscriptionStatus
     }
   }
@@ -435,25 +424,7 @@ function mapJsonWebhookEnabled(row: WallosJsonRow) {
   return String(row.Notifications ?? '').trim().toLowerCase() === 'enabled'
 }
 
-function resolveJsonEffectiveNextPayment(row: WallosJsonRow, today?: Date | string) {
-  const nextPayment = parseDate(row['Next Payment'])
-  if (!nextPayment) return null
-
-  const active = String(row.Active ?? '').trim().toLowerCase()
-  const state = String(row.State ?? '').trim().toLowerCase()
-  const cycle = parsePaymentCycle(row['Payment Cycle'])
-  return resolveWallosEffectiveNextPayment({
-    nextPayment,
-    autoRenew: mapJsonAutoRenew(row),
-    billingIntervalCount: cycle.billingIntervalCount,
-    billingIntervalUnit: cycle.billingIntervalUnit,
-    inactive: active === 'no' || state === 'disabled',
-    cancellationDate: parseDate(row['Cancellation Date']),
-    today
-  })
-}
-
-function mapJsonStatus(row: WallosJsonRow, today?: Date | string) {
+function mapJsonStatus(row: WallosJsonRow, today?: Date | string, sourceTimezone?: string) {
   const active = String(row.Active ?? '').trim().toLowerCase()
   const state = String(row.State ?? '').trim().toLowerCase()
   const cancellationDate = parseDate(row['Cancellation Date'])
@@ -472,11 +443,11 @@ function mapJsonStatus(row: WallosJsonRow, today?: Date | string) {
       billingIntervalUnit: cycle.billingIntervalUnit,
       inactive: active === 'no' || state === 'disabled',
       cancellationDate,
-      today
+      today,
+      sourceTimezone
     })
-    const nextDate = effectiveNextPayment ? startOfUtcDay(`${effectiveNextPayment}T00:00:00Z`) : null
-    const todayDate = startOfUtcDay(today ?? new Date())
-    if (nextDate && nextDate.getTime() < todayDate.getTime()) {
+    const todayDate = currentBusinessDateString(normalizeAppTimezone(sourceTimezone), today ?? new Date())
+    if (effectiveNextPayment && effectiveNextPayment < todayDate) {
       return 'expired' as SubscriptionStatus
     }
   }
@@ -547,6 +518,9 @@ function buildJsonPreview(rows: WallosJsonRow[], options: PreparedImportOptions)
     const tagName = normalizeWallosTagName(String(row.Category ?? ''))
     const rowWarnings: string[] = []
     const derived = buildJsonDerivedWarnings(row)
+    const active = String(row.Active ?? '').trim().toLowerCase()
+    const state = String(row.State ?? '').trim().toLowerCase()
+    const cancellationDate = parseDate(row['Cancellation Date'])
     derived.warnings.forEach((warning) => pushRowWarning(warnings, rowWarnings, `json#${index + 1}`, warning))
 
     if (tagName) {
@@ -558,12 +532,22 @@ function buildJsonPreview(rows: WallosJsonRow[], options: PreparedImportOptions)
       name,
       amount: derived.price.amount,
       currency: derived.price.currency,
-      status: mapJsonStatus(row, options.today),
+      status: mapJsonStatus(row, options.today, options.sourceTimezone),
       autoRenew: mapJsonAutoRenew(row),
       billingIntervalCount: derived.cycle.billingIntervalCount,
       billingIntervalUnit: derived.cycle.billingIntervalUnit,
       startDate: nextPayment,
-      nextRenewalDate: resolveJsonEffectiveNextPayment(row, options.today) ?? nextPayment,
+      nextRenewalDate:
+        resolveWallosEffectiveNextPayment({
+          nextPayment,
+          autoRenew: mapJsonAutoRenew(row),
+          billingIntervalCount: derived.cycle.billingIntervalCount,
+          billingIntervalUnit: derived.cycle.billingIntervalUnit,
+          inactive: active === 'no' || state === 'disabled',
+          cancellationDate,
+          today: options.today,
+          sourceTimezone: options.sourceTimezone
+        }) ?? nextPayment,
       notifyDaysBefore: options.defaultNotifyDays,
       webhookEnabled: mapJsonWebhookEnabled(row),
       notes: String(row.Notes ?? ''),
@@ -600,7 +584,8 @@ function buildJsonPreview(rows: WallosJsonRow[], options: PreparedImportOptions)
 function resolveDbEffectiveNextPayment(
   row: WallosSubscriptionRow,
   mappedInterval: { billingIntervalCount: number; billingIntervalUnit: BillingIntervalUnit },
-  today?: Date | string
+  today?: Date | string,
+  sourceTimezone?: string
 ) {
   return resolveWallosEffectiveNextPayment({
     nextPayment: row.next_payment,
@@ -609,7 +594,8 @@ function resolveDbEffectiveNextPayment(
     billingIntervalUnit: mappedInterval.billingIntervalUnit,
     inactive: row.inactive,
     cancellationDate: row.cancellation_date,
-    today
+    today,
+    sourceTimezone
   })
 }
 
@@ -635,7 +621,7 @@ function buildDbPreview(
     }
 
     const mappedInterval = mapWallosBillingInterval(row.cycle_days, row.frequency_name)
-    const effectiveNextRenewalDate = resolveDbEffectiveNextPayment(row, mappedInterval, options.today)
+    const effectiveNextRenewalDate = resolveDbEffectiveNextPayment(row, mappedInterval, options.today, options.sourceTimezone)
     const mappedStatus = mapWallosSubscriptionStatus({
       inactive: row.inactive,
       cancellationDate: row.cancellation_date,
@@ -643,7 +629,8 @@ function buildDbPreview(
       autoRenew: Boolean(row.auto_renew),
       billingIntervalCount: mappedInterval.billingIntervalCount,
       billingIntervalUnit: mappedInterval.billingIntervalUnit,
-      today: options.today
+      today: options.today,
+      sourceTimezone: options.sourceTimezone
     })
     const notifyConfig = resolveWallosNotifyDays({
       notify: row.notify,

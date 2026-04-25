@@ -17,6 +17,8 @@ import { runWithRuntimeContext, type WorkerBindings } from '../runtime'
 import { autoRenewDueSubscriptions, reconcileExpiredSubscriptions } from '../services/subscription.service'
 import { scanRenewalNotifications } from '../services/notification.service'
 import { refreshExchangeRates } from '../services/exchange-rate.service'
+import { getAppTimezone } from '../services/settings.service'
+import { runDailyTaskAtLocalHour } from '../services/worker-cron.service'
 import type { D1Database, ExecutionContext, ScheduledController } from './types'
 import { requiresWorkerRuntimeContext } from './request-routing'
 
@@ -109,7 +111,9 @@ export default {
       await bootstrapPromise
       switch (controller.cron) {
         case env.CRON_REFRESH_RATES ?? '0 2 * * *':
-          await refreshExchangeRates()
+          await runDailyTaskAtLocalHour('refreshExchangeRates', await getAppTimezone(), 2, new Date(), async () => {
+            await refreshExchangeRates()
+          })
           break
         case env.CRON_SCAN ?? '* * * * *':
           await scanRenewalNotifications(new Date())
@@ -118,7 +122,9 @@ export default {
           await autoRenewDueSubscriptions()
           break
         case env.CRON_RECONCILE_EXPIRED ?? '10 2 * * *':
-          await reconcileExpiredSubscriptions()
+          await runDailyTaskAtLocalHour('reconcileExpiredSubscriptions', await getAppTimezone(), 2, new Date(), async () => {
+            await reconcileExpiredSubscriptions()
+          })
           break
         default:
           break

@@ -120,6 +120,39 @@ describe('buildPreparedWallosImportPayload', () => {
     )
   })
 
+  it('respects the selected Wallos source timezone when computing business-day status', async () => {
+    const file = new File(
+      [
+        JSON.stringify([
+          {
+            Name: 'Timezone Sensitive',
+            Price: '$10',
+            Category: 'Video',
+            'Payment Cycle': 'Yearly',
+            'Next Payment': '2026-04-25',
+            Renewal: 'Manual',
+            URL: 'example.com',
+            Notes: ''
+          }
+        ])
+      ],
+      'wallos.json',
+      { type: 'application/json' }
+    )
+
+    const payload = await buildPreparedWallosImportPayload(file, {
+      defaultNotifyDays: 3,
+      baseCurrency: 'CNY',
+      today: '2026-04-25T18:00:00.000Z',
+      sourceTimezone: 'Asia/Shanghai'
+    })
+
+    expect(payload.preview.subscriptionsPreview[0]).toMatchObject({
+      nextRenewalDate: '2026-04-25',
+      status: 'expired'
+    })
+  })
+
   it('parses wallos sqlite in browser mode and keeps db-only fields', async () => {
     const file = new File([await createWallosFixtureBuffer()], 'wallos.db', {
       type: 'application/octet-stream'
