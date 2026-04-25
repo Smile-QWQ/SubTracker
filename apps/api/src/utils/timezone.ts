@@ -1,7 +1,7 @@
 import dayjs from 'dayjs'
-import utc from 'dayjs/plugin/utc'
-import timezone from 'dayjs/plugin/timezone'
-import customParseFormat from 'dayjs/plugin/customParseFormat'
+import utc from 'dayjs/plugin/utc.js'
+import timezone from 'dayjs/plugin/timezone.js'
+import customParseFormat from 'dayjs/plugin/customParseFormat.js'
 import { DEFAULT_TIMEZONE } from '@subtracker/shared'
 
 dayjs.extend(utc)
