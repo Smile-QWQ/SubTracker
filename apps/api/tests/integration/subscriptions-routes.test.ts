@@ -39,7 +39,8 @@ const routeMocks = vi.hoisted(() => {
       logoSource: logoSource ?? null,
       logoFetchedAt: null
     })),
-    getDefaultAdvanceReminderRulesSettingMock: vi.fn(async () => '3&09:30;0&09:30;')
+    getDefaultAdvanceReminderRulesSettingMock: vi.fn(async () => '3&09:30;0&09:30;'),
+    getAppTimezoneMock: vi.fn(async () => 'Asia/Shanghai')
   }
 })
 
@@ -81,6 +82,7 @@ vi.mock('../../src/services/reminder-rules.service', () => ({
 }))
 
 vi.mock('../../src/services/settings.service', () => ({
+  getAppTimezone: routeMocks.getAppTimezoneMock,
   getDefaultAdvanceReminderRulesSetting: routeMocks.getDefaultAdvanceReminderRulesSettingMock
 }))
 

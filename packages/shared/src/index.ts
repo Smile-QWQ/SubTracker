@@ -157,6 +157,22 @@ export const DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE = `{
 export const DEFAULT_REMINDER_RULE_TIME = '09:30'
 export const DEFAULT_ADVANCE_REMINDER_RULES = `3&${DEFAULT_REMINDER_RULE_TIME};0&${DEFAULT_REMINDER_RULE_TIME};`
 export const DEFAULT_OVERDUE_REMINDER_RULES = `1&${DEFAULT_REMINDER_RULE_TIME};2&${DEFAULT_REMINDER_RULE_TIME};3&${DEFAULT_REMINDER_RULE_TIME};`
+export const DEFAULT_TIMEZONE = 'Asia/Shanghai'
+
+function isValidTimeZone(value: string) {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value }).format(new Date())
+    return true
+  } catch {
+    return false
+  }
+}
+
+export const TimeZoneSchema = z
+  .string()
+  .min(1)
+  .max(100)
+  .refine((value) => isValidTimeZone(value), 'Invalid timezone')
 
 export const TagSchema = z.object({
   id: z.string().cuid().optional(),
@@ -296,6 +312,7 @@ export const AiConfigSchema = z.object({
 
 export const SettingsSchema = z.object({
   baseCurrency: z.string().length(3).default('CNY').transform((v) => v.toUpperCase()),
+  timezone: TimeZoneSchema.default(DEFAULT_TIMEZONE),
   defaultNotifyDays: z.number().int().min(0).max(365).default(3),
   defaultAdvanceReminderRules: z.string().max(500).default(DEFAULT_ADVANCE_REMINDER_RULES),
   rememberSessionDays: z.number().int().min(1).max(365).default(7),
@@ -358,7 +375,8 @@ export const AiRecognizeSubscriptionSchema = z.object({
 export const WallosImportInspectSchema = z.object({
   filename: z.string().min(1).max(255),
   contentType: z.string().min(1).max(120),
-  base64: z.string().min(1)
+  base64: z.string().min(1),
+  sourceTimezone: TimeZoneSchema.optional()
 })
 
 export const WallosImportCommitSchema = z.object({

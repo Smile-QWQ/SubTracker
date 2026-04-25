@@ -63,14 +63,15 @@
 </template>
 
 <script setup lang="ts">
-import dayjs from 'dayjs'
 import { computed } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { NCard, NDescriptions, NDescriptionsItem, NDrawer, NDrawerContent, NEmpty, NSpace, NTag } from 'naive-ui'
+import { useSettingsQuery } from '@/composables/settings-query'
 import type { SubscriptionDetail } from '@/types/api'
 import { resolveLogoUrl } from '@/utils/logo'
 import { formatReminderRulesText } from '@/utils/reminder-rules'
 import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils/subscription-status'
+import { formatDateInTimezone, formatDateTimeInTimezone } from '@/utils/timezone'
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -80,6 +81,7 @@ defineProps<{
 }>()
 
 const { width } = useWindowSize()
+const { data: settings } = useSettingsQuery()
 const drawerWidth = computed(() => (width.value < 760 ? '100%' : 720))
 const descriptionColumns = computed(() => (width.value < 760 ? 1 : 2))
 
@@ -88,11 +90,11 @@ function formatMoney(amount: number, currency: string) {
 }
 
 function formatDate(value: string) {
-  return dayjs(value).format('YYYY-MM-DD')
+  return formatDateInTimezone(value, settings.value?.timezone)
 }
 
 function formatDateTime(value: string) {
-  return dayjs(value).format('YYYY-MM-DD HH:mm:ss')
+  return formatDateTimeInTimezone(value, settings.value?.timezone)
 }
 
 function unitLabel(unit: string) {

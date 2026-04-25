@@ -8,11 +8,12 @@
 </template>
 
 <script setup lang="ts">
-import dayjs from 'dayjs'
 import { computed } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { NDataTable, NDrawer, NDrawerContent, NEmpty } from 'naive-ui'
+import { useSettingsQuery } from '@/composables/settings-query'
 import type { PaymentRecord } from '@/types/api'
+import { formatDateInTimezone, formatDateTimeInTimezone } from '@/utils/timezone'
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -22,13 +23,14 @@ const props = defineProps<{
 }>()
 
 const { width } = useWindowSize()
+const { data: settings } = useSettingsQuery()
 const drawerWidth = computed(() => (width.value < 760 ? '100%' : 760))
 
 const columns = [
   {
     title: '续订时间',
     key: 'paidAt',
-    render: (row: PaymentRecord) => dayjs(row.paidAt).format('YYYY-MM-DD HH:mm:ss')
+    render: (row: PaymentRecord) => formatDateTimeInTimezone(row.paidAt, settings.value?.timezone)
   },
   {
     title: '金额',
@@ -43,12 +45,12 @@ const columns = [
   {
     title: '周期开始',
     key: 'periodStart',
-    render: (row: PaymentRecord) => dayjs(row.periodStart).format('YYYY-MM-DD')
+    render: (row: PaymentRecord) => formatDateInTimezone(row.periodStart, settings.value?.timezone)
   },
   {
     title: '周期结束',
     key: 'periodEnd',
-    render: (row: PaymentRecord) => dayjs(row.periodEnd).format('YYYY-MM-DD')
+    render: (row: PaymentRecord) => formatDateInTimezone(row.periodEnd, settings.value?.timezone)
   }
 ]
 

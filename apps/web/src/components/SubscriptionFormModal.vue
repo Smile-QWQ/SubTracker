@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <n-modal :show="show" preset="card" title="订阅信息" style="width: min(920px, calc(100vw - 24px))" @mask-click="close" @update:show="handleUpdateShow">
     <n-spin :show="saving" description="保存中，请稍候...">
     <n-form :model="form" label-placement="top">
@@ -249,7 +249,6 @@
 </template>
 
 <script setup lang="ts">
-import dayjs from 'dayjs'
 import { computed, reactive, ref, watch } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import {
@@ -275,9 +274,11 @@ import {
 } from 'naive-ui'
 import { CloseOutline, ColorWandOutline, HelpCircleOutline, SearchOutline } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
+import { useSettingsQuery } from '@/composables/settings-query'
 import SubscriptionAiModal from '@/components/SubscriptionAiModal.vue'
 import { buildCurrencyOptions } from '@/utils/currency'
 import { resolveLogoUrl } from '@/utils/logo'
+import { businessDateToPickerTs, currentBusinessDatePickerTs, pickerTsToDateString } from '@/utils/timezone'
 import {
   calculateNextRenewalDateTs,
   canRecalculateNextRenewal,
@@ -305,6 +306,7 @@ const emit = defineEmits<{
 }>()
 
 const { width } = useWindowSize()
+const { data: settings } = useSettingsQuery()
 const message = useMessage()
 const helpCircleOutline = HelpCircleOutline
 const showAiModal = ref(false)
@@ -354,8 +356,8 @@ const form = reactive({
   billingIntervalCount: 1,
   billingIntervalUnit: 'month' as Subscription['billingIntervalUnit'] | '',
   autoRenew: false,
-  startDateTs: dayjs().valueOf() as number | null,
-  nextRenewalDateTs: dayjs().add(1, 'month').valueOf() as number | null,
+  startDateTs: currentBusinessDatePickerTs(settings.value?.timezone) as number | null,
+  nextRenewalDateTs: calculateNextRenewalDateTs(currentBusinessDatePickerTs(settings.value?.timezone), 1, 'month') as number | null,
   advanceReminderRules: '',
   overdueReminderRules: '',
   webhookEnabled: true,
@@ -406,8 +408,8 @@ function resetForm() {
   form.billingIntervalCount = 1
   form.billingIntervalUnit = 'month'
   form.autoRenew = false
-  form.startDateTs = dayjs().valueOf()
-  form.nextRenewalDateTs = dayjs().add(1, 'month').valueOf()
+  form.startDateTs = currentBusinessDatePickerTs(settings.value?.timezone)
+  form.nextRenewalDateTs = calculateNextRenewalDateTs(form.startDateTs, 1, 'month')
   form.advanceReminderRules = ''
   form.overdueReminderRules = ''
   form.webhookEnabled = true
@@ -429,8 +431,8 @@ function hydrateFromModel(model: Subscription) {
   form.billingIntervalCount = model.billingIntervalCount
   form.billingIntervalUnit = model.billingIntervalUnit
   form.autoRenew = model.autoRenew ?? false
-  form.startDateTs = dayjs(model.startDate).valueOf()
-  form.nextRenewalDateTs = dayjs(model.nextRenewalDate).valueOf()
+  form.startDateTs = businessDateToPickerTs(model.startDate, settings.value?.timezone)
+  form.nextRenewalDateTs = businessDateToPickerTs(model.nextRenewalDate, settings.value?.timezone)
   form.advanceReminderRules = model.advanceReminderRules ?? ''
   form.overdueReminderRules = model.overdueReminderRules ?? ''
   form.webhookEnabled = model.webhookEnabled
@@ -592,9 +594,9 @@ function applyAiResult(result: AiRecognitionResult) {
   if (result.currency) form.currency = result.currency
   if (result.billingIntervalCount) form.billingIntervalCount = result.billingIntervalCount
   if (result.billingIntervalUnit) form.billingIntervalUnit = result.billingIntervalUnit
-  if (result.startDate) form.startDateTs = dayjs(result.startDate).valueOf()
+  if (result.startDate) form.startDateTs = businessDateToPickerTs(result.startDate, settings.value?.timezone)
   if (result.nextRenewalDate) {
-    form.nextRenewalDateTs = dayjs(result.nextRenewalDate).valueOf()
+    form.nextRenewalDateTs = businessDateToPickerTs(result.nextRenewalDate, settings.value?.timezone)
   }
   if (result.websiteUrl) form.websiteUrl = result.websiteUrl
   if (result.notes) form.notes = result.notes
@@ -677,6 +679,11 @@ function submit() {
 
   form.websiteUrl = validation.normalizedWebsiteUrl ?? ''
 
+  if (form.startDateTs === null || form.nextRenewalDateTs === null) {
+    message.warning('请选择开始日期和下次续订日期')
+    return
+  }
+
   emit(
     'submit',
     {
@@ -688,8 +695,8 @@ function submit() {
       billingIntervalCount: Number(form.billingIntervalCount),
       billingIntervalUnit: form.billingIntervalUnit,
       autoRenew: form.autoRenew,
-      startDate: dayjs(form.startDateTs).format('YYYY-MM-DD'),
-      nextRenewalDate: dayjs(form.nextRenewalDateTs).format('YYYY-MM-DD'),
+      startDate: pickerTsToDateString(form.startDateTs),
+      nextRenewalDate: pickerTsToDateString(form.nextRenewalDateTs),
       advanceReminderRules: form.advanceReminderRules.trim() || '',
       overdueReminderRules: form.overdueReminderRules.trim() || '',
       webhookEnabled: form.webhookEnabled,

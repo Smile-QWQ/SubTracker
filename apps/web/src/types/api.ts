@@ -224,6 +224,7 @@ export interface AiTestResponse {
 
 export interface Settings {
   baseCurrency: string
+  timezone: string
   defaultNotifyDays: number
   defaultAdvanceReminderRules: string
   rememberSessionDays: number

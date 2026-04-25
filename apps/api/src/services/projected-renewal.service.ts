@@ -1,6 +1,7 @@
 import dayjs from 'dayjs'
 import type { BillingIntervalUnit, SubscriptionStatus } from '@subtracker/shared'
 import { addInterval } from '../utils/date'
+import { DEFAULT_APP_TIMEZONE, formatDateInTimezone, toTimezonedDayjs } from '../utils/timezone'
 
 type ProjectableSubscription = {
   id: string
@@ -33,10 +34,12 @@ export function projectRenewalEvents<T extends ProjectableSubscription>(
     end: Date | string
     statuses?: SubscriptionStatus[]
     maxOccurrencesPerSubscription?: number
+    timezone?: string
   }
 ) {
-  const rangeStart = dayjs(options.start).startOf('day')
-  const rangeEnd = dayjs(options.end).endOf('day')
+  const timezone = options.timezone ?? DEFAULT_APP_TIMEZONE
+  const rangeStart = toTimezonedDayjs(options.start, timezone).startOf('day')
+  const rangeEnd = toTimezonedDayjs(options.end, timezone).endOf('day')
 
   if (rangeStart.isAfter(rangeEnd)) {
     return [] as ProjectedRenewalEvent<T>[]
@@ -51,18 +54,19 @@ export function projectRenewalEvents<T extends ProjectableSubscription>(
       continue
     }
 
-    let cursor = dayjs(subscription.nextRenewalDate).startOf('day')
+    let cursor = toTimezonedDayjs(subscription.nextRenewalDate, timezone).startOf('day')
     let guard = 0
 
     while (cursor.isBefore(rangeStart) && guard < maxOccurrencesPerSubscription) {
-      cursor = dayjs(
-        addInterval(cursor.toDate(), subscription.billingIntervalCount, subscription.billingIntervalUnit)
+      cursor = toTimezonedDayjs(
+        addInterval(cursor.toDate(), subscription.billingIntervalCount, subscription.billingIntervalUnit, timezone),
+        timezone
       ).startOf('day')
       guard += 1
     }
 
     while (!cursor.isAfter(rangeEnd) && guard < maxOccurrencesPerSubscription) {
-      const eventDate = cursor.format('YYYY-MM-DD')
+      const eventDate = formatDateInTimezone(cursor.toDate(), timezone)
       events.push({
         id: `${subscription.id}:${eventDate}`,
         subscriptionId: subscription.id,
@@ -74,8 +78,9 @@ export function projectRenewalEvents<T extends ProjectableSubscription>(
         subscription
       })
 
-      cursor = dayjs(
-        addInterval(cursor.toDate(), subscription.billingIntervalCount, subscription.billingIntervalUnit)
+      cursor = toTimezonedDayjs(
+        addInterval(cursor.toDate(), subscription.billingIntervalCount, subscription.billingIntervalUnit, timezone),
+        timezone
       ).startOf('day')
       guard += 1
     }

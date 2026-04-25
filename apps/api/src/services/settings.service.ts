@@ -2,6 +2,7 @@ import {
   AiConfigSchema,
   DEFAULT_RESEND_API_URL,
   DEFAULT_AI_CONFIG,
+  DEFAULT_TIMEZONE,
   SettingsSchema,
   type SettingsInput
 } from '@subtracker/shared'
@@ -14,6 +15,7 @@ import {
   resolveDefaultAdvanceReminderRules,
   resolveDefaultOverdueReminderRules
 } from './reminder-rules.service'
+import { normalizeAppTimezone } from '../utils/timezone'
 
 const DEFAULT_SMTP_CONFIG: SettingsInput['smtpConfig'] = {
   host: '',
@@ -65,6 +67,8 @@ export async function getAppSettings(): Promise<SettingsInput> {
   const settingsMap = new Map(rows.map((row) => [row.key, row.valueJson]))
 
   const baseCurrency = readSettingsValue(settingsMap, 'baseCurrency', config.baseCurrency)
+  const timezoneFallback = normalizeAppTimezone(process.env.TZ ?? DEFAULT_TIMEZONE)
+  const timezone = readSettingsValue(settingsMap, 'timezone', timezoneFallback)
   const defaultNotifyDays = readSettingsValue(settingsMap, 'defaultNotifyDays', config.defaultNotifyDays)
   const defaultAdvanceReminderRules = resolveDefaultAdvanceReminderRules(
     readSettingsValue<string | null>(settingsMap, 'defaultAdvanceReminderRules', null),
@@ -106,6 +110,7 @@ export async function getAppSettings(): Promise<SettingsInput> {
 
   return SettingsSchema.parse({
     baseCurrency,
+    timezone,
     defaultNotifyDays: deriveNotifyDaysBeforeFromAdvanceRules(defaultAdvanceReminderRules) || defaultNotifyDays,
     defaultAdvanceReminderRules,
     rememberSessionDays,
@@ -135,6 +140,10 @@ export async function getAppSettings(): Promise<SettingsInput> {
 
 export async function getRememberSessionDays(): Promise<number> {
   return getSetting('rememberSessionDays', 7)
+}
+
+export async function getAppTimezone(): Promise<string> {
+  return (await getAppSettings()).timezone
 }
 
 export async function getAiConfig() {
@@ -206,7 +215,7 @@ export async function getNotificationChannelSettings() {
 }
 
 export async function getNotificationScanSettings() {
-  const [defaultAdvanceReminderRules, defaultOverdueReminderRules, mergeMultiSubscriptionNotifications] = await Promise.all([
+  const [defaultAdvanceReminderRules, defaultOverdueReminderRules, mergeMultiSubscriptionNotifications, timezone] = await Promise.all([
     getDefaultAdvanceReminderRulesSetting(),
     (async () => {
       const overdueReminderDays = await getSetting<Array<1 | 2 | 3>>('overdueReminderDays', [1, 2, 3])
@@ -215,12 +224,14 @@ export async function getNotificationScanSettings() {
         overdueReminderDays
       )
     })(),
-    getSetting('mergeMultiSubscriptionNotifications', true)
+    getSetting('mergeMultiSubscriptionNotifications', true),
+    getSetting('timezone', normalizeAppTimezone(process.env.TZ ?? DEFAULT_TIMEZONE))
   ])
 
   return {
     defaultAdvanceReminderRules,
     defaultOverdueReminderRules,
-    mergeMultiSubscriptionNotifications
+    mergeMultiSubscriptionNotifications,
+    timezone
   }
 }

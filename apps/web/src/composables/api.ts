@@ -361,7 +361,7 @@ export const api = {
     }
   },
 
-  async inspectWallosImport(payload: { filename: string; contentType: string; base64: string }) {
+  async inspectWallosImport(payload: { filename: string; contentType: string; base64: string; sourceTimezone?: string }) {
     return postOnce<WallosImportInspectResult>('/import/wallos/inspect', payload, { timeout: 60000 })
   },
 

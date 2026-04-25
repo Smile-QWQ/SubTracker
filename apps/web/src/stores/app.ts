@@ -7,6 +7,7 @@ import type { Settings } from '@/types/api'
 export const useAppStore = defineStore('app', () => {
   const settings = ref<Settings>({
     baseCurrency: 'CNY',
+    timezone: 'Asia/Shanghai',
     defaultNotifyDays: 3,
     defaultAdvanceReminderRules: DEFAULT_ADVANCE_REMINDER_RULES,
     rememberSessionDays: 7,

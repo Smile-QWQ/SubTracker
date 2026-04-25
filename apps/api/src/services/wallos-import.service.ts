@@ -16,7 +16,8 @@ import type {
 } from '@subtracker/shared'
 import { prisma } from '../db'
 import { addInterval } from '../utils/date'
-import { getAppSettings } from './settings.service'
+import { formatDateInTimezone, normalizeAppTimezone, parseDateInTimezone } from '../utils/timezone'
+import { getAppSettings, getAppTimezone } from './settings.service'
 import { appendSubscriptionOrders } from './subscription-order.service'
 import { saveImportedLogoBuffer } from './logo.service'
 
@@ -159,12 +160,6 @@ function parseDate(value: unknown) {
   return date.toISOString().slice(0, 10)
 }
 
-function startOfUtcDay(value: Date | string = new Date()) {
-  const date = new Date(value)
-  date.setUTCHours(0, 0, 0, 0)
-  return date
-}
-
 function detectImportFileType(input: WallosImportInspectInput, buffer: Buffer): ImportFileType {
   const filename = input.filename.toLowerCase()
   const trimmed = buffer.toString('utf8', 0, Math.min(buffer.length, 80)).trimStart()
@@ -228,12 +223,14 @@ export function resolveWallosEffectiveNextPayment(input: {
   inactive?: number | boolean | null
   cancellationDate?: string | null
   today?: Date | string
+  sourceTimezone?: string
 }) {
   const parsedNextPayment = parseDate(input.nextPayment)
   if (!parsedNextPayment) return null
 
-  let effectiveDate = startOfUtcDay(`${parsedNextPayment}T00:00:00Z`)
-  const today = startOfUtcDay(input.today ?? new Date())
+  const sourceTimezone = normalizeAppTimezone(input.sourceTimezone)
+  let effectiveDate = parsedNextPayment
+  const today = formatDateInTimezone(input.today ?? new Date(), sourceTimezone)
   const canAutoAdvance =
     Boolean(input.autoRenew) &&
     !input.inactive &&
@@ -242,18 +239,19 @@ export function resolveWallosEffectiveNextPayment(input: {
     input.billingIntervalUnit
 
   if (!canAutoAdvance) {
-    return effectiveDate.toISOString().slice(0, 10)
+    return effectiveDate
   }
 
   let guard = 0
-  while (effectiveDate.getTime() < today.getTime() && guard < 3660) {
-    effectiveDate = startOfUtcDay(
-      addInterval(effectiveDate, Number(input.billingIntervalCount), input.billingIntervalUnit as BillingIntervalUnit)
+  while (effectiveDate < today && guard < 3660) {
+    effectiveDate = formatDateInTimezone(
+      addInterval(effectiveDate, Number(input.billingIntervalCount), input.billingIntervalUnit as BillingIntervalUnit, sourceTimezone),
+      sourceTimezone
     )
     guard += 1
   }
 
-  return effectiveDate.toISOString().slice(0, 10)
+  return effectiveDate
 }
 
 export function mapWallosSubscriptionStatus(input: {
@@ -264,15 +262,15 @@ export function mapWallosSubscriptionStatus(input: {
   billingIntervalCount?: number | null
   billingIntervalUnit?: BillingIntervalUnit | null
   today?: Date | string
+  sourceTimezone?: string
 }) {
   if (input.inactive) return 'paused' as SubscriptionStatus
   if (parseDate(input.cancellationDate)) return 'cancelled' as SubscriptionStatus
 
   const nextPayment = resolveWallosEffectiveNextPayment(input)
   if (nextPayment) {
-    const nextDate = startOfUtcDay(`${nextPayment}T00:00:00Z`)
-    const today = startOfUtcDay(input.today ?? new Date())
-    if (nextDate.getTime() < today.getTime()) {
+    const today = formatDateInTimezone(input.today ?? new Date(), normalizeAppTimezone(input.sourceTimezone))
+    if (nextPayment < today) {
       return 'expired' as SubscriptionStatus
     }
   }
@@ -508,7 +506,7 @@ function parsePaymentCycle(input: unknown) {
   }
 }
 
-function mapJsonStatus(row: WallosJsonRow) {
+function mapJsonStatus(row: WallosJsonRow, today?: Date | string, sourceTimezone?: string) {
   const active = String(row.Active ?? '').trim().toLowerCase()
   const state = String(row.State ?? '').trim().toLowerCase()
   const cancellationDate = parseDate(row['Cancellation Date'])
@@ -526,11 +524,12 @@ function mapJsonStatus(row: WallosJsonRow) {
       billingIntervalCount: cycle.billingIntervalCount,
       billingIntervalUnit: cycle.billingIntervalUnit,
       inactive: active === 'no' || state === 'disabled',
-      cancellationDate
+      cancellationDate,
+      today,
+      sourceTimezone
     })
-    const nextDate = effectiveNextPayment ? startOfUtcDay(`${effectiveNextPayment}T00:00:00Z`) : null
-    const today = startOfUtcDay(new Date())
-    if (nextDate && nextDate.getTime() < today.getTime()) {
+    const todayDate = formatDateInTimezone(today ?? new Date(), normalizeAppTimezone(sourceTimezone))
+    if (effectiveNextPayment && effectiveNextPayment < todayDate) {
       return 'expired' as SubscriptionStatus
     }
   }
@@ -538,7 +537,7 @@ function mapJsonStatus(row: WallosJsonRow) {
   return 'active' as SubscriptionStatus
 }
 
-function resolveJsonEffectiveNextPayment(row: WallosJsonRow) {
+function resolveJsonEffectiveNextPayment(row: WallosJsonRow, today?: Date | string, sourceTimezone?: string) {
   const nextPayment = parseDate(row['Next Payment'])
   if (!nextPayment) return null
 
@@ -551,13 +550,17 @@ function resolveJsonEffectiveNextPayment(row: WallosJsonRow) {
     billingIntervalCount: cycle.billingIntervalCount,
     billingIntervalUnit: cycle.billingIntervalUnit,
     inactive: active === 'no' || state === 'disabled',
-    cancellationDate: parseDate(row['Cancellation Date'])
+    cancellationDate: parseDate(row['Cancellation Date']),
+    today,
+    sourceTimezone
   })
 }
 
 function resolveDbEffectiveNextPayment(
   row: WallosSubscriptionRow,
-  mappedInterval: { billingIntervalCount: number; billingIntervalUnit: BillingIntervalUnit }
+  mappedInterval: { billingIntervalCount: number; billingIntervalUnit: BillingIntervalUnit },
+  today?: Date | string,
+  sourceTimezone?: string
 ) {
   return resolveWallosEffectiveNextPayment({
     nextPayment: row.next_payment,
@@ -565,7 +568,9 @@ function resolveDbEffectiveNextPayment(
     billingIntervalCount: mappedInterval.billingIntervalCount,
     billingIntervalUnit: mappedInterval.billingIntervalUnit,
     inactive: row.inactive,
-    cancellationDate: row.cancellation_date
+    cancellationDate: row.cancellation_date,
+    today,
+    sourceTimezone
   })
 }
 
@@ -598,7 +603,8 @@ function buildJsonDerivedWarnings(row: WallosJsonRow) {
 
 function buildJsonPreview(
   rows: WallosJsonRow[],
-  settings: { defaultNotifyDays: number; baseCurrency: string }
+  settings: { defaultNotifyDays: number; baseCurrency: string; timezone: string },
+  sourceTimezone: string
 ): Omit<WallosImportInspectResultDto, 'importToken'> {
   const warnings: string[] = []
   const previewSubscriptions: WallosImportSubscriptionPreviewDto[] = []
@@ -631,12 +637,12 @@ function buildJsonPreview(
       name,
       amount: derived.price.amount,
       currency: derived.price.currency,
-      status: mapJsonStatus(row),
+      status: mapJsonStatus(row, undefined, sourceTimezone),
       autoRenew: mapJsonAutoRenew(row),
       billingIntervalCount: derived.cycle.billingIntervalCount,
       billingIntervalUnit: derived.cycle.billingIntervalUnit,
       startDate: nextPayment,
-      nextRenewalDate: resolveJsonEffectiveNextPayment(row) ?? nextPayment,
+      nextRenewalDate: resolveJsonEffectiveNextPayment(row, undefined, sourceTimezone) ?? nextPayment,
       notifyDaysBefore: settings.defaultNotifyDays,
       webhookEnabled: mapJsonWebhookEnabled(row),
       notes: String(row.Notes ?? ''),
@@ -681,10 +687,11 @@ function mapJsonAutoRenew(row: WallosJsonRow) {
 
 function buildDbPreview(
   rows: WallosSubscriptionRow[],
-  settings: { defaultNotifyDays: number; baseCurrency: string },
+  settings: { defaultNotifyDays: number; baseCurrency: string; timezone: string },
   globalNotifyDays: number,
   fileType: ImportFileType,
-  zipLogos = new Map<string, ZipLogoAsset>()
+  zipLogos = new Map<string, ZipLogoAsset>(),
+  sourceTimezone = settings.timezone
 ): Omit<WallosImportInspectResultDto, 'importToken'> {
   const warnings: string[] = []
   let skippedSubscriptions = 0
@@ -701,14 +708,15 @@ function buildDbPreview(
     }
 
     const mappedInterval = mapWallosBillingInterval(row.cycle_days, row.frequency_name)
-    const effectiveNextRenewalDate = resolveDbEffectiveNextPayment(row, mappedInterval)
+    const effectiveNextRenewalDate = resolveDbEffectiveNextPayment(row, mappedInterval, undefined, sourceTimezone)
     const mappedStatus = mapWallosSubscriptionStatus({
       inactive: row.inactive,
       cancellationDate: row.cancellation_date,
       nextPayment: row.next_payment,
       autoRenew: Boolean(row.auto_renew),
       billingIntervalCount: mappedInterval.billingIntervalCount,
-      billingIntervalUnit: mappedInterval.billingIntervalUnit
+      billingIntervalUnit: mappedInterval.billingIntervalUnit,
+      sourceTimezone
     })
     const notifyConfig = resolveWallosNotifyDays({
       notify: row.notify,
@@ -797,13 +805,15 @@ async function buildDbPreviewFromBuffer(
   options?: {
     defaultNotifyDays?: number
     baseCurrency?: string
+    sourceTimezone?: string
   }
 ) {
   const settings =
     options?.defaultNotifyDays !== undefined || options?.baseCurrency
       ? {
           defaultNotifyDays: options?.defaultNotifyDays ?? 3,
-          baseCurrency: options?.baseCurrency ?? 'CNY'
+          baseCurrency: options?.baseCurrency ?? 'CNY',
+          timezone: normalizeAppTimezone(options?.sourceTimezone)
         }
       : await getAppSettings()
 
@@ -856,22 +866,23 @@ async function buildDbPreviewFromBuffer(
       `
     )
 
-    return buildDbPreview(rows, settings, globalNotifyDays, fileType, zipLogos)
+    const sourceTimezone = normalizeAppTimezone(options?.sourceTimezone ?? settings.timezone)
+    return buildDbPreview(rows, settings, globalNotifyDays, fileType, zipLogos, sourceTimezone)
   } finally {
     db.close()
   }
 }
 
-async function inspectZipImport(buffer: Buffer) {
+async function inspectZipImport(buffer: Buffer, options?: { defaultNotifyDays?: number; baseCurrency?: string; sourceTimezone?: string }) {
   const extracted = extractZipImport(buffer)
-  const preview = await buildDbPreviewFromBuffer(extracted.dbBuffer, 'zip', extracted.zipLogos)
+  const preview = await buildDbPreviewFromBuffer(extracted.dbBuffer, 'zip', extracted.zipLogos, options)
   return {
     preview,
     zipLogos: extracted.zipLogos
   }
 }
 
-async function inspectJsonImport(buffer: Buffer) {
+async function inspectJsonImport(buffer: Buffer, options?: { defaultNotifyDays?: number; baseCurrency?: string; sourceTimezone?: string }) {
   let parsed: unknown
   try {
     parsed = JSON.parse(buffer.toString('utf8'))
@@ -883,14 +894,23 @@ async function inspectJsonImport(buffer: Buffer) {
     throw new Error('Wallos JSON 导出内容必须是数组')
   }
 
-  const settings = await getAppSettings()
+  const settings =
+    options?.defaultNotifyDays !== undefined || options?.baseCurrency
+      ? {
+          ...(await getAppSettings()),
+          defaultNotifyDays: options?.defaultNotifyDays ?? 3,
+          baseCurrency: options?.baseCurrency ?? 'CNY',
+          timezone: normalizeAppTimezone(options?.sourceTimezone)
+        }
+      : await getAppSettings()
+  const sourceTimezone = normalizeAppTimezone(options?.sourceTimezone ?? settings.timezone)
   return {
-    preview: buildJsonPreview(parsed as WallosJsonRow[], settings),
+    preview: buildJsonPreview(parsed as WallosJsonRow[], settings, sourceTimezone),
     zipLogos: new Map<string, ZipLogoAsset>()
   }
 }
 
-async function inspectDbImport(buffer: Buffer, options?: { defaultNotifyDays?: number; baseCurrency?: string }) {
+async function inspectDbImport(buffer: Buffer, options?: { defaultNotifyDays?: number; baseCurrency?: string; sourceTimezone?: string }) {
   const preview = await buildDbPreviewFromBuffer(buffer, 'db', new Map<string, ZipLogoAsset>(), options)
   return {
     preview,
@@ -898,18 +918,18 @@ async function inspectDbImport(buffer: Buffer, options?: { defaultNotifyDays?: n
   }
 }
 
-async function inspectImportBuffer(input: WallosImportInspectInput, options?: { defaultNotifyDays?: number; baseCurrency?: string }) {
+async function inspectImportBuffer(input: WallosImportInspectInput, options?: { defaultNotifyDays?: number; baseCurrency?: string; sourceTimezone?: string }) {
   const buffer = decodeDatabase(input)
   const fileType = detectImportFileType(input, buffer)
 
   switch (fileType) {
     case 'json':
-      return inspectJsonImport(buffer)
+      return inspectJsonImport(buffer, { ...options, sourceTimezone: input.sourceTimezone ?? options?.sourceTimezone })
     case 'zip':
-      return inspectZipImport(buffer)
+      return inspectZipImport(buffer, { ...options, sourceTimezone: input.sourceTimezone ?? options?.sourceTimezone })
     case 'db':
     default:
-      return inspectDbImport(buffer, options)
+      return inspectDbImport(buffer, { ...options, sourceTimezone: input.sourceTimezone ?? options?.sourceTimezone })
   }
 }
 
@@ -944,6 +964,7 @@ export async function commitWallosImport(input: WallosImportCommitInput): Promis
   const preview = entry.preview
   const zipLogos = entry.zipLogos
   previewCache.delete(input.importToken)
+  const appTimezone = await getAppTimezone()
 
   const existingTags = await prisma.tag.findMany({
     where: {
@@ -1036,8 +1057,8 @@ export async function commitWallosImport(input: WallosImportCommitInput): Promis
       billingIntervalCount: item.billingIntervalCount,
       billingIntervalUnit: item.billingIntervalUnit,
       autoRenew: item.autoRenew,
-      startDate: new Date(`${item.startDate}T00:00:00.000Z`),
-      nextRenewalDate: new Date(`${item.nextRenewalDate}T00:00:00.000Z`),
+      startDate: parseDateInTimezone(item.startDate, appTimezone),
+      nextRenewalDate: parseDateInTimezone(item.nextRenewalDate, appTimezone),
       notifyDaysBefore: item.notifyDaysBefore,
       webhookEnabled: item.webhookEnabled,
       notes: item.notes,
@@ -1089,6 +1110,7 @@ export async function previewWallosImportFromBase64ForTest(
   options?: {
     defaultNotifyDays?: number
     baseCurrency?: string
+    sourceTimezone?: string
   }
 ) {
   const result = await inspectImportBuffer(input, options)

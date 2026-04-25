@@ -7,6 +7,7 @@ const store = new Map<string, unknown>()
 vi.mock('../../src/services/settings.service', () => ({
   getAppSettings: vi.fn(async () => ({
     baseCurrency: 'CNY',
+    timezone: 'Asia/Shanghai',
     defaultNotifyDays: 3,
     defaultAdvanceReminderRules: '3&09:30;0&09:30;',
     rememberSessionDays: 7,

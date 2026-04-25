@@ -139,6 +139,30 @@ describe('wallos import helpers', () => {
     })
   })
 
+  it('resolves wallos overdue status against the provided source timezone day boundary', () => {
+    expect(
+      mapWallosSubscriptionStatus({
+        inactive: 0,
+        cancellationDate: null,
+        nextPayment: '2026-04-24',
+        autoRenew: false,
+        today: '2026-04-25T06:00:00.000Z',
+        sourceTimezone: 'America/Los_Angeles'
+      })
+    ).toBe('active')
+
+    expect(
+      mapWallosSubscriptionStatus({
+        inactive: 0,
+        cancellationDate: null,
+        nextPayment: '2026-04-24',
+        autoRenew: false,
+        today: '2026-04-25T06:00:00.000Z',
+        sourceTimezone: 'Asia/Shanghai'
+      })
+    ).toBe('expired')
+  })
+
   it('only includes used tags and maps each Wallos category to at most one tag', async () => {
     const preview = await previewWallosImportFromBase64ForTest(
       {
@@ -209,5 +233,40 @@ describe('wallos import helpers', () => {
         expect.stringContaining('网址 "netflix.com" 缺少协议')
       ])
     )
+  })
+
+  it('uses the provided wallos source timezone when building json preview status', async () => {
+    const payload = {
+      filename: 'wallos.json',
+      contentType: 'application/json',
+      base64: Buffer.from(
+        JSON.stringify([
+          {
+            Name: 'Timezone Sensitive',
+            Price: '$10',
+            Category: 'Video',
+            'Payment Cycle': 'Yearly',
+            'Next Payment': '2026-04-24',
+            Renewal: 'Manual',
+            URL: 'example.com',
+            Notes: ''
+          }
+        ])
+      ).toString('base64')
+    } as const
+
+    const losAngelesPreview = await previewWallosImportFromBase64ForTest(payload, {
+      defaultNotifyDays: 3,
+      baseCurrency: 'CNY',
+      sourceTimezone: 'America/Los_Angeles'
+    })
+    const shanghaiPreview = await previewWallosImportFromBase64ForTest(payload, {
+      defaultNotifyDays: 3,
+      baseCurrency: 'CNY',
+      sourceTimezone: 'Asia/Shanghai'
+    })
+
+    expect(losAngelesPreview.subscriptionsPreview[0]?.status).toBe('active')
+    expect(shanghaiPreview.subscriptionsPreview[0]?.status).toBe('expired')
   })
 })

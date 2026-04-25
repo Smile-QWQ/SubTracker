@@ -10,7 +10,8 @@ vi.mock('../../src/services/settings.service', () => ({
   getNotificationScanSettings: vi.fn(async () => ({
     defaultAdvanceReminderRules: '3&09:30;0&09:30;',
     defaultOverdueReminderRules: '1&09:30;2&09:30;3&09:30;',
-    mergeMultiSubscriptionNotifications: notificationState.mergeMultiSubscriptionNotifications
+    mergeMultiSubscriptionNotifications: notificationState.mergeMultiSubscriptionNotifications,
+    timezone: 'Asia/Shanghai'
   }))
 }))
 

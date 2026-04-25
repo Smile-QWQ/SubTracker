@@ -1,4 +1,3 @@
-import dayjs from 'dayjs'
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '../db'
@@ -31,8 +30,8 @@ import {
   deriveNotifyDaysBeforeFromAdvanceRules,
   normalizeOptionalReminderRules
 } from '../services/reminder-rules.service'
-import { getDefaultAdvanceReminderRulesSetting } from '../services/settings.service'
-import { toDate } from '../utils/date'
+import { getAppTimezone, getDefaultAdvanceReminderRulesSetting } from '../services/settings.service'
+import { parseDateInTimezone, startOfDayDateInTimezone } from '../utils/timezone'
 import { normalizeWebsiteUrlInput } from '../utils/website-url'
 
 const subscriptionInclude = {
@@ -431,6 +430,8 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       return sendError(reply, 422, 'validation_error', error instanceof Error ? error.message : 'Invalid reminder rules')
     }
 
+    const timezone = await getAppTimezone()
+
     const created = await prisma.$transaction(async (tx) => {
       const subscription = await tx.subscription.create({
         data: {
@@ -441,8 +442,8 @@ export async function subscriptionRoutes(app: FastifyInstance) {
           billingIntervalCount: parsed.data.billingIntervalCount,
           billingIntervalUnit: parsed.data.billingIntervalUnit,
           autoRenew: parsed.data.autoRenew,
-          startDate: toDate(parsed.data.startDate),
-          nextRenewalDate: toDate(parsed.data.nextRenewalDate),
+          startDate: parseDateInTimezone(parsed.data.startDate, timezone),
+          nextRenewalDate: parseDateInTimezone(parsed.data.nextRenewalDate, timezone),
           notifyDaysBefore: reminderFields.notifyDaysBefore ?? parsed.data.notifyDaysBefore,
           ...(reminderFields.advanceReminderRules !== undefined
             ? { advanceReminderRules: reminderFields.advanceReminderRules }
@@ -502,6 +503,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
             })
           : null
 
+      const timezone = await getAppTimezone()
       const updated = await prisma.$transaction(async (tx) => {
         const tagIds = payload.tagIds !== undefined ? normalizeTagIds(payload.tagIds) : null
         const existing = await tx.subscription.findUnique({
@@ -512,12 +514,13 @@ export async function subscriptionRoutes(app: FastifyInstance) {
           throw new Error('Subscription not found')
         }
 
-        const normalizedNextRenewalDate = payload.nextRenewalDate !== undefined ? toDate(payload.nextRenewalDate) : undefined
+        const normalizedNextRenewalDate =
+          payload.nextRenewalDate !== undefined ? parseDateInTimezone(payload.nextRenewalDate, timezone) : undefined
         const shouldRestoreActive =
           payload.status === undefined &&
           existing.status === 'expired' &&
           normalizedNextRenewalDate !== undefined &&
-          !dayjs(normalizedNextRenewalDate).isBefore(dayjs().startOf('day'))
+          normalizedNextRenewalDate.getTime() >= startOfDayDateInTimezone(new Date(), timezone).getTime()
 
         const subscription = await tx.subscription.update({
           where: { id: params.data.id },
@@ -530,7 +533,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
             ...(payload.billingIntervalCount !== undefined ? { billingIntervalCount: payload.billingIntervalCount } : {}),
             ...(payload.billingIntervalUnit !== undefined ? { billingIntervalUnit: payload.billingIntervalUnit } : {}),
             ...(payload.autoRenew !== undefined ? { autoRenew: payload.autoRenew } : {}),
-            ...(payload.startDate !== undefined ? { startDate: toDate(payload.startDate) } : {}),
+            ...(payload.startDate !== undefined ? { startDate: parseDateInTimezone(payload.startDate, timezone) } : {}),
             ...(normalizedNextRenewalDate !== undefined ? { nextRenewalDate: normalizedNextRenewalDate } : {}),
             ...(reminderFields.notifyDaysBefore !== undefined ? { notifyDaysBefore: reminderFields.notifyDaysBefore } : {}),
             ...(reminderFields.advanceReminderRules !== undefined
@@ -583,9 +586,10 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     }
 
     try {
+      const timezone = await getAppTimezone()
       const result = await renewSubscription(
         params.data.id,
-        parsed.data.paidAt ? dayjs(parsed.data.paidAt).toDate() : undefined,
+        parsed.data.paidAt ? parseDateInTimezone(parsed.data.paidAt, timezone) : undefined,
         parsed.data.amount,
         parsed.data.currency
       )

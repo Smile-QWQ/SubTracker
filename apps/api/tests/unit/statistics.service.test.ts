@@ -20,6 +20,7 @@ vi.mock('../../src/db', () => ({
 vi.mock('../../src/services/exchange-rate.service', () => ({
   ensureExchangeRates: vi.fn(async () => ({
     baseCurrency: 'CNY',
+    timezone: 'Asia/Shanghai',
     rates: {}
   }))
 }))
@@ -27,6 +28,7 @@ vi.mock('../../src/services/exchange-rate.service', () => ({
 vi.mock('../../src/services/settings.service', () => ({
   getAppSettings: vi.fn(async () => ({
     baseCurrency: 'CNY',
+    timezone: 'Asia/Shanghai',
     defaultNotifyDays: 3,
     rememberSessionDays: 7,
     notifyOnDueDay: true,

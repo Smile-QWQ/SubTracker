@@ -16,6 +16,7 @@ import {
   deriveOverdueReminderDaysFromRules,
   normalizeReminderRules
 } from '../services/reminder-rules.service'
+import { formatDateInTimezone, formatDateTimeInTimezone } from '../utils/timezone'
 
 function validateSettingsPayload(settings: Awaited<ReturnType<typeof getAppSettings>>) {
   if (settings.emailNotificationsEnabled) {
@@ -132,6 +133,7 @@ export async function settingsRoutes(app: FastifyInstance) {
       return sendError(reply, 422, 'validation_error', 'Export format must be csv or json')
     }
 
+    const appSettings = await getAppSettings()
     const subscriptions = await prisma.subscription.findMany({
       include: {
         tags: {
@@ -156,8 +158,8 @@ export async function settingsRoutes(app: FastifyInstance) {
       billingIntervalCount: subscription.billingIntervalCount,
       billingIntervalUnit: subscription.billingIntervalUnit,
       autoRenew: subscription.autoRenew,
-      startDate: subscription.startDate.toISOString().slice(0, 10),
-      nextRenewalDate: subscription.nextRenewalDate.toISOString().slice(0, 10),
+      startDate: formatDateInTimezone(subscription.startDate, appSettings.timezone),
+      nextRenewalDate: formatDateInTimezone(subscription.nextRenewalDate, appSettings.timezone),
       notifyDaysBefore: subscription.notifyDaysBefore,
       advanceReminderRules: subscription.advanceReminderRules ?? '',
       overdueReminderRules: subscription.overdueReminderRules ?? '',
@@ -173,8 +175,8 @@ export async function settingsRoutes(app: FastifyInstance) {
           icon: tag.icon,
           sortOrder: tag.sortOrder
         })),
-      createdAt: subscription.createdAt.toISOString(),
-      updatedAt: subscription.updatedAt.toISOString()
+      createdAt: formatDateTimeInTimezone(subscription.createdAt, appSettings.timezone),
+      updatedAt: formatDateTimeInTimezone(subscription.updatedAt, appSettings.timezone)
     }))
 
     if (format === 'json') {

@@ -28,7 +28,8 @@ vi.mock('../../src/services/settings.service', () => ({
   getAppSettings: vi.fn(async () => ({
     defaultNotifyDays: 3,
     baseCurrency: 'CNY'
-  }))
+  })),
+  getAppTimezone: vi.fn(async () => 'Asia/Shanghai')
 }))
 
 vi.mock('../../src/services/subscription-order.service', () => ({
@@ -125,7 +126,7 @@ describe('commitWallosImport', () => {
     expect(createdRows[0]).toMatchObject({
       currency: 'USD',
       websiteUrl: 'https://netflix.com/',
-      nextRenewalDate: new Date('2027-01-10T00:00:00.000Z'),
+      nextRenewalDate: new Date('2027-01-09T16:00:00.000Z'),
       status: 'active'
     })
     expect(prismaMock.subscriptionTag.createMany).toHaveBeenCalledWith({

@@ -4,7 +4,8 @@ import {
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_OVERDUE_REMINDER_RULES,
   normalizeWebsiteUrlInput,
-  SettingsSchema
+  SettingsSchema,
+  WallosImportInspectSchema
 } from '../src/index'
 
 describe('shared schema', () => {
@@ -26,6 +27,7 @@ describe('shared schema', () => {
   it('should provide reminder-related setting defaults', () => {
     const parsed = SettingsSchema.parse({})
 
+    expect(parsed.timezone).toBe('Asia/Shanghai')
     expect(parsed.defaultNotifyDays).toBe(3)
     expect(parsed.defaultAdvanceReminderRules).toBe(DEFAULT_ADVANCE_REMINDER_RULES)
     expect(parsed.notifyOnDueDay).toBe(true)
@@ -59,5 +61,19 @@ describe('shared schema', () => {
       value: null,
       error: '请输入合法网址，例如 https://example.com'
     })
+  })
+
+  it('should validate timezone values', () => {
+    expect(() => SettingsSchema.parse({ timezone: 'Mars/Olympus' })).toThrow()
+    expect(SettingsSchema.parse({ timezone: 'America/Los_Angeles' }).timezone).toBe('America/Los_Angeles')
+  })
+
+  it('should allow wallos inspect payloads to include a source timezone', () => {
+    expect(WallosImportInspectSchema.parse({
+      filename: 'wallos.db',
+      contentType: 'application/octet-stream',
+      base64: 'ZmFrZQ==',
+      sourceTimezone: 'Asia/Shanghai'
+    }).sourceTimezone).toBe('Asia/Shanghai')
   })
 })

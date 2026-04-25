@@ -16,6 +16,18 @@
         {{ JSON_IMPORT_WARNING_MESSAGE }}
       </n-alert>
 
+      <n-space vertical :size="8" style="width: 100%">
+        <span class="advanced-label">Wallos 源时区（高级）</span>
+        <n-select
+          v-model:value="wallosSourceTimezone"
+          :options="timeZoneOptions"
+          filterable
+          style="max-width: 360px"
+          placeholder="默认使用当前业务时区"
+        />
+        <span class="advanced-hint">仅在导出的 Wallos 实例使用了不同的 TZ 时需要调整，否则保持默认即可。</span>
+      </n-space>
+
       <template v-if="preview">
         <n-grid :cols="summaryCols" :x-gap="12" :y-gap="12">
           <n-grid-item>
@@ -78,17 +90,20 @@
 </template>
 
 <script setup lang="ts">
-import dayjs from 'dayjs'
 import { computed, h, ref } from 'vue'
 import { useWindowSize } from '@vueuse/core'
-import { NAlert, NButton, NCard, NDataTable, NEmpty, NGrid, NGridItem, NModal, NSpace, NTag, useMessage } from 'naive-ui'
+import { NAlert, NButton, NCard, NDataTable, NEmpty, NGrid, NGridItem, NModal, NSelect, NSpace, NTag, useMessage } from 'naive-ui'
 import { api } from '@/composables/api'
 import type { WallosImportInspectResult, WallosImportSubscriptionPreview } from '@/types/api'
 import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils/subscription-status'
 import { JSON_IMPORT_WARNING_MESSAGE, shouldRecommendDbImport } from '@/utils/wallos-import'
+import { buildTimeZoneOptions, formatDateInTimezone, normalizeAppTimezone } from '@/utils/timezone'
 
 const props = defineProps<{
   show: boolean
+  defaultNotifyDays?: number
+  baseCurrency?: string
+  appTimezone?: string
 }>()
 
 const emit = defineEmits<{
@@ -105,8 +120,10 @@ const preview = ref<WallosImportInspectResult | null>(null)
 const inspecting = ref(false)
 const committing = ref(false)
 const warningsExpanded = ref(false)
+const wallosSourceTimezone = ref(normalizeAppTimezone(props.appTimezone))
 
 const summaryCols = computed(() => (width.value < 700 ? 2 : 4))
+const timeZoneOptions = computed(() => buildTimeZoneOptions())
 const showJsonImportWarning = computed(() =>
   shouldRecommendDbImport(selectedFileName.value, preview.value?.summary.fileType)
 )
@@ -136,7 +153,7 @@ const subscriptionColumns = [
   {
     title: '下次续订',
     key: 'nextRenewalDate',
-    render: (row: WallosImportSubscriptionPreview) => dayjs(row.nextRenewalDate).format('YYYY-MM-DD')
+    render: (row: WallosImportSubscriptionPreview) => formatDateInTimezone(row.nextRenewalDate, props.appTimezone)
   },
   {
     title: '标签',
@@ -187,7 +204,8 @@ async function inspectFile() {
     preview.value = await api.inspectWallosImport({
       filename: selectedFile.value.name,
       contentType: selectedFile.value.type || 'application/octet-stream',
-      base64
+      base64,
+      sourceTimezone: wallosSourceTimezone.value
     })
     warningsExpanded.value = false
     message.success('已生成导入预览')
@@ -222,7 +240,10 @@ function close() {
 function handleShowUpdate(value: boolean) {
   if (!value) {
     emit('close')
+    return
   }
+
+  wallosSourceTimezone.value = normalizeAppTimezone(props.appTimezone)
 }
 
 function readFileAsBase64(file: File) {
@@ -269,6 +290,17 @@ function fileTypeText(type: WallosImportInspectResult['summary']['fileType']) {
 .summary-label {
   color: var(--app-text-secondary);
   font-size: 13px;
+}
+
+.advanced-label {
+  color: var(--app-text-strong);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.advanced-hint {
+  color: var(--app-text-secondary);
+  font-size: 12px;
 }
 
 .summary-value {
