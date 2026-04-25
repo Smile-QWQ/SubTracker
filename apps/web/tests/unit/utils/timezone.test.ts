@@ -7,7 +7,8 @@ import {
   formatDateInTimezone,
   formatDateTimeInTimezone,
   normalizeAppTimezone,
-  pickerTsToDateString
+  pickerTsToDateString,
+  resolveCalendarPanelDate
 } from '@/utils/timezone'
 
 describe('timezone utils', () => {
@@ -36,5 +37,17 @@ describe('timezone utils', () => {
   it('builds current picker timestamps from business timezone today', () => {
     const ts = currentBusinessDatePickerTs('Asia/Shanghai', '2026-04-24T16:30:00.000Z')
     expect(pickerTsToDateString(ts)).toBe('2026-04-25')
+  })
+
+  it('prefers business timezone today when switching calendar panel to the current month', () => {
+    expect(resolveCalendarPanelDate('2026-03-08', '2026-04', 'Asia/Shanghai', '2026-04-24T16:30:00.000Z')).toBe(
+      '2026-04-25'
+    )
+  })
+
+  it('preserves the selected day when switching to non-current months', () => {
+    expect(resolveCalendarPanelDate('2026-03-31', '2026-02', 'Asia/Shanghai', '2026-04-24T16:30:00.000Z')).toBe(
+      '2026-02-28'
+    )
   })
 })

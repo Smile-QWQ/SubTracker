@@ -109,12 +109,12 @@ import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils
 import {
   businessDateToPickerTs,
   currentBusinessDatePickerTs,
-  daysInMonthFromMonthKey,
   formatDateInTimezone,
   formatMonthLabelInTimezone,
   monthRangeFromMonthKey,
   pickerTsToDateString,
-  pickerTsToMonthKey
+  pickerTsToMonthKey,
+  resolveCalendarPanelDate
 } from '@/utils/timezone'
 
 const { width } = useWindowSize()
@@ -129,6 +129,7 @@ const tab = ref('month')
 const { data: settings } = useSettingsQuery()
 const selectedDateTs = ref(currentBusinessDatePickerTs(settings.value?.timezone))
 const panelMonthKey = ref(pickerTsToMonthKey(selectedDateTs.value))
+const selectedDateMode = ref<'auto' | 'manual'>('auto')
 let ignoreSelectedDateWatch = false
 const baseCurrency = computed(() => settings.value?.baseCurrency ?? 'CNY')
 const panelMonthRange = computed(() => {
@@ -151,6 +152,7 @@ watch(selectedDateTs, async (value) => {
     return
   }
 
+  selectedDateMode.value = 'manual'
   const selectedMonthKey = pickerTsToMonthKey(value)
   if (selectedMonthKey !== panelMonthKey.value) {
     panelMonthKey.value = selectedMonthKey
@@ -169,8 +171,13 @@ watch(
   () => settings.value?.timezone,
   (timezone) => {
     if (!timezone) return
-    const currentDateString = pickerTsToDateString(selectedDateTs.value)
-    selectedDateTs.value = businessDateToPickerTs(currentDateString, timezone)
+
+    if (selectedDateMode.value === 'auto') {
+      selectedDateTs.value = currentBusinessDatePickerTs(timezone)
+    } else {
+      const currentDateString = pickerTsToDateString(selectedDateTs.value)
+      selectedDateTs.value = businessDateToPickerTs(currentDateString, timezone)
+    }
     panelMonthKey.value = pickerTsToMonthKey(selectedDateTs.value)
   }
 )
@@ -222,10 +229,13 @@ const columns = [
 
 function handlePanelChange({ year, month }: { year: number; month: number }) {
   const targetMonthKey = `${year}-${String(month).padStart(2, '0')}`
-  const currentSelectedDay = Number(selectedDateLabel.value.slice(8, 10))
-  const clampedDay = Math.min(currentSelectedDay, daysInMonthFromMonthKey(targetMonthKey))
-  const targetSelectedDate = `${targetMonthKey}-${String(clampedDay).padStart(2, '0')}`
+  const targetSelectedDate = resolveCalendarPanelDate(
+    selectedDateLabel.value,
+    targetMonthKey,
+    settings.value?.timezone
+  )
 
+  selectedDateMode.value = 'manual'
   ignoreSelectedDateWatch = true
   selectedDateTs.value = businessDateToPickerTs(targetSelectedDate, settings.value?.timezone)
   panelMonthKey.value = targetMonthKey
