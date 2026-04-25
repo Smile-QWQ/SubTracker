@@ -112,6 +112,22 @@ export function monthRangeFromMonthKey(monthKey: string) {
   }
 }
 
+export function resolveCalendarPanelDate(
+  currentSelectedDate: string,
+  targetMonthKey: string,
+  timezoneValue = DEFAULT_APP_TIMEZONE,
+  now: Date | string = new Date()
+) {
+  const today = currentBusinessDateString(timezoneValue, now)
+  if (today.slice(0, 7) === targetMonthKey) {
+    return today
+  }
+
+  const currentSelectedDay = Number(currentSelectedDate.slice(8, 10))
+  const clampedDay = Math.min(currentSelectedDay, daysInMonthFromMonthKey(targetMonthKey))
+  return `${targetMonthKey}-${String(clampedDay).padStart(2, '0')}`
+}
+
 export function addIntervalToPickerTs(
   timestamp: number,
   count: number,

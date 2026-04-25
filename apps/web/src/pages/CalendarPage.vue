@@ -109,13 +109,13 @@ import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils
 import {
   businessDateToPickerTs,
   currentBusinessDatePickerTs,
-  daysInMonthFromMonthKey,
   formatDateInTimezone,
   formatMonthLabelInTimezone,
   monthKeyToPickerTs,
   monthRangeFromMonthKey,
   pickerTsToDateString,
-  pickerTsToMonthKey
+  pickerTsToMonthKey,
+  resolveCalendarPanelDate
 } from '@/utils/timezone'
 
 const { width } = useWindowSize()
@@ -223,9 +223,11 @@ const columns = [
 
 function handlePanelChange({ year, month }: { year: number; month: number }) {
   const targetMonthKey = `${year}-${String(month).padStart(2, '0')}`
-  const currentSelectedDay = Number(selectedDateLabel.value.slice(8, 10))
-  const clampedDay = Math.min(currentSelectedDay, daysInMonthFromMonthKey(targetMonthKey))
-  const targetSelectedDate = `${targetMonthKey}-${String(clampedDay).padStart(2, '0')}`
+  const targetSelectedDate = resolveCalendarPanelDate(
+    selectedDateLabel.value,
+    targetMonthKey,
+    settings.value?.timezone
+  )
 
   ignoreSelectedDateWatch = true
   selectedDateTs.value = businessDateToPickerTs(targetSelectedDate, settings.value?.timezone)
