@@ -1,0 +1,148 @@
+name: Lite CI and Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - lite
+  pull_request:
+    branches:
+      - lite
+
+concurrency:
+  group: deploy-cloudflare-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      run_lite: ${{ steps.branch_check.outputs.run_lite }}
+
+    steps:
+      - name: Check branch scope
+        id: branch_check
+        shell: bash
+        run: |
+          if [ "${{ github.ref_name }}" = "lite" ]; then
+            echo "run_lite=true" >> "$GITHUB_OUTPUT"
+            echo "Running lite workflow for branch: ${{ github.ref_name }}"
+          else
+            echo "run_lite=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::This workflow only deploys the lite branch. Re-run it with branch 'lite'."
+          fi
+
+  verify:
+    if: needs.guard.outputs.run_lite == 'true'
+    needs: guard
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma generate
+        run: npm run prisma:generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        env:
+          VITE_APP_VERSION: ${{ github.ref_name }}
+        run: npm run build
+
+  deploy:
+    if: needs.guard.outputs.run_lite == 'true' && github.event_name != 'pull_request'
+    needs:
+      - guard
+      - verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Resolve app version
+        id: app_version
+        shell: bash
+        run: |
+          echo "value=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve deploy options
+        id: deploy_options
+        shell: bash
+        run: |
+          NAME_PREFIX="${{ vars.WORKER_NAME_PREFIX }}"
+          ENABLE_R2="${{ vars.ENABLE_R2 }}"
+
+          if [ -z "$NAME_PREFIX" ]; then
+            NAME_PREFIX="subtracker"
+          fi
+
+          if [ -z "$ENABLE_R2" ]; then
+            ENABLE_R2="false"
+          fi
+
+          echo "name_prefix=$NAME_PREFIX" >> "$GITHUB_OUTPUT"
+          echo "enable_r2=$ENABLE_R2" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma generate
+        run: npm run prisma:generate
+
+      - name: Verify Cloudflare secrets
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "Missing CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID secrets." >&2
+            exit 1
+          fi
+
+      - name: Deploy without R2
+        if: steps.deploy_options.outputs.enable_r2 != 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: >
+          npm run deploy:worker --
+          --name-prefix ${{ steps.deploy_options.outputs.name_prefix }}
+          --app-version ${{ steps.app_version.outputs.value }}
+
+      - name: Deploy with R2
+        if: steps.deploy_options.outputs.enable_r2 == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: >
+          npm run deploy:worker:r2 --
+          --name-prefix ${{ steps.deploy_options.outputs.name_prefix }}
+          --app-version ${{ steps.app_version.outputs.value }}
