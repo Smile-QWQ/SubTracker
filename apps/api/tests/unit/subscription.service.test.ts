@@ -12,6 +12,7 @@ const serviceMocks = vi.hoisted(() => ({
       delete: vi.fn()
     }
   },
+  bumpCacheVersions: vi.fn(async () => 0),
   getBaseCurrency: vi.fn(async () => 'CNY'),
   ensureExchangeRates: vi.fn(async () => ({
     baseCurrency: 'CNY',
@@ -29,6 +30,10 @@ vi.mock('../../src/db', () => ({
 vi.mock('../../src/services/exchange-rate.service', () => ({
   getBaseCurrency: serviceMocks.getBaseCurrency,
   ensureExchangeRates: serviceMocks.ensureExchangeRates
+}))
+
+vi.mock('../../src/services/cache-version.service', () => ({
+  bumpCacheVersions: serviceMocks.bumpCacheVersions
 }))
 
 vi.mock('../../src/services/settings.service', () => ({

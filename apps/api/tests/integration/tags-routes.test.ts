@@ -2,6 +2,7 @@ import Fastify from 'fastify'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const tagRouteMocks = vi.hoisted(() => ({
+  bumpCacheVersions: vi.fn(async () => 0),
   prisma: {
     subscriptionTag: {
       deleteMany: vi.fn(async () => ({ count: 1 }))
@@ -17,6 +18,10 @@ const tagRouteMocks = vi.hoisted(() => ({
 
 vi.mock('../../src/db', () => ({
   prisma: tagRouteMocks.prisma
+}))
+
+vi.mock('../../src/services/cache-version.service', () => ({
+  bumpCacheVersions: tagRouteMocks.bumpCacheVersions
 }))
 
 describe('tag routes D1 compatibility', () => {

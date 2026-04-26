@@ -2,6 +2,7 @@ import Fastify from 'fastify'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const routeMocks = vi.hoisted(() => ({
+  bumpCacheVersions: vi.fn(async () => 0),
   prisma: {
     $transaction: vi.fn(async () => {
       throw new Error('interactive transaction should not be used in worker routes')
@@ -37,6 +38,10 @@ const routeMocks = vi.hoisted(() => ({
 
 vi.mock('../../src/db', () => ({
   prisma: routeMocks.prisma
+}))
+
+vi.mock('../../src/services/cache-version.service', () => ({
+  bumpCacheVersions: routeMocks.bumpCacheVersions
 }))
 
 vi.mock('../../src/services/subscription-order.service', () => ({
