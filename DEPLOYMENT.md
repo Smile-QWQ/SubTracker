@@ -23,6 +23,12 @@
 
 先把当前仓库 fork 到你自己的 GitHub 账号下。
 
+注意这里有一个很容易踩坑的点：
+
+- fork 时请取消勾选 **只复制默认分支 / Copy the main branch only**
+- 否则你的 fork 里不会带上 `lite` 分支
+- 如果已经忘了取消，最省事的做法通常是删除这个 fork 后重新 fork 一次
+
 ### 3. Cloudflare API Token
 
 在 Cloudflare Dashboard 中创建：
@@ -97,9 +103,10 @@
 
 1. 打开 **Actions**
 2. 选择 **Lite CI and Deploy**
-3. 点击 **Run workflow**
+3. 在 **Use workflow from** 里选择 **`lite` 分支**
+4. 点击 **Run workflow**
 
-这一步不需要再填写额外参数。
+这里一定要确认运行的是 **`lite`**，不要直接用默认显示的 `main` 去跑。
 
 首次部署时，workflow 会自动：
 
@@ -122,6 +129,10 @@
 - `Lite CI and Deploy`
 
 也就是说，正常情况下你后面不需要再手工重复部署；同一个 workflow 会先跑 CI，验证通过后再执行部署。
+
+如果你后面需要手动重新执行，也同样记得：
+
+- 在 **Use workflow from** 中选择 **`lite` 分支**
 
 只要这些不变：
 

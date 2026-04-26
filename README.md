@@ -108,8 +108,9 @@ npm test
 
 1. fork 仓库
 2. 配置 Cloudflare Secrets / Variables
-3. 在 GitHub Actions 中运行 **Lite CI and Deploy**
-4. 后续通过 **Sync fork** 自动更新
+3. fork 时记得不要勾选“只复制默认分支 / Copy the main branch only”，否则不会带上 `lite`
+4. 在 GitHub Actions 中运行 **Lite CI and Deploy**，并在 **Use workflow from** 里选择 **`lite`**
+5. 后续通过 **Sync fork** 自动更新
 
 常用仓库 Variables：
 
