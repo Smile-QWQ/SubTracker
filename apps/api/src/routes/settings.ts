@@ -6,8 +6,10 @@ import {
 } from '@subtracker/shared'
 import { prisma } from '../db'
 import { sendError, sendOk } from '../http'
+import { bumpCacheVersions, getCacheVersion } from '../services/cache-version.service'
 import { invalidateWorkerLiteCache } from '../services/worker-lite-cache.service'
-import { getAppSettings, setSetting } from '../services/settings.service'
+import { withWorkerTieredCache } from '../services/worker-tiered-cache.service'
+import { getAppSettings } from '../services/settings.service'
 import { validateNotificationTargetUrl } from '../services/notification-url.service'
 import {
   buildAdvanceReminderRulesFromLegacy,
@@ -17,7 +19,10 @@ import {
   deriveOverdueReminderDaysFromRules,
   normalizeReminderRules
 } from '../services/reminder-rules.service'
+import { setSettingLite } from '../services/worker-lite-repository.service'
 import { formatDateInTimezone, formatDateTimeInTimezone } from '../utils/timezone'
+
+const SETTINGS_CACHE_TTL_SECONDS = 5 * 60
 
 function validateSettingsPayload(settings: Awaited<ReturnType<typeof getAppSettings>>) {
   if (settings.emailNotificationsEnabled) {
@@ -258,7 +263,13 @@ export async function settingsRoutes(app: FastifyInstance) {
   })
 
   app.get('/settings', async (_, reply) => {
-    const settings = await getAppSettings()
+    const version = await getCacheVersion('settings')
+    const settings = await withWorkerTieredCache(
+      'settings',
+      `response:v${version}`,
+      () => getAppSettings(),
+      SETTINGS_CACHE_TTL_SECONDS
+    )
     return sendOk(reply, settings)
   })
 
@@ -330,8 +341,11 @@ export async function settingsRoutes(app: FastifyInstance) {
       ['overdueReminderDays', normalizedReminderSettings.overdueReminderDays]
     )
 
-    await Promise.all(filteredEntries.map(([key, value]) => setSetting(key, value)))
-    await invalidateWorkerLiteCache(['settings', 'statistics', 'exchange-rates'])
+    await Promise.all(filteredEntries.map(([key, value]) => setSettingLite(key, value)))
+    await Promise.all([
+      invalidateWorkerLiteCache(['settings', 'statistics', 'calendar', 'exchange-rates']),
+      bumpCacheVersions(['settings', 'statistics', 'calendar', 'exchangeRates'])
+    ])
 
     const settings = await getAppSettings()
     return sendOk(reply, settings)

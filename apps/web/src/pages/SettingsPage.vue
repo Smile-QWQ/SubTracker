@@ -8,8 +8,7 @@
     />
 
     <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
-      当前运行时：Cloudflare Worker。
-      KV 不使用；
+      当前运行时：Cloudflare Worker + D1。
       R2 {{ settingsForm.storageCapabilities.r2Enabled ? '已启用' : '未启用，仅支持远程 Logo 引用' }}；
       Wallos 导入模式：JSON / SQLite / ZIP。
     </n-alert>
@@ -707,7 +706,6 @@ const settingsForm = reactive<Settings>({
   },
   storageCapabilities: {
     runtime: 'worker-lite',
-    kvEnabled: false,
     r2Enabled: false,
     logoStorageEnabled: false,
     wallosImportMode: 'json-db-zip'

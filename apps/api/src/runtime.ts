@@ -1,11 +1,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { PrismaClient } from '@prisma/client'
-import type { D1Database, Fetcher, KVNamespace, R2Bucket } from './worker/types'
+import type { D1Database, Fetcher, R2Bucket } from './worker/types'
 
 export interface WorkerBindings {
   DB: D1Database
   ASSETS?: Fetcher
-  SUBTRACKER_CACHE?: KVNamespace
   SUBTRACKER_LOGOS?: R2Bucket
   WEB_ORIGIN?: string
   BASE_CURRENCY?: string
@@ -80,14 +79,6 @@ function getBindingOrEnv(key: keyof WorkerBindings, fallback: string) {
   }
 
   return fallback
-}
-
-export function getWorkerCache() {
-  try {
-    return getRuntimeBindings().SUBTRACKER_CACHE
-  } catch {
-    return undefined
-  }
 }
 
 export function getWorkerLogoBucket() {

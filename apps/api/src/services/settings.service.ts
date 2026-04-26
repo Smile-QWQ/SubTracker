@@ -8,7 +8,7 @@ import {
   type SettingsInput
 } from '@subtracker/shared'
 import { config } from '../config'
-import { getWorkerCache, getWorkerLogoBucket } from '../runtime'
+import { getWorkerLogoBucket } from '../runtime'
 import {
   deriveNotifyDaysBeforeFromAdvanceRules,
   deriveNotifyOnDueDayFromAdvanceRules,
@@ -16,6 +16,7 @@ import {
   resolveDefaultAdvanceReminderRules,
   resolveDefaultOverdueReminderRules
 } from './reminder-rules.service'
+import { getCacheVersion } from './cache-version.service'
 import { invalidateWorkerLiteCache, withWorkerLiteCache } from './worker-lite-cache.service'
 import { getSettingLite, listSettingsLite, setSettingLite } from './worker-lite-repository.service'
 
@@ -46,8 +47,13 @@ const DEFAULT_GOTIFY_CONFIG: SettingsInput['gotifyConfig'] = {
   ignoreSsl: false
 }
 
+function resolveSettingsCacheKey(prefix: string, version: number) {
+  return `${prefix}:v${version}`
+}
+
 export async function getSetting<T>(key: string, fallback: T): Promise<T> {
-  return withWorkerLiteCache('settings', `setting:${key}`, () => getSettingLite(key, fallback), 30)
+  const version = await getCacheVersion('settings')
+  return withWorkerLiteCache('settings', resolveSettingsCacheKey(`setting:${key}`, version), () => getSettingLite(key, fallback), 30)
 }
 
 export async function setSetting<T>(key: string, value: T): Promise<void> {
@@ -62,7 +68,6 @@ function readSettingsValue<T>(settingsMap: Map<string, unknown>, key: string, fa
 function buildStorageCapabilities() {
   return StorageCapabilitiesSchema.parse({
     runtime: 'worker-lite',
-    kvEnabled: Boolean(getWorkerCache()),
     r2Enabled: Boolean(getWorkerLogoBucket()),
     logoStorageEnabled: Boolean(getWorkerLogoBucket()),
     wallosImportMode: 'json-db-zip'
@@ -82,9 +87,10 @@ function readLegacyResendConfig(settingsMap: Map<string, unknown>) {
 }
 
 export async function getAppSettings(): Promise<SettingsInput> {
+  const version = await getCacheVersion('settings')
   return withWorkerLiteCache(
     'settings',
-    'app-settings',
+    resolveSettingsCacheKey('app-settings', version),
     async () => {
       const settingsMap = await listSettingsLite()
 

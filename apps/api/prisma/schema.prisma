@@ -147,6 +147,17 @@ model ImportPreview {
   @@index([expiresAt])
 }
 
+model ComputedCache {
+  namespace String
+  cacheKey  String
+  valueJson Json
+  expiresAt DateTime
+  updatedAt DateTime @updatedAt
+
+  @@id([namespace, cacheKey])
+  @@index([namespace, expiresAt])
+}
+
 model Setting {
   key       String   @id
   valueJson Json

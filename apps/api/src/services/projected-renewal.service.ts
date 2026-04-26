@@ -19,13 +19,55 @@ export interface ProjectedRenewalEvent<T extends ProjectableSubscription = Proje
   subscriptionId: string
   title: string
   date: Date
+  dateKey: string
   amount: number
   currency: string
   status: SubscriptionStatus
-  subscription: T
 }
 
 const DEFAULT_MAX_OCCURRENCES_PER_SUBSCRIPTION = 480
+
+function fastForwardFixedIntervalCursor<T extends ProjectableSubscription>(
+  cursor: dayjs.Dayjs,
+  rangeStart: dayjs.Dayjs,
+  subscription: T,
+  remainingOccurrences: number
+) {
+  if (remainingOccurrences <= 0) {
+    return { cursor, consumed: 0 }
+  }
+
+  const intervalCount = Math.max(subscription.billingIntervalCount, 1)
+
+  if (subscription.billingIntervalUnit === 'day') {
+    const diffDays = rangeStart.diff(cursor, 'day')
+    if (diffDays > intervalCount) {
+      const steps = Math.min(Math.floor(diffDays / intervalCount), remainingOccurrences)
+      if (steps > 0) {
+        return {
+          cursor: cursor.add(steps * intervalCount, 'day').startOf('day'),
+          consumed: steps
+        }
+      }
+    }
+  }
+
+  if (subscription.billingIntervalUnit === 'week') {
+    const diffDays = rangeStart.diff(cursor, 'day')
+    const intervalDays = intervalCount * 7
+    if (diffDays > intervalDays) {
+      const steps = Math.min(Math.floor(diffDays / intervalDays), remainingOccurrences)
+      if (steps > 0) {
+        return {
+          cursor: cursor.add(steps * intervalCount, 'week').startOf('day'),
+          consumed: steps
+        }
+      }
+    }
+  }
+
+  return { cursor, consumed: 0 }
+}
 
 export function projectRenewalEvents<T extends ProjectableSubscription>(
   subscriptions: T[],
@@ -35,6 +77,7 @@ export function projectRenewalEvents<T extends ProjectableSubscription>(
     timezone?: string
     statuses?: SubscriptionStatus[]
     maxOccurrencesPerSubscription?: number
+    sortResult?: boolean
   }
 ) {
   const timezone = options.timezone ?? DEFAULT_APP_TIMEZONE
@@ -57,6 +100,10 @@ export function projectRenewalEvents<T extends ProjectableSubscription>(
     let cursor = toTimezonedDayjs(subscription.nextRenewalDate, timezone).startOf('day')
     let guard = 0
 
+    const fastForwarded = fastForwardFixedIntervalCursor(cursor, rangeStart, subscription, maxOccurrencesPerSubscription)
+    cursor = fastForwarded.cursor
+    guard += fastForwarded.consumed
+
     while (cursor.isBefore(rangeStart) && guard < maxOccurrencesPerSubscription) {
       cursor = toTimezonedDayjs(
         addInterval(cursor.toDate(), subscription.billingIntervalCount, subscription.billingIntervalUnit, timezone),
@@ -72,10 +119,10 @@ export function projectRenewalEvents<T extends ProjectableSubscription>(
         subscriptionId: subscription.id,
         title: subscription.name,
         date: cursor.toDate(),
+        dateKey: eventDate,
         amount: subscription.amount,
         currency: subscription.currency,
-        status: subscription.status,
-        subscription
+        status: subscription.status
       })
 
       cursor = toTimezonedDayjs(
@@ -84,6 +131,10 @@ export function projectRenewalEvents<T extends ProjectableSubscription>(
       ).startOf('day')
       guard += 1
     }
+  }
+
+  if (options.sortResult === false) {
+    return events
   }
 
   return events.sort((a, b) => {

@@ -2,12 +2,6 @@ export interface Fetcher {
   fetch(input: Request | string | URL, init?: RequestInit): Promise<Response>
 }
 
-export interface KVNamespace {
-  get(key: string, type?: 'text' | 'json'): Promise<any>
-  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>
-  delete(key: string): Promise<void>
-}
-
 export interface R2ObjectBody {
   body: ReadableStream | null
   httpEtag: string

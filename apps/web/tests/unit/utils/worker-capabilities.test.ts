@@ -7,7 +7,6 @@ describe('worker capabilities helpers', () => {
       supportsLogoStorage({
         storageCapabilities: {
           runtime: 'worker-lite',
-          kvEnabled: true,
           r2Enabled: true,
           logoStorageEnabled: true,
           wallosImportMode: 'json-db-zip'
@@ -22,7 +21,6 @@ describe('worker capabilities helpers', () => {
       supportsManagedLogoLibrary({
         storageCapabilities: {
           runtime: 'worker-lite',
-          kvEnabled: false,
           r2Enabled: false,
           logoStorageEnabled: false,
           wallosImportMode: 'json-db-zip'

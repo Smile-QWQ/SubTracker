@@ -2,8 +2,10 @@ import dayjs from 'dayjs'
 import { prisma } from '../db'
 import { config } from '../config'
 import { convertAmount } from '../utils/money'
+import { bumpCacheVersions, getCacheVersion } from './cache-version.service'
 import { getSetting } from './settings.service'
 import { getExchangeRateSnapshotLite } from './worker-lite-repository.service'
+import { withWorkerLiteCache } from './worker-lite-cache.service'
 import type { ExchangeRateSnapshotDto } from '@subtracker/shared'
 
 type ProviderResponse = {
@@ -13,6 +15,8 @@ type ProviderResponse = {
   time_last_update_utc?: string
   rates: Record<string, number>
 }
+
+const EXCHANGE_RATE_CACHE_TTL_SECONDS = 30
 
 export async function getBaseCurrency(): Promise<string> {
   const baseCurrency = await getSetting('baseCurrency', config.baseCurrency)
@@ -53,24 +57,15 @@ export async function refreshExchangeRates(baseCurrency?: string) {
       throw new Error('Rate payload is empty')
     }
 
-    const existing = await prisma.exchangeRateSnapshot.findUnique({
-      where: { baseCurrency: base }
-    })
-
-    if (existing) {
-      return await prisma.exchangeRateSnapshot.update({
-        where: { baseCurrency: base },
-        data: {
-          ratesJson: rates,
-          provider: config.exchangeRateProvider,
-          fetchedAt: new Date(),
-          isStale: false
-        }
-      })
-    }
-
-    return await prisma.exchangeRateSnapshot.create({
-      data: {
+    const snapshot = await prisma.exchangeRateSnapshot.upsert({
+      where: { baseCurrency: base },
+      update: {
+        ratesJson: rates,
+        provider: config.exchangeRateProvider,
+        fetchedAt: new Date(),
+        isStale: false
+      },
+      create: {
         baseCurrency: base,
         ratesJson: rates,
         provider: config.exchangeRateProvider,
@@ -78,6 +73,9 @@ export async function refreshExchangeRates(baseCurrency?: string) {
         isStale: false
       }
     })
+
+    await bumpCacheVersions(['statistics', 'calendar', 'exchangeRates'])
+    return snapshot
   } catch (error) {
     const existing = await getExchangeRateSnapshotLite(base)
     if (existing) {
@@ -95,19 +93,28 @@ export async function refreshExchangeRates(baseCurrency?: string) {
 
 export async function ensureExchangeRates(baseCurrency?: string): Promise<ExchangeRateSnapshotDto> {
   const base = (baseCurrency ?? (await getBaseCurrency())).toUpperCase()
-  const existing = await getExchangeRateSnapshotLite(base)
+  const version = await getCacheVersion('exchangeRates')
 
-  if (!existing) {
-    return getLatestSnapshot(base)
-  }
+  return withWorkerLiteCache(
+    'exchange-rates',
+    `snapshot:${base}:v${version}`,
+    async () => {
+      const existing = await getExchangeRateSnapshotLite(base)
 
-  const shouldRefresh = dayjs().diff(dayjs(existing.fetchedAt), 'hour') >= 24
+      if (!existing) {
+        return getLatestSnapshot(base)
+      }
 
-  if (shouldRefresh) {
-    await refreshExchangeRates(base)
-  }
+      const shouldRefresh = dayjs().diff(dayjs(existing.fetchedAt), 'hour') >= 24
 
-  return getLatestSnapshot(base)
+      if (shouldRefresh) {
+        await refreshExchangeRates(base)
+      }
+
+      return getLatestSnapshot(base)
+    },
+    EXCHANGE_RATE_CACHE_TTL_SECONDS
+  )
 }
 
 export async function convertToBase(amount: number, sourceCurrency: string): Promise<number> {

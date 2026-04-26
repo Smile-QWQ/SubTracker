@@ -58,7 +58,6 @@ export const useAppStore = defineStore('app', () => {
     },
     storageCapabilities: {
       runtime: 'worker-lite',
-      kvEnabled: false,
       r2Enabled: false,
       logoStorageEnabled: false,
       wallosImportMode: 'json-db-zip'

@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client'
 import type { WebhookEventType } from '@subtracker/shared'
 import { prisma } from '../db'
-import { getRuntimeD1Database, getWorkerCache, isWorkerRuntime } from '../runtime'
+import { getRuntimeD1Database, isWorkerRuntime } from '../runtime'
 
 type NotificationChannel = 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify'
 
@@ -11,15 +11,9 @@ type ImportPreviewRow = {
   expiresAt: string
 }
 
-const IMPORT_PREVIEW_CACHE_PREFIX = 'import-preview:'
-
 function getD1() {
   if (!isWorkerRuntime()) return null
   return getRuntimeD1Database()
-}
-
-function getImportPreviewCacheKey(token: string) {
-  return `${IMPORT_PREVIEW_CACHE_PREFIX}${token}`
 }
 
 async function d1First<T>(sql: string, params: unknown[] = []) {
@@ -145,14 +139,6 @@ export async function releaseNotificationDelivery(params: {
 
 export async function storeImportPreview<T>(token: string, preview: T, ttlMs: number) {
   const expiresAt = new Date(Date.now() + ttlMs)
-  const workerCache = getWorkerCache()
-
-  if (workerCache) {
-    await workerCache.put(getImportPreviewCacheKey(token), JSON.stringify(preview), {
-      expirationTtl: Math.max(Math.ceil(ttlMs / 1000), 60)
-    })
-    return
-  }
 
   if (!getD1()) {
     await prisma.importPreview.upsert({
@@ -184,18 +170,6 @@ export async function getImportPreview<T>(
     onExpired?: (payload: T | null, token: string) => Promise<void> | void
   }
 ) {
-  const workerCache = getWorkerCache()
-  if (workerCache) {
-    const cached = await workerCache.get(getImportPreviewCacheKey(token), 'json')
-    if (!cached) {
-      if (options?.onExpired) {
-        await options.onExpired(null, token)
-      }
-      return null
-    }
-    return cached as T
-  }
-
   if (!getD1()) {
     const row = await prisma.importPreview.findUnique({ where: { token } })
     if (!row) return null
@@ -240,12 +214,6 @@ export async function deleteImportPreview<T>(
 ) {
   if (options?.onDelete) {
     await options.onDelete(options.payload ?? null, token)
-  }
-
-  const workerCache = getWorkerCache()
-  if (workerCache) {
-    await workerCache.delete(getImportPreviewCacheKey(token))
-    return
   }
 
   if (!getD1()) {

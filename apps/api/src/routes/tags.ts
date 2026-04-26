@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { TagSchema } from '@subtracker/shared'
 import { sendCreated, sendError, sendOk } from '../http'
+import { bumpCacheVersions } from '../services/cache-version.service'
 import { invalidateWorkerLiteCache, withWorkerLiteCache } from '../services/worker-lite-cache.service'
 import { createTagLite, deleteTagLite, listTagsLite, updateTagLite } from '../services/worker-lite-repository.service'
 
@@ -19,7 +20,10 @@ export async function tagRoutes(app: FastifyInstance) {
 
     try {
       const created = await createTagLite(parsed.data)
-      await invalidateWorkerLiteCache(['tags', 'subscriptions', 'statistics'])
+      await Promise.all([
+        invalidateWorkerLiteCache(['tags', 'subscriptions', 'statistics']),
+        bumpCacheVersions(['statistics'])
+      ])
       return sendCreated(reply, created)
     } catch (error) {
       return sendError(reply, 409, 'conflict', 'Tag name already exists', error)
@@ -39,7 +43,10 @@ export async function tagRoutes(app: FastifyInstance) {
 
     try {
       const updated = await updateTagLite(params.data.id, parsed.data)
-      await invalidateWorkerLiteCache(['tags', 'subscriptions', 'statistics'])
+      await Promise.all([
+        invalidateWorkerLiteCache(['tags', 'subscriptions', 'statistics']),
+        bumpCacheVersions(['statistics'])
+      ])
       return sendOk(reply, updated)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Tag update failed'
@@ -61,7 +68,10 @@ export async function tagRoutes(app: FastifyInstance) {
 
     try {
       await deleteTagLite(params.data.id)
-      await invalidateWorkerLiteCache(['tags', 'subscriptions', 'statistics'])
+      await Promise.all([
+        invalidateWorkerLiteCache(['tags', 'subscriptions', 'statistics']),
+        bumpCacheVersions(['statistics'])
+      ])
       return sendOk(reply, { id: params.data.id, deleted: true })
     } catch (error) {
       return sendError(reply, 404, 'not_found', 'Tag not found', error)

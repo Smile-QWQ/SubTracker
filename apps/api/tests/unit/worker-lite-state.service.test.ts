@@ -11,12 +11,6 @@ const importPreview = {
   deleteMany: vi.fn()
 }
 
-const workerCache = {
-  get: vi.fn(),
-  put: vi.fn(),
-  delete: vi.fn()
-}
-
 vi.mock('../../src/db', () => ({
   prisma: {
     notificationDelivery,
@@ -26,7 +20,6 @@ vi.mock('../../src/db', () => ({
 
 vi.mock('../../src/runtime', () => ({
   getRuntimeD1Database: vi.fn(() => undefined),
-  getWorkerCache: vi.fn(() => undefined),
   isWorkerRuntime: vi.fn(() => false)
 }))
 
@@ -71,24 +64,34 @@ describe('worker-lite state service', () => {
     })
   })
 
-  it('stores import previews in worker KV when cache binding is available', async () => {
-    const runtime = await import('../../src/runtime')
-    vi.mocked(runtime.getWorkerCache).mockReturnValue(workerCache as never)
+  it('stores import previews in database-backed state when KV is not used', async () => {
     const { storeImportPreview, getImportPreview, deleteImportPreview } = await import('../../src/services/worker-lite-state.service')
 
-    workerCache.get.mockResolvedValueOnce({ preview: true })
+    importPreview.findUnique.mockResolvedValueOnce({
+      token: 'preview-token',
+      previewJson: { preview: true },
+      expiresAt: new Date(Date.now() + 60_000)
+    })
 
     await storeImportPreview('preview-token', { preview: true }, 60_000)
     await expect(getImportPreview('preview-token')).resolves.toEqual({ preview: true })
     await deleteImportPreview('preview-token')
 
-    expect(workerCache.put).toHaveBeenCalledWith(
-      'import-preview:preview-token',
-      JSON.stringify({ preview: true }),
-      expect.objectContaining({ expirationTtl: 60 })
-    )
-    expect(workerCache.get).toHaveBeenCalledWith('import-preview:preview-token', 'json')
-    expect(workerCache.delete).toHaveBeenCalledWith('import-preview:preview-token')
-    expect(importPreview.upsert).not.toHaveBeenCalled()
+    expect(importPreview.upsert).toHaveBeenCalledWith({
+      where: { token: 'preview-token' },
+      update: expect.objectContaining({
+        previewJson: { preview: true }
+      }),
+      create: expect.objectContaining({
+        token: 'preview-token',
+        previewJson: { preview: true }
+      })
+    })
+    expect(importPreview.findUnique).toHaveBeenCalledWith({
+      where: { token: 'preview-token' }
+    })
+    expect(importPreview.deleteMany).toHaveBeenCalledWith({
+      where: { token: 'preview-token' }
+    })
   })
 })

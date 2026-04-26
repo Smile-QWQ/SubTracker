@@ -9,6 +9,7 @@ import {
   RenewSubscriptionSchema,
   UpdateSubscriptionSchema
 } from '@subtracker/shared'
+import { bumpCacheVersions } from '../services/cache-version.service'
 import {
   appendSubscriptionOrder,
   removeSubscriptionOrder,
@@ -316,7 +317,10 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     const result = await runBatchAction(parsed.data.ids, async (id) => {
       await renewSubscription(id)
     })
-    await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar', 'exchange-rates'])
+    await Promise.all([
+      invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar']),
+      bumpCacheVersions(['statistics', 'calendar'])
+    ])
 
     return sendOk(reply, result)
   })
@@ -340,7 +344,10 @@ export async function subscriptionRoutes(app: FastifyInstance) {
           rows.some((row) => row.status !== 'active') ? 'Only active subscriptions can be paused in batch mode' : null
       }
     )
-    await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar'])
+    await Promise.all([
+      invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar']),
+      bumpCacheVersions(['statistics', 'calendar'])
+    ])
 
     return sendOk(reply, result)
   })
@@ -364,7 +371,10 @@ export async function subscriptionRoutes(app: FastifyInstance) {
           rows.some((row) => row.status !== 'active') ? 'Only active subscriptions can be cancelled in batch mode' : null
       }
     )
-    await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar'])
+    await Promise.all([
+      invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar']),
+      bumpCacheVersions(['statistics', 'calendar'])
+    ])
 
     return sendOk(reply, result)
   })
@@ -393,7 +403,10 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       return sendError(reply, 422, 'batch_delete_not_allowed', result.failures[0]?.message ?? 'Batch delete failed', result)
     }
 
-    await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar'])
+    await Promise.all([
+      invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar']),
+      bumpCacheVersions(['statistics', 'calendar'])
+    ])
     return sendOk(reply, result)
   })
 
@@ -496,7 +509,10 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     const created = await fetchSubscriptionWithTags(subscription.id)
 
     await appendSubscriptionOrder(created.id)
-    await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar'])
+    await Promise.all([
+      invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar']),
+      bumpCacheVersions(['statistics', 'calendar'])
+    ])
     return sendCreated(reply, flattenSubscriptionTags(created))
   })
 
@@ -588,7 +604,10 @@ export async function subscriptionRoutes(app: FastifyInstance) {
 
       const updated = await fetchSubscriptionWithTags(subscription.id)
 
-      await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar'])
+      await Promise.all([
+        invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar']),
+        bumpCacheVersions(['statistics', 'calendar'])
+      ])
       return sendOk(reply, flattenSubscriptionTags(updated))
     } catch (error) {
       if (error instanceof Error && error.message.includes('Logo')) {
@@ -618,7 +637,10 @@ export async function subscriptionRoutes(app: FastifyInstance) {
         parsed.data.currency
       )
 
-      await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar', 'exchange-rates'])
+      await Promise.all([
+        invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar']),
+        bumpCacheVersions(['statistics', 'calendar'])
+      ])
       return sendOk(reply, result)
     } catch (error) {
       return sendError(reply, 404, 'not_found', error instanceof Error ? error.message : 'Renew failed')
@@ -636,7 +658,10 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       data: { status: 'paused' }
     })
 
-    await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar'])
+    await Promise.all([
+      invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar']),
+      bumpCacheVersions(['statistics', 'calendar'])
+    ])
     return sendOk(reply, updated)
   })
 
@@ -651,7 +676,10 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       data: { status: 'cancelled' }
     })
 
-    await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar'])
+    await Promise.all([
+      invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar']),
+      bumpCacheVersions(['statistics', 'calendar'])
+    ])
     return sendOk(reply, updated)
   })
 
@@ -667,7 +695,10 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       })
 
       await removeSubscriptionOrder(params.data.id)
-      await invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar'])
+      await Promise.all([
+        invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar']),
+        bumpCacheVersions(['statistics', 'calendar'])
+      ])
       return sendOk(reply, { id: params.data.id, deleted: true })
     } catch {
       return sendError(reply, 404, 'not_found', 'Subscription not found')

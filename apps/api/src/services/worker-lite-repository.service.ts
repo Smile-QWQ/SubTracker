@@ -492,9 +492,15 @@ export async function listSubscriptionsLite(filters: SubscriptionListFilters = {
   return rows.map((row) => toSubscription(row, tagsBySubscription.get(row.id) ?? []))
 }
 
-export async function listStatisticsSubscriptionsLite() {
+export async function listStatisticsSubscriptionsLite(filters: Pick<SubscriptionListFilters, 'statuses'> = {}) {
   if (!getD1()) {
+    const where: Record<string, unknown> = {}
+    if (filters.statuses?.length) {
+      where.status = { in: filters.statuses }
+    }
+
     return prisma.subscription.findMany({
+      where,
       include: {
         tags: {
           include: {
@@ -505,6 +511,8 @@ export async function listStatisticsSubscriptionsLite() {
       orderBy: [{ createdAt: 'asc' }]
     })
   }
+
+  const { whereClause, params } = buildSubscriptionWhere(filters)
 
   const rows = await d1All<Pick<
     SubscriptionRow,
@@ -522,7 +530,9 @@ export async function listStatisticsSubscriptionsLite() {
       s.id, s.name, s.amount, s.currency, s.status,
       s.billingIntervalCount, s.billingIntervalUnit, s.autoRenew, s.nextRenewalDate
      FROM Subscription s
-     ORDER BY s.createdAt ASC`
+     ${whereClause}
+     ORDER BY s.createdAt ASC`,
+    params
   )
 
   if (rows.length === 0) return []

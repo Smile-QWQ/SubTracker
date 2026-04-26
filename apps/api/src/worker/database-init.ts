@@ -149,6 +149,20 @@ const schemaStatements = [
   ON "ImportPreview"("expiresAt")
   `,
   `
+  CREATE TABLE IF NOT EXISTS "ComputedCache" (
+    "namespace" TEXT NOT NULL,
+    "cacheKey" TEXT NOT NULL,
+    "valueJson" TEXT NOT NULL,
+    "expiresAt" DATETIME NOT NULL,
+    "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY ("namespace", "cacheKey")
+  )
+  `,
+  `
+  CREATE INDEX IF NOT EXISTS "ComputedCache_namespace_expiresAt_idx"
+  ON "ComputedCache"("namespace", "expiresAt")
+  `,
+  `
   CREATE TABLE IF NOT EXISTS "Setting" (
     "key" TEXT NOT NULL PRIMARY KEY,
     "valueJson" TEXT NOT NULL,

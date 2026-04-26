@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_RESEND_API_URL } from '@subtracker/shared'
+import { invalidateWorkerLiteCache } from '../../src/services/worker-lite-cache.service'
 
-const { findManySubscriptionsMock, findManyTagsMock } = vi.hoisted(() => ({
+const { findManySubscriptionsMock, findManyTagsMock, projectRenewalEventsMock } = vi.hoisted(() => ({
   findManySubscriptionsMock: vi.fn(),
-  findManyTagsMock: vi.fn()
+  findManyTagsMock: vi.fn(),
+  projectRenewalEventsMock: vi.fn(() => [])
 }))
 
 vi.mock('../../src/db', () => ({
@@ -100,10 +102,10 @@ vi.mock('../../src/utils/money', () => ({
 }))
 
 vi.mock('../../src/services/projected-renewal.service', () => ({
-  projectRenewalEvents: vi.fn(() => [])
+  projectRenewalEvents: projectRenewalEventsMock
 }))
 
-import { getOverviewStatistics } from '../../src/services/statistics.service'
+import { getBudgetStatistics, getOverviewStatistics } from '../../src/services/statistics.service'
 
 function createSubscription(id: string, overrides: Record<string, unknown> = {}) {
   return {
@@ -129,9 +131,11 @@ function createSubscription(id: string, overrides: Record<string, unknown> = {})
 }
 
 describe('statistics service', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await invalidateWorkerLiteCache(['statistics', 'settings', 'exchange-rates'])
     findManyTagsMock.mockReset()
     findManySubscriptionsMock.mockReset()
+    projectRenewalEventsMock.mockClear()
     findManyTagsMock.mockResolvedValue([])
     vi.useRealTimers()
   })
@@ -182,6 +186,29 @@ describe('statistics service', () => {
 
     expect(result.upcomingRenewals[0]).toMatchObject({
       nextRenewalDate: '2026-04-30'
+    })
+  })
+
+  it('does not build projected trend series for budget-only responses', async () => {
+    findManySubscriptionsMock.mockImplementation(async (filters?: { statuses?: string[] }) => {
+      const rows = [
+        createSubscription('monthly'),
+        createSubscription('paused-budget', { amount: 999, status: 'paused' })
+      ]
+      return filters?.statuses?.length ? rows.filter((item) => filters.statuses?.includes(String(item.status))) : rows
+    })
+
+    const result = await getBudgetStatistics()
+
+    expect(projectRenewalEventsMock).not.toHaveBeenCalled()
+    expect(findManySubscriptionsMock).toHaveBeenCalledWith({ statuses: ['active'] })
+    expect(result).toMatchObject({
+      enabledTagBudgets: false,
+      budgetSummary: {
+        monthly: {
+          spent: 10
+        }
+      }
     })
   })
 })

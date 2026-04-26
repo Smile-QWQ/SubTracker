@@ -47,6 +47,7 @@ describe('ensureDatabaseInitialized', () => {
     expect(preparedQueries[0]).toContain('CREATE TABLE IF NOT EXISTS "Tag"')
     expect(preparedQueries[0].trim().endsWith(')')).toBe(true)
     expect(preparedQueries.some((query) => query.includes('CREATE TABLE IF NOT EXISTS "Setting"'))).toBe(true)
+    expect(preparedQueries.some((query) => query.includes('CREATE TABLE IF NOT EXISTS "ComputedCache"'))).toBe(true)
   })
 
   it('does not cache a rejected initialization forever and retries on next call', async () => {

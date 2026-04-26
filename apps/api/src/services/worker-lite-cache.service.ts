@@ -1,4 +1,4 @@
-const DEFAULT_CACHE_TTL_SECONDS = 30
+export const DEFAULT_WORKER_LITE_CACHE_TTL_SECONDS = 30
 const CACHE_KEY_PREFIX = 'liteMemoryCache:'
 
 type CacheEntry<T> = {
@@ -11,6 +11,10 @@ const inflightLoads = new Map<string, Promise<unknown>>()
 
 function now() {
   return Date.now()
+}
+
+function resolveCacheKey(namespace: string, cacheKey: string) {
+  return `${CACHE_KEY_PREFIX}${namespace}:${cacheKey}`
 }
 
 function getMemoryCache<T>(key: string) {
@@ -38,13 +42,26 @@ async function setCacheValue<T>(key: string, value: T, ttlSeconds: number) {
   setMemoryCache(key, value, ttlSeconds)
 }
 
+export async function getWorkerLiteCacheValue<T>(namespace: string, cacheKey: string) {
+  return getCacheValue<T>(resolveCacheKey(namespace, cacheKey))
+}
+
+export async function setWorkerLiteCacheValue<T>(
+  namespace: string,
+  cacheKey: string,
+  value: T,
+  ttlSeconds = DEFAULT_WORKER_LITE_CACHE_TTL_SECONDS
+) {
+  await setCacheValue(resolveCacheKey(namespace, cacheKey), value, ttlSeconds)
+}
+
 export async function withWorkerLiteCache<T>(
   namespace: string,
   cacheKey: string,
   loader: () => Promise<T>,
-  ttlSeconds = DEFAULT_CACHE_TTL_SECONDS
+  ttlSeconds = DEFAULT_WORKER_LITE_CACHE_TTL_SECONDS
 ) {
-  const resolvedKey = `${CACHE_KEY_PREFIX}${namespace}:${cacheKey}`
+  const resolvedKey = resolveCacheKey(namespace, cacheKey)
   const cached = await getCacheValue<T>(resolvedKey)
   if (cached !== null) {
     return cached

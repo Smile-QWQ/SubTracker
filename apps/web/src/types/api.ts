@@ -224,7 +224,6 @@ export interface AiTestResponse {
 
 export interface StorageCapabilities {
   runtime: 'worker-lite'
-  kvEnabled: boolean
   r2Enabled: boolean
   logoStorageEnabled: boolean
   wallosImportMode: 'json-only' | 'json-db-zip'

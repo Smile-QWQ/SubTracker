@@ -1,8 +1,10 @@
 import { prisma } from '../db'
+import { bumpCacheVersions } from './cache-version.service'
 import { addInterval } from '../utils/date'
 import { ensureExchangeRates, getBaseCurrency } from './exchange-rate.service'
 import { convertAmount } from '../utils/money'
 import { getAppTimezone } from './settings.service'
+import { invalidateWorkerLiteCache } from './worker-lite-cache.service'
 import { endOfDayDateInTimezone, startOfDayDateInTimezone, toTimezonedDayjs } from '../utils/timezone'
 
 export async function renewSubscription(
@@ -103,6 +105,13 @@ export async function autoRenewDueSubscriptions(today = new Date()) {
     }
   }
 
+  if (renewedCount > 0) {
+    await Promise.all([
+      bumpCacheVersions(['statistics', 'calendar']),
+      invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar'])
+    ])
+  }
+
   return renewedCount
 }
 
@@ -128,6 +137,13 @@ export async function reconcileExpiredSubscriptions(today = new Date()) {
         status: 'expired'
       }
     })
+  }
+
+  if (rows.length > 0) {
+    await Promise.all([
+      bumpCacheVersions(['statistics', 'calendar']),
+      invalidateWorkerLiteCache(['subscriptions', 'statistics', 'calendar'])
+    ])
   }
 
   return rows.length
