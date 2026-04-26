@@ -19,6 +19,9 @@ describe('worker tiered cache', () => {
   })
 
   it('reuses persistent cache values and warms current isolate memory', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-26T12:00:00.000Z'))
+
     getComputedCacheEntryMock.mockResolvedValueOnce({
       value: { source: 'd1' },
       expiresAt: new Date('2026-04-26T12:05:00.000Z')
