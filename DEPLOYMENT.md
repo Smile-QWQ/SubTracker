@@ -37,16 +37,11 @@
 
 - `Account Settings: Read`
 - `Workers Scripts: Edit`
-- `Workers KV Storage: Edit`
 - `D1: Edit`
 
 如果你要启用 Logo 持久化，再额外加：
 
 - `Workers R2 Storage: Edit`
-
-如果你以后还要绑定自定义域名 / Route，再额外加：
-
-- `Workers Routes: Edit`
 
 建议把资源范围限制在你自己的目标 Account。
 
@@ -101,7 +96,7 @@
 在你自己的 fork 仓库中：
 
 1. 打开 **Actions**
-2. 选择 **Deploy to Cloudflare**
+2. 选择 **Lite CI and Deploy**
 3. 点击 **Run workflow**
 
 这一步不需要再填写额外参数。
@@ -124,9 +119,9 @@
 
 同步上游代码后，会自动触发：
 
-- `Deploy to Cloudflare`
+- `Lite CI and Deploy`
 
-也就是说，正常情况下你后面不需要再手工重复部署。
+也就是说，正常情况下你后面不需要再手工重复部署；同一个 workflow 会先跑 CI，验证通过后再执行部署。
 
 只要这些不变：
 
@@ -186,45 +181,82 @@ https://api.resend.com/emails
 
 ---
 
-## 八、Worker Lite 的性能取舍
+## 八、当前分支能力边界
+
+### 支持
+
+- 登录
+- 订阅管理
+- 标签
+- 统计
+- 日历
+- 汇率刷新
+- Webhook
+- PushPlus
+- Telegram
+- Resend 邮件
+- AI 文本 / 图片识别
+- Wallos JSON / SQLite / ZIP 导入
+
+### 不支持
+
+- 本地 OCR
+- 原生 SMTP
+
+---
+
+## 九、Worker Lite 的性能取舍
 
 这个分支面向 **Cloudflare Worker Free**，因此实现上做了明确的 Lite 化裁剪，而不是完全复刻 Docker 版的运行模型。
 
-### 1. isolate 内存短 TTL 缓存
+### 1. L1 isolate 内存 + L2 D1 持久缓存
 
-以下读取类接口默认会缓存 **30 秒**：
+当前热点读取接口使用两级缓存：
 
-- `/settings`
+- **L1：当前 isolate 内存缓存**
+- **L2：D1 `ComputedCache` 持久缓存**
+- **L1 命中窗口固定较短**，并且不会超过对应 D1 条目的剩余有效期
+
+目前接入 D1 二级缓存的接口是：
+
+- `/settings`（5 分钟）
+- `/exchange-rates/latest`（5 分钟）
+- `/statistics/overview`（5 分钟）
+- `/statistics/budgets`（15 分钟）
+- `/calendar/events`（10 分钟）
+
+仍保留短 TTL 内存缓存的读取接口包括：
+
 - `/tags`
 - `/subscriptions`
-- `/statistics/overview`
-- `/statistics/budgets`
-- `/exchange-rates/latest`
-- `/calendar/events`
 
 这样做的原因是：
 
 - Worker Free 每次 HTTP 请求只有 **10ms CPU**
 - 同一页面会并发读取多份数据
 - 如果每次都实时重算，很容易撞上 `Worker exceeded CPU time limit`
+- D1 读额度相对充裕，适合承担热点聚合结果的二级缓存
 - 同时避免继续消耗 KV Free 的每日写入额度
 
-这 30 秒缓存的副作用是：
+这套缓存的副作用是：
 
-- 刚修改完数据后，其他页面在极短时间内可能看到旧数据
-- 统计页、日历页、标签页在 30 秒窗口内可能不是绝对实时
-- 这是 isolate 级缓存，不保证跨实例强一致
+- 正常写操作后，统计/日历/汇率相关接口通常会立即切到新版本缓存，而不是机械地等 TTL 过期
+- 真正可能自然短暂变旧的主要是 `/statistics/overview`，在无写操作场景下最多约 5 分钟
+- `/statistics/budgets` 与 `/calendar/events` 更依赖 version bump，正常情况下不应频繁看到明显旧值
+- L1 仍是 isolate 级缓存，不保证跨实例强一致
+- D1 二级缓存会跨 isolate 复用，但通过版本号失效而不是逐条删除
 
 当前实现已经对主要写操作做了主动失效，所以正常情况下：
 
-- 保存设置后，会刷新 settings / statistics / exchange-rates
-- 修改标签后，会刷新 tags / subscriptions / statistics
-- 修改订阅后，会刷新 subscriptions / statistics / calendar
-- Wallos 导入提交后，会刷新 subscriptions / tags / statistics / calendar
+- 保存设置后，会刷新 settings / statistics / calendar / exchange-rates，并 bump `cacheVersion.settings` / `cacheVersion.statistics` / `cacheVersion.calendar` / `cacheVersion.exchangeRates`
+- 修改标签后，会刷新 tags / subscriptions / statistics，并 bump `cacheVersion.statistics`
+- 修改订阅后，会刷新 subscriptions / statistics / calendar，并 bump `cacheVersion.statistics` / `cacheVersion.calendar`
+- Wallos 导入提交后，会刷新 subscriptions / tags / statistics / calendar，并 bump `cacheVersion.statistics` / `cacheVersion.calendar`
+- 汇率刷新成功后，也会 bump `cacheVersion.statistics` / `cacheVersion.calendar` / `cacheVersion.exchangeRates`
 
 也就是说：
 
-> **30 秒缓存带来的不是“数据一定延迟 30 秒”，而是“最多可能有短时间旧数据”。**
+> **缓存带来的不是“写完一定还要等完整 TTL”，而是“正常写后通常会立刻切新版本；只有少数纯时间驱动统计（主要是 `/statistics/overview`）才可能在无写操作时最多短暂旧约 5 分钟”。**
 
 ### 2. 不使用 KV
 
@@ -233,9 +265,12 @@ https://api.resend.com/emails
 现在这些能力的处理方式是：
 
 - 读取类接口：使用 isolate 内存短缓存
+- 热点聚合接口：额外落一层 D1 `ComputedCache`
 - 通知去重：回到 D1
 - 导入预览 token：回到 D1
 - Logo 搜索缓存：仅保留进程内短缓存
+
+另外，`ComputedCache` 过期行会通过现有的 hourly Worker cron 顺手清理，不单独增加新的调度器。
 
 ### 3. Wallos 导入能力
 
@@ -315,7 +350,7 @@ Worker Lite 的 Logo 搜索只保留：
 
 ---
 
-## 九、本地手动部署（开发者可选）
+## 十、本地手动部署（开发者可选）
 
 如果你不是普通 fork 用户，而是本地维护这个分支的开发者，也可以直接在本机执行：
 
@@ -336,7 +371,7 @@ npm run deploy:worker:r2
 
 ---
 
-## 十、本地开发（开发者可选）
+## 十一、本地开发（开发者可选）
 
 如果你需要本地调试 Worker：
 
@@ -354,24 +389,3 @@ http://127.0.0.1:8787
 
 ---
 
-## 十一、当前分支能力边界
-
-### 支持
-
-- 登录
-- 订阅管理
-- 标签
-- 统计
-- 日历
-- 汇率刷新
-- Webhook
-- PushPlus
-- Telegram
-- Resend 邮件
-- AI 文本 / 图片识别
-- Wallos JSON / SQLite / ZIP 导入
-
-### 不支持
-
-- 本地 OCR
-- 原生 SMTP

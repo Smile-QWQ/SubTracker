@@ -1,14 +1,20 @@
-# SubTracker Lite
+<p align="center">
+  <img src="./screenshot/brand.png" alt="SubTracker Lite" width="220" />
+</p>
 
-[![GitHub release](https://img.shields.io/github/v/release/Smile-QWQ/SubTracker?style=flat-square)](https://github.com/Smile-QWQ/SubTracker/releases)
-[![GitHub stars](https://img.shields.io/github/stars/Smile-QWQ/SubTracker?style=flat-square)](https://github.com/Smile-QWQ/SubTracker/stargazers)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat-square)](https://www.gnu.org/licenses/gpl-3.0)
+<p align="center">
+  <a href="https://github.com/Smile-QWQ/SubTracker/releases"><img src="https://img.shields.io/github/v/release/Smile-QWQ/SubTracker?style=flat-square" alt="GitHub release" /></a>
+  <a href="https://github.com/Smile-QWQ/SubTracker/stargazers"><img src="https://img.shields.io/github/stars/Smile-QWQ/SubTracker?style=flat-square" alt="GitHub stars" /></a>
+  <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat-square" alt="License: GPL v3" /></a>
+</p>
 
-一个现代化的自托管订阅管理工具，用来统一管理多币种订阅、续订提醒、预算分析、Logo 资源，以及 Wallos 数据迁移。
+<p align="center">
+  现代化的自托管订阅管理工具，统一管理多币种订阅、续订提醒、预算分析、Logo 资源，以及 Wallos 数据迁移。
+</p>
 
-本分支当前只保留 **Cloudflare Worker** 部署路线，详见：
-
-- [`DEPLOYMENT.md`](./DEPLOYMENT.md)
+<p align="center">
+  当前分支仅保留 <strong>Cloudflare Worker</strong> 部署路线 · <a href="./DEPLOYMENT.md">查看部署文档</a>
+</p>
 
 ## 界面预览
 
@@ -42,21 +48,14 @@
 
 ## Lite 版说明
 
-这个分支面向 **Cloudflare Worker Free**，因此会主动做一些性能取舍来换稳定性：
+这个分支面向 **Cloudflare Worker Free**，因此会做一些 Lite 化取舍：
 
-- 读取类接口使用 **isolate 内存短 TTL 缓存**
+- 热点统计 / 日历接口会使用 D1 缓存来降低 Worker CPU 压力
 - **不使用 KV**
-- Logo 搜索是 Lite 版，只保留网站候选 + DuckDuckGo
-- Cron 已拆成更轻的 Worker 版职责
+- Wallos 导入、Logo 搜索、Cron 等能力都做了 Worker 适配
 - 遇到 `503` / CPU 超限时，前端会明确提示可能受 Worker 免费版限制影响
 
-这意味着：
-
-- 大部分功能可以还原
-- 但短时间内可能看到旧数据
-- Logo 搜索质量和实时性不追求与 main 的 Docker 版完全一致
-
-详细说明见：
+更详细的部署、能力边界与性能说明见：
 
 - [`DEPLOYMENT.md`](./DEPLOYMENT.md)
 
@@ -109,7 +108,7 @@ npm test
 
 1. fork 仓库
 2. 配置 Cloudflare Secrets / Variables
-3. 在 GitHub Actions 中运行 **Deploy to Cloudflare**
+3. 在 GitHub Actions 中运行 **Lite CI and Deploy**
 4. 后续通过 **Sync fork** 自动更新
 
 常用仓库 Variables：
@@ -119,8 +118,7 @@ npm test
 
 ## 工作流
 
-- `CF Worker CI`：负责 lint / test / build
-- `Deploy to Cloudflare`：首次 fork 后手动运行一次，后续 sync fork 自动部署
+- `Lite CI and Deploy`：同一个 workflow 里先跑 lint / test / build，验证通过后再部署到 Cloudflare
 
 ## 许可证
 
