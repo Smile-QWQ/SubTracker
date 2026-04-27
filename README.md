@@ -6,7 +6,7 @@
 
 一个现代化的自托管订阅管理工具，用来统一管理多币种订阅、续订提醒、预算分析、Logo 资源，以及 Wallos 数据迁移。
 
-本项目目前提供的部署方式为 **Docker / Docker Compose**。
+当前 `main` 分支提供 **Docker / Docker Compose** 部署；如果你需要 **Cloudflare Worker 无服务器部署**，请前往 [`lite`](https://github.com/Smile-QWQ/SubTracker/tree/lite) 分支，对应的部署说明、工作流与 Worker 适配实现都维护在该分支。
 
 ## 界面预览
 
