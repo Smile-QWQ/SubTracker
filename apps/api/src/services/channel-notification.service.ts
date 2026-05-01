@@ -17,6 +17,7 @@ import { getAppTimezone, getNotificationChannelSettings, getSetting, setSetting 
 import { validateNotificationTargetUrl } from './notification-url.service'
 import { toIsoDate } from '../utils/date'
 import { formatDateInTimezone } from '../utils/timezone'
+import { prisma } from '../db'
 
 type NotificationDispatchParams = {
   eventType: WebhookEventType
@@ -70,11 +71,33 @@ export type NotificationChannelResult = {
   message?: string
 }
 
+const NOTIFICATION_DEDUP_KEY_PREFIX = 'notification:'
+export const NOTIFICATION_DEDUP_RETENTION_DAYS = 30
+
 function buildNotificationKey(
   channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify',
   params: NotificationDispatchParams
 ) {
-  return `notification:${channel}:${params.eventType}:${params.resourceKey}:${params.periodKey}`
+  return `${NOTIFICATION_DEDUP_KEY_PREFIX}${channel}:${params.eventType}:${params.resourceKey}:${params.periodKey}`
+}
+
+export async function cleanupOldNotificationDedupSettings(
+  now = new Date(),
+  retentionDays = NOTIFICATION_DEDUP_RETENTION_DAYS
+) {
+  const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000)
+  const result = await prisma.setting.deleteMany({
+    where: {
+      key: {
+        startsWith: NOTIFICATION_DEDUP_KEY_PREFIX
+      },
+      updatedAt: {
+        lt: cutoff
+      }
+    }
+  })
+
+  return result.count
 }
 
 const CHANNEL_LABELS: Record<NotificationChannelResult['channel'], string> = {

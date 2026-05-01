@@ -5,6 +5,7 @@ import { scanRenewalNotifications } from './notification.service'
 import { parseDailyCronForTimezoneGate, runDailyTaskAtLocalHour } from './cron-gate.service'
 import { getAppTimezone } from './settings.service'
 import { autoRenewDueSubscriptions, reconcileExpiredSubscriptions } from './subscription.service'
+import { cleanupOldNotificationDedupSettings } from './channel-notification.service'
 
 type NotificationScan = Awaited<ReturnType<typeof scanRenewalNotifications>>
 
@@ -50,6 +51,15 @@ function logReminderScan(result: NotificationScan) {
   )
 }
 
+export async function cleanupNotificationDedupSettingsOncePerDay(now = new Date()) {
+  return runDailyTaskAtLocalHour('cleanupNotificationDedupSettings', await getAppTimezone(), 3, now, async () => {
+    const deleted = await cleanupOldNotificationDedupSettings(now)
+    if (deleted > 0) {
+      console.log(`[cron] notification dedup cleanup：清理 ${deleted} 条旧记录`)
+    }
+  })
+}
+
 export function startSchedulers() {
   const refreshRatesCronGate = parseDailyCronForTimezoneGate(config.cronRefreshRates)
   cron.schedule(refreshRatesCronGate?.triggerCron ?? config.cronRefreshRates, async () => {
@@ -81,6 +91,7 @@ export function startSchedulers() {
     try {
       await autoRenewDueSubscriptions()
       await reconcileExpiredSubscriptions()
+      await cleanupNotificationDedupSettingsOncePerDay()
       const result = await scanRenewalNotifications()
       logReminderScan(result)
     } catch (e) {
