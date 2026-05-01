@@ -166,14 +166,19 @@
       <n-grid-item>
         <n-card title="汇率转换器" class="settings-card">
           <n-space vertical style="width: 100%">
-            <n-grid :cols="formCols" :x-gap="12" :y-gap="12">
-              <n-grid-item>
+            <div class="converter-currency-row">
+              <div class="converter-currency-row__select">
                 <n-select v-model:value="sourceCurrency" :options="allCurrencyOptions" filterable placeholder="源货币" />
-              </n-grid-item>
-              <n-grid-item>
+              </div>
+              <n-button quaternary circle class="converter-swap-button" title="交换源货币和目标货币" @click="swapConverterCurrencies">
+                <template #icon>
+                  <n-icon><swap-horizontal-outline /></n-icon>
+                </template>
+              </n-button>
+              <div class="converter-currency-row__select">
                 <n-select v-model:value="targetCurrency" :options="allCurrencyOptions" filterable placeholder="目标货币" />
-              </n-grid-item>
-            </n-grid>
+              </div>
+            </div>
             <n-input-number v-model:value="converterAmount" :min="0" :precision="4" style="width: 100%" />
             <n-card size="small" embedded>
               <template v-if="sourceCurrency && targetCurrency">
@@ -580,7 +585,15 @@ import {
   NTooltip,
   useMessage
 } from 'naive-ui'
-import { ChevronDownOutline, ChevronUpOutline, HelpCircleOutline, RefreshOutline, SaveOutline, SettingsOutline } from '@vicons/ionicons5'
+import {
+  ChevronDownOutline,
+  ChevronUpOutline,
+  HelpCircleOutline,
+  RefreshOutline,
+  SaveOutline,
+  SettingsOutline,
+  SwapHorizontalOutline
+} from '@vicons/ionicons5'
 import { api } from '@/composables/api'
 import { EXCHANGE_RATE_SNAPSHOT_QUERY_KEY, useExchangeRateSnapshotQuery } from '@/composables/exchange-rate-query'
 import { NOTIFICATION_WEBHOOK_QUERY_KEY, useNotificationWebhookQuery } from '@/composables/notification-webhook-query'
@@ -590,6 +603,7 @@ import WallosImportModal from '@/components/WallosImportModal.vue'
 import { useAuthStore } from '@/stores/auth'
 import { isRememberedSession } from '@/utils/auth-storage'
 import { buildCurrencyOptions } from '@/utils/currency'
+import { swapCurrencyPair } from '@/utils/currency-converter'
 import { cloneSettingsForForm } from '@/utils/settings-form'
 import { buildTimeZoneOptions, formatDateTimeInTimezone, normalizeAppTimezone } from '@/utils/timezone'
 import type { AiProviderPreset, ChangeCredentialsPayload, ExchangeRateSnapshot, NotificationWebhookSettings, Settings } from '@/types/api'
@@ -603,6 +617,7 @@ const { data: webhookQueryData } = useNotificationWebhookQuery()
 const { width } = useWindowSize()
 const chevronDownOutline = ChevronDownOutline
 const chevronUpOutline = ChevronUpOutline
+const swapHorizontalOutline = SwapHorizontalOutline
 const helpCircleOutline = HelpCircleOutline
 const settingsOutline = SettingsOutline
 const AI_PROVIDER_PRESETS: Record<
@@ -1117,6 +1132,15 @@ async function refreshRates() {
   message.success('汇率已刷新')
 }
 
+function swapConverterCurrencies() {
+  const swapped = swapCurrencyPair({
+    sourceCurrency: sourceCurrency.value,
+    targetCurrency: targetCurrency.value
+  })
+  sourceCurrency.value = swapped.sourceCurrency
+  targetCurrency.value = swapped.targetCurrency
+}
+
 async function submitCredentialsChange() {
   if (savingCredentials.value) return
   savingCredentials.value = true
@@ -1391,6 +1415,21 @@ function formatTime(value: string) {
   word-break: break-all;
 }
 
+.converter-currency-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.converter-currency-row__select {
+  min-width: 0;
+}
+
+.converter-swap-button {
+  color: var(--app-text-secondary);
+}
+
 .converter-main {
   font-size: 20px;
   font-weight: 700;
@@ -1445,6 +1484,16 @@ function formatTime(value: string) {
 .webhook-advanced,
 .ai-advanced {
   margin-bottom: 12px;
+}
+
+@media (max-width: 640px) {
+  .converter-currency-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .converter-swap-button {
+    justify-self: center;
+  }
 }
 
 :deep(.n-grid-item),
