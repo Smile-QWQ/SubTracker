@@ -33,6 +33,8 @@ function defaultWebhookSettings(): NotificationWebhookSettingsInput {
 }
 
 function normalizeWebhookSettings(input: Partial<NotificationWebhookSettingsInput>): NotificationWebhookSettingsInput {
+  // Cloudflare Worker fetch does not expose a per-request TLS verification toggle,
+  // so ignoreSsl is intentionally forced off in lite/worker runtime.
   return NotificationWebhookSettingsSchema.parse({
     ...defaultWebhookSettings(),
     ...input,
@@ -181,11 +183,6 @@ export async function dispatchWebhookEvent(params: {
     } as const
   }
 
-  const result = await sendWebhookRequest(endpoint, {
-    eventType: params.eventType,
-    payload: params.payload
-  })
-
   const existing = await prisma.webhookDelivery.findUnique({
     where: {
       eventType_resourceKey_periodKey: {
@@ -196,50 +193,108 @@ export async function dispatchWebhookEvent(params: {
     },
     select: {
       id: true,
-      attemptCount: true
+      attemptCount: true,
+      status: true
     }
   })
 
-  if (existing) {
-    await prisma.webhookDelivery.update({
-      where: { id: existing.id },
-      data: {
-        subscriptionId: params.subscriptionId ?? null,
-        targetUrl: endpoint.url,
-        requestMethod: endpoint.requestMethod,
-        payloadJson: params.payload as Prisma.InputJsonValue,
-        status: result.statusCode >= 400 ? 'failed' : 'success',
-        responseCode: result.statusCode,
-        responseBody: result.responseBody,
-        attemptCount: existing.attemptCount + 1,
-        lastAttemptAt: new Date()
-      }
-    })
-  } else {
-    await prisma.webhookDelivery.create({
-      data: {
-        subscriptionId: params.subscriptionId ?? null,
-        eventType: params.eventType,
-        resourceKey: params.resourceKey,
-        periodKey: params.periodKey,
-        targetUrl: endpoint.url,
-        requestMethod: endpoint.requestMethod,
-        payloadJson: params.payload as Prisma.InputJsonValue,
-        status: result.statusCode >= 400 ? 'failed' : 'success',
-        responseCode: result.statusCode,
-        responseBody: result.responseBody,
-        attemptCount: 1,
-        lastAttemptAt: new Date()
-      }
-    })
+  if (existing?.status === 'success') {
+    return {
+      channel: 'webhook',
+      status: 'skipped',
+      message: 'webhook_already_sent'
+    } as const
   }
 
-  if (result.statusCode >= 400) {
-    throw new Error(`Webhook dispatch failed: HTTP ${result.statusCode}`)
-  }
+  try {
+    const result = await sendWebhookRequest(endpoint, {
+      eventType: params.eventType,
+      payload: params.payload
+    })
 
-  return {
-    channel: 'webhook',
-    status: 'success'
-  } as const
+    const nextStatus = result.statusCode >= 400 ? 'failed' : 'success'
+
+    if (existing) {
+      await prisma.webhookDelivery.update({
+        where: { id: existing.id },
+        data: {
+          subscriptionId: params.subscriptionId ?? null,
+          targetUrl: endpoint.url,
+          requestMethod: endpoint.requestMethod,
+          payloadJson: params.payload as Prisma.InputJsonValue,
+          status: nextStatus,
+          responseCode: result.statusCode,
+          responseBody: result.responseBody,
+          attemptCount: existing.attemptCount + 1,
+          lastAttemptAt: new Date()
+        }
+      })
+    } else {
+      await prisma.webhookDelivery.create({
+        data: {
+          subscriptionId: params.subscriptionId ?? null,
+          eventType: params.eventType,
+          resourceKey: params.resourceKey,
+          periodKey: params.periodKey,
+          targetUrl: endpoint.url,
+          requestMethod: endpoint.requestMethod,
+          payloadJson: params.payload as Prisma.InputJsonValue,
+          status: nextStatus,
+          responseCode: result.statusCode,
+          responseBody: result.responseBody,
+          attemptCount: 1,
+          lastAttemptAt: new Date()
+        }
+      })
+    }
+
+    if (result.statusCode >= 400) {
+      throw new Error(`Webhook dispatch failed: HTTP ${result.statusCode}`)
+    }
+
+    return {
+      channel: 'webhook',
+      status: 'success'
+    } as const
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Webhook dispatch failed: HTTP ')) {
+      throw error
+    }
+
+    if (existing) {
+      await prisma.webhookDelivery.update({
+        where: { id: existing.id },
+        data: {
+          subscriptionId: params.subscriptionId ?? null,
+          targetUrl: endpoint.url,
+          requestMethod: endpoint.requestMethod,
+          payloadJson: params.payload as Prisma.InputJsonValue,
+          status: 'failed',
+          responseCode: 0,
+          responseBody: error instanceof Error ? error.message : 'webhook_dispatch_failed',
+          attemptCount: existing.attemptCount + 1,
+          lastAttemptAt: new Date()
+        }
+      })
+    } else {
+      await prisma.webhookDelivery.create({
+        data: {
+          subscriptionId: params.subscriptionId ?? null,
+          eventType: params.eventType,
+          resourceKey: params.resourceKey,
+          periodKey: params.periodKey,
+          targetUrl: endpoint.url,
+          requestMethod: endpoint.requestMethod,
+          payloadJson: params.payload as Prisma.InputJsonValue,
+          status: 'failed',
+          responseCode: 0,
+          responseBody: error instanceof Error ? error.message : 'webhook_dispatch_failed',
+          attemptCount: 1,
+          lastAttemptAt: new Date()
+        }
+      })
+    }
+
+    throw error
+  }
 }

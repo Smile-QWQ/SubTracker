@@ -78,6 +78,9 @@ export async function claimNotificationDelivery(params: {
   resourceKey: string
   periodKey: string
 }) {
+  // NotificationDelivery is intentionally a lightweight dedup-claim table for
+  // worker-lite hot paths. It prevents duplicate sends for the same channel and
+  // periodKey, but it is not a durable delivery ledger.
   if (!getD1()) {
     try {
       await prisma.notificationDelivery.create({

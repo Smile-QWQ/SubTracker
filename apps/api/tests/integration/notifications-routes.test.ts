@@ -11,7 +11,8 @@ const notificationMocks = vi.hoisted(() => ({
   sendTestServerchanNotificationMock: vi.fn(),
   sendTestServerchanNotificationWithConfigMock: vi.fn(),
   sendTestGotifyNotificationMock: vi.fn(),
-  sendTestGotifyNotificationWithConfigMock: vi.fn()
+  sendTestGotifyNotificationWithConfigMock: vi.fn(),
+  scanRenewalNotificationsMock: vi.fn()
 }))
 
 vi.mock('../../src/services/channel-notification.service', () => ({
@@ -25,6 +26,10 @@ vi.mock('../../src/services/channel-notification.service', () => ({
   sendTestServerchanNotificationWithConfig: notificationMocks.sendTestServerchanNotificationWithConfigMock,
   sendTestGotifyNotification: notificationMocks.sendTestGotifyNotificationMock,
   sendTestGotifyNotificationWithConfig: notificationMocks.sendTestGotifyNotificationWithConfigMock
+}))
+
+vi.mock('../../src/services/notification.service', () => ({
+  scanRenewalNotifications: notificationMocks.scanRenewalNotificationsMock
 }))
 
 vi.mock('../../src/services/webhook.service', () => ({
@@ -69,6 +74,28 @@ describe('notification routes', () => {
     notificationMocks.sendTestServerchanNotificationWithConfigMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestGotifyNotificationMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestGotifyNotificationWithConfigMock.mockResolvedValue({ success: true })
+    notificationMocks.scanRenewalNotificationsMock.mockReset()
+    notificationMocks.scanRenewalNotificationsMock.mockResolvedValue({
+      processedCount: 1,
+      matchedReminderCount: 1,
+      notificationCount: 0,
+      scan: {
+        scanTime: '2026-05-01 09:30:00',
+        timezone: 'Asia/Shanghai',
+        defaultAdvanceReminderRules: '3&09:30;0&09:30;',
+        defaultOverdueReminderRules: '1&09:30;2&09:30;3&09:30;',
+        maxAdvanceDays: 3,
+        mergeMultiSubscriptionNotifications: true,
+        queryWindow: {
+          start: '2026-04-24',
+          defaultRuleEnd: '2026-05-04',
+          customRuleEnd: '2027-05-02',
+          customRuleLookaheadDays: 366
+        }
+      },
+      candidates: [],
+      notifications: []
+    })
   })
 
   afterEach(async () => {
@@ -144,6 +171,23 @@ describe('notification routes', () => {
 
     expect(res.statusCode).toBe(200)
     expect(notificationMocks.sendTestGotifyNotificationWithConfigMock).toHaveBeenCalled()
+  })
+
+  it('supports dry-run notification scan debugging', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/notifications/scan-debug',
+      payload: {
+        now: '2026-05-01T09:30:00+08:00',
+        dryRun: true
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(notificationMocks.scanRenewalNotificationsMock).toHaveBeenCalledWith(
+      new Date('2026-05-01T09:30:00+08:00'),
+      { dryRun: true }
+    )
   })
 
 })

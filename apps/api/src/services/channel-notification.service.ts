@@ -15,6 +15,7 @@ import { getAppTimezone, getNotificationChannelSettings } from './settings.servi
 import { claimNotificationDelivery, releaseNotificationDelivery } from './worker-lite-state.service'
 import { toIsoDate } from '../utils/date'
 import { formatDateInTimezone } from '../utils/timezone'
+import { prisma } from '../db'
 
 type NotificationDispatchParams = {
   eventType: WebhookEventType
@@ -66,6 +67,44 @@ export type NotificationChannelResult = {
   channel: 'webhook' | 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify'
   status: 'success' | 'skipped' | 'failed'
   message?: string
+}
+
+const NOTIFICATION_DEDUP_KEY_PREFIX = 'notification:'
+export const NOTIFICATION_DEDUP_RETENTION_DAYS = 30
+
+export async function cleanupLegacyNotificationDedupSettings(
+  now = new Date(),
+  retentionDays = NOTIFICATION_DEDUP_RETENTION_DAYS
+) {
+  const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000)
+  const result = await prisma.setting.deleteMany({
+    where: {
+      key: {
+        startsWith: NOTIFICATION_DEDUP_KEY_PREFIX
+      },
+      updatedAt: {
+        lt: cutoff
+      }
+    }
+  })
+
+  return result.count
+}
+
+export async function cleanupNotificationDeliveryClaims(
+  now = new Date(),
+  retentionDays = NOTIFICATION_DEDUP_RETENTION_DAYS
+) {
+  const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000)
+  const result = await prisma.notificationDelivery.deleteMany({
+    where: {
+      updatedAt: {
+        lt: cutoff
+      }
+    }
+  })
+
+  return result.count
 }
 
 function getMergedSubscriptions(params: NotificationDispatchParams) {
@@ -216,6 +255,10 @@ async function withDeliveryClaim(
   params: NotificationDispatchParams,
   send: () => Promise<void>
 ): Promise<NotificationChannelResult> {
+  // Worker-lite keeps channel dedup as lightweight claim rows in NotificationDelivery.
+  // These rows are only temporary occupancy markers for a channel+periodKey, not
+  // a full delivery state machine. If the runtime crashes after claiming and before
+  // release, a stale row may temporarily suppress retries until it is cleaned up.
   const claimed = await claimNotificationDelivery({
     channel,
     eventType: params.eventType,

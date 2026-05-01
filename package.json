@@ -17,6 +17,7 @@
     "prisma:migrate": "npm run prisma:migrate -w apps/api",
     "prisma:push": "npm run prisma:push -w apps/api",
     "prisma:seed": "npm run prisma:seed -w apps/api",
+    "predev:worker": "npm run build:web",
     "dev:worker": "wrangler dev",
     "reset:worker:local": "node scripts/reset-cloudflare-state.mjs --local-all",
     "reset:worker:local:d1": "node scripts/reset-cloudflare-state.mjs --local-d1",

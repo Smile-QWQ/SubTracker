@@ -84,7 +84,8 @@ describe('scanRenewalNotifications merge behavior', () => {
     await scanRenewalNotifications(new Date('2026-04-23T01:30:00.000Z'))
 
     expect(notificationState.dispatchMock).toHaveBeenCalledTimes(1)
-    const payload = notificationState.dispatchMock.mock.calls[0][0].payload
+    const [params] = notificationState.dispatchMock.mock.calls[0]
+    const payload = params.payload
     expect(payload.merged).toBe(true)
     expect(payload.mergedCount).toBe(3)
     expect(payload.subscriptions).toHaveLength(3)
@@ -95,6 +96,9 @@ describe('scanRenewalNotifications merge behavior', () => {
       '2026-04-23',
       '2026-04-22'
     ])
+    expect(params.periodKey).toContain('summary:')
+    expect(params.periodKey).toContain('2026-04-23:due_today:advance-0@09:30')
+    expect(params.periodKey).toContain('2026-04-22:overdue_day_1:overdue-1@09:30')
   })
 
   it('sends notifications separately when merging is disabled', async () => {
@@ -108,11 +112,11 @@ describe('scanRenewalNotifications merge behavior', () => {
     }
   })
 
-  it('does not backfill reminders outside the exact trigger minute', async () => {
+  it('allows same-day makeup dispatch after the configured reminder minute', async () => {
     notificationState.mergeMultiSubscriptionNotifications = false
 
     await scanRenewalNotifications(new Date('2026-04-23T01:34:00.000Z'))
 
-    expect(notificationState.dispatchMock).not.toHaveBeenCalled()
+    expect(notificationState.dispatchMock).toHaveBeenCalledTimes(3)
   })
 })

@@ -23,6 +23,7 @@ import {
   sendTestTelegramNotification,
   sendTestTelegramNotificationWithConfig
 } from '../services/channel-notification.service'
+import { scanRenewalNotifications } from '../services/notification.service'
 import {
   getPrimaryWebhookEndpoint,
   sendTestWebhookNotification,
@@ -34,6 +35,11 @@ const EmailNotificationTestSchema = z.object({
   emailProvider: EmailProviderSchema.default('smtp'),
   smtpConfig: EmailConfigSchema.partial().default({}),
   resendConfig: ResendConfigSchema.partial().default({})
+})
+
+const NotificationScanDebugSchema = z.object({
+  now: z.string().datetime({ offset: true }).optional(),
+  dryRun: z.boolean().default(true)
 })
 
 export async function notificationRoutes(app: FastifyInstance) {
@@ -54,6 +60,18 @@ export async function notificationRoutes(app: FastifyInstance) {
 
     const saved = await upsertPrimaryWebhookEndpoint(parsed.data)
     return sendOk(reply, saved)
+  })
+
+  app.post('/notifications/scan-debug', async (request, reply) => {
+    const parsed = NotificationScanDebugSchema.safeParse(request.body ?? {})
+    if (!parsed.success) {
+      return sendError(reply, 422, 'validation_error', 'Invalid scan debug payload', parsed.error.flatten())
+    }
+
+    const result = await scanRenewalNotifications(parsed.data.now ? new Date(parsed.data.now) : new Date(), {
+      dryRun: parsed.data.dryRun
+    })
+    return sendOk(reply, result)
   })
 
   app.post('/notifications/test/email', async (request, reply) => {
