@@ -170,6 +170,73 @@ describe('subscription routes', () => {
     expect(res.json().error.message).toBe('websiteUrl 格式无效，请填写合法网址')
   })
 
+  it('filters by all selected tags instead of matching any selected tag', async () => {
+    routeMocks.prismaMock.subscription.findMany.mockResolvedValue([])
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/subscriptions?tagIds=tag_a,tag_b'
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(routeMocks.prismaMock.subscription.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: [
+            { tags: { some: { tagId: 'tag_a' } } },
+            { tags: { some: { tagId: 'tag_b' } } }
+          ]
+        })
+      })
+    )
+  })
+
+  it('batch updates mixed subscription statuses to a user-selected status', async () => {
+    routeMocks.prismaMock.subscription.findMany.mockResolvedValue([
+      { id: 'sub_1', status: 'paused' },
+      { id: 'sub_2', status: 'cancelled' }
+    ])
+    routeMocks.prismaMock.subscription.update.mockResolvedValue({})
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/subscriptions/batch/status',
+      payload: {
+        ids: ['sub_1', 'sub_2'],
+        status: 'active'
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data).toMatchObject({
+      successCount: 2,
+      failureCount: 0
+    })
+    expect(routeMocks.prismaMock.subscription.update).toHaveBeenCalledTimes(2)
+    expect(routeMocks.prismaMock.subscription.update).toHaveBeenNthCalledWith(1, {
+      where: { id: 'sub_1' },
+      data: { status: 'active' }
+    })
+    expect(routeMocks.prismaMock.subscription.update).toHaveBeenNthCalledWith(2, {
+      where: { id: 'sub_2' },
+      data: { status: 'active' }
+    })
+  })
+
+  it('rejects batch status updates to system-only expired status', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/subscriptions/batch/status',
+      payload: {
+        ids: ['sub_1'],
+        status: 'expired'
+      }
+    })
+
+    expect(res.statusCode).toBe(422)
+    expect(routeMocks.prismaMock.subscription.update).not.toHaveBeenCalled()
+  })
+
   it('restores expired subscriptions to active when nextRenewalDate is moved to the future', async () => {
     routeMocks.tx.subscription.findUnique.mockResolvedValue({
       id: 'sub_1',

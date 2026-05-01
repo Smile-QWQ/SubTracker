@@ -24,7 +24,7 @@
     <n-card style="margin-bottom: 12px">
       <n-space vertical :size="12" style="width: 100%">
         <div class="filters-grid">
-          <n-input v-model:value="filters.q" placeholder="搜索名称/描述" clearable />
+          <n-input v-model:value="filters.q" placeholder="搜索名称/描述" clearable @keyup.enter="loadSubscriptions" />
           <n-select v-model:value="filters.status" clearable placeholder="状态" :options="statusOptions" />
           <n-select v-model:value="sortMode" placeholder="排序方式" :options="sortOptions" />
           <n-button @click="loadSubscriptions">
@@ -87,12 +87,16 @@
       <n-space v-if="batchMode" justify="space-between" align="center" style="margin-bottom: 12px" wrap>
         <n-space align="center" wrap>
           <n-tag type="info">已选 {{ selectedCount }} 项</n-tag>
+          <n-button size="small" :disabled="visibleSelectionIds.length === 0 || allVisibleSubscriptionsSelected" @click="selectVisibleSubscriptions">
+            全选当前页
+          </n-button>
           <n-button size="small" :disabled="selectedCount === 0" @click="clearSelectedSubscriptions">清空选择</n-button>
         </n-space>
         <n-space wrap>
           <n-button size="small" type="primary" ghost :disabled="selectedCount === 0" @click="runBatchRenew">批量续订</n-button>
-          <n-button size="small" :disabled="!canBatchPause" @click="runBatchPause">批量暂停</n-button>
-          <n-button size="small" type="warning" ghost :disabled="!canBatchCancel" @click="runBatchCancel">批量取消</n-button>
+          <n-button size="small" :disabled="selectedCount === 0" @click="runBatchSetStatus('active')">设为正常</n-button>
+          <n-button size="small" :disabled="selectedCount === 0" @click="runBatchSetStatus('paused')">设为暂停</n-button>
+          <n-button size="small" type="warning" ghost :disabled="selectedCount === 0" @click="runBatchSetStatus('cancelled')">设为停用</n-button>
           <n-button size="small" type="error" ghost :disabled="!canBatchDelete" @click="runBatchDelete">批量删除</n-button>
         </n-space>
       </n-space>
@@ -158,23 +162,39 @@
             <n-button size="small" @click="openDetail(item.id)">详情</n-button>
             <n-button size="small" @click="openRecords(item.id)">记录</n-button>
             <n-button size="small" @click="openEdit(item)">编辑</n-button>
-            <n-button size="small" type="primary" ghost @click="quickRenew(item)">续订</n-button>
-            <n-popconfirm positive-text="确认" negative-text="取消" @positive-click="pause(item.id)">
-              <template #trigger>
-                <n-button size="small" :disabled="item.status !== 'active'">暂停</n-button>
-              </template>
-              确认暂停该订阅？
-            </n-popconfirm>
+            <n-button
+              v-if="item.status === 'active' || item.status === 'expired'"
+              size="small"
+              type="primary"
+              ghost
+              @click="quickRenew(item)"
+            >
+              续订
+            </n-button>
+            <template v-if="item.status === 'active'">
+              <n-popconfirm positive-text="确认" negative-text="取消" @positive-click="pause(item.id)">
+                <template #trigger>
+                  <n-button size="small">暂停</n-button>
+                </template>
+                确认暂停该订阅？
+              </n-popconfirm>
+              <n-popconfirm positive-text="确认" negative-text="取消" @positive-click="cancel(item.id)">
+                <template #trigger>
+                  <n-button size="small" type="error" ghost>取消</n-button>
+                </template>
+                确认取消该订阅？
+              </n-popconfirm>
+            </template>
             <n-popconfirm
-              v-if="item.status === 'active'"
-              positive-text="确认"
+              v-else-if="item.status === 'paused'"
+              positive-text="恢复"
               negative-text="取消"
-              @positive-click="cancel(item.id)"
+              @positive-click="resume(item.id)"
             >
               <template #trigger>
-                <n-button size="small" type="error" ghost>取消</n-button>
+                <n-button size="small" type="primary" ghost>恢复</n-button>
               </template>
-              确认取消该订阅？
+              确认恢复该订阅为正常状态？
             </n-popconfirm>
             <n-popconfirm
               v-else
@@ -283,10 +303,17 @@ import PageHeader from '@/components/PageHeader.vue'
 import SubscriptionDetailDrawer from '@/components/SubscriptionDetailDrawer.vue'
 import SubscriptionFormModal from '@/components/SubscriptionFormModal.vue'
 import SubscriptionPaymentRecordsDrawer from '@/components/SubscriptionPaymentRecordsDrawer.vue'
-import type { PaymentRecord, Settings, Subscription, SubscriptionDetail, Tag } from '@/types/api'
+import type { PaymentRecord, Subscription, SubscriptionDetail, Tag } from '@/types/api'
 import { resolveLogoUrl } from '@/utils/logo'
 import { createSingleFlight } from '@/utils/single-flight'
 import { formatDateInTimezone } from '@/utils/timezone'
+import {
+  areAllVisibleSubscriptionsSelected,
+  getBatchStatusText,
+  getVisiblePageSubscriptionIds,
+  mergeSelectedSubscriptionIds,
+  type BatchSettableStatus
+} from '@/utils/subscription-batch'
 import {
   DEFAULT_SUBSCRIPTION_PAGE_SIZE,
   SUBSCRIPTION_PAGE_SIZE_OPTIONS,
@@ -383,14 +410,18 @@ const selectedSubscriptions = computed(() =>
   subscriptions.value.filter((item) => selectedSubscriptionIds.value.includes(item.id))
 )
 const selectedCount = computed(() => selectedSubscriptionIds.value.length)
-const canBatchPause = computed(
-  () => selectedCount.value > 0 && selectedSubscriptions.value.every((item) => item.status === 'active')
-)
-const canBatchCancel = computed(
-  () => selectedCount.value > 0 && selectedSubscriptions.value.every((item) => item.status === 'active')
-)
 const canBatchDelete = computed(
   () => selectedCount.value > 0 && selectedSubscriptions.value.every((item) => item.status !== 'active')
+)
+const visibleSelectionIds = computed(() =>
+  getVisiblePageSubscriptionIds({
+    isMobile: isMobile.value,
+    orderedSubscriptions: orderedSubscriptions.value,
+    pagedSubscriptions: pagedSubscriptions.value
+  })
+)
+const allVisibleSubscriptionsSelected = computed(() =>
+  areAllVisibleSubscriptionsSelected(visibleSelectionIds.value, selectedSubscriptionIds.value)
 )
 const subscriptionQueryParams = computed(() => ({
   q: appliedFilters.q || undefined,
@@ -615,22 +646,18 @@ const mainColumns = [
     render: (row: SubscriptionTableRow) => {
       if (row.__rowType === 'note') return null
 
-      return h(NSpace, { size: 6, wrapItem: false }, {
-        default: () => [
-          h(NButton, { size: 'small', onClick: () => void openDetail(row.id) }, { default: () => '详情' }),
-          h(NButton, { size: 'small', onClick: () => void openRecords(row.id) }, { default: () => '记录' }),
-          h(NButton, { size: 'small', onClick: () => openEdit(row) }, { default: () => '编辑' }),
-          h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => void quickRenew(row) }, { default: () => '续订' }),
-          h(
-            NPopconfirm,
-            { positiveText: '确认', negativeText: '取消', onPositiveClick: () => void pause(row.id) },
-            {
-              trigger: () => h(NButton, { size: 'small', disabled: row.status !== 'active' }, { default: () => '暂停' }),
-              default: () => '确认暂停该订阅？'
-            }
-          ),
-          row.status === 'active'
-            ? h(
+      const statusActions =
+        row.status === 'active'
+          ? [
+              h(
+                NPopconfirm,
+                { positiveText: '确认', negativeText: '取消', onPositiveClick: () => void pause(row.id) },
+                {
+                  trigger: () => h(NButton, { size: 'small' }, { default: () => '暂停' }),
+                  default: () => '确认暂停该订阅？'
+                }
+              ),
+              h(
                 NPopconfirm,
                 { positiveText: '确认', negativeText: '取消', onPositiveClick: () => void cancel(row.id) },
                 {
@@ -638,14 +665,38 @@ const mainColumns = [
                   default: () => '确认取消该订阅？'
                 }
               )
-            : h(
-                NPopconfirm,
-                { positiveText: '删除', negativeText: '保留', onPositiveClick: () => void removeSubscription(row.id, row.name) },
-                {
-                  trigger: () => h(NButton, { size: 'small', type: 'error', ghost: true }, { default: () => '删除' }),
-                  default: () => '该订阅已停用，确认彻底删除？'
-                }
-              )
+            ]
+          : row.status === 'paused'
+            ? [
+                h(
+                  NPopconfirm,
+                  { positiveText: '恢复', negativeText: '取消', onPositiveClick: () => void resume(row.id) },
+                  {
+                    trigger: () => h(NButton, { size: 'small', type: 'primary', ghost: true }, { default: () => '恢复' }),
+                    default: () => '确认恢复该订阅为正常状态？'
+                  }
+                )
+              ]
+            : [
+                h(
+                  NPopconfirm,
+                  { positiveText: '删除', negativeText: '保留', onPositiveClick: () => void removeSubscription(row.id, row.name) },
+                  {
+                    trigger: () => h(NButton, { size: 'small', type: 'error', ghost: true }, { default: () => '删除' }),
+                    default: () => '该订阅已停用，确认彻底删除？'
+                  }
+                )
+              ]
+
+      return h(NSpace, { size: 6, wrapItem: false }, {
+        default: () => [
+          h(NButton, { size: 'small', onClick: () => void openDetail(row.id) }, { default: () => '详情' }),
+          h(NButton, { size: 'small', onClick: () => void openRecords(row.id) }, { default: () => '记录' }),
+          h(NButton, { size: 'small', onClick: () => openEdit(row) }, { default: () => '编辑' }),
+          ...(row.status === 'active' || row.status === 'expired'
+            ? [h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => void quickRenew(row) }, { default: () => '续订' })]
+            : []),
+          ...statusActions
         ]
       })
     }
@@ -796,6 +847,7 @@ async function openRecords(id: string) {
 
 function closeModal() {
   showModal.value = false
+  editing.value = null
 }
 
 const submitSubscriptionTask = createSingleFlight(async (payload: Record<string, unknown>, editingId?: string) => {
@@ -822,7 +874,7 @@ function submitSubscription(payload: Record<string, unknown>, editingId?: string
   return submitSubscriptionTask.run(payload, editingId)
 }
 
-async function createTag(payload: { name: string; color: string; icon: string; sortOrder: number }) {
+async function createTag(payload: { name: string; color: string; sortOrder: number }) {
   try {
     await api.createTag(payload)
     message.success('标签已创建')
@@ -832,7 +884,7 @@ async function createTag(payload: { name: string; color: string; icon: string; s
   }
 }
 
-async function updateTag(payload: { name: string; color: string; icon: string; sortOrder: number }, id: string) {
+async function updateTag(payload: { name: string; color: string; sortOrder: number }, id: string) {
   try {
     await api.updateTag(id, payload)
     message.success('标签已更新')
@@ -875,6 +927,10 @@ function clearSelectedSubscriptions() {
   selectedSubscriptionIds.value = []
 }
 
+function selectVisibleSubscriptions() {
+  selectedSubscriptionIds.value = mergeSelectedSubscriptionIds(selectedSubscriptionIds.value, visibleSelectionIds.value)
+}
+
 function ensureBatchSelection() {
   if (!selectedCount.value) {
     message.warning('请先选择订阅')
@@ -907,22 +963,13 @@ async function runBatchRenew() {
   await refreshOpenDetailIfNeeded(ids)
 }
 
-async function runBatchPause() {
-  if (!ensureBatchSelection() || !canBatchPause.value) return
-  if (!window.confirm(`确认批量暂停已选的 ${selectedCount.value} 项订阅吗？`)) return
+async function runBatchSetStatus(status: BatchSettableStatus) {
+  if (!ensureBatchSelection()) return
+  const statusLabel = getBatchStatusText(status)
+  if (!window.confirm(`确认将已选的 ${selectedCount.value} 项订阅设为${statusLabel}吗？`)) return
   const ids = [...selectedSubscriptionIds.value]
-  const result = await api.batchPauseSubscriptions(ids)
-  summarizeBatchResult('批量暂停', result)
-  await refetchCurrentSubscriptions()
-  await refreshOpenDetailIfNeeded(ids)
-}
-
-async function runBatchCancel() {
-  if (!ensureBatchSelection() || !canBatchCancel.value) return
-  if (!window.confirm(`确认批量取消已选的 ${selectedCount.value} 项订阅吗？`)) return
-  const ids = [...selectedSubscriptionIds.value]
-  const result = await api.batchCancelSubscriptions(ids)
-  summarizeBatchResult('批量取消', result)
+  const result = await api.batchUpdateSubscriptionStatus(ids, status)
+  summarizeBatchResult(`批量设为${statusLabel}`, result)
   await refetchCurrentSubscriptions()
   await refreshOpenDetailIfNeeded(ids)
 }
@@ -952,6 +999,15 @@ async function quickRenew(row: Subscription) {
 async function pause(id: string) {
   await api.pauseSubscription(id)
   message.success('已暂停')
+  await refetchCurrentSubscriptions()
+  if (detail.value?.id === id) {
+    detail.value = await api.getSubscription(id)
+  }
+}
+
+async function resume(id: string) {
+  await api.updateSubscription(id, { status: 'active' })
+  message.success('已恢复')
   await refetchCurrentSubscriptions()
   if (detail.value?.id === id) {
     detail.value = await api.getSubscription(id)

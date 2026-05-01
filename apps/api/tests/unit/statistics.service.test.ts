@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_RESEND_API_URL } from '@subtracker/shared'
 
-const { findManySubscriptionsMock, findManyTagsMock } = vi.hoisted(() => ({
+const { findManySubscriptionsMock, findManyTagsMock, statisticsSettings } = vi.hoisted(() => ({
   findManySubscriptionsMock: vi.fn(),
-  findManyTagsMock: vi.fn()
+  findManyTagsMock: vi.fn(),
+  statisticsSettings: {
+    enableTagBudgets: false,
+    tagBudgets: {} as Record<string, number>
+  }
 }))
 
 vi.mock('../../src/db', () => ({
@@ -34,9 +38,9 @@ vi.mock('../../src/services/settings.service', () => ({
     notifyOnDueDay: true,
     monthlyBudgetBase: null,
     yearlyBudgetBase: null,
-    enableTagBudgets: false,
+    enableTagBudgets: statisticsSettings.enableTagBudgets,
     overdueReminderDays: [1, 2, 3],
-    tagBudgets: {},
+    tagBudgets: statisticsSettings.tagBudgets,
     emailNotificationsEnabled: false,
     emailProvider: 'smtp',
     pushplusNotificationsEnabled: false,
@@ -131,6 +135,8 @@ function createSubscription(id: string, overrides: Record<string, unknown> = {})
 
 describe('statistics service', () => {
   beforeEach(() => {
+    statisticsSettings.enableTagBudgets = false
+    statisticsSettings.tagBudgets = {}
     findManyTagsMock.mockReset()
     findManySubscriptionsMock.mockReset()
     findManyTagsMock.mockResolvedValue([])
@@ -164,5 +170,32 @@ describe('statistics service', () => {
     await getOverviewStatistics()
 
     expect(findManyTagsMock).not.toHaveBeenCalled()
+  })
+
+  it('excludes paused subscriptions from tag budget spend', async () => {
+    statisticsSettings.enableTagBudgets = true
+    statisticsSettings.tagBudgets = { tag_video: 100 }
+    findManyTagsMock.mockResolvedValue([{ id: 'tag_video', name: 'Video' }])
+    findManySubscriptionsMock.mockResolvedValue([
+      createSubscription('active-video', {
+        amount: 40,
+        tags: [{ tag: { id: 'tag_video', name: 'Video', color: '#3b82f6', icon: 'apps-outline', sortOrder: 0 } }]
+      }),
+      createSubscription('paused-video', {
+        amount: 90,
+        status: 'paused',
+        tags: [{ tag: { id: 'tag_video', name: 'Video', color: '#3b82f6', icon: 'apps-outline', sortOrder: 0 } }]
+      })
+    ])
+
+    const result = await getOverviewStatistics()
+
+    expect(result.tagBudgetUsage).toEqual([
+      expect.objectContaining({
+        tagId: 'tag_video',
+        spent: 40,
+        budget: 100
+      })
+    ])
   })
 })

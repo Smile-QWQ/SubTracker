@@ -77,6 +77,15 @@ function parseBatchIds(input: unknown) {
     .safeParse(input)
 }
 
+function parseBatchStatus(input: unknown) {
+  return z
+    .object({
+      ids: z.array(z.string()).min(1),
+      status: z.enum(['active', 'paused', 'cancelled'])
+    })
+    .safeParse(input)
+}
+
 function normalizeSubscriptionPayloadWebsiteUrl<T extends Record<string, unknown>>(
   payload: T
 ): { payload: T; websiteUrlError: string | null } {
@@ -248,11 +257,16 @@ export async function subscriptionRoutes(app: FastifyInstance) {
           .filter(Boolean)
       )
       if (tagIds.length > 0) {
-        where.tags = {
-          some: {
-            tagId: { in: tagIds }
-          }
-        }
+        where.AND = [
+          ...(Array.isArray(where.AND) ? where.AND : []),
+          ...tagIds.map((tagId) => ({
+            tags: {
+              some: {
+                tagId
+              }
+            }
+          }))
+        ]
       }
     }
 
@@ -286,6 +300,22 @@ export async function subscriptionRoutes(app: FastifyInstance) {
 
     const result = await runBatchAction(parsed.data.ids, async (id) => {
       await renewSubscription(id)
+    })
+
+    return sendOk(reply, result)
+  })
+
+  app.post('/subscriptions/batch/status', async (request, reply) => {
+    const parsed = parseBatchStatus(request.body)
+    if (!parsed.success) {
+      return sendError(reply, 422, 'validation_error', 'Invalid batch status payload', parsed.error.flatten())
+    }
+
+    const result = await runBatchAction(parsed.data.ids, async (id) => {
+      await prisma.subscription.update({
+        where: { id },
+        data: { status: parsed.data.status }
+      })
     })
 
     return sendOk(reply, result)
