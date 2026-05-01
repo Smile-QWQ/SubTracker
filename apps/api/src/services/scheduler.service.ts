@@ -6,6 +6,50 @@ import { parseDailyCronForTimezoneGate, runDailyTaskAtLocalHour } from './cron-g
 import { getAppTimezone } from './settings.service'
 import { autoRenewDueSubscriptions, reconcileExpiredSubscriptions } from './subscription.service'
 
+type NotificationScan = Awaited<ReturnType<typeof scanRenewalNotifications>>
+
+function summarizeChannelResults(result: NotificationScan) {
+  const summary: Record<string, Record<string, number>> = {}
+
+  for (const notification of result.notifications) {
+    for (const channelResult of notification.channelResults) {
+      summary[channelResult.channel] ??= {}
+      summary[channelResult.channel][channelResult.status] = (summary[channelResult.channel][channelResult.status] ?? 0) + 1
+    }
+  }
+
+  return summary
+}
+
+const CHANNEL_LABELS: Record<string, string> = {
+  webhook: 'Webhook',
+  email: '邮箱',
+  pushplus: 'PushPlus',
+  telegram: 'Telegram',
+  serverchan: 'Server 酱',
+  gotify: 'Gotify'
+}
+
+function formatChannelSummary(result: NotificationScan) {
+  const summary = summarizeChannelResults(result)
+  const parts = Object.entries(summary)
+    .map(([channel, counts]) => {
+      const success = counts.success ?? 0
+      const failed = counts.failed ?? 0
+      const skipped = counts.skipped ?? 0
+      return `${CHANNEL_LABELS[channel] ?? channel}:成功${success}/失败${failed}/跳过${skipped}`
+    })
+    .join('；')
+
+  return parts ? `；${parts}` : ''
+}
+
+function logReminderScan(result: NotificationScan) {
+  console.log(
+    `[cron] subscription reminders scanned：候选 ${result.processedCount}，命中 ${result.matchedReminderCount}，通知 ${result.notificationCount}${formatChannelSummary(result)}`
+  )
+}
+
 export function startSchedulers() {
   const refreshRatesCronGate = parseDailyCronForTimezoneGate(config.cronRefreshRates)
   cron.schedule(refreshRatesCronGate?.triggerCron ?? config.cronRefreshRates, async () => {
@@ -37,8 +81,8 @@ export function startSchedulers() {
     try {
       await autoRenewDueSubscriptions()
       await reconcileExpiredSubscriptions()
-      await scanRenewalNotifications()
-      console.log('[cron] subscription reminders scanned')
+      const result = await scanRenewalNotifications()
+      logReminderScan(result)
     } catch (e) {
       console.error('[cron] reminder scan failed', e)
     }

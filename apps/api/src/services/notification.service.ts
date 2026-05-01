@@ -11,6 +11,7 @@ import { getNotificationScanSettings } from './settings.service'
 import {
   endOfDayDateInTimezone,
   formatDateInTimezone,
+  formatDateTimeInTimezone,
   getNowInTimezone,
   startOfDayDateInTimezone,
   toTimezonedDayjs
@@ -20,7 +21,23 @@ export type ReminderPhase = 'upcoming' | 'due_today' | `overdue_day_${number}`
 
 export type NotificationScanResult = {
   processedCount: number
+  matchedReminderCount: number
   notificationCount: number
+  scan: {
+    scanTime: string
+    timezone: string
+    defaultAdvanceReminderRules: string
+    defaultOverdueReminderRules: string
+    maxAdvanceDays: number
+    mergeMultiSubscriptionNotifications: boolean
+    queryWindow: {
+      start: string
+      defaultRuleEnd: string
+      customRuleEnd: string
+      customRuleLookaheadDays: number
+    }
+  }
+  candidates: ReminderDebugCandidate[]
   notifications: Array<{
     subscriptionId: string
     subscriptionName: string
@@ -34,7 +51,9 @@ export type NotificationScanResult = {
 
 export type NotificationScanOverrides = Partial<
   Awaited<ReturnType<typeof getNotificationScanSettings>>
->
+> & {
+  dryRun?: boolean
+}
 
 type ReminderSubscriptionLike = {
   id: string
@@ -83,6 +102,25 @@ type ReminderDispatchEntry = {
   payload: ReminderEntryPayload
 }
 
+type ReminderDebugCandidate = {
+  subscriptionId: string
+  subscriptionName: string
+  status: string
+  nextRenewalDate: string
+  advanceReminderRulesSource: 'subscription' | 'default' | 'legacy'
+  advanceReminderRules: string
+  overdueReminderRulesSource: 'subscription' | 'default'
+  overdueReminderRules: string
+  matchedRules: Array<{
+    eventType: 'subscription.reminder_due' | 'subscription.overdue'
+    phase: ReminderPhase
+    ruleKey: string
+    ruleTime: string
+    daysUntilRenewal: number
+    daysOverdue: number
+  }>
+}
+
 type ReminderSummarySection = {
   phase: ReminderPhase
   title: string
@@ -99,6 +137,8 @@ type ReminderMatch = {
   ruleTime: string
   ruleKey: string
 }
+
+const CUSTOM_REMINDER_RULE_LOOKAHEAD_DAYS = 366
 
 function getOverduePhase(daysOverdue: number): ReminderPhase {
   return `overdue_day_${daysOverdue}`
@@ -125,28 +165,54 @@ function getSummaryPhaseTitle(phase: ReminderPhase) {
 }
 
 function resolveAdvanceRules(sub: ReminderSubscriptionLike, defaultAdvanceReminderRules: string) {
+  return parseReminderRules(resolveAdvanceRuleSet(sub, defaultAdvanceReminderRules).rules, 'advance')
+}
+
+function resolveAdvanceRuleSet(sub: ReminderSubscriptionLike, defaultAdvanceReminderRules: string) {
   if (sub.advanceReminderRules === '') {
-    return parseReminderRules(defaultAdvanceReminderRules, 'advance')
+    return {
+      source: 'default' as const,
+      rules: defaultAdvanceReminderRules
+    }
   }
 
   if (sub.advanceReminderRules?.trim()) {
-    return parseReminderRules(sub.advanceReminderRules, 'advance')
+    return {
+      source: 'subscription' as const,
+      rules: sub.advanceReminderRules
+    }
   }
 
   const legacyRules = buildAdvanceReminderRulesFromLegacyWithDefault(sub.notifyDaysBefore, defaultAdvanceReminderRules)
-  return parseReminderRules(legacyRules || defaultAdvanceReminderRules, 'advance')
+  return {
+    source: 'legacy' as const,
+    rules: legacyRules || defaultAdvanceReminderRules
+  }
 }
 
 function resolveOverdueRules(sub: ReminderSubscriptionLike, defaultOverdueReminderRules: string) {
+  return parseReminderRules(resolveOverdueRuleSet(sub, defaultOverdueReminderRules).rules, 'overdue')
+}
+
+function resolveOverdueRuleSet(sub: ReminderSubscriptionLike, defaultOverdueReminderRules: string) {
   if (sub.overdueReminderRules === '') {
-    return parseReminderRules(defaultOverdueReminderRules, 'overdue')
+    return {
+      source: 'default' as const,
+      rules: defaultOverdueReminderRules
+    }
   }
 
   if (sub.overdueReminderRules?.trim()) {
-    return parseReminderRules(sub.overdueReminderRules, 'overdue')
+    return {
+      source: 'subscription' as const,
+      rules: sub.overdueReminderRules
+    }
   }
 
-  return parseReminderRules(defaultOverdueReminderRules, 'overdue')
+  return {
+    source: 'default' as const,
+    rules: defaultOverdueReminderRules
+  }
 }
 
 function resolveRuleTriggerMoment(
@@ -168,7 +234,9 @@ function matchReminderRule(
   timezone: string
 ): ReminderMatch | null {
   const trigger = resolveRuleTriggerMoment(nextRenewalDate, rule, direction, timezone)
-  if (!now.isSame(trigger, 'minute')) {
+  const normalizedNow = now.second(0).millisecond(0)
+  const normalizedTrigger = trigger.second(0).millisecond(0)
+  if (!normalizedNow.isSame(normalizedTrigger, 'day') || normalizedNow.isBefore(normalizedTrigger)) {
     return null
   }
 
@@ -314,6 +382,62 @@ function buildMergedPayload(entries: ReminderDispatchEntry[]) {
   }
 }
 
+function buildMergedPeriodKey(entries: ReminderDispatchEntry[]) {
+  return entries.map((entry) => entry.periodKey).sort().join('|')
+}
+
+function buildScanDiagnostics(input: {
+  now: dayjs.Dayjs
+  settings: Awaited<ReturnType<typeof getNotificationScanSettings>>
+  maxAdvanceDays: number
+  queryStart: Date
+  defaultRuleQueryEnd: Date
+  customRuleQueryEnd: Date
+}) {
+  return {
+    scanTime: formatDateTimeInTimezone(input.now.toDate(), input.settings.timezone),
+    timezone: input.settings.timezone,
+    defaultAdvanceReminderRules: input.settings.defaultAdvanceReminderRules,
+    defaultOverdueReminderRules: input.settings.defaultOverdueReminderRules,
+    maxAdvanceDays: input.maxAdvanceDays,
+    mergeMultiSubscriptionNotifications: input.settings.mergeMultiSubscriptionNotifications,
+    queryWindow: {
+      start: formatDateTimeInTimezone(input.queryStart, input.settings.timezone),
+      defaultRuleEnd: formatDateTimeInTimezone(input.defaultRuleQueryEnd, input.settings.timezone),
+      customRuleEnd: formatDateTimeInTimezone(input.customRuleQueryEnd, input.settings.timezone),
+      customRuleLookaheadDays: CUSTOM_REMINDER_RULE_LOOKAHEAD_DAYS
+    }
+  }
+}
+
+function buildDebugCandidate(
+  sub: ReminderSubscriptionLike,
+  matches: ReminderMatch[],
+  settings: Awaited<ReturnType<typeof getNotificationScanSettings>>
+): ReminderDebugCandidate {
+  const advance = resolveAdvanceRuleSet(sub, settings.defaultAdvanceReminderRules)
+  const overdue = resolveOverdueRuleSet(sub, settings.defaultOverdueReminderRules)
+
+  return {
+    subscriptionId: sub.id,
+    subscriptionName: sub.name,
+    status: sub.status,
+    nextRenewalDate: formatDateInTimezone(sub.nextRenewalDate, settings.timezone),
+    advanceReminderRulesSource: advance.source,
+    advanceReminderRules: advance.rules,
+    overdueReminderRulesSource: overdue.source,
+    overdueReminderRules: overdue.rules,
+    matchedRules: matches.map((match) => ({
+      eventType: match.eventType,
+      phase: match.phase,
+      ruleKey: match.ruleKey,
+      ruleTime: match.ruleTime,
+      daysUntilRenewal: match.daysUntilRenewal,
+      daysOverdue: match.daysOverdue
+    }))
+  }
+}
+
 export async function scanRenewalNotifications(
   today = new Date(),
   overrides: NotificationScanOverrides = {}
@@ -322,19 +446,53 @@ export async function scanRenewalNotifications(
     ...(await getNotificationScanSettings()),
     ...overrides
   }
+  const dryRun = overrides.dryRun ?? false
   const now = getNowInTimezone(today, appSettings.timezone).second(0).millisecond(0)
   const currentDay = now.startOf('day')
   const maxAdvanceDays = getMaxAdvanceReminderDays(appSettings.defaultAdvanceReminderRules)
   const queryStart = startOfDayDateInTimezone(currentDay.subtract(7, 'day').toDate(), appSettings.timezone)
-  const queryEnd = endOfDayDateInTimezone(currentDay.add(maxAdvanceDays, 'day').toDate(), appSettings.timezone)
+  const defaultRuleQueryEnd = endOfDayDateInTimezone(
+    currentDay.add(maxAdvanceDays, 'day').toDate(),
+    appSettings.timezone
+  )
+  const customRuleQueryEnd = endOfDayDateInTimezone(
+    currentDay.add(Math.max(maxAdvanceDays, CUSTOM_REMINDER_RULE_LOOKAHEAD_DAYS), 'day').toDate(),
+    appSettings.timezone
+  )
   const subscriptions = await prisma.subscription.findMany({
     where: {
       status: { in: ['active', 'expired'] },
       webhookEnabled: true,
       nextRenewalDate: {
         gte: queryStart,
-        lte: queryEnd
-      }
+        lte: customRuleQueryEnd
+      },
+      OR: [
+        {
+          nextRenewalDate: {
+            lte: defaultRuleQueryEnd
+          }
+        },
+        {
+          AND: [
+            {
+              advanceReminderRules: {
+                not: null
+              }
+            },
+            {
+              advanceReminderRules: {
+                not: ''
+              }
+            }
+          ]
+        },
+        {
+          notifyDaysBefore: {
+            gt: maxAdvanceDays
+          }
+        }
+      ]
     },
     include: {
       tags: {
@@ -344,12 +502,22 @@ export async function scanRenewalNotifications(
       }
     }
   })
+  const scan = buildScanDiagnostics({
+    now,
+    settings: appSettings,
+    maxAdvanceDays,
+    queryStart,
+    defaultRuleQueryEnd,
+    customRuleQueryEnd
+  })
 
   const dispatchEntries: ReminderDispatchEntry[] = []
+  const candidates: ReminderDebugCandidate[] = []
   const notifications: NotificationScanResult['notifications'] = []
 
   for (const sub of subscriptions) {
     const matches = resolveReminderMatches(now, sub, appSettings)
+    candidates.push(buildDebugCandidate(sub, matches, appSettings))
     for (const match of matches) {
       dispatchEntries.push(buildDispatchEntry(sub, match, appSettings.timezone))
     }
@@ -357,13 +525,21 @@ export async function scanRenewalNotifications(
 
   if (!appSettings.mergeMultiSubscriptionNotifications || dispatchEntries.length <= 1) {
     for (const entry of dispatchEntries) {
-      const channelResults = await dispatchNotificationEvent({
-        eventType: entry.eventType,
-        resourceKey: entry.resourceKey,
-        periodKey: entry.periodKey,
-        subscriptionId: entry.subscriptionId,
-        payload: entry.payload
-      })
+      const channelResults = dryRun
+        ? [
+            {
+              channel: 'email' as const,
+              status: 'skipped' as const,
+              message: 'dry_run'
+            }
+          ]
+        : await dispatchNotificationEvent({
+            eventType: entry.eventType,
+            resourceKey: entry.resourceKey,
+            periodKey: entry.periodKey,
+            subscriptionId: entry.subscriptionId,
+            payload: entry.payload
+          })
 
       notifications.push({
         subscriptionId: entry.subscriptionId,
@@ -378,7 +554,10 @@ export async function scanRenewalNotifications(
 
     return {
       processedCount: subscriptions.length,
+      matchedReminderCount: dispatchEntries.length,
       notificationCount: notifications.length,
+      scan,
+      candidates,
       notifications
     }
   }
@@ -387,12 +566,20 @@ export async function scanRenewalNotifications(
   const mergedEventType = dispatchEntries.some((entry) => entry.eventType === 'subscription.overdue')
     ? 'subscription.overdue'
     : 'subscription.reminder_due'
-  const channelResults = await dispatchNotificationEvent({
-    eventType: mergedEventType,
-    resourceKey: 'subscriptions:scan-summary',
-    periodKey: `${toIsoDate(now.toDate(), appSettings.timezone)}:summary:${now.format('HH:mm')}`,
-    payload: mergedPayload
-  })
+  const channelResults = dryRun
+    ? [
+        {
+          channel: 'email' as const,
+          status: 'skipped' as const,
+          message: 'dry_run'
+        }
+      ]
+    : await dispatchNotificationEvent({
+        eventType: mergedEventType,
+        resourceKey: 'subscriptions:scan-summary',
+        periodKey: `${toIsoDate(now.toDate(), appSettings.timezone)}:summary:${buildMergedPeriodKey(dispatchEntries)}`,
+        payload: mergedPayload
+      })
 
   notifications.push({
     subscriptionId: 'merged:summary',
@@ -406,7 +593,10 @@ export async function scanRenewalNotifications(
 
   return {
     processedCount: subscriptions.length,
+    matchedReminderCount: dispatchEntries.length,
     notificationCount: notifications.length,
+    scan,
+    candidates,
     notifications
   }
 }

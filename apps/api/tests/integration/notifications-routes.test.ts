@@ -11,7 +11,8 @@ const notificationMocks = vi.hoisted(() => ({
   sendTestServerchanNotificationMock: vi.fn(),
   sendTestServerchanNotificationWithConfigMock: vi.fn(),
   sendTestGotifyNotificationMock: vi.fn(),
-  sendTestGotifyNotificationWithConfigMock: vi.fn()
+  sendTestGotifyNotificationWithConfigMock: vi.fn(),
+  scanRenewalNotificationsMock: vi.fn()
 }))
 
 vi.mock('../../src/services/channel-notification.service', () => ({
@@ -25,6 +26,10 @@ vi.mock('../../src/services/channel-notification.service', () => ({
   sendTestServerchanNotificationWithConfig: notificationMocks.sendTestServerchanNotificationWithConfigMock,
   sendTestGotifyNotification: notificationMocks.sendTestGotifyNotificationMock,
   sendTestGotifyNotificationWithConfig: notificationMocks.sendTestGotifyNotificationWithConfigMock
+}))
+
+vi.mock('../../src/services/notification.service', () => ({
+  scanRenewalNotifications: notificationMocks.scanRenewalNotificationsMock
 }))
 
 vi.mock('../../src/services/webhook.service', () => ({
@@ -59,6 +64,7 @@ describe('notification routes', () => {
     notificationMocks.sendTestServerchanNotificationWithConfigMock.mockReset()
     notificationMocks.sendTestGotifyNotificationMock.mockReset()
     notificationMocks.sendTestGotifyNotificationWithConfigMock.mockReset()
+    notificationMocks.scanRenewalNotificationsMock.mockReset()
     notificationMocks.sendTestEmailNotificationMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestEmailNotificationWithConfigMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestPushplusNotificationMock.mockResolvedValue({ accepted: true, message: 'ok' })
@@ -69,6 +75,27 @@ describe('notification routes', () => {
     notificationMocks.sendTestServerchanNotificationWithConfigMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestGotifyNotificationMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestGotifyNotificationWithConfigMock.mockResolvedValue({ success: true })
+    notificationMocks.scanRenewalNotificationsMock.mockResolvedValue({
+      processedCount: 1,
+      matchedReminderCount: 1,
+      notificationCount: 1,
+      scan: {
+        scanTime: '2026-05-01 17:15:00',
+        timezone: 'Asia/Shanghai',
+        defaultAdvanceReminderRules: '3&09:30;1&17:14;0&09:30;',
+        defaultOverdueReminderRules: '1&09:30;2&09:30;3&09:30;',
+        maxAdvanceDays: 3,
+        mergeMultiSubscriptionNotifications: true,
+        queryWindow: {
+          start: '2026-04-24 00:00:00',
+          defaultRuleEnd: '2026-05-04 23:59:59',
+          customRuleEnd: '2027-05-02 23:59:59',
+          customRuleLookaheadDays: 366
+        }
+      },
+      candidates: [],
+      notifications: []
+    })
   })
 
   afterEach(async () => {
@@ -144,6 +171,22 @@ describe('notification routes', () => {
 
     expect(res.statusCode).toBe(200)
     expect(notificationMocks.sendTestGotifyNotificationWithConfigMock).toHaveBeenCalled()
+  })
+
+  it('runs notification scan debug in dry-run mode by default', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/notifications/scan-debug',
+      payload: {
+        now: '2026-05-01T17:15:00.000+08:00'
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(notificationMocks.scanRenewalNotificationsMock).toHaveBeenCalledWith(new Date('2026-05-01T17:15:00.000+08:00'), {
+      dryRun: true
+    })
+    expect(res.json().data.processedCount).toBe(1)
   })
 
 })

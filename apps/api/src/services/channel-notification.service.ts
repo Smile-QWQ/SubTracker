@@ -77,6 +77,52 @@ function buildNotificationKey(
   return `notification:${channel}:${params.eventType}:${params.resourceKey}:${params.periodKey}`
 }
 
+const CHANNEL_LABELS: Record<NotificationChannelResult['channel'], string> = {
+  webhook: 'Webhook',
+  email: '邮箱',
+  pushplus: 'PushPlus',
+  telegram: 'Telegram',
+  serverchan: 'Server 酱',
+  gotify: 'Gotify'
+}
+
+const CHANNEL_STATUS_LABELS: Record<NotificationChannelResult['status'], string> = {
+  success: '成功',
+  skipped: '跳过',
+  failed: '失败'
+}
+
+function getNotificationLogName(params: NotificationDispatchParams) {
+  const name = params.payload.name
+  return typeof name === 'string' && name.trim() ? name.trim() : params.resourceKey
+}
+
+function formatChannelResult(result: NotificationChannelResult) {
+  const label = CHANNEL_LABELS[result.channel]
+  const status = CHANNEL_STATUS_LABELS[result.status]
+  return result.message ? `${label}${status}（${result.message}）` : `${label}${status}`
+}
+
+function logNotificationDispatch(params: NotificationDispatchParams, results: NotificationChannelResult[]) {
+  const successCount = results.filter((result) => result.status === 'success').length
+  const failed = results.filter((result) => result.status === 'failed')
+  const skipped = results.filter((result) => result.status === 'skipped')
+  const details = results.map(formatChannelResult).join('；')
+  const baseMessage = `[notification] ${getNotificationLogName(params)}：通知渠道 ${successCount} 个成功，${failed.length} 个失败，${skipped.length} 个跳过。${details}`
+
+  if (failed.length) {
+    console.warn(baseMessage)
+    return
+  }
+
+  if (successCount > 0) {
+    console.log(baseMessage)
+    return
+  }
+
+  console.log(`[notification] ${getNotificationLogName(params)}：所有通知渠道均已跳过。${details}`)
+}
+
 async function hasNotificationBeenSent(
   channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify',
   params: NotificationDispatchParams
@@ -698,6 +744,8 @@ export async function dispatchNotificationEvent(params: NotificationDispatchPara
     message: error instanceof Error ? error.message : 'gotify_dispatch_failed'
   }))) as NotificationChannelResult
   results.push(gotifyResult)
+
+  logNotificationDispatch(params, results)
 
   return results
 }
