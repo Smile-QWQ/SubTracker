@@ -4,6 +4,7 @@ import path from 'node:path'
 import AdmZip, { type IZipEntry } from 'adm-zip'
 import initSqlJs from 'sql.js'
 import type { Database as SqlJsDatabase, SqlJsStatic } from 'sql.js'
+import { DEFAULT_TIMEZONE } from '@subtracker/shared'
 import type {
   BillingIntervalUnit,
   SubscriptionStatus,
@@ -27,6 +28,17 @@ const require = createRequire(import.meta.url)
 
 type SqlDatabase = SqlJsDatabase
 type ImportFileType = 'json' | 'db' | 'zip'
+type WallosPreviewSettings = {
+  defaultNotifyDays: number
+  baseCurrency: string
+  timezone: string
+}
+
+const DEFAULT_WALLOS_PREVIEW_SETTINGS: WallosPreviewSettings = {
+  defaultNotifyDays: 3,
+  baseCurrency: 'CNY',
+  timezone: DEFAULT_TIMEZONE
+}
 
 type WallosSubscriptionRow = {
   id: number
@@ -809,12 +821,12 @@ async function buildDbPreviewFromBuffer(
     sourceTimezone?: string
   }
 ) {
-  const settings =
-    options?.defaultNotifyDays !== undefined || options?.baseCurrency
+  const settings: WallosPreviewSettings =
+    options?.defaultNotifyDays !== undefined || options?.baseCurrency || options?.sourceTimezone
       ? {
-          defaultNotifyDays: options?.defaultNotifyDays ?? 3,
-          baseCurrency: options?.baseCurrency ?? 'CNY',
-          timezone: normalizeAppTimezone(options?.sourceTimezone)
+          defaultNotifyDays: options?.defaultNotifyDays ?? DEFAULT_WALLOS_PREVIEW_SETTINGS.defaultNotifyDays,
+          baseCurrency: options?.baseCurrency ?? DEFAULT_WALLOS_PREVIEW_SETTINGS.baseCurrency,
+          timezone: normalizeAppTimezone(options?.sourceTimezone ?? DEFAULT_WALLOS_PREVIEW_SETTINGS.timezone)
         }
       : await getAppSettings()
 
@@ -895,13 +907,12 @@ async function inspectJsonImport(buffer: Buffer, options?: { defaultNotifyDays?:
     throw new Error('Wallos JSON 导出内容必须是数组')
   }
 
-  const settings =
-    options?.defaultNotifyDays !== undefined || options?.baseCurrency
+  const settings: WallosPreviewSettings =
+    options?.defaultNotifyDays !== undefined || options?.baseCurrency || options?.sourceTimezone
       ? {
-          ...(await getAppSettings()),
-          defaultNotifyDays: options?.defaultNotifyDays ?? 3,
-          baseCurrency: options?.baseCurrency ?? 'CNY',
-          timezone: normalizeAppTimezone(options?.sourceTimezone)
+          defaultNotifyDays: options?.defaultNotifyDays ?? DEFAULT_WALLOS_PREVIEW_SETTINGS.defaultNotifyDays,
+          baseCurrency: options?.baseCurrency ?? DEFAULT_WALLOS_PREVIEW_SETTINGS.baseCurrency,
+          timezone: normalizeAppTimezone(options?.sourceTimezone ?? DEFAULT_WALLOS_PREVIEW_SETTINGS.timezone)
         }
       : await getAppSettings()
   const sourceTimezone = normalizeAppTimezone(options?.sourceTimezone ?? settings.timezone)

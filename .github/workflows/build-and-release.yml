@@ -111,6 +111,7 @@ jobs:
         with:
           images: ${{ env.API_IMAGE_NAME }}
           tags: |
+            type=raw,value=latest
             type=raw,value=${{ steps.release_tag.outputs.value }}
             type=sha
 
@@ -120,6 +121,7 @@ jobs:
         with:
           images: ${{ env.WEB_IMAGE_NAME }}
           tags: |
+            type=raw,value=latest
             type=raw,value=${{ steps.release_tag.outputs.value }}
             type=sha
 
