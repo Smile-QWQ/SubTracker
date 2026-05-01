@@ -415,6 +415,9 @@ watch(
     if (!value) {
       showLogoPanel.value = false
       searchingLogoCandidates.value = false
+      if (!props.model) {
+        resetForm()
+      }
       return
     }
 

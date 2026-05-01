@@ -93,4 +93,42 @@ describe('listSubscriptionsLite chunking', () => {
     expect(tagQueryBindings[1]).toHaveLength(50)
     expect(tagQueryBindings[2]).toHaveLength(20)
   })
+
+  it('requires every selected tag when building D1 subscription filters', async () => {
+    const preparedQueries: string[] = []
+    const bindingsPerQuery: unknown[][] = []
+
+    getRuntimeD1Database.mockReturnValue({
+      prepare(query: string) {
+        preparedQueries.push(query)
+        return {
+          bind(...values: unknown[]) {
+            bindingsPerQuery.push(values)
+            return this
+          },
+          async all() {
+            return { results: [] }
+          },
+          async first() {
+            return null
+          },
+          async run() {
+            return {}
+          }
+        }
+      }
+    })
+
+    const { listSubscriptionsLite } = await import('../../src/services/worker-lite-repository.service')
+
+    await listSubscriptionsLite({
+      tagIds: ['tag_a', 'tag_b']
+    })
+
+    const subscriptionQuery = preparedQueries.find((query) => query.includes('FROM Subscription s'))
+    expect(subscriptionQuery).toContain('EXISTS (SELECT 1 FROM SubscriptionTag st WHERE st.subscriptionId = s.id AND st.tagId = ?)')
+    expect(subscriptionQuery?.match(/EXISTS \(SELECT 1 FROM SubscriptionTag st WHERE st\.subscriptionId = s\.id AND st\.tagId = \?\)/g))
+      .toHaveLength(2)
+    expect(bindingsPerQuery[0]).toEqual(['tag_a', 'tag_b'])
+  })
 })

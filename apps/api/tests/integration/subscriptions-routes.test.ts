@@ -3,12 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const routeMocks = vi.hoisted(() => ({
   bumpCacheVersions: vi.fn(async () => 0),
+  invalidateWorkerLiteCache: vi.fn(async () => undefined),
+  withWorkerLiteCache: vi.fn(async (_namespace: string, _key: string, loader: () => Promise<unknown>) => loader()),
+  listSubscriptionsLite: vi.fn(async () => []),
   prisma: {
     $transaction: vi.fn(async () => {
       throw new Error('interactive transaction should not be used in worker routes')
     }),
     subscription: {
       create: vi.fn(),
+      findMany: vi.fn(),
       update: vi.fn(),
       findUnique: vi.fn(),
       findUniqueOrThrow: vi.fn()
@@ -42,6 +46,15 @@ vi.mock('../../src/db', () => ({
 
 vi.mock('../../src/services/cache-version.service', () => ({
   bumpCacheVersions: routeMocks.bumpCacheVersions
+}))
+
+vi.mock('../../src/services/worker-lite-cache.service', () => ({
+  invalidateWorkerLiteCache: routeMocks.invalidateWorkerLiteCache,
+  withWorkerLiteCache: routeMocks.withWorkerLiteCache
+}))
+
+vi.mock('../../src/services/worker-lite-repository.service', () => ({
+  listSubscriptionsLite: routeMocks.listSubscriptionsLite
 }))
 
 vi.mock('../../src/services/subscription-order.service', () => ({
@@ -82,6 +95,8 @@ describe('subscription routes D1 compatibility', () => {
     vi.resetModules()
     vi.clearAllMocks()
     routeMocks.prisma.subscription.findUnique.mockReset()
+    routeMocks.listSubscriptionsLite.mockReset()
+    routeMocks.listSubscriptionsLite.mockResolvedValue([])
   })
 
   it('creates subscriptions without using Prisma interactive transactions', async () => {
@@ -224,6 +239,75 @@ describe('subscription routes D1 compatibility', () => {
 
     expect(response.statusCode).toBe(422)
     expect(response.json().error.message).toBe('websiteUrl 格式无效，请填写合法网址')
+
+    await app.close()
+  })
+
+  it('filters by all selected tags instead of matching any selected tag', async () => {
+    const { subscriptionRoutes } = await import('../../src/routes/subscriptions')
+    const app = Fastify()
+    await subscriptionRoutes(app)
+
+    routeMocks.sortSubscriptionsByOrder.mockResolvedValue([])
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/subscriptions?tagIds=tag_a,tag_b'
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(routeMocks.normalizeTagIds).toHaveBeenCalledWith(['tag_a', 'tag_b'])
+    expect(routeMocks.listSubscriptionsLite).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tagIds: ['tag_a', 'tag_b']
+      })
+    )
+
+    await app.close()
+  })
+
+  it('supports batch status updates for active paused and cancelled', async () => {
+    const { subscriptionRoutes } = await import('../../src/routes/subscriptions')
+    const app = Fastify()
+    await subscriptionRoutes(app)
+
+    routeMocks.prisma.subscription.findMany.mockResolvedValue([
+      { id: 'sub_1', status: 'paused' },
+      { id: 'sub_2', status: 'cancelled' }
+    ])
+    routeMocks.prisma.subscription.update.mockResolvedValue({})
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/subscriptions/batch/status',
+      payload: {
+        ids: ['sub_1', 'sub_2'],
+        status: 'active'
+      }
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(routeMocks.prisma.subscription.update).toHaveBeenCalledTimes(2)
+
+    await app.close()
+  })
+
+  it('rejects batch status updates to expired', async () => {
+    const { subscriptionRoutes } = await import('../../src/routes/subscriptions')
+    const app = Fastify()
+    await subscriptionRoutes(app)
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/subscriptions/batch/status',
+      payload: {
+        ids: ['sub_1'],
+        status: 'expired'
+      }
+    })
+
+    expect(response.statusCode).toBe(422)
+    expect(routeMocks.prisma.subscription.update).not.toHaveBeenCalled()
 
     await app.close()
   })

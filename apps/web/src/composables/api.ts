@@ -22,6 +22,7 @@ import type {
   StatisticsOverview,
   Subscription,
   SubscriptionDetail,
+  SubscriptionStatus,
   Tag,
   TelegramConfig,
   WallosImportCommitResult,
@@ -208,6 +209,10 @@ export const api = {
 
   async batchPauseSubscriptions(ids: string[]) {
     return postOnce<BatchActionResult>('/subscriptions/batch/pause', { ids })
+  },
+
+  async batchUpdateSubscriptionStatus(ids: string[], status: Extract<SubscriptionStatus, 'active' | 'paused' | 'cancelled'>) {
+    return postOnce<BatchActionResult>('/subscriptions/batch/status', { ids, status })
   },
 
   async cancelSubscription(id: string) {

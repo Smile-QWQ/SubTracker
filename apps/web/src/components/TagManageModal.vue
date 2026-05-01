@@ -3,7 +3,7 @@
     :show="show"
     preset="card"
     title="标签管理"
-    style="width: min(820px, calc(100vw - 24px))"
+    style="width: min(760px, calc(100vw - 24px))"
     @mask-click="$emit('close')"
     @update:show="handleUpdateShow"
   >
@@ -22,10 +22,15 @@
 
 <script setup lang="ts">
 import { computed, h, ref } from 'vue'
-import { NButton, NDataTable, NIcon, NModal, NPopconfirm, NSpace, NTag, NText } from 'naive-ui'
-import { PricetagsOutline } from '@vicons/ionicons5'
+import { NButton, NDataTable, NModal, NPopconfirm, NSpace, NText } from 'naive-ui'
 import TagFormModal from '@/components/TagFormModal.vue'
 import type { Tag } from '@/types/api'
+
+type TagFormPayload = {
+  name: string
+  color: string
+  sortOrder: number
+}
 
 const props = defineProps<{
   show: boolean
@@ -35,8 +40,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  create: [payload: { name: string; color: string; icon: string; sortOrder: number }]
-  update: [payload: { name: string; color: string; icon: string; sortOrder: number }, id: string]
+  create: [payload: TagFormPayload]
+  update: [payload: TagFormPayload, id: string]
   delete: [tag: Tag]
 }>()
 
@@ -69,63 +74,16 @@ const columns = computed(() => [
             }
           }),
           h(
-            NIcon,
-            {
-              size: 18,
-              color: 'var(--app-text-secondary)'
-            },
-            { default: () => h(resolveTagIcon(row.icon)) }
-          ),
-          h(
-            'div',
+            'span',
             {
               style: {
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '2px'
+                fontWeight: '600',
+                color: 'var(--app-text-strong)'
               }
             },
-            [
-              h(
-                'span',
-                {
-                  style: {
-                    fontWeight: '600',
-                    color: 'var(--app-text-strong)'
-                  }
-                },
-                row.name
-              ),
-              h(
-                'span',
-                {
-                  style: {
-                    fontSize: '12px',
-                    color: 'var(--app-text-muted)'
-                  }
-                },
-                row.icon
-              )
-            ]
+            row.name
           )
         ]
-      )
-  },
-  {
-    title: '颜色',
-    key: 'color',
-    width: 140,
-    render: (row: Tag) =>
-      h(
-        NTag,
-        {
-          bordered: false,
-          color: {
-            color: row.color,
-            textColor: '#fff'
-          }
-        },
-        { default: () => row.color }
       )
   },
   {
@@ -196,7 +154,7 @@ function closeFormModal() {
   editing.value = null
 }
 
-function handleSubmit(payload: { name: string; color: string; icon: string; sortOrder: number }, editingId?: string) {
+function handleSubmit(payload: TagFormPayload, editingId?: string) {
   if (editingId) {
     emit('update', payload, editingId)
   } else {
@@ -209,41 +167,5 @@ function handleUpdateShow(value: boolean) {
   if (!value) {
     emit('close')
   }
-}
-
-import {
-  AppsOutline,
-  BriefcaseOutline,
-  BuildOutline,
-  CloudOutline,
-  CodeSlashOutline,
-  FilmOutline,
-  GameControllerOutline,
-  LaptopOutline,
-  LibraryOutline,
-  MusicalNotesOutline,
-  RocketOutline,
-  SchoolOutline,
-  WalletOutline
-} from '@vicons/ionicons5'
-
-const iconMap = {
-  'apps-outline': AppsOutline,
-  'briefcase-outline': BriefcaseOutline,
-  'build-outline': BuildOutline,
-  'cloud-outline': CloudOutline,
-  'code-slash-outline': CodeSlashOutline,
-  'film-outline': FilmOutline,
-  'game-controller-outline': GameControllerOutline,
-  'laptop-outline': LaptopOutline,
-  'library-outline': LibraryOutline,
-  'musical-notes-outline': MusicalNotesOutline,
-  'rocket-outline': RocketOutline,
-  'school-outline': SchoolOutline,
-  'wallet-outline': WalletOutline
-} as const
-
-function resolveTagIcon(icon: string) {
-  return iconMap[icon as keyof typeof iconMap] ?? PricetagsOutline
 }
 </script>

@@ -392,12 +392,10 @@ function buildSubscriptionWhere(filters: SubscriptionListFilters) {
   }
 
   if (filters.tagIds?.length) {
-    clauses.push(
-      `EXISTS (SELECT 1 FROM SubscriptionTag st WHERE st.subscriptionId = s.id AND st.tagId IN (${filters.tagIds
-        .map(() => '?')
-        .join(', ')}))`
-    )
-    params.push(...filters.tagIds)
+    for (const tagId of filters.tagIds) {
+      clauses.push('EXISTS (SELECT 1 FROM SubscriptionTag st WHERE st.subscriptionId = s.id AND st.tagId = ?)')
+      params.push(tagId)
+    }
   }
 
   return {
@@ -425,7 +423,13 @@ export async function listSubscriptionsLite(filters: SubscriptionListFilters = {
       }
     }
     if (filters.tagIds?.length) {
-      where.tags = { some: { tagId: { in: filters.tagIds } } }
+      where.AND = filters.tagIds.map((tagId) => ({
+        tags: {
+          some: {
+            tagId
+          }
+        }
+      }))
     }
 
     return prisma.subscription.findMany({
