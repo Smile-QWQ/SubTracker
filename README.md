@@ -139,7 +139,7 @@ docker compose up -d
 
 ## Release 产物
 
-仓库的 `Build and Release` workflow 会在打 tag 时自动发布：
+发布 Release 时会提供：
 
 - `subtracker-web-dist.zip`：前端静态文件
 - `ghcr.io/smile-qwq/subtracker-api`：API Docker 镜像
