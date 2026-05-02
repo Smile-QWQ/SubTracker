@@ -70,6 +70,7 @@ vi.mock('../../src/services/settings.service', () => ({
     },
     aiConfig: {
       enabled: false,
+      dashboardSummaryEnabled: false,
       providerPreset: 'custom',
       providerName: 'DeepSeek',
       baseUrl: 'https://api.deepseek.com',
@@ -77,6 +78,7 @@ vi.mock('../../src/services/settings.service', () => ({
       model: 'deepseek-chat',
       timeoutMs: 30000,
       promptTemplate: '',
+      dashboardSummaryPromptTemplate: '',
       capabilities: {
         vision: false,
         structuredOutput: true
@@ -104,13 +106,14 @@ describe('settings routes validation', () => {
     await app.close()
   })
 
-  it('rejects incomplete AI config when enabling AI recognition', async () => {
+  it('rejects incomplete AI config when enabling AI capability', async () => {
     const res = await app.inject({
       method: 'PATCH',
       url: '/settings',
       payload: {
         aiConfig: {
           enabled: true,
+          dashboardSummaryEnabled: true,
           providerPreset: 'custom',
           providerName: '',
           baseUrl: 'https://api.deepseek.com',
@@ -118,6 +121,7 @@ describe('settings routes validation', () => {
           model: '',
           timeoutMs: 30000,
           promptTemplate: '',
+          dashboardSummaryPromptTemplate: '',
           capabilities: {
             vision: false,
             structuredOutput: true
@@ -127,7 +131,37 @@ describe('settings routes validation', () => {
     })
 
     expect(res.statusCode).toBe(422)
-    expect(res.json().error.message).toContain('启用 AI 识别时必须填写')
+    expect(res.json().error.message).toContain('启用 AI 能力时必须填写')
+  })
+
+  it('accepts dashboard summary switch without forcing AI recognition to be enabled', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      payload: {
+        aiConfig: {
+          enabled: false,
+          dashboardSummaryEnabled: true,
+          providerPreset: 'custom',
+          providerName: 'DeepSeek',
+          baseUrl: 'https://api.deepseek.com',
+          apiKey: 'token',
+          model: 'deepseek-chat',
+          timeoutMs: 30000,
+          promptTemplate: '',
+          dashboardSummaryPromptTemplate: '你是一个统计摘要助手。',
+          capabilities: {
+            vision: false,
+            structuredOutput: true
+          }
+        }
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data.aiConfig.dashboardSummaryEnabled).toBe(true)
+    expect(res.json().data.aiConfig.enabled).toBe(false)
+    expect(res.json().data.aiConfig.dashboardSummaryPromptTemplate).toBe('你是一个统计摘要助手。')
   })
 
   it('rejects incomplete email config when enabling email notifications', async () => {

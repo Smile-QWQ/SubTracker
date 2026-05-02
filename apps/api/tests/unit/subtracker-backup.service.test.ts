@@ -128,6 +128,7 @@ describe('subtracker backup service', () => {
       gotifyConfig: { url: '', token: '', ignoreSsl: false },
       aiConfig: {
         enabled: false,
+        dashboardSummaryEnabled: false,
         providerPreset: 'custom',
         providerName: 'DeepSeek',
         baseUrl: 'https://api.deepseek.com',
@@ -135,6 +136,7 @@ describe('subtracker backup service', () => {
         model: 'deepseek-chat',
         timeoutMs: 30000,
         promptTemplate: '',
+        dashboardSummaryPromptTemplate: '',
         capabilities: { vision: false, structuredOutput: true }
       }
     })
@@ -255,6 +257,7 @@ describe('subtracker backup service', () => {
               gotifyConfig: { url: '', token: '', ignoreSsl: false },
               aiConfig: {
                 enabled: false,
+                dashboardSummaryEnabled: false,
                 providerPreset: 'custom',
                 providerName: 'DeepSeek',
                 baseUrl: 'https://api.deepseek.com',
@@ -262,6 +265,7 @@ describe('subtracker backup service', () => {
                 model: 'deepseek-chat',
                 timeoutMs: 30000,
                 promptTemplate: '',
+                dashboardSummaryPromptTemplate: '',
                 capabilities: { vision: false, structuredOutput: true }
               }
             },

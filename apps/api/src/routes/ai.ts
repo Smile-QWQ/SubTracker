@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify'
 import { AiConfigSchema, DEFAULT_AI_CONFIG, type AiConfigInput } from '@subtracker/shared'
 import { sendError, sendOk } from '../http'
 import { recognizeSubscriptionByAi, testAiConnection, testAiVisionConnection } from '../services/ai.service'
+import { generateDashboardAiSummary, getDashboardAiSummary } from '../services/ai-summary.service'
 
 function normalizeAiConfigPayload(payload: Partial<AiConfigInput>) {
   return AiConfigSchema.parse({
@@ -15,6 +16,22 @@ function normalizeAiConfigPayload(payload: Partial<AiConfigInput>) {
 }
 
 export async function aiRoutes(app: FastifyInstance) {
+  app.get('/ai/summary/dashboard', async (_request, reply) => {
+    try {
+      return sendOk(reply, await getDashboardAiSummary())
+    } catch (error) {
+      return sendError(reply, 400, 'ai_summary_fetch_failed', error instanceof Error ? error.message : 'AI summary fetch failed')
+    }
+  })
+
+  app.post('/ai/summary/dashboard/generate', async (_request, reply) => {
+    try {
+      return sendOk(reply, await generateDashboardAiSummary())
+    } catch (error) {
+      return sendError(reply, 400, 'ai_summary_generate_failed', error instanceof Error ? error.message : 'AI summary generate failed')
+    }
+  })
+
   app.post('/ai/test', async (request, reply) => {
     try {
       if (request.body) {

@@ -1,5 +1,25 @@
 import Fastify, { type FastifyInstance } from 'fastify'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const summaryRouteMocks = vi.hoisted(() => ({
+  getDashboardAiSummaryMock: vi.fn(),
+  generateDashboardAiSummaryMock: vi.fn(),
+  recognizeSubscriptionByAiMock: vi.fn(),
+  testAiConnectionMock: vi.fn(),
+  testAiVisionConnectionMock: vi.fn()
+}))
+
+vi.mock('../../src/services/ai-summary.service', () => ({
+  getDashboardAiSummary: summaryRouteMocks.getDashboardAiSummaryMock,
+  generateDashboardAiSummary: summaryRouteMocks.generateDashboardAiSummaryMock
+}))
+
+vi.mock('../../src/services/ai.service', () => ({
+  recognizeSubscriptionByAi: summaryRouteMocks.recognizeSubscriptionByAiMock,
+  testAiConnection: summaryRouteMocks.testAiConnectionMock,
+  testAiVisionConnection: summaryRouteMocks.testAiVisionConnectionMock
+}))
+
 import { aiRoutes } from '../../src/routes/ai'
 
 function jsonResponse(payload: unknown, status = 200) {
@@ -18,6 +38,23 @@ describe('ai routes', () => {
     app = Fastify()
     await aiRoutes(app)
     vi.restoreAllMocks()
+    summaryRouteMocks.getDashboardAiSummaryMock.mockReset()
+    summaryRouteMocks.generateDashboardAiSummaryMock.mockReset()
+    summaryRouteMocks.recognizeSubscriptionByAiMock.mockReset()
+    summaryRouteMocks.testAiConnectionMock.mockReset()
+    summaryRouteMocks.testAiVisionConnectionMock.mockReset()
+    summaryRouteMocks.testAiConnectionMock.mockResolvedValue({
+      success: true,
+      providerName: '测试 Provider',
+      model: 'test-model',
+      response: 'OK'
+    })
+    summaryRouteMocks.testAiVisionConnectionMock.mockResolvedValue({
+      success: true,
+      providerName: '测试 Provider',
+      model: 'test-model',
+      response: '已收到图片'
+    })
   })
 
   afterEach(async () => {
@@ -26,21 +63,6 @@ describe('ai routes', () => {
   })
 
   it('tests connection with override payload', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () =>
-        jsonResponse({
-          choices: [
-            {
-              message: {
-                content: 'OK'
-              }
-            }
-          ]
-        })
-      )
-    )
-
     const res = await app.inject({
       method: 'POST',
       url: '/ai/test',
@@ -60,25 +82,18 @@ describe('ai routes', () => {
     })
 
     expect(res.statusCode).toBe(200)
-    expect(res.json().data.providerName).toBe('阿里百炼')
+    expect(res.json().data.providerName).toBe('测试 Provider')
+    expect(summaryRouteMocks.testAiConnectionMock).toHaveBeenCalledTimes(1)
+    expect(summaryRouteMocks.testAiConnectionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerName: '阿里百炼',
+        providerPreset: 'aliyun-bailian',
+        model: 'qwen3-vl-plus'
+      })
+    )
   })
 
   it('allows connection test with override payload even when enabled is false', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () =>
-        jsonResponse({
-          choices: [
-            {
-              message: {
-                content: 'OK'
-              }
-            }
-          ]
-        })
-      )
-    )
-
     const res = await app.inject({
       method: 'POST',
       url: '/ai/test',
@@ -102,19 +117,6 @@ describe('ai routes', () => {
   })
 
   it('tests vision endpoint with image_url payload', async () => {
-    const fetchMock = vi.fn(async () =>
-      jsonResponse({
-        choices: [
-          {
-            message: {
-              content: '已收到图片'
-            }
-          }
-        ]
-      })
-    )
-    vi.stubGlobal('fetch', fetchMock)
-
     const res = await app.inject({
       method: 'POST',
       url: '/ai/test-vision',
@@ -134,11 +136,12 @@ describe('ai routes', () => {
     })
 
     expect(res.statusCode).toBe(200)
-    const requestBody = JSON.parse(String(((fetchMock.mock.calls[0] as unknown) as [unknown, RequestInit])[1]?.body))
-    expect(requestBody.messages[1].content[1].type).toBe('image_url')
+    expect(summaryRouteMocks.testAiVisionConnectionMock).toHaveBeenCalledTimes(1)
   })
 
   it('rejects vision test when vision capability is disabled', async () => {
+    summaryRouteMocks.testAiVisionConnectionMock.mockRejectedValue(new Error('当前 Provider 未启用视觉输入能力'))
+
     const res = await app.inject({
       method: 'POST',
       url: '/ai/test-vision',
@@ -159,5 +162,57 @@ describe('ai routes', () => {
 
     expect(res.statusCode).toBe(400)
     expect(res.json().error.message).toContain('视觉输入能力')
+  })
+
+  it('returns dashboard ai summary state', async () => {
+    summaryRouteMocks.getDashboardAiSummaryMock.mockResolvedValue({
+      scope: 'dashboard-overview',
+      status: 'success',
+      content: '## 总览',
+      previewContent: '- 提要',
+      errorMessage: null,
+      generatedAt: '2026-05-03T00:00:00.000Z',
+      updatedAt: '2026-05-03T00:00:00.000Z',
+      sourceDataHash: 'hash-1',
+      fromCache: true,
+      isStale: false,
+      canGenerate: true,
+      needsGeneration: false
+    })
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/ai/summary/dashboard'
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data.status).toBe('success')
+    expect(summaryRouteMocks.getDashboardAiSummaryMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('generates dashboard ai summary on demand', async () => {
+    summaryRouteMocks.generateDashboardAiSummaryMock.mockResolvedValue({
+      scope: 'dashboard-overview',
+      status: 'success',
+      content: '## 总览',
+      previewContent: '- 提要',
+      errorMessage: null,
+      generatedAt: '2026-05-03T00:00:00.000Z',
+      updatedAt: '2026-05-03T00:00:00.000Z',
+      sourceDataHash: 'hash-2',
+      fromCache: false,
+      isStale: false,
+      canGenerate: true,
+      needsGeneration: false
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/ai/summary/dashboard/generate'
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data.fromCache).toBe(false)
+    expect(summaryRouteMocks.generateDashboardAiSummaryMock).toHaveBeenCalledTimes(1)
   })
 })

@@ -80,6 +80,7 @@ vi.mock('../../src/services/settings.service', () => ({
     },
     aiConfig: {
       enabled: false,
+      dashboardSummaryEnabled: false,
       providerPreset: 'custom',
       providerName: 'DeepSeek',
       baseUrl: 'https://api.deepseek.com',
@@ -87,6 +88,7 @@ vi.mock('../../src/services/settings.service', () => ({
       model: 'deepseek-chat',
       timeoutMs: 30000,
       promptTemplate: '',
+      dashboardSummaryPromptTemplate: '',
       capabilities: {
         vision: false,
         structuredOutput: true

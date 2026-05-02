@@ -90,7 +90,7 @@ function validateSettingsPayload(settings: Awaited<ReturnType<typeof getAppSetti
     .map(([label]) => label)
 
   if (settings.aiConfig.enabled && missingAiFields.length) {
-    throw new Error(`启用 AI 识别时必须填写：${missingAiFields.join('、')}`)
+    throw new Error(`启用 AI 能力时必须填写：${missingAiFields.join('、')}`)
   }
 }
 

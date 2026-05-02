@@ -26,14 +26,22 @@ const visionTestImageBase64 =
 const jsonOnlySuffix = '必须只返回合法 JSON 对象，不要返回 Markdown、代码块或额外解释。'
 let ocrWorkerPromise: Promise<Worker> | null = null
 
-function ensureAiConfig(aiConfig: AiSettings, options?: { requireEnabled?: boolean }) {
+export function ensureAiConfig(aiConfig: AiSettings, options?: { requireEnabled?: boolean; featureLabel?: string }) {
   if (options?.requireEnabled !== false && !aiConfig.enabled) {
-    throw new Error('AI 识别未启用')
+    throw new Error(`${options?.featureLabel ?? 'AI 功能'}未启用`)
   }
 
   if (!aiConfig.baseUrl || !aiConfig.apiKey || !aiConfig.model) {
-    throw new Error('AI 配置不完整')
+    throw new Error(`${options?.featureLabel ?? 'AI'}配置不完整`)
   }
+}
+
+export function ensureAiSummaryConfig(aiConfig: AiSettings) {
+  if (!aiConfig.dashboardSummaryEnabled) {
+    throw new Error('AI 总结未启用')
+  }
+
+  ensureAiConfig(aiConfig, { requireEnabled: false, featureLabel: 'AI 总结' })
 }
 
 export function looksLikeImageFormatUnsupported(errorText: string) {

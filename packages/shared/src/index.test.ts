@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  AiDashboardSummaryStatusSchema,
   CreateSubscriptionSchema,
+  DEFAULT_AI_DASHBOARD_SUMMARY_PREVIEW_PROMPT,
+  DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT,
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_OVERDUE_REMINDER_RULES,
+  formatAiSummaryPreviewText,
   normalizeWebsiteUrlInput,
   SettingsSchema,
   SubtrackerBackupCommitSchema,
@@ -37,6 +41,8 @@ describe('shared schema', () => {
     expect(parsed.overdueReminderDays).toEqual([1, 2, 3])
     expect(parsed.defaultOverdueReminderRules).toBe(DEFAULT_OVERDUE_REMINDER_RULES)
     expect(parsed.telegramNotificationsEnabled).toBe(false)
+    expect(parsed.aiConfig.dashboardSummaryEnabled).toBe(false)
+    expect(parsed.aiConfig.dashboardSummaryPromptTemplate).toBe('')
     expect(parsed.telegramConfig).toEqual({
       botToken: '',
       chatId: ''
@@ -99,5 +105,22 @@ describe('shared schema', () => {
       mode: 'append',
       restoreSettings: true
     })
+  })
+
+  it('should expose dashboard summary prompt and status schema', () => {
+    expect(DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT).toContain('订阅运营摘要助手')
+    expect(DEFAULT_AI_DASHBOARD_SUMMARY_PREVIEW_PROMPT).toContain('摘要压缩助手')
+    expect(AiDashboardSummaryStatusSchema.parse('success')).toBe('success')
+    expect(() => AiDashboardSummaryStatusSchema.parse('unknown')).toThrow()
+  })
+
+  it('formats ai summary preview text into multiple readable lines', () => {
+    expect(
+      formatAiSummaryPreviewText(
+        '当前 13 个活跃订阅，月支出 1254.61 元，占预算 69.7%。年度支出已用 83.6%，剩余预算仅 2944.68 元。未来 30 天续订密集，年度预算可能在 2-3 个月内耗尽。'
+      )
+    ).toBe(
+      '当前 13 个活跃订阅，月支出 1254.61 元，占预算 69.7%。年度支出已用 83.6%，剩余预算仅 2944.68 元。未来 30 天续订密集，年度预算可能在 2-3 个月内耗尽。'
+    )
   })
 })
