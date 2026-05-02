@@ -386,6 +386,53 @@ export interface WallosImportCommitPayload {
   preview?: Omit<WallosImportInspectResult, 'importToken'>
 }
 
+export interface SubtrackerBackupAssetLogoDto {
+  path: string
+  filename: string
+  sourceLogoUrl: string
+  contentType: string
+  referencedBySubscriptionIds: string[]
+}
+
+export interface SubtrackerBackupSummary {
+  scope: 'business-complete'
+  subscriptionsTotal: number
+  tagsTotal: number
+  paymentRecordsTotal: number
+  logosTotal: number
+  includesSettings: boolean
+}
+
+export interface SubtrackerBackupInspectConflicts {
+  existingTagNameCount: number
+  existingSubscriptionIdCount: number
+  existingPaymentRecordIdCount: number
+  canRestoreSettings: boolean
+}
+
+export interface SubtrackerBackupInspectResult {
+  isSubtrackerBackup: boolean
+  summary: SubtrackerBackupSummary
+  warnings: string[]
+  importToken: string
+  availableModes: Array<'replace' | 'append'>
+  conflicts: SubtrackerBackupInspectConflicts
+}
+
+export interface SubtrackerBackupCommitResult {
+  mode: 'replace' | 'append'
+  clearedExistingData: boolean
+  restoredSettings: boolean
+  importedTags: number
+  reusedTags: number
+  importedSubscriptions: number
+  skippedSubscriptions: number
+  importedPaymentRecords: number
+  skippedPaymentRecords: number
+  importedLogos: number
+  warnings: string[]
+}
+
 export interface PaymentRecord {
   id: string
   subscriptionId: string

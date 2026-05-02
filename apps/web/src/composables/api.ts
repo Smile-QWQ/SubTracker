@@ -20,6 +20,8 @@ import type {
   ServerchanConfig,
   Settings,
   StatisticsOverview,
+  SubtrackerBackupCommitResult,
+  SubtrackerBackupInspectResult,
   Subscription,
   SubscriptionDetail,
   SubscriptionStatus,
@@ -348,9 +350,8 @@ export const api = {
     return postOnce<{ success: boolean; statusCode: number; responseBody: string }>('/notifications/test/webhook', payload)
   },
 
-  async exportSubscriptions(format: 'csv' | 'json') {
-    const response = await client.get(`/settings/export/subscriptions`, {
-      params: { format },
+  async exportBackup() {
+    const response = await client.get('/settings/export/backup', {
       responseType: 'blob'
     })
     return {
@@ -358,7 +359,7 @@ export const api = {
       filename:
         String(response.headers['content-disposition'] ?? '')
           .match(/filename="?([^"]+)"?/)?.[1]
-          ?.trim() || `subtracker-subscriptions.${format}`
+          ?.trim() || 'subtracker-backup.zip'
     }
   },
 
@@ -368,5 +369,17 @@ export const api = {
 
   async commitWallosImport(payload: { importToken: string; preview?: Omit<WallosImportInspectResult, 'importToken'> }) {
     return postOnce<WallosImportCommitResult>('/import/wallos/commit', payload)
+  },
+
+  async inspectSubtrackerBackup(payload: {
+    filename: string
+    manifest: unknown
+    logoAssets: Array<{ path: string; filename: string; contentType: string; base64: string }>
+  }) {
+    return postOnce<SubtrackerBackupInspectResult>('/import/subtracker/inspect', payload, { timeout: 60000 })
+  },
+
+  async commitSubtrackerBackup(payload: { importToken: string; mode: 'replace' | 'append'; restoreSettings: boolean }) {
+    return postOnce<SubtrackerBackupCommitResult>('/import/subtracker/commit', payload, { timeout: 60000 })
   }
 }

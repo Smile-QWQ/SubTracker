@@ -4,6 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const store = new Map<string, unknown>()
 
+const prismaMock = vi.hoisted(() => ({}))
+const createSubtrackerBackupArchiveMock = vi.hoisted(() => vi.fn())
+
+vi.mock('../../src/db', () => ({
+  prisma: prismaMock
+}))
+
 vi.mock('../../src/services/settings.service', () => ({
   getAppSettings: vi.fn(async () => ({
     baseCurrency: 'CNY',
@@ -80,6 +87,10 @@ vi.mock('../../src/services/settings.service', () => ({
   setSetting: vi.fn(async (key: string, value: unknown) => {
     store.set(key, value)
   })
+}))
+
+vi.mock('../../src/services/subtracker-backup.service', () => ({
+  createSubtrackerBackupArchive: createSubtrackerBackupArchiveMock
 }))
 
 import { settingsRoutes } from '../../src/routes/settings'
@@ -211,5 +222,22 @@ describe('settings routes validation', () => {
 
     expect(res.statusCode).toBe(422)
     expect(res.json().error.message).toContain('时间必须为 HH:mm')
+  })
+
+  it('exports backup archive', async () => {
+    createSubtrackerBackupArchiveMock.mockResolvedValue({
+      filename: 'subtracker-backup.zip',
+      contentType: 'application/zip',
+      buffer: Buffer.from('zip')
+    })
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/settings/export/backup'
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['content-type']).toContain('application/zip')
+    expect(String(res.headers['content-disposition'])).toContain('subtracker-backup.zip')
   })
 })

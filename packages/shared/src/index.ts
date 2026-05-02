@@ -343,6 +343,31 @@ export const WallosImportCommitSchema = z.object({
   preview: WallosImportPreparedPreviewSchema.optional()
 })
 
+export const SubtrackerBackupScopeSchema = z.enum(['business-complete'])
+export const SubtrackerBackupRestoreModeSchema = z.enum(['replace', 'append'])
+
+export const SubtrackerBackupInspectSchema = z.object({
+  filename: z.string().min(1).max(255),
+  manifest: z.unknown(),
+  logoAssets: z
+    .array(
+      z.object({
+        path: z.string().min(1).max(500),
+        filename: z.string().min(1).max(255),
+        contentType: z.string().min(1).max(120),
+        base64: z.string().min(1)
+      })
+    )
+    .max(500)
+    .default([])
+})
+
+export const SubtrackerBackupCommitSchema = z.object({
+  importToken: z.string().min(10).max(200),
+  mode: SubtrackerBackupRestoreModeSchema,
+  restoreSettings: z.boolean().default(false)
+})
+
 export type SubscriptionStatus = z.infer<typeof SubscriptionStatusSchema>
 export type BillingIntervalUnit = z.infer<typeof BillingIntervalUnitSchema>
 export type WebhookRequestMethod = z.infer<typeof WebhookRequestMethodSchema>
@@ -370,6 +395,10 @@ export type LogoUploadInput = z.infer<typeof LogoUploadSchema>
 export type AiRecognizeSubscriptionInput = z.infer<typeof AiRecognizeSubscriptionSchema>
 export type WallosImportInspectInput = z.infer<typeof WallosImportInspectSchema>
 export type WallosImportCommitInput = z.infer<typeof WallosImportCommitSchema>
+export type SubtrackerBackupScope = z.infer<typeof SubtrackerBackupScopeSchema>
+export type SubtrackerBackupRestoreMode = z.infer<typeof SubtrackerBackupRestoreModeSchema>
+export type SubtrackerBackupInspectInput = z.infer<typeof SubtrackerBackupInspectSchema>
+export type SubtrackerBackupCommitInput = z.infer<typeof SubtrackerBackupCommitSchema>
 
 export interface MoneyDto {
   amount: number
@@ -586,4 +615,103 @@ export interface PaymentRecordDto {
   periodStart: string
   periodEnd: string
   createdAt: string
+}
+
+export interface SubtrackerBackupTagDto {
+  id: string
+  name: string
+  color: string
+  icon: string
+  sortOrder: number
+}
+
+export interface SubtrackerBackupSubscriptionDto {
+  id: string
+  name: string
+  description: string
+  websiteUrl: string | null
+  logoUrl: string | null
+  logoSource: string | null
+  logoFetchedAt: string | null
+  status: SubscriptionStatus
+  amount: number
+  currency: string
+  billingIntervalCount: number
+  billingIntervalUnit: BillingIntervalUnit
+  autoRenew: boolean
+  startDate: string
+  nextRenewalDate: string
+  notifyDaysBefore: number
+  advanceReminderRules: string | null
+  overdueReminderRules: string | null
+  webhookEnabled: boolean
+  notes: string
+  tagIds: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SubtrackerBackupAssetLogoDto {
+  path: string
+  filename: string
+  sourceLogoUrl: string
+  contentType: string
+  referencedBySubscriptionIds: string[]
+}
+
+export interface SubtrackerBackupManifestDto {
+  schemaVersion: number
+  exportedAt: string
+  app: 'SubTracker'
+  scope: SubtrackerBackupScope
+  data: {
+    settings: SettingsInput
+    notificationWebhook: NotificationWebhookSettingsInput
+    tags: SubtrackerBackupTagDto[]
+    subscriptions: SubtrackerBackupSubscriptionDto[]
+    paymentRecords: PaymentRecordDto[]
+    subscriptionOrder: string[]
+  }
+  assets: {
+    logos: SubtrackerBackupAssetLogoDto[]
+  }
+}
+
+export interface SubtrackerBackupSummaryDto {
+  scope: SubtrackerBackupScope
+  subscriptionsTotal: number
+  tagsTotal: number
+  paymentRecordsTotal: number
+  logosTotal: number
+  includesSettings: boolean
+}
+
+export interface SubtrackerBackupInspectConflictsDto {
+  existingTagNameCount: number
+  existingSubscriptionIdCount: number
+  existingPaymentRecordIdCount: number
+  canRestoreSettings: boolean
+}
+
+export interface SubtrackerBackupInspectResultDto {
+  isSubtrackerBackup: boolean
+  summary: SubtrackerBackupSummaryDto
+  warnings: string[]
+  importToken: string
+  availableModes: Array<SubtrackerBackupRestoreMode>
+  conflicts: SubtrackerBackupInspectConflictsDto
+}
+
+export interface SubtrackerBackupCommitResultDto {
+  mode: SubtrackerBackupRestoreMode
+  clearedExistingData: boolean
+  restoredSettings: boolean
+  importedTags: number
+  reusedTags: number
+  importedSubscriptions: number
+  skippedSubscriptions: number
+  importedPaymentRecords: number
+  skippedPaymentRecords: number
+  importedLogos: number
+  warnings: string[]
 }

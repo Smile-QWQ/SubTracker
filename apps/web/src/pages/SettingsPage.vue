@@ -8,9 +8,9 @@
     />
 
     <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
-      当前运行时：Cloudflare Worker + D1。
-      R2 {{ settingsForm.storageCapabilities.r2Enabled ? '已启用' : '未启用，仅支持远程 Logo 引用' }}；
-      Wallos 导入模式：JSON / SQLite / ZIP。
+      当前运行环境为 Cloudflare Worker + D1
+      <template v-if="settingsForm.storageCapabilities.r2Enabled">，R2 已启用</template>
+      <template v-else>，R2 未启用，仅支持远程 Logo 引用</template>
     </n-alert>
 
     <n-grid :cols="gridCols" :x-gap="12" :y-gap="12">
@@ -534,24 +534,36 @@
       </n-grid-item>
 
       <n-grid-item>
-        <n-card title="导出和导入" class="settings-card">
+        <n-card title="导入和导出" class="settings-card">
           <n-space vertical style="width: 100%">
-            <n-alert type="info" :show-icon="false">
-              可导出全部订阅为 CSV / JSON，也可在这里导入 Wallos 数据。
-              当前 Cloudflare Worker 版本支持 JSON、SQLite 与 ZIP 导入。
-              <template v-if="!settingsForm.storageCapabilities.r2Enabled">
-                当前未启用 R2，ZIP 中的 Logo 会被忽略，但仍可导入其中的数据库内容。
-              </template>
-            </n-alert>
-            <n-space wrap>
-              <n-button type="success" @click="showWallosImportModal = true">导入 Wallos</n-button>
-              <n-button @click="exportSubscriptions('csv')">导出 CSV</n-button>
-              <n-button @click="exportSubscriptions('json')">导出 JSON</n-button>
-            </n-space>
+            <n-card size="small" embedded title="备份">
+              <n-space vertical style="width: 100%">
+                <div class="card-muted">支持通过 ZIP 进行导出备份与恢复备份，包含订阅、标签、支付记录、排序、系统设置与本地 Logo</div>
+                <n-space wrap>
+                  <n-button type="primary" @click="exportBackup">导出备份</n-button>
+                  <n-button type="success" ghost @click="showSubtrackerBackupModal = true">恢复备份</n-button>
+                </n-space>
+              </n-space>
+            </n-card>
+
+            <n-card size="small" embedded title="迁移">
+              <n-space vertical style="width: 100%">
+                <div class="card-muted">从第三方同类项目导入数据</div>
+                <n-space wrap>
+                  <n-button type="success" @click="showWallosImportModal = true">导入 Wallos</n-button>
+                </n-space>
+              </n-space>
+            </n-card>
           </n-space>
         </n-card>
       </n-grid-item>
     </n-grid>
+
+    <subtracker-backup-modal
+      :show="showSubtrackerBackupModal"
+      @close="showSubtrackerBackupModal = false"
+      @imported="handleSubtrackerBackupImported"
+    />
 
     <wallos-import-modal
       :show="showWallosImportModal"
@@ -614,6 +626,7 @@ import { EXCHANGE_RATE_SNAPSHOT_QUERY_KEY, useExchangeRateSnapshotQuery } from '
 import { NOTIFICATION_WEBHOOK_QUERY_KEY, useNotificationWebhookQuery } from '@/composables/notification-webhook-query'
 import { SETTINGS_QUERY_KEY, useSettingsQuery } from '@/composables/settings-query'
 import PageHeader from '@/components/PageHeader.vue'
+import SubtrackerBackupModal from '@/components/SubtrackerBackupModal.vue'
 import WallosImportModal from '@/components/WallosImportModal.vue'
 import { useAuthStore } from '@/stores/auth'
 import { isRememberedSession } from '@/utils/auth-storage'
@@ -763,6 +776,7 @@ const savingCredentials = ref(false)
 const sourceCurrency = ref('USD')
 const targetCurrency = ref('CNY')
 const converterAmount = ref(1)
+const showSubtrackerBackupModal = ref(false)
 const showWallosImportModal = ref(false)
 const emailDetailsExpanded = ref(false)
 const isMobile = computed(() => width.value < 960)
@@ -1244,27 +1258,50 @@ async function testGotify() {
   }
 }
 
-async function exportSubscriptions(format: 'csv' | 'json') {
+async function exportBackup() {
   try {
-    const result = await api.exportSubscriptions(format)
-    const url = window.URL.createObjectURL(result.blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = result.filename
-    link.click()
-    window.URL.revokeObjectURL(url)
-    message.success(`${format.toUpperCase()} 导出已开始`)
+    const result = await api.exportBackup()
+    downloadBlob(result.blob, result.filename)
+    message.success('备份导出已开始')
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '导出失败')
+    message.error(error instanceof Error ? error.message : '备份导出失败')
   }
 }
 
-function handleWallosImported() {
+function downloadBlob(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  window.URL.revokeObjectURL(url)
+}
+
+function refreshAppQueries() {
   queryClient.removeQueries({ queryKey: ['subscriptions'] })
   queryClient.removeQueries({ queryKey: ['tags'] })
   queryClient.removeQueries({ queryKey: ['statistics-overview'] })
   queryClient.removeQueries({ queryKey: ['statistics-budgets'] })
   queryClient.removeQueries({ queryKey: ['calendar-events'] })
+  queryClient.removeQueries({ queryKey: SETTINGS_QUERY_KEY })
+  queryClient.removeQueries({ queryKey: EXCHANGE_RATE_SNAPSHOT_QUERY_KEY })
+  queryClient.removeQueries({ queryKey: NOTIFICATION_WEBHOOK_QUERY_KEY })
+}
+
+function handleSubtrackerBackupImported(result: { mode: 'replace' | 'append'; restoredSettings: boolean }) {
+  refreshAppQueries()
+  showSubtrackerBackupModal.value = false
+  message.success(
+    result.mode === 'replace'
+      ? '备份已恢复'
+      : result.restoredSettings
+        ? '备份已追加恢复，并覆盖了系统设置'
+        : '备份已追加恢复'
+  )
+}
+
+function handleWallosImported() {
+  refreshAppQueries()
   showWallosImportModal.value = false
   message.success('Wallos 数据已导入')
 }

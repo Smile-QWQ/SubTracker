@@ -3,7 +3,9 @@ import {
   CreateSubscriptionSchema,
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_OVERDUE_REMINDER_RULES,
-  SettingsSchema
+  SettingsSchema,
+  SubtrackerBackupCommitSchema,
+  SubtrackerBackupInspectSchema
 } from '../src/index'
 
 describe('shared schema', () => {
@@ -42,5 +44,36 @@ describe('shared schema', () => {
   it('should validate timezone values', () => {
     expect(() => SettingsSchema.parse({ timezone: 'Mars/Olympus' })).toThrow()
     expect(SettingsSchema.parse({ timezone: 'America/Los_Angeles' }).timezone).toBe('America/Los_Angeles')
+  })
+
+  it('should validate subtracker backup inspect payload', () => {
+    const parsed = SubtrackerBackupInspectSchema.parse({
+      filename: 'subtracker-backup.zip',
+      manifest: {
+        app: 'SubTracker'
+      },
+      logoAssets: [
+        {
+          path: 'logos/test.png',
+          filename: 'test.png',
+          contentType: 'image/png',
+          base64: 'ZmFrZQ=='
+        }
+      ]
+    })
+
+    expect(parsed.filename).toBe('subtracker-backup.zip')
+    expect(parsed.logoAssets).toHaveLength(1)
+  })
+
+  it('should validate subtracker backup commit payload', () => {
+    const parsed = SubtrackerBackupCommitSchema.parse({
+      importToken: 'x'.repeat(24),
+      mode: 'append',
+      restoreSettings: true
+    })
+
+    expect(parsed.mode).toBe('append')
+    expect(parsed.restoreSettings).toBe(true)
   })
 })
