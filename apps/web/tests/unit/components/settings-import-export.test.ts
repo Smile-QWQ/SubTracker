@@ -39,4 +39,17 @@ describe('settings import export section', () => {
     expect(backupModal).not.toContain('生成预览')
     expect(backupModal).not.toContain('确认导入')
   })
+
+  it('expands ai settings wording from recognition-only to shared ai capability', () => {
+    const source = readFileSync('src/pages/SettingsPage.vue', 'utf8')
+
+    expect(source).toContain('title="AI 能力设置"')
+    expect(source).toContain('启用 AI 能力')
+    expect(source).toContain('AI 总结')
+    expect(source).toContain('AI 能力总开关控制识别与连接测试；AI 总结可单独开启或关闭')
+    expect(source).toContain('自定义识别提示词')
+    expect(source).toContain('自定义总结提示词')
+    expect(source).not.toContain('title="AI 识别设置"')
+    expect(source).not.toContain('启用 AI 识别')
+  })
 })

@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type {
+  AiDashboardSummary,
   AiRecognitionResult,
   AiTestResponse,
   AuthResponse,
@@ -256,6 +257,14 @@ export const api = {
 
   async testAiVisionConfigurationWithPayload(payload: Settings['aiConfig']) {
     return postOnce<AiTestResponse>('/ai/test-vision', payload)
+  },
+
+  async getDashboardAiSummary() {
+    return unwrap<AiDashboardSummary>((await client.get('/ai/summary/dashboard')) as { data: Envelope<AiDashboardSummary> })
+  },
+
+  async generateDashboardAiSummary() {
+    return postOnce<AiDashboardSummary>('/ai/summary/dashboard/generate', undefined, { timeout: 65000 })
   },
 
   async getTags() {

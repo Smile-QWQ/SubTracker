@@ -205,6 +205,7 @@ export interface AiCapabilities {
 
 export interface AiConfig {
   enabled: boolean
+  dashboardSummaryEnabled: boolean
   providerPreset: AiProviderPreset
   providerName: string
   baseUrl: string
@@ -212,6 +213,7 @@ export interface AiConfig {
   model: string
   timeoutMs: number
   promptTemplate: string
+  dashboardSummaryPromptTemplate: string
   capabilities: AiCapabilities
 }
 
@@ -220,6 +222,23 @@ export interface AiTestResponse {
   providerName: string
   model: string
   response: string
+}
+
+export type AiDashboardSummaryStatus = 'idle' | 'unconfigured' | 'generating' | 'success' | 'failed'
+
+export interface AiDashboardSummary {
+  scope: 'dashboard-overview'
+  status: AiDashboardSummaryStatus
+  content: string | null
+  previewContent: string | null
+  errorMessage: string | null
+  generatedAt: string | null
+  updatedAt: string | null
+  sourceDataHash: string | null
+  fromCache: boolean
+  isStale: boolean
+  canGenerate: boolean
+  needsGeneration: boolean
 }
 
 export interface Settings {
