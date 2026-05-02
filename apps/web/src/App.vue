@@ -3,7 +3,7 @@
     <n-message-provider>
       <router-view v-if="isLoginPage" />
       <template v-else>
-        <n-layout has-sider class="app-layout">
+        <n-layout has-sider class="app-layout" content-style="overflow: visible;">
           <n-drawer v-model:show="mobileMenuVisible" placement="left" :width="260">
             <n-drawer-content closable body-content-style="padding: 8px 0;">
               <template #header>
@@ -44,6 +44,7 @@
             collapse-mode="width"
             :collapsed-width="64"
             :width="220"
+            class="desktop-sider"
           >
             <div class="sider-shell">
               <div>
@@ -86,7 +87,7 @@
             </div>
           </n-layout-sider>
 
-          <n-layout>
+          <n-layout class="main-layout">
             <n-layout-header bordered class="header">
               <div class="header__left">
                 <n-button v-if="isMobile" quaternary circle @click="mobileMenuVisible = true">
@@ -112,7 +113,7 @@
               </n-space>
             </n-layout-header>
 
-            <n-layout-content :content-style="contentStyle">
+            <n-layout-content class="main-content" :content-style="contentStyle">
               <router-view />
             </n-layout-content>
           </n-layout>
@@ -346,6 +347,20 @@ async function submitDefaultPasswordChange() {
 <style scoped>
 .app-layout {
   min-height: 100vh;
+  overflow: visible;
+}
+
+.desktop-sider {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+
+.main-layout {
+  min-width: 0;
 }
 
 .sider-shell {
@@ -357,6 +372,7 @@ async function submitDefaultPasswordChange() {
 .sider-menu {
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
 }
 
 .sider-footer {
