@@ -225,7 +225,7 @@ describe('subtracker backup service', () => {
 
     const result = await createSubtrackerBackupArchive()
 
-    expect(result.filename).toContain('subtracker-backup-')
+    expect(result.filename).toBe('subtracker-backup-2026-05-02T16-00-00.zip')
     expect(result.contentType).toBe('application/zip')
     const decoded = Buffer.from(result.buffer).toString('binary')
     expect(decoded.length).toBeGreaterThan(0)

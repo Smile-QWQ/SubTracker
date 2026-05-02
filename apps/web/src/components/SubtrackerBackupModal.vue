@@ -61,7 +61,7 @@
 
             <template v-else>
               <n-alert type="info" :show-icon="false">
-                追加恢复时：同名标签会复用现有标签；订阅与支付记录按原始 ID 幂等跳过；系统设置是否覆盖由你单独选择
+                追加恢复时：同名标签会复用现有标签；订阅与支付记录按备份中的唯一标识（CUID）幂等跳过；系统设置是否覆盖由你单独选择
               </n-alert>
               <div class="switch-row">
                 <n-switch v-model:value="restoreSettings" />
@@ -78,11 +78,11 @@
               <strong>{{ preview.conflicts.existingTagNameCount }}</strong>
             </div>
             <div class="conflict-row">
-              <span>现有同 ID 订阅：</span>
+              <span>现有同唯一标识（CUID）订阅：</span>
               <strong>{{ preview.conflicts.existingSubscriptionIdCount }}</strong>
             </div>
             <div class="conflict-row">
-              <span>现有同 ID 支付记录：</span>
+              <span>现有同唯一标识（CUID）支付记录：</span>
               <strong>{{ preview.conflicts.existingPaymentRecordIdCount }}</strong>
             </div>
           </n-space>
@@ -156,6 +156,23 @@ function normalizePreviewErrorMessage(error: unknown) {
   return '备份预览失败'
 }
 
+function buildRestoreSuccessMessage(result: {
+  importedSubscriptions: number
+  importedTags: number
+  importedPaymentRecords: number
+  importedLogos: number
+  mode: 'replace' | 'append'
+}) {
+  const importedTotal =
+    result.importedSubscriptions + result.importedTags + result.importedPaymentRecords + result.importedLogos
+
+  if (result.mode === 'append' && importedTotal === 0) {
+    return '未导入任何新数据，重复项已自动跳过'
+  }
+
+  return `恢复完成：${result.importedSubscriptions} 条订阅，${result.importedTags} 个新标签，${result.importedPaymentRecords} 条支付记录，${result.importedLogos} 个 Logo`
+}
+
 async function inspectFile() {
   if (!selectedFile.value) return
 
@@ -186,9 +203,7 @@ async function commitImport() {
       mode: restoreMode.value,
       restoreSettings: restoreMode.value === 'replace' ? true : restoreSettings.value
     })
-    message.success(
-      `恢复完成：${result.importedSubscriptions} 条订阅，${result.importedTags} 个新标签，${result.importedPaymentRecords} 条支付记录，${result.importedLogos} 个 Logo`
-    )
+    message.success(buildRestoreSuccessMessage(result))
     emit('imported', {
       mode: result.mode,
       restoredSettings: result.restoredSettings

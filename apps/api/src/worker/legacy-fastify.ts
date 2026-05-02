@@ -37,6 +37,30 @@ class LegacyReply {
       return payload
     }
 
+    if (payload instanceof Uint8Array) {
+      return new Response(
+        payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength) as ArrayBuffer,
+        {
+          status: this.responseStatus,
+          headers: this.headers
+        }
+      )
+    }
+
+    if (payload instanceof ArrayBuffer) {
+      return new Response(payload, {
+        status: this.responseStatus,
+        headers: this.headers
+      })
+    }
+
+    if (ArrayBuffer.isView(payload)) {
+      return new Response(payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength) as ArrayBuffer, {
+        status: this.responseStatus,
+        headers: this.headers
+      })
+    }
+
     if (typeof payload === 'string') {
       return new Response(payload, {
         status: this.responseStatus,
