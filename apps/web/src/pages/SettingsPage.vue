@@ -1268,10 +1268,10 @@ function handleSubtrackerBackupImported(result: { mode: 'replace' | 'append'; re
   showSubtrackerBackupModal.value = false
   message.success(
     result.mode === 'replace'
-      ? '数据已完成导入'
+      ? '备份已恢复'
       : result.restoredSettings
-        ? '数据已追加导入，并覆盖了系统设置'
-        : '数据已追加导入'
+        ? '备份已追加恢复，并覆盖了系统设置'
+        : '备份已追加恢复'
   )
 }
 

@@ -1,8 +1,8 @@
 <template>
-  <n-modal :show="show" preset="card" title="导入 ZIP" style="width: min(960px, calc(100vw - 24px))" @update:show="handleShowUpdate">
+  <n-modal :show="show" preset="card" title="恢复备份" style="width: min(960px, calc(100vw - 24px))" @update:show="handleShowUpdate">
     <n-space vertical :size="16" style="width: 100%">
       <n-alert type="info" :show-icon="false">
-        该 ZIP 会导入订阅、标签、支付记录、排序、系统设置与本地 Logo；不会导入登录凭据、会话密钥、Webhook 历史和汇率快照。
+        该 ZIP 会恢复订阅、标签、支付记录、排序、系统设置与本地 Logo；不会恢复登录凭据、会话密钥、Webhook 历史和汇率快照
       </n-alert>
 
       <n-space align="center" wrap>
@@ -15,7 +15,7 @@
         />
         <n-button @click="pickFile">选择 ZIP 文件</n-button>
         <span class="file-name">{{ selectedFileName || '未选择文件' }}</span>
-        <n-button type="primary" :disabled="!selectedFile" :loading="inspecting" @click="inspectFile">生成预览</n-button>
+        <n-button type="primary" :disabled="!selectedFile" :loading="inspecting" @click="inspectFile">预览备份</n-button>
       </n-space>
 
       <template v-if="preview">
@@ -46,22 +46,22 @@
           </n-grid-item>
         </n-grid>
 
-        <n-card title="导入模式" size="small">
+        <n-card title="恢复模式" size="small">
           <n-space vertical>
             <n-radio-group v-model:value="restoreMode">
               <n-space vertical>
-                <n-radio value="replace">清空现有数据后导入</n-radio>
-                <n-radio value="append">保留现有数据并追加导入</n-radio>
+                <n-radio value="replace">清空现有数据后恢复</n-radio>
+                <n-radio value="append">保留现有数据并追加恢复</n-radio>
               </n-space>
             </n-radio-group>
 
             <n-alert v-if="restoreMode === 'replace'" type="warning" :show-icon="false">
-              将删除当前实例中的订阅、标签、支付记录、排序、系统设置和本地 Logo，然后再按文件内容重新导入。
+              将删除当前实例中的订阅、标签、支付记录、排序、系统设置和本地 Logo，然后再按文件内容重新恢复
             </n-alert>
 
             <template v-else>
               <n-alert type="info" :show-icon="false">
-                追加模式下：同名标签会复用现有标签；订阅与支付记录按原始 ID 幂等跳过；系统设置是否覆盖由你单独选择。
+                追加恢复时：同名标签会复用现有标签；订阅与支付记录按备份中的唯一标识（CUID）幂等跳过；系统设置是否覆盖由你单独选择
               </n-alert>
               <div class="switch-row">
                 <n-switch v-model:value="restoreSettings" />
@@ -71,18 +71,18 @@
           </n-space>
         </n-card>
 
-        <n-card title="冲突预览" size="small">
+        <n-card title="恢复预览" size="small">
           <n-space vertical :size="8">
             <div class="conflict-row">
               <span>现有同名标签：</span>
               <strong>{{ preview.conflicts.existingTagNameCount }}</strong>
             </div>
             <div class="conflict-row">
-              <span>现有同 ID 订阅：</span>
+              <span>现有同唯一标识（CUID）订阅：</span>
               <strong>{{ preview.conflicts.existingSubscriptionIdCount }}</strong>
             </div>
             <div class="conflict-row">
-              <span>现有同 ID 支付记录：</span>
+              <span>现有同唯一标识（CUID）支付记录：</span>
               <strong>{{ preview.conflicts.existingPaymentRecordIdCount }}</strong>
             </div>
           </n-space>
@@ -97,7 +97,7 @@
 
       <n-space justify="end">
         <n-button @click="close">取消</n-button>
-        <n-button type="primary" :disabled="!preview" :loading="committing" @click="commitImport">确认导入</n-button>
+        <n-button type="primary" :disabled="!preview" :loading="committing" @click="commitImport">确认恢复</n-button>
       </n-space>
     </n-space>
   </n-modal>
@@ -132,6 +132,33 @@ const restoreSettings = ref(false)
 
 const summaryCols = computed(() => (width.value < 700 ? 2 : 4))
 
+function normalizePreviewErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    if (/invalid zip data/i.test(error.message)) {
+      return '备份 ZIP 无法解析'
+    }
+    return error.message
+  }
+  return '备份预览失败'
+}
+
+function buildRestoreSuccessMessage(result: {
+  importedSubscriptions: number
+  importedTags: number
+  importedPaymentRecords: number
+  importedLogos: number
+  mode: 'replace' | 'append'
+}) {
+  const importedTotal =
+    result.importedSubscriptions + result.importedTags + result.importedPaymentRecords + result.importedLogos
+
+  if (result.mode === 'append' && importedTotal === 0) {
+    return '未导入任何新数据，重复项已自动跳过'
+  }
+
+  return `恢复完成：${result.importedSubscriptions} 条订阅，${result.importedTags} 个新标签，${result.importedPaymentRecords} 条支付记录，${result.importedLogos} 个 Logo`
+}
+
 function pickFile() {
   fileInputRef.value?.click()
 }
@@ -156,10 +183,10 @@ async function inspectFile() {
       contentType: selectedFile.value.type || 'application/zip',
       base64
     })
-    message.success('已生成 ZIP 预览')
+    message.success('已生成备份预览')
   } catch (error) {
     preview.value = null
-    message.error(error instanceof Error ? error.message : 'ZIP 预览失败')
+    message.error(normalizePreviewErrorMessage(error))
   } finally {
     inspecting.value = false
   }
@@ -175,16 +202,14 @@ async function commitImport() {
       mode: restoreMode.value,
       restoreSettings: restoreMode.value === 'replace' ? true : restoreSettings.value
     })
-    message.success(
-      `导入完成：${result.importedSubscriptions} 条订阅，${result.importedTags} 个新标签，${result.importedPaymentRecords} 条支付记录，${result.importedLogos} 个 Logo`
-    )
+    message.success(buildRestoreSuccessMessage(result))
     emit('imported', {
       mode: result.mode,
       restoredSettings: result.restoredSettings
     })
     close()
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '导入失败')
+    message.error(error instanceof Error ? error.message : '恢复失败')
   } finally {
     committing.value = false
   }

@@ -200,7 +200,7 @@ describe('subtracker backup service', () => {
 
     const result = await createSubtrackerBackupArchive()
 
-    expect(result.filename).toContain('subtracker-backup-')
+    expect(result.filename).toBe('subtracker-backup-2026-05-02T16-00-00.zip')
     const zip = new AdmZip(Buffer.from(await result.buffer))
     const entries = zip.getEntries().map((entry) => entry.entryName)
     expect(entries).toContain('manifest.json')

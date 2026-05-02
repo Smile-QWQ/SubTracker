@@ -17,7 +17,7 @@ import type {
 } from '@subtracker/shared'
 import { SettingsSchema } from '@subtracker/shared'
 import { prisma } from '../db'
-import { formatDateInTimezone, parseDateInTimezone } from '../utils/timezone'
+import { formatDateInTimezone, parseDateInTimezone, toTimezonedDayjs } from '../utils/timezone'
 import { getLocalLogoLibrary, getLogoStorageDir, saveImportedLogoBuffer } from './logo.service'
 import { getAppSettings, setSetting } from './settings.service'
 import { getSubscriptionOrder, setSubscriptionOrder } from './subscription-order.service'
@@ -96,8 +96,8 @@ function createImportToken() {
   return crypto.randomBytes(24).toString('hex')
 }
 
-function buildBackupFileName(now = new Date()) {
-  const stamp = now.toISOString().replaceAll(':', '-').replace(/\.\d{3}Z$/, 'Z')
+function buildBackupFileName(timezone: string, now = new Date()) {
+  const stamp = toTimezonedDayjs(now, timezone).format('YYYY-MM-DDTHH-mm-ss')
   return `subtracker-backup-${stamp}.zip`
 }
 
@@ -244,7 +244,7 @@ export async function createSubtrackerBackupArchive() {
   }
 
   return {
-    filename: buildBackupFileName(),
+    filename: buildBackupFileName(manifest.data.settings.timezone),
     contentType: 'application/zip',
     buffer: zip.toBuffer()
   }
@@ -367,7 +367,7 @@ function buildBackupWarnings(manifest: BackupManifest) {
   }
 
   warnings.push('不会恢复登录凭据、会话密钥、Webhook 历史和汇率快照')
-  warnings.push('追加导入时，订阅与支付记录按原始 ID 幂等跳过；同名标签会复用现有标签')
+  warnings.push('追加导入时，订阅与支付记录按备份中的唯一标识（CUID）幂等跳过；同名标签会复用现有标签')
 
   return warnings
 }

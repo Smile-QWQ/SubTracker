@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 describe('settings import export section', () => {
   it('uses neutral import/export wording for backup zip section', () => {
     const source = readFileSync('src/pages/SettingsPage.vue', 'utf8')
+    const backupModal = readFileSync('src/components/SubtrackerBackupModal.vue', 'utf8')
 
     expect(source).toContain('title="导入和导出"')
     expect(source).toContain('title="备份"')
@@ -23,5 +24,19 @@ describe('settings import export section', () => {
     expect(source).not.toContain('导入 ZIP')
     expect(source).not.toContain('项目自身完整备份恢复')
     expect(source).not.toContain('业务完整恢复包')
+
+    expect(backupModal).toContain('title="恢复备份"')
+    expect(backupModal).toContain('预览备份')
+    expect(backupModal).toContain('确认恢复')
+    expect(backupModal).toContain('恢复模式')
+    expect(backupModal).toContain('恢复预览')
+    expect(backupModal).toContain('备份 ZIP 无法解析')
+    expect(backupModal).toContain('未导入任何新数据，重复项已自动跳过')
+    expect(backupModal).toContain('按备份中的唯一标识（CUID）幂等跳过')
+    expect(backupModal).toContain('现有同唯一标识（CUID）订阅')
+    expect(backupModal).toContain('现有同唯一标识（CUID）支付记录')
+    expect(backupModal).not.toContain('title="导入 ZIP"')
+    expect(backupModal).not.toContain('生成预览')
+    expect(backupModal).not.toContain('确认导入')
   })
 })
