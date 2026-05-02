@@ -20,6 +20,7 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
+  background: #111827;
   --app-bg: #111827;
   --app-surface: #1f2937;
   --app-surface-alt: #0f172a;
@@ -39,6 +40,7 @@
   box-sizing: border-box;
 }
 
+html,
 body {
   margin: 0;
   background: var(--app-bg);
@@ -47,6 +49,7 @@ body {
 
 #app {
   min-height: 100vh;
+  background: var(--app-bg);
 }
 
 .page-title {
