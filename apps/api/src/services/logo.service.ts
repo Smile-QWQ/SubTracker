@@ -778,3 +778,7 @@ export async function deleteLocalLogoFromLibrary(filename: string) {
     deleted: true
   }
 }
+
+export function getLogoStorageDir() {
+  return logoDir
+}

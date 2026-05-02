@@ -16,7 +16,7 @@ import {
   deriveOverdueReminderDaysFromRules,
   normalizeReminderRules
 } from '../services/reminder-rules.service'
-import { formatDateInTimezone, formatDateTimeInTimezone } from '../utils/timezone'
+import { createSubtrackerBackupArchive } from '../services/subtracker-backup.service'
 
 function validateSettingsPayload(settings: Awaited<ReturnType<typeof getAppSettings>>) {
   if (settings.emailNotificationsEnabled) {
@@ -125,131 +125,11 @@ function normalizeReminderSettingsPayload(
 }
 
 export async function settingsRoutes(app: FastifyInstance) {
-  app.get('/settings/export/subscriptions', async (request, reply) => {
-    const formatValue = (request.query as { format?: string } | undefined)?.format
-    const format = formatValue === 'csv' || formatValue === 'json' ? formatValue : null
-
-    if (!format) {
-      return sendError(reply, 422, 'validation_error', 'Export format must be csv or json')
-    }
-
-    const appSettings = await getAppSettings()
-    const subscriptions = await prisma.subscription.findMany({
-      include: {
-        tags: {
-          include: {
-            tag: true
-          }
-        }
-      },
-      orderBy: [{ createdAt: 'asc' }]
-    })
-
-    const rows = subscriptions.map((subscription) => ({
-      id: subscription.id,
-      name: subscription.name,
-      description: subscription.description,
-      websiteUrl: subscription.websiteUrl ?? '',
-      logoUrl: subscription.logoUrl ?? '',
-      logoSource: subscription.logoSource ?? '',
-      status: subscription.status,
-      amount: subscription.amount,
-      currency: subscription.currency,
-      billingIntervalCount: subscription.billingIntervalCount,
-      billingIntervalUnit: subscription.billingIntervalUnit,
-      autoRenew: subscription.autoRenew,
-      startDate: formatDateInTimezone(subscription.startDate, appSettings.timezone),
-      nextRenewalDate: formatDateInTimezone(subscription.nextRenewalDate, appSettings.timezone),
-      notifyDaysBefore: subscription.notifyDaysBefore,
-      advanceReminderRules: subscription.advanceReminderRules ?? '',
-      overdueReminderRules: subscription.overdueReminderRules ?? '',
-      webhookEnabled: subscription.webhookEnabled,
-      notes: subscription.notes,
-      tags: subscription.tags
-        .map((item) => item.tag)
-        .filter((item): item is NonNullable<typeof item> => Boolean(item))
-        .map((tag) => ({
-          id: tag.id,
-          name: tag.name,
-          color: tag.color,
-          icon: tag.icon,
-          sortOrder: tag.sortOrder
-        })),
-      createdAt: formatDateTimeInTimezone(subscription.createdAt, appSettings.timezone),
-      updatedAt: formatDateTimeInTimezone(subscription.updatedAt, appSettings.timezone)
-    }))
-
-    if (format === 'json') {
-      reply.header('Content-Type', 'application/json; charset=utf-8')
-      reply.header('Content-Disposition', 'attachment; filename="subtracker-subscriptions.json"')
-      return reply.send(JSON.stringify(rows, null, 2))
-    }
-
-    const escapeCsv = (value: unknown) => {
-      const text = String(value ?? '')
-      return `"${text.replaceAll('"', '""')}"`
-    }
-
-    const headers = [
-      'id',
-      'name',
-      'description',
-      'websiteUrl',
-      'logoUrl',
-      'logoSource',
-      'status',
-      'amount',
-      'currency',
-      'billingIntervalCount',
-      'billingIntervalUnit',
-      'autoRenew',
-      'startDate',
-      'nextRenewalDate',
-      'notifyDaysBefore',
-      'advanceReminderRules',
-      'overdueReminderRules',
-      'webhookEnabled',
-      'notes',
-      'tags',
-      'createdAt',
-      'updatedAt'
-    ]
-
-    const csv = [
-      headers.join(','),
-      ...rows.map((row) =>
-        [
-          row.id,
-          row.name,
-          row.description,
-          row.websiteUrl,
-          row.logoUrl,
-          row.logoSource,
-          row.status,
-          row.amount,
-          row.currency,
-          row.billingIntervalCount,
-          row.billingIntervalUnit,
-          row.autoRenew,
-          row.startDate,
-          row.nextRenewalDate,
-          row.notifyDaysBefore,
-          row.advanceReminderRules,
-          row.overdueReminderRules,
-          row.webhookEnabled,
-          row.notes,
-          row.tags.map((tag) => tag.name).join(', '),
-          row.createdAt,
-          row.updatedAt
-        ]
-          .map(escapeCsv)
-          .join(',')
-      )
-    ].join('\n')
-
-    reply.header('Content-Type', 'text/csv; charset=utf-8')
-    reply.header('Content-Disposition', 'attachment; filename="subtracker-subscriptions.csv"')
-    return reply.send(`\uFEFF${csv}`)
+  app.get('/settings/export/backup', async (_request, reply) => {
+    const archive = await createSubtrackerBackupArchive()
+    reply.header('Content-Type', archive.contentType)
+    reply.header('Content-Disposition', `attachment; filename="${archive.filename}"`)
+    return reply.send(archive.buffer)
   })
 
   app.get('/settings', async (_, reply) => {

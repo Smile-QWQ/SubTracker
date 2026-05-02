@@ -4,6 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const store = new Map<string, unknown>()
 
+const prismaMock = vi.hoisted(() => ({}))
+
+vi.mock('../../src/db', () => ({
+  prisma: prismaMock
+}))
+
 vi.mock('../../src/services/settings.service', () => ({
   getAppSettings: vi.fn(async () => ({
     baseCurrency: 'CNY',
@@ -213,4 +219,5 @@ describe('settings routes validation', () => {
     expect(res.statusCode).toBe(422)
     expect(res.json().error.message).toContain('时间必须为 HH:mm')
   })
+
 })

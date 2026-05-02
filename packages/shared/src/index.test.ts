@@ -5,6 +5,8 @@ import {
   DEFAULT_OVERDUE_REMINDER_RULES,
   normalizeWebsiteUrlInput,
   SettingsSchema,
+  SubtrackerBackupCommitSchema,
+  SubtrackerBackupInspectSchema,
   WallosImportInspectSchema
 } from '../src/index'
 
@@ -75,5 +77,27 @@ describe('shared schema', () => {
       base64: 'ZmFrZQ==',
       sourceTimezone: 'Asia/Shanghai'
     }).sourceTimezone).toBe('Asia/Shanghai')
+  })
+
+  it('should validate subtracker backup inspect payloads', () => {
+    expect(SubtrackerBackupInspectSchema.parse({
+      filename: 'subtracker-backup.zip',
+      contentType: 'application/zip',
+      base64: 'ZmFrZQ=='
+    })).toMatchObject({
+      filename: 'subtracker-backup.zip',
+      contentType: 'application/zip'
+    })
+  })
+
+  it('should validate subtracker backup commit payloads', () => {
+    expect(SubtrackerBackupCommitSchema.parse({
+      importToken: '0123456789abcdef',
+      mode: 'append',
+      restoreSettings: true
+    })).toMatchObject({
+      mode: 'append',
+      restoreSettings: true
+    })
   })
 })
