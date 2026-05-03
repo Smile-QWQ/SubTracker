@@ -13,6 +13,8 @@ export function cloneSettingsForForm(settings: Settings): Settings {
     gotifyConfig: { ...settings.gotifyConfig },
     aiConfig: {
       ...settings.aiConfig,
+      dashboardSummaryEnabled: settings.aiConfig.dashboardSummaryEnabled,
+      dashboardSummaryPromptTemplate: settings.aiConfig.dashboardSummaryPromptTemplate,
       capabilities: {
         ...settings.aiConfig.capabilities
       }

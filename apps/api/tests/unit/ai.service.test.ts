@@ -7,6 +7,7 @@ const mockedSettings: {
   aiConfig: {
     ...DEFAULT_AI_CONFIG,
     enabled: true,
+    dashboardSummaryEnabled: false,
     apiKey: 'test-key',
     capabilities: {
       ...DEFAULT_AI_CONFIG.capabilities
@@ -34,6 +35,7 @@ describe('ai service', () => {
     mockedSettings.aiConfig = {
       ...DEFAULT_AI_CONFIG,
       enabled: true,
+      dashboardSummaryEnabled: false,
       apiKey: 'test-key',
       capabilities: {
         ...DEFAULT_AI_CONFIG.capabilities

@@ -58,6 +58,7 @@ describe('cloneSettingsForForm', () => {
       },
       aiConfig: {
         enabled: true,
+        dashboardSummaryEnabled: true,
         providerPreset: 'custom',
         providerName: 'OpenAI',
         baseUrl: 'https://example.com',
@@ -65,6 +66,7 @@ describe('cloneSettingsForForm', () => {
         model: 'gpt',
         timeoutMs: 30000,
         promptTemplate: 'prompt',
+        dashboardSummaryPromptTemplate: 'summary prompt',
         capabilities: {
           vision: true,
           structuredOutput: true

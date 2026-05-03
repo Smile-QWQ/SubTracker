@@ -2,7 +2,7 @@
   <div>
     <page-header
       title="系统设置"
-      subtitle="管理基础参数、预算、汇率、通知与 AI 识别"
+      subtitle="管理基础参数、预算、汇率、通知与 AI 能力"
       :icon="settingsOutline"
       icon-background="linear-gradient(135deg, #64748b 0%, #334155 100%)"
     />
@@ -441,12 +441,15 @@
       </n-grid-item>
 
       <n-grid-item>
-        <n-card title="AI 识别设置" class="settings-card">
+        <n-card title="AI 能力设置" class="settings-card">
           <n-form :model="settingsForm.aiConfig" label-placement="top">
             <n-form-item>
               <n-switch v-model:value="settingsForm.aiConfig.enabled" />
-              <span class="switch-label">启用 AI 识别</span>
+              <span class="switch-label">启用 AI 能力</span>
             </n-form-item>
+            <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
+              AI 能力总开关控制识别与连接测试；AI 总结可单独开启或关闭。
+            </n-alert>
 
             <n-grid :cols="formCols" :x-gap="12" :y-gap="12">
               <n-grid-item>
@@ -468,12 +471,20 @@
                   <n-input v-model:value="settingsForm.aiConfig.model" />
                 </n-form-item>
               </n-grid-item>
-                <n-grid-item>
-                  <n-form-item>
-                    <n-switch v-model:value="settingsForm.aiConfig.capabilities.vision" />
-                    <span class="switch-label">模型视觉输入</span>
-                  </n-form-item>
-                </n-grid-item>
+              <n-grid-item>
+                <n-form-item label="能力开关">
+                  <div class="switch-group switch-group--ai-capabilities-inline">
+                    <div class="switch-group__item">
+                      <n-switch v-model:value="settingsForm.aiConfig.capabilities.vision" />
+                      <span class="switch-label switch-label--compact">模型视觉输入</span>
+                    </div>
+                    <div class="switch-group__item">
+                      <n-switch v-model:value="settingsForm.aiConfig.dashboardSummaryEnabled" :disabled="!settingsForm.aiConfig.enabled" />
+                      <span class="switch-label switch-label--compact">AI 总结</span>
+                    </div>
+                  </div>
+                </n-form-item>
+              </n-grid-item>
             </n-grid>
 
             <n-form-item label="API Base URL">
@@ -494,12 +505,20 @@
                 <n-form-item label="请求超时（毫秒）">
                   <n-input-number v-model:value="settingsForm.aiConfig.timeoutMs" :min="5000" :max="120000" style="width: 100%" />
                 </n-form-item>
-                <n-form-item label="自定义提示词">
+                <n-form-item label="自定义识别提示词">
                   <n-input
                     v-model:value="aiPromptInput"
                     type="textarea"
                     :autosize="{ minRows: 6, maxRows: 12 }"
-                    placeholder="未修改或为空时，会继续使用系统预设提示词"
+                    placeholder="留空时，订阅识别使用系统识别提示词；仪表盘 AI 总结始终使用系统总结提示词"
+                  />
+                </n-form-item>
+                <n-form-item label="自定义总结提示词">
+                  <n-input
+                    v-model:value="dashboardSummaryPromptInput"
+                    type="textarea"
+                    :autosize="{ minRows: 6, maxRows: 12 }"
+                    placeholder="留空时，AI 总结使用系统预设总结提示词"
                   />
                 </n-form-item>
               </n-collapse-item>
@@ -538,7 +557,7 @@
           <n-space vertical style="width: 100%">
             <n-card size="small" embedded title="备份">
               <n-space vertical style="width: 100%">
-                <div class="card-muted">支持通过 ZIP 进行导出备份与恢复备份，包含订阅、标签、支付记录、排序、系统设置与本地 Logo</div>
+                <div class="card-muted">支持通过 ZIP 进行备份与恢复，包含订阅、标签、支付记录、排序、系统设置与本地 Logo</div>
                 <n-space wrap>
                   <n-button type="primary" @click="exportBackup">导出备份</n-button>
                   <n-button type="success" ghost @click="showSubtrackerBackupModal = true">恢复备份</n-button>
@@ -583,6 +602,7 @@ import { useQueryClient } from '@tanstack/vue-query'
 import {
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_AI_CONFIG,
+  DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT,
   DEFAULT_AI_SUBSCRIPTION_PROMPT,
   DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
   DEFAULT_OVERDUE_REMINDER_RULES,
@@ -764,6 +784,7 @@ const webhookForm = reactive<NotificationWebhookSettings>({
 
 const snapshot = ref<ExchangeRateSnapshot | null>(null)
 const aiPromptInput = ref(DEFAULT_AI_SUBSCRIPTION_PROMPT)
+const dashboardSummaryPromptInput = ref(DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT)
 const savingBasicSettings = ref(false)
 const savingEmailSettings = ref(false)
 const savingPushplusSettings = ref(false)
@@ -930,7 +951,7 @@ function validateWebhookSettings(action: 'save' | 'test') {
 }
 
 function validateAiSettings(action: 'save' | 'connection-test' | 'vision-test') {
-  if (action === 'save' && !settingsForm.aiConfig.enabled) {
+  if (action === 'save' && !settingsForm.aiConfig.enabled && !settingsForm.aiConfig.dashboardSummaryEnabled) {
     return true
   }
 
@@ -942,7 +963,7 @@ function validateAiSettings(action: 'save' | 'connection-test' | 'vision-test') 
   ])
 
   if (!missing.length) return true
-  message.error(`AI 识别缺少必填项：${missing.join('、')}`)
+  message.error(`AI 能力缺少必填项：${missing.join('、')}`)
   return false
 }
 
@@ -953,6 +974,8 @@ watch(
     Object.assign(settingsForm, cloneSettingsForForm(settings))
     normalizeWorkerEmailProvider()
     aiPromptInput.value = settings.aiConfig.promptTemplate.trim() || DEFAULT_AI_SUBSCRIPTION_PROMPT
+    dashboardSummaryPromptInput.value =
+      settings.aiConfig.dashboardSummaryPromptTemplate.trim() || DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT
     credentialsForm.oldUsername = authStore.username
     credentialsForm.newUsername = authStore.username
     targetCurrency.value = settings.baseCurrency
@@ -980,6 +1003,9 @@ watch(
 function applySavedSettings(result: Settings) {
   Object.assign(settingsForm, cloneSettingsForForm(result))
   normalizeWorkerEmailProvider()
+  aiPromptInput.value = result.aiConfig.promptTemplate.trim() || DEFAULT_AI_SUBSCRIPTION_PROMPT
+  dashboardSummaryPromptInput.value =
+    result.aiConfig.dashboardSummaryPromptTemplate.trim() || DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT
   queryClient.setQueryData(SETTINGS_QUERY_KEY, result)
 }
 
@@ -1101,8 +1127,11 @@ async function saveAiSettings() {
   if (savingAiSettings.value) return
   if (!validateAiSettings('save')) return
   const promptTemplate = normalizeAiPrompt(aiPromptInput.value)
+  const dashboardSummaryPromptTemplate = normalizeDashboardSummaryPrompt(dashboardSummaryPromptInput.value)
   settingsForm.aiConfig.promptTemplate = promptTemplate
+  settingsForm.aiConfig.dashboardSummaryPromptTemplate = dashboardSummaryPromptTemplate
   aiPromptInput.value = promptTemplate || DEFAULT_AI_SUBSCRIPTION_PROMPT
+  dashboardSummaryPromptInput.value = dashboardSummaryPromptTemplate || DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT
   savingAiSettings.value = true
   try {
     const result = await api.updateSettings({
@@ -1111,12 +1140,12 @@ async function saveAiSettings() {
         capabilities: {
           ...settingsForm.aiConfig.capabilities
         },
-        promptTemplate
+        promptTemplate,
+        dashboardSummaryPromptTemplate
       }
     })
     applySavedSettings(result)
-    aiPromptInput.value = result.aiConfig.promptTemplate.trim() || DEFAULT_AI_SUBSCRIPTION_PROMPT
-    message.success(settingsForm.aiConfig.enabled ? 'AI 识别配置已保存' : 'AI 识别已关闭')
+    message.success(settingsForm.aiConfig.enabled || settingsForm.aiConfig.dashboardSummaryEnabled ? 'AI 能力配置已保存' : 'AI 能力已关闭')
   } finally {
     savingAiSettings.value = false
   }
@@ -1126,9 +1155,11 @@ async function testAiConnectionSettings() {
   if (!validateAiSettings('connection-test')) return
   try {
     const promptTemplate = normalizeAiPrompt(aiPromptInput.value)
+    const dashboardSummaryPromptTemplate = normalizeDashboardSummaryPrompt(dashboardSummaryPromptInput.value)
     const result = await api.testAiConfigurationWithPayload({
       ...settingsForm.aiConfig,
       promptTemplate,
+      dashboardSummaryPromptTemplate,
       capabilities: {
         ...settingsForm.aiConfig.capabilities
       }
@@ -1143,9 +1174,11 @@ async function testAiVisionSettings() {
   if (!validateAiSettings('vision-test')) return
   try {
     const promptTemplate = normalizeAiPrompt(aiPromptInput.value)
+    const dashboardSummaryPromptTemplate = normalizeDashboardSummaryPrompt(dashboardSummaryPromptInput.value)
     const result = await api.testAiVisionConfigurationWithPayload({
       ...settingsForm.aiConfig,
       promptTemplate,
+      dashboardSummaryPromptTemplate,
       capabilities: {
         ...settingsForm.aiConfig.capabilities
       }
@@ -1160,6 +1193,13 @@ function normalizeAiPrompt(value: string) {
   const normalized = value.trim()
   if (!normalized) return ''
   if (normalized === DEFAULT_AI_SUBSCRIPTION_PROMPT.trim()) return ''
+  return value
+}
+
+function normalizeDashboardSummaryPrompt(value: string) {
+  const normalized = value.trim()
+  if (!normalized) return ''
+  if (normalized === DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT.trim()) return ''
   return value
 }
 
@@ -1262,9 +1302,9 @@ async function exportBackup() {
   try {
     const result = await api.exportBackup()
     downloadBlob(result.blob, result.filename)
-    message.success('备份导出已开始')
+    message.success('ZIP 导出已开始')
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '备份导出失败')
+    message.error(error instanceof Error ? error.message : 'ZIP 导出失败')
   }
 }
 
@@ -1440,6 +1480,11 @@ function formatTime(value: string) {
   align-items: center;
 }
 
+.switch-group--ai-capabilities-inline {
+  width: 100%;
+  justify-content: flex-start;
+}
+
 .switch-group--single {
   min-height: 34px;
 }
@@ -1449,6 +1494,10 @@ function formatTime(value: string) {
   align-items: center;
   gap: 10px;
   min-height: 34px;
+}
+
+.switch-label--compact {
+  margin-left: 0;
 }
 
 .label-with-tip {
