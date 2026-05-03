@@ -7,7 +7,83 @@
       icon-background="linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%)"
     />
 
-    <n-grid :cols="gridCols" :x-gap="12" :y-gap="12">
+    <n-grid v-if="showAiSummaryCard" :cols="1" :x-gap="12" :y-gap="12">
+      <n-grid-item>
+        <n-card title="AI 总结">
+          <template #header-extra>
+            <div class="ai-summary-header-actions">
+              <span v-if="dashboardAiSummary?.generatedAt" class="card-muted ai-summary-generated-at">
+                最近生成：{{ summaryGeneratedAtText(dashboardAiSummary.generatedAt) }}
+              </span>
+              <n-button
+                quaternary
+                size="small"
+                class="ai-summary-toggle"
+                @click="summaryExpanded = !summaryExpanded"
+              >
+                {{ summaryExpanded ? '收起详情' : '查看详情' }}
+              </n-button>
+              <n-button size="small" :loading="generatingSummary" :disabled="generatingSummary" @click="regenerateSummary">
+                重新生成总结
+              </n-button>
+            </div>
+          </template>
+
+          <n-space vertical :size="12" style="width: 100%">
+            <div v-if="summaryExpanded" class="card-muted">基于当前统计自动生成，不会修改订阅数据</div>
+
+            <div v-if="summaryLoadingVisible" class="ai-summary-loading">
+              <n-spin size="small" />
+              <div class="card-muted">正在基于当前统计生成 AI 总结，请稍候…</div>
+            </div>
+
+            <template v-else-if="dashboardAiSummary">
+              <n-alert
+                v-if="dashboardAiSummary.status === 'unconfigured'"
+                type="warning"
+                :show-icon="false"
+              >
+                请先前往系统设置启用 AI 能力与 AI 总结，之后统计页面会自动生成总结。
+              </n-alert>
+
+              <n-alert
+                v-else-if="dashboardAiSummary.status === 'failed'"
+                type="error"
+                :show-icon="false"
+              >
+                {{ dashboardAiSummary.errorMessage || 'AI 总结生成失败，请稍后重试。' }}
+              </n-alert>
+
+              <n-empty
+                v-else-if="!dashboardAiSummary.content"
+                description="暂无 AI 总结"
+              />
+
+              <template v-else>
+                <div v-if="!summaryExpanded" class="ai-summary-preview">
+                  <div class="ai-summary-preview__label">摘要</div>
+                  <div class="ai-summary-preview__text">{{ dashboardSummaryPreviewText }}</div>
+                </div>
+                <n-collapse-transition :show="summaryExpanded">
+                  <div
+                    v-if="summaryExpanded"
+                    class="ai-summary-markdown"
+                    v-html="dashboardSummaryHtml"
+                  />
+                </n-collapse-transition>
+              </template>
+            </template>
+
+            <n-empty
+              v-else-if="!dashboardAiSummaryQuery.isLoading.value"
+              description="暂无 AI 总结"
+            />
+          </n-space>
+        </n-card>
+      </n-grid-item>
+    </n-grid>
+
+    <n-grid :cols="gridCols" :x-gap="12" :y-gap="12" style="margin-top: 12px">
       <n-grid-item>
         <n-card title="月支付趋势（未来12个月）">
           <chart-view v-if="trendOption" :option="trendOption" />
@@ -60,32 +136,60 @@
         </n-card>
       </n-grid-item>
     </n-grid>
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useWindowSize } from '@vueuse/core'
-import { NCard, NEmpty, NGrid, NGridItem, useThemeVars } from 'naive-ui'
+import { useQueryClient } from '@tanstack/vue-query'
+import { NAlert, NButton, NCard, NCollapseTransition, NEmpty, NGrid, NGridItem, NSpace, NSpin, useMessage, useThemeVars } from 'naive-ui'
 import { BarChartOutline } from '@vicons/ionicons5'
+import { api } from '@/composables/api'
+import { DASHBOARD_AI_SUMMARY_QUERY_KEY, useDashboardAiSummaryQuery } from '@/composables/dashboard-ai-summary-query'
 import { useSettingsQuery } from '@/composables/settings-query'
 import { useStatisticsOverviewQuery } from '@/composables/statistics-overview-query'
 import ChartView from '@/components/ChartView.vue'
 import PageHeader from '@/components/PageHeader.vue'
-import type { StatisticsOverview, SubscriptionStatus } from '@/types/api'
-import { formatDateInTimezone } from '@/utils/timezone'
+import { formatAiSummaryPreviewText } from '@subtracker/shared'
+import type { SubscriptionStatus } from '@/types/api'
+import { renderMarkdownToHtml } from '@/utils/simple-markdown'
+import { formatDateInTimezone, formatDateTimeInTimezone } from '@/utils/timezone'
 import { buildTopSubscriptionsOption } from '@/utils/statistics-top-subscriptions'
 
 const { width } = useWindowSize()
 const barChartOutline = BarChartOutline
 const themeVars = useThemeVars()
+const queryClient = useQueryClient()
+const message = useMessage()
 
 const { data: overview } = useStatisticsOverviewQuery()
-
 const { data: settings } = useSettingsQuery()
+
+const showAiSummaryCard = computed(() => Boolean(settings.value?.aiConfig.enabled && settings.value?.aiConfig.dashboardSummaryEnabled))
+const dashboardAiSummaryQuery = useDashboardAiSummaryQuery(showAiSummaryCard)
+const dashboardAiSummary = computed(() => dashboardAiSummaryQuery.data.value)
+const generatingSummary = ref(false)
+const autoGenerateAttempted = ref(false)
+const summaryExpanded = ref(false)
 
 const baseCurrency = computed(() => settings.value?.baseCurrency ?? 'CNY')
 const gridCols = computed(() => (width.value < 1100 ? 1 : 2))
+const summaryLoadingVisible = computed(
+  () =>
+    showAiSummaryCard.value && (
+      generatingSummary.value ||
+      dashboardAiSummary.value?.status === 'generating' ||
+      (dashboardAiSummaryQuery.isLoading.value && !dashboardAiSummary.value?.content)
+    )
+)
+const dashboardSummaryHtml = computed(() =>
+  dashboardAiSummary.value?.content ? renderMarkdownToHtml(dashboardAiSummary.value.content) : ''
+)
+const dashboardSummaryPreviewText = computed(() =>
+  formatAiSummaryPreviewText(dashboardAiSummary.value?.previewContent || dashboardAiSummary.value?.content || '')
+)
 
 const statusLabelMap: Record<SubscriptionStatus, string> = {
   active: '正常',
@@ -324,4 +428,114 @@ const topSubscriptionsOption = computed(() =>
 function formatMoney(amount: number, currency: string) {
   return `${currency} ${amount.toFixed(2)}`
 }
+
+async function regenerateSummary() {
+  if (!showAiSummaryCard.value || generatingSummary.value) return
+  generatingSummary.value = true
+  try {
+    await api.generateDashboardAiSummary()
+    await queryClient.invalidateQueries({ queryKey: DASHBOARD_AI_SUMMARY_QUERY_KEY })
+    message.success('AI 总结已更新')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : 'AI 总结生成失败')
+  } finally {
+    generatingSummary.value = false
+  }
+}
+
+function summaryGeneratedAtText(value: string) {
+  return formatDateTimeInTimezone(value, settings.value?.timezone)
+}
+
+watch(
+  [() => dashboardAiSummaryQuery.isLoading.value, dashboardAiSummary, overview],
+  async ([loading, summary, currentOverview]) => {
+    if (!showAiSummaryCard.value || loading || generatingSummary.value || autoGenerateAttempted.value || !currentOverview) return
+    if (!summary) {
+      autoGenerateAttempted.value = true
+      await regenerateSummary()
+      return
+    }
+    if (!summary.canGenerate || !summary.needsGeneration) return
+
+    autoGenerateAttempted.value = true
+    await regenerateSummary()
+  },
+  { immediate: true }
+)
 </script>
+
+<style scoped>
+.card-muted {
+  color: var(--app-text-secondary);
+}
+
+.ai-summary-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ai-summary-generated-at {
+  white-space: nowrap;
+}
+
+.ai-summary-toggle {
+  font-weight: 600;
+}
+
+.ai-summary-loading {
+  min-height: 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.ai-summary-preview {
+  max-width: 100%;
+}
+
+.ai-summary-preview__label {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--app-text-secondary);
+}
+
+.ai-summary-preview__text {
+  color: var(--app-text-primary);
+  line-height: 1.85;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.ai-summary-markdown {
+  color: var(--app-text-primary);
+  line-height: 1.75;
+  word-break: break-word;
+}
+
+.ai-summary-markdown :deep(h2),
+.ai-summary-markdown :deep(h3) {
+  margin: 0 0 10px;
+  color: var(--app-text-strong);
+}
+
+.ai-summary-markdown :deep(p) {
+  margin: 0 0 10px;
+}
+
+.ai-summary-markdown :deep(ul) {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+
+.ai-summary-markdown :deep(li) {
+  margin-bottom: 6px;
+}
+</style>

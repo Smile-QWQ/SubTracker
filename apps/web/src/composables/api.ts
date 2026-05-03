@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type {
+  AiDashboardSummary,
   AiRecognitionResult,
   AiTestResponse,
   AuthResponse,
@@ -41,6 +42,7 @@ const client = axios.create({
 })
 
 const LOGO_REQUEST_TIMEOUT_MS = 60000
+const DASHBOARD_AI_SUMMARY_GENERATE_TIMEOUT_MS = 65000
 
 client.interceptors.request.use((request) => {
   const token = getStoredToken()
@@ -252,6 +254,16 @@ export const api = {
 
   async testAiVisionConfigurationWithPayload(payload: Settings['aiConfig']) {
     return postOnce<AiTestResponse>('/ai/test-vision', payload)
+  },
+
+  async getDashboardAiSummary() {
+    return unwrap<AiDashboardSummary>((await client.get('/ai/summary/dashboard')) as { data: Envelope<AiDashboardSummary> })
+  },
+
+  async generateDashboardAiSummary() {
+    return postOnce<AiDashboardSummary>('/ai/summary/dashboard/generate', undefined, {
+      timeout: DASHBOARD_AI_SUMMARY_GENERATE_TIMEOUT_MS
+    })
   },
 
   async getTags() {
