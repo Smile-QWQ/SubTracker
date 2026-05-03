@@ -5,7 +5,9 @@ const routeMocks = vi.hoisted(() => ({
   inspectWallosImportFileMock: vi.fn(),
   commitWallosImportMock: vi.fn(),
   inspectSubtrackerBackupFileMock: vi.fn(),
-  commitSubtrackerBackupMock: vi.fn()
+  commitSubtrackerBackupMock: vi.fn(),
+  invalidateWorkerLiteCacheMock: vi.fn(async () => undefined),
+  bumpCacheVersionsMock: vi.fn(async () => 0)
 }))
 
 vi.mock('../../src/services/wallos-import.service', () => ({
@@ -16,6 +18,14 @@ vi.mock('../../src/services/wallos-import.service', () => ({
 vi.mock('../../src/services/subtracker-backup.service', () => ({
   inspectSubtrackerBackupFile: routeMocks.inspectSubtrackerBackupFileMock,
   commitSubtrackerBackup: routeMocks.commitSubtrackerBackupMock
+}))
+
+vi.mock('../../src/services/worker-lite-cache.service', () => ({
+  invalidateWorkerLiteCache: routeMocks.invalidateWorkerLiteCacheMock
+}))
+
+vi.mock('../../src/services/cache-version.service', () => ({
+  bumpCacheVersions: routeMocks.bumpCacheVersionsMock
 }))
 
 import { importRoutes } from '../../src/routes/imports'
@@ -30,6 +40,8 @@ describe('import routes', () => {
     routeMocks.commitWallosImportMock.mockReset()
     routeMocks.inspectSubtrackerBackupFileMock.mockReset()
     routeMocks.commitSubtrackerBackupMock.mockReset()
+    routeMocks.invalidateWorkerLiteCacheMock.mockReset()
+    routeMocks.bumpCacheVersionsMock.mockReset()
   })
 
   afterEach(async () => {
