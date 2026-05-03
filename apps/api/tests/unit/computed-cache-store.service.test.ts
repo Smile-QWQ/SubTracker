@@ -55,4 +55,28 @@ describe('computed cache store', () => {
       expect.any(String)
     )
   })
+
+  it('creates and deletes cache rows without upsert when used as a distributed lock', async () => {
+    const { createComputedCache, deleteComputedCache } = await import('../../src/services/computed-cache-store.service')
+
+    prisma.$executeRawUnsafe.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 1 })
+
+    await expect(createComputedCache('ai-summary', 'dashboard-overview:lock', { ownerId: 'x' }, 120)).resolves.toBe(true)
+    await deleteComputedCache('ai-summary', 'dashboard-overview:lock')
+
+    expect(prisma.$executeRawUnsafe).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('INSERT INTO "ComputedCache"'),
+      'ai-summary',
+      'dashboard-overview:lock',
+      JSON.stringify({ ownerId: 'x' }),
+      expect.any(String)
+    )
+    expect(prisma.$executeRawUnsafe).toHaveBeenNthCalledWith(
+      2,
+      'DELETE FROM "ComputedCache" WHERE "namespace" = ? AND "cacheKey" = ?',
+      'ai-summary',
+      'dashboard-overview:lock'
+    )
+  })
 })

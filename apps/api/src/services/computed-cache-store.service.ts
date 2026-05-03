@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '../db'
 import { getRuntimeD1Database, isWorkerRuntime } from '../runtime'
 
@@ -59,6 +60,15 @@ function parseJsonValue<T>(value: unknown) {
 
 function toExpiresAt(value: string | Date) {
   return value instanceof Date ? value : new Date(value)
+}
+
+function isUniqueConstraintError(error: unknown) {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return error.code === 'P2002'
+  }
+
+  const message = error instanceof Error ? error.message : String(error)
+  return /unique|constraint/i.test(message)
 }
 
 export async function getComputedCacheEntry<T>(namespace: string, cacheKey: string): Promise<ComputedCacheEntry<T> | null> {
@@ -141,6 +151,57 @@ export async function setComputedCache<T>(namespace: string, cacheKey: string, v
      DO UPDATE SET "valueJson" = excluded."valueJson", "expiresAt" = excluded."expiresAt", "updatedAt" = CURRENT_TIMESTAMP`,
     [namespace, cacheKey, serializedValue, expiresAt]
   )
+}
+
+export async function createComputedCache<T>(namespace: string, cacheKey: string, value: T, ttlSeconds: number) {
+  const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString()
+  const serializedValue = JSON.stringify(value)
+
+  if (!getD1()) {
+    try {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "ComputedCache" ("namespace", "cacheKey", "valueJson", "expiresAt", "updatedAt")
+         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        namespace,
+        cacheKey,
+        serializedValue,
+        expiresAt
+      )
+      return true
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        return false
+      }
+      throw error
+    }
+  }
+
+  try {
+    await d1Run(
+      `INSERT INTO "ComputedCache" ("namespace", "cacheKey", "valueJson", "expiresAt", "updatedAt")
+       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      [namespace, cacheKey, serializedValue, expiresAt]
+    )
+    return true
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      return false
+    }
+    throw error
+  }
+}
+
+export async function deleteComputedCache(namespace: string, cacheKey: string) {
+  if (!getD1()) {
+    await prisma.$executeRawUnsafe(
+      'DELETE FROM "ComputedCache" WHERE "namespace" = ? AND "cacheKey" = ?',
+      namespace,
+      cacheKey
+    )
+    return
+  }
+
+  await d1Run('DELETE FROM "ComputedCache" WHERE "namespace" = ? AND "cacheKey" = ?', [namespace, cacheKey])
 }
 
 export async function purgeExpiredComputedCache() {
