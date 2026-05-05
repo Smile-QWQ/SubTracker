@@ -42,12 +42,11 @@ jobs:
           VITE_APP_VERSION: ${{ github.head_ref || github.ref_name }}
         run: npm run build
 
-  release:
+  release-metadata:
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      packages: write
+    outputs:
+      release_tag: ${{ steps.release_tag.outputs.value }}
 
     steps:
       - name: Validate release tag
@@ -61,10 +60,18 @@ jobs:
           fi
           echo "value=$TAG" >> "$GITHUB_OUTPUT"
 
+  release-assets:
+    if: github.event_name == 'release'
+    needs: release-metadata
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
       - name: Checkout release tag
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ needs.release-metadata.outputs.release_tag }}
           fetch-depth: 0
 
       - name: Setup Node.js
@@ -87,13 +94,63 @@ jobs:
 
       - name: Build
         env:
-          VITE_APP_VERSION: ${{ steps.release_tag.outputs.value }}
+          VITE_APP_VERSION: ${{ needs.release-metadata.outputs.release_tag }}
         run: npm run build
 
       - name: Archive web dist
         run: |
           cd apps/web/dist
           zip -r ../../../subtracker-web-dist.zip .
+
+      - name: Upload assets to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.release-metadata.outputs.release_tag }}
+          files: |
+            subtracker-web-dist.zip
+
+  docker-build:
+    if: github.event_name == 'release'
+    needs: release-metadata
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api
+            image_name: ghcr.io/smile-qwq/subtracker-api
+            dockerfile: ./Dockerfile
+            platform: linux/amd64
+            platform_pair: linux-amd64
+            runner: ubuntu-latest
+          - image: api
+            image_name: ghcr.io/smile-qwq/subtracker-api
+            dockerfile: ./Dockerfile
+            platform: linux/arm64
+            platform_pair: linux-arm64
+            runner: ubuntu-24.04-arm
+          - image: web
+            image_name: ghcr.io/smile-qwq/subtracker-web
+            dockerfile: ./docker/web.Dockerfile
+            platform: linux/amd64
+            platform_pair: linux-amd64
+            runner: ubuntu-latest
+          - image: web
+            image_name: ghcr.io/smile-qwq/subtracker-web
+            dockerfile: ./docker/web.Dockerfile
+            platform: linux/arm64
+            platform_pair: linux-arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-metadata.outputs.release_tag }}
+          fetch-depth: 0
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -102,57 +159,92 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            VITE_APP_VERSION=${{ needs.release-metadata.outputs.release_tag }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/Smile-QWQ/SubTracker
+            org.opencontainers.image.version=${{ needs.release-metadata.outputs.release_tag }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.platform_pair }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.platform_pair }}
+          provenance: false
+          sbom: false
+          outputs: type=image,name=${{ matrix.image_name }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        shell: bash
+        run: |
+          mkdir -p "/tmp/digests/${{ matrix.image }}"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${{ matrix.image }}/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.image }}-${{ matrix.platform_pair }}
+          path: /tmp/digests/${{ matrix.image }}/*
+          if-no-files-found: error
+          retention-days: 1
+
+  docker-merge:
+    if: github.event_name == 'release'
+    needs:
+      - release-metadata
+      - docker-build
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api
+            image_name: ghcr.io/smile-qwq/subtracker-api
+          - image: web
+            image_name: ghcr.io/smile-qwq/subtracker-web
+
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-${{ matrix.image }}-*
+          merge-multiple: true
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Extract API Docker metadata
-        id: api_meta
+      - name: Extract Docker metadata
+        id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.API_IMAGE_NAME }}
+          images: ${{ matrix.image_name }}
           tags: |
             type=raw,value=latest
-            type=raw,value=${{ steps.release_tag.outputs.value }}
+            type=raw,value=${{ needs.release-metadata.outputs.release_tag }}
             type=sha
 
-      - name: Extract Web Docker metadata
-        id: web_meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.WEB_IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest
-            type=raw,value=${{ steps.release_tag.outputs.value }}
-            type=sha
-
-      - name: Build and push API Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.api_meta.outputs.tags }}
-          labels: ${{ steps.api_meta.outputs.labels }}
-
-      - name: Build and push Web Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./docker/web.Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          build-args: |
-            VITE_APP_VERSION=${{ steps.release_tag.outputs.value }}
-          tags: ${{ steps.web_meta.outputs.tags }}
-          labels: ${{ steps.web_meta.outputs.labels }}
-
-      - name: Upload assets to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.release_tag.outputs.value }}
-          files: |
-            subtracker-web-dist.zip
+      - name: Create multi-architecture manifest
+        shell: bash
+        run: |
+          cd /tmp/digests
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ matrix.image_name }}@sha256:%s ' *)
