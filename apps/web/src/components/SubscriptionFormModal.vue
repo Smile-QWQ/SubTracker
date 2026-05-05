@@ -229,6 +229,17 @@
         </n-grid-item>
       </n-grid>
 
+      <reminder-rules-preview
+        ref="subscriptionReminderPreviewRef"
+        class="subscription-reminder-preview"
+        :advance-value="form.advanceReminderRules"
+        :overdue-value="form.overdueReminderRules"
+        :default-advance-value="props.defaultAdvanceReminderRules"
+        :default-overdue-value="props.defaultOverdueReminderRules"
+        :show-button="false"
+        @visibility-change="subscriptionReminderPreviewVisible = $event"
+      />
+
       <n-form-item label="备注" :validation-status="validationStatusOf('notes')" :feedback="formErrors.notes">
         <n-input
           v-model:value="form.notes"
@@ -248,6 +259,14 @@
         </n-space>
         <n-space wrap>
           <n-button :disabled="saving" @click="showAiModal = true">AI 识别</n-button>
+          <n-button
+            :disabled="saving"
+            :type="subscriptionReminderPreviewVisible ? 'primary' : 'default'"
+            :secondary="subscriptionReminderPreviewVisible"
+            @click="previewSubscriptionReminderRules"
+          >
+            {{ subscriptionReminderPreviewVisible ? '收起提醒预览' : '预览提醒规则' }}
+          </n-button>
           <n-button :disabled="saving" @click="handleReset">重置</n-button>
           <n-button :disabled="saving" @click="close">取消</n-button>
           <n-button type="primary" :loading="saving" :disabled="saving" @click="submit">保存</n-button>
@@ -287,6 +306,7 @@ import {
 import { CloseOutline, ColorWandOutline, HelpCircleOutline, SearchOutline } from '@vicons/ionicons5'
 import { api } from '@/composables/api'
 import { useSettingsQuery } from '@/composables/settings-query'
+import ReminderRulesPreview from '@/components/ReminderRulesPreview.vue'
 import SubscriptionAiModal from '@/components/SubscriptionAiModal.vue'
 import { buildCurrencyOptions } from '@/utils/currency'
 import { resolveLogoUrl } from '@/utils/logo'
@@ -321,6 +341,8 @@ const { width } = useWindowSize()
 const { data: settings } = useSettingsQuery()
 const message = useMessage()
 const helpCircleOutline = HelpCircleOutline
+const subscriptionReminderPreviewRef = ref<InstanceType<typeof ReminderRulesPreview> | null>(null)
+const subscriptionReminderPreviewVisible = ref(false)
 const showAiModal = ref(false)
 const showLogoPanel = ref(false)
 const logoPanelTab = ref<string>(LOGO_TAB_WEB)
@@ -787,6 +809,10 @@ function close() {
   emit('close')
 }
 
+function previewSubscriptionReminderRules() {
+  subscriptionReminderPreviewRef.value?.toggle()
+}
+
 function handleUpdateShow(value: boolean) {
   if (!value) {
     close()
@@ -1064,6 +1090,11 @@ function formatLogoSource(source: string) {
   color: var(--app-text-muted);
   font-size: 15px;
   cursor: help;
+}
+
+.subscription-reminder-preview {
+  margin-top: -2px;
+  margin-bottom: 18px;
 }
 
 @media (max-width: 900px) {

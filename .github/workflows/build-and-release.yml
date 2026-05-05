@@ -102,6 +102,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -130,6 +133,7 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.api_meta.outputs.tags }}
           labels: ${{ steps.api_meta.outputs.labels }}
@@ -139,6 +143,7 @@ jobs:
         with:
           context: .
           file: ./docker/web.Dockerfile
+          platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
             VITE_APP_VERSION=${{ steps.release_tag.outputs.value }}

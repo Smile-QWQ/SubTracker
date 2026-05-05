@@ -10,6 +10,8 @@
 
 API 容器首次启动时会自动执行 Prisma `db push`，自动初始化或补齐 SQLite 表结构。
 
+以上 Docker 镜像均支持 x86 / ARM 双架构，镜像名称与 tag 不需要区分；Docker 会根据宿主机架构自动拉取对应变体。
+
 建议直接使用安装脚本：
 
 ```bash
