@@ -97,6 +97,15 @@
               </n-grid-item>
             </n-grid>
 
+            <reminder-rules-preview
+              ref="settingsReminderPreviewRef"
+              class="settings-reminder-preview"
+              :advance-value="settingsForm.defaultAdvanceReminderRules"
+              :overdue-value="settingsForm.defaultOverdueReminderRules"
+              :show-button="false"
+              @visibility-change="settingsReminderPreviewVisible = $event"
+            />
+
             <n-grid :cols="formCols" :x-gap="12">
               <n-grid-item>
                 <div class="switch-row">
@@ -126,6 +135,16 @@
                   <n-icon><save-outline /></n-icon>
                 </template>
                 保存
+              </n-button>
+              <n-button
+                :type="settingsReminderPreviewVisible ? 'primary' : 'default'"
+                :secondary="settingsReminderPreviewVisible"
+                @click="previewSettingsReminderRules"
+              >
+                <template #icon>
+                  <n-icon :component="eyeOutline" />
+                </template>
+                {{ settingsReminderPreviewVisible ? '收起提醒预览' : '预览提醒规则' }}
               </n-button>
             </n-space>
           </n-form>
@@ -635,6 +654,7 @@ import {
 import {
   ChevronDownOutline,
   ChevronUpOutline,
+  EyeOutline,
   HelpCircleOutline,
   RefreshOutline,
   SaveOutline,
@@ -646,6 +666,7 @@ import { EXCHANGE_RATE_SNAPSHOT_QUERY_KEY, useExchangeRateSnapshotQuery } from '
 import { NOTIFICATION_WEBHOOK_QUERY_KEY, useNotificationWebhookQuery } from '@/composables/notification-webhook-query'
 import { SETTINGS_QUERY_KEY, useSettingsQuery } from '@/composables/settings-query'
 import PageHeader from '@/components/PageHeader.vue'
+import ReminderRulesPreview from '@/components/ReminderRulesPreview.vue'
 import SubtrackerBackupModal from '@/components/SubtrackerBackupModal.vue'
 import WallosImportModal from '@/components/WallosImportModal.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -668,6 +689,9 @@ const chevronUpOutline = ChevronUpOutline
 const swapHorizontalOutline = SwapHorizontalOutline
 const helpCircleOutline = HelpCircleOutline
 const settingsOutline = SettingsOutline
+const eyeOutline = EyeOutline
+const settingsReminderPreviewRef = ref<InstanceType<typeof ReminderRulesPreview> | null>(null)
+const settingsReminderPreviewVisible = ref(false)
 const AI_PROVIDER_PRESETS: Record<
   Exclude<AiProviderPreset, 'custom'>,
   Pick<Settings['aiConfig'], 'providerName' | 'baseUrl' | 'model' | 'capabilities'>
@@ -1453,6 +1477,10 @@ function formatTime(value: string) {
   return formatDateTimeInTimezone(value, settingsForm.timezone)
 }
 
+function previewSettingsReminderRules() {
+  settingsReminderPreviewRef.value?.toggle()
+}
+
 </script>
 
 <style scoped>
@@ -1597,6 +1625,11 @@ function formatTime(value: string) {
   gap: 12px;
   min-height: 34px;
   margin-top: -2px;
+  margin-bottom: 12px;
+}
+
+.settings-reminder-preview {
+  margin-top: -4px;
   margin-bottom: 12px;
 }
 
