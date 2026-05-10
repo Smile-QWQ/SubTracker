@@ -31,3 +31,11 @@ export function getBatchStatusText(status: BatchSettableStatus) {
     cancelled: '停用'
   }[status]
 }
+
+export function countBatchDeletableSubscriptions(subscriptions: Array<Pick<Subscription, 'status'>>) {
+  const deletableCount = subscriptions.filter((item) => item.status !== 'active').length
+  return {
+    deletableCount,
+    blockedCount: subscriptions.length - deletableCount
+  }
+}

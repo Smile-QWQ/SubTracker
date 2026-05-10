@@ -19,7 +19,8 @@ const routeMocks = vi.hoisted(() => {
         update: vi.fn(),
         findUnique: vi.fn(),
         findUniqueOrThrow: vi.fn(),
-        findMany: vi.fn()
+        findMany: vi.fn(),
+        delete: vi.fn()
       },
       paymentRecord: {
         findMany: vi.fn()
@@ -40,7 +41,18 @@ const routeMocks = vi.hoisted(() => {
       logoFetchedAt: null
     })),
     getDefaultAdvanceReminderRulesSettingMock: vi.fn(async () => '3&09:30;0&09:30;'),
-    getAppTimezoneMock: vi.fn(async () => 'Asia/Shanghai')
+    getAppTimezoneMock: vi.fn(async () => 'Asia/Shanghai'),
+    ensureExchangeRatesMock: vi.fn(async () => ({
+      baseCurrency: 'CNY',
+      rates: {
+        CNY: 1,
+        USD: 0.14
+      },
+      fetchedAt: new Date('2026-05-01T00:00:00.000Z').toISOString(),
+      provider: 'mock',
+      providerUrl: 'https://example.com',
+      isStale: false
+    }))
   }
 })
 
@@ -86,6 +98,10 @@ vi.mock('../../src/services/settings.service', () => ({
   getDefaultAdvanceReminderRulesSetting: routeMocks.getDefaultAdvanceReminderRulesSettingMock
 }))
 
+vi.mock('../../src/services/exchange-rate.service', () => ({
+  ensureExchangeRates: routeMocks.ensureExchangeRatesMock
+}))
+
 import { subscriptionRoutes } from '../../src/routes/subscriptions'
 
 describe('subscription routes', () => {
@@ -101,6 +117,8 @@ describe('subscription routes', () => {
     routeMocks.prismaMock.subscription.findUniqueOrThrow.mockReset()
     routeMocks.prismaMock.subscription.create.mockReset()
     routeMocks.prismaMock.subscription.update.mockReset()
+    routeMocks.prismaMock.subscription.delete.mockReset()
+    routeMocks.prismaMock.paymentRecord.findMany.mockReset()
     routeMocks.tx.subscription.findUnique.mockReset()
     routeMocks.tx.subscription.create.mockReset()
     routeMocks.tx.subscription.update.mockReset()
@@ -223,6 +241,29 @@ describe('subscription routes', () => {
     })
   })
 
+  it('deletes only deletable subscriptions in batch mode and skips active ones', async () => {
+    routeMocks.prismaMock.subscription.findMany.mockResolvedValue([
+      { id: 'sub_1', status: 'active' },
+      { id: 'sub_2', status: 'paused' }
+    ])
+    routeMocks.prismaMock.subscription.delete = vi.fn().mockResolvedValue({})
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/subscriptions/batch/delete',
+      payload: {
+        ids: ['sub_1', 'sub_2']
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data).toMatchObject({
+      successCount: 1,
+      failureCount: 1,
+      failures: [{ id: 'sub_1', message: 'Active subscriptions cannot be deleted directly' }]
+    })
+  })
+
   it('rejects batch status updates to system-only expired status', async () => {
     const res = await app.inject({
       method: 'POST',
@@ -235,6 +276,97 @@ describe('subscription routes', () => {
 
     expect(res.statusCode).toBe(422)
     expect(routeMocks.prismaMock.subscription.update).not.toHaveBeenCalled()
+  })
+
+  it('rejects deleting an active subscription directly', async () => {
+    routeMocks.prismaMock.subscription.findUnique.mockResolvedValue({
+      id: 'sub_1',
+      status: 'active'
+    })
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/subscriptions/sub_1'
+    })
+
+    expect(res.statusCode).toBe(422)
+    expect(res.json().error.code).toBe('subscription_delete_not_allowed')
+  })
+
+  it('allows deleting a paused subscription directly', async () => {
+    routeMocks.prismaMock.subscription.findUnique.mockResolvedValue({
+      id: 'sub_1',
+      status: 'paused'
+    })
+    routeMocks.prismaMock.subscription.delete = vi.fn().mockResolvedValue({})
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/subscriptions/sub_1'
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(routeMocks.removeSubscriptionOrderMock).toHaveBeenCalledWith('sub_1')
+  })
+
+  it('returns remaining value fields in subscription detail', async () => {
+    routeMocks.prismaMock.subscription.findUnique.mockResolvedValue({
+      id: 'sub_1',
+      name: 'Pro',
+      description: '',
+      websiteUrl: null,
+      logoUrl: null,
+      logoSource: null,
+      logoFetchedAt: null,
+      status: 'active',
+      amount: 30,
+      currency: 'USD',
+      billingIntervalCount: 1,
+      billingIntervalUnit: 'month',
+      autoRenew: true,
+      startDate: new Date('2026-05-01T00:00:00.000Z'),
+      nextRenewalDate: new Date('2026-06-01T00:00:00.000Z'),
+      notifyDaysBefore: 3,
+      advanceReminderRules: '3&09:30;',
+      overdueReminderRules: '1&09:30;',
+      webhookEnabled: true,
+      notes: '',
+      createdAt: new Date('2026-05-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-01T00:00:00.000Z'),
+      tags: []
+    })
+    routeMocks.prismaMock.paymentRecord.findMany.mockResolvedValue([
+      {
+        id: 'pay_1',
+        subscriptionId: 'sub_1',
+        amount: 30,
+        currency: 'USD',
+        baseCurrency: 'CNY',
+        convertedAmount: 200,
+        exchangeRate: 6.66,
+        paidAt: new Date('2026-05-01T01:00:00.000Z'),
+        periodStart: new Date('2026-05-01T00:00:00.000Z'),
+        periodEnd: new Date('2026-06-01T00:00:00.000Z'),
+        createdAt: new Date('2026-05-01T01:00:00.000Z')
+      }
+    ])
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/subscriptions/sub_1'
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data).toEqual(
+      expect.objectContaining({
+        currentCycleStartDate: expect.any(String),
+        currentCycleEndDate: expect.any(String),
+        remainingDays: expect.any(Number),
+        remainingRatio: expect.any(Number),
+        remainingValue: expect.any(Number),
+        remainingValueCurrency: 'CNY'
+      })
+    )
   })
 
   it('restores expired subscriptions to active when nextRenewalDate is moved to the future', async () => {

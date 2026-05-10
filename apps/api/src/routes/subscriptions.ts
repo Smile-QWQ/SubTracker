@@ -1,4 +1,5 @@
 import { FastifyInstance } from 'fastify'
+import type { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { prisma } from '../db'
 import { sendCreated, sendError, sendOk } from '../http'
@@ -16,6 +17,7 @@ import {
   sortSubscriptionsByOrder
 } from '../services/subscription-order.service'
 import { renewSubscription } from '../services/subscription.service'
+import { calculateSubscriptionRemainingValue } from '../services/subscription-value.service'
 import { flattenSubscriptionTags, normalizeTagIds, replaceSubscriptionTags } from '../services/tag.service'
 import {
   deleteLocalLogoFromLibrary,
@@ -30,6 +32,7 @@ import {
   deriveNotifyDaysBeforeFromAdvanceRules,
   normalizeOptionalReminderRules
 } from '../services/reminder-rules.service'
+import { ensureExchangeRates } from '../services/exchange-rate.service'
 import { getAppTimezone, getDefaultAdvanceReminderRulesSetting } from '../services/settings.service'
 import { parseDateInTimezone, startOfDayDateInTimezone } from '../utils/timezone'
 import { normalizeWebsiteUrlInput } from '../utils/website-url'
@@ -170,6 +173,31 @@ async function runBatchAction(
     successCount,
     failureCount: failures.length,
     failures
+  }
+}
+
+async function buildSubscriptionDetailResponse(
+  row: Prisma.SubscriptionGetPayload<{
+    include: typeof subscriptionInclude
+  }> | null,
+  timezone: string
+) {
+  if (!row) return null
+
+  const flatRow = flattenSubscriptionTags(row)
+  const paymentRecords = await prisma.paymentRecord.findMany({
+    where: { subscriptionId: flatRow.id },
+    orderBy: [{ periodEnd: 'desc' }, { paidAt: 'desc' }]
+  })
+  const exchangeRates = await ensureExchangeRates()
+
+  return {
+    ...flatRow,
+    ...calculateSubscriptionRemainingValue(flatRow, paymentRecords, new Date(), timezone, {
+      baseCurrency: exchangeRates.baseCurrency,
+      exchangeRatesBaseCurrency: exchangeRates.baseCurrency,
+      exchangeRates: exchangeRates.rates
+    })
   }
 }
 
@@ -373,25 +401,57 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       return sendError(reply, 422, 'validation_error', 'Invalid batch delete payload', parsed.error.flatten())
     }
 
-    const result = await runBatchAction(
-      parsed.data.ids,
-      async (id) => {
-        await prisma.subscription.delete({
-          where: { id }
-        })
-        await removeSubscriptionOrder(id)
+    const rows = await prisma.subscription.findMany({
+      where: {
+        id: { in: parsed.data.ids }
       },
-      {
-        validate: (rows) =>
-          rows.some((row) => row.status === 'active') ? 'Active subscriptions cannot be deleted in batch mode' : null
+      select: {
+        id: true,
+        status: true
       }
-    )
+    })
 
-    if (result.failureCount > 0 && result.successCount === 0) {
-      return sendError(reply, 422, 'batch_delete_not_allowed', result.failures[0]?.message ?? 'Batch delete failed', result)
+    if (rows.length !== parsed.data.ids.length) {
+      const existing = new Set(rows.map((item) => item.id))
+      const missingId = parsed.data.ids.find((id) => !existing.has(id))
+      return sendError(reply, 404, 'not_found', 'Subscription not found', {
+        successCount: 0,
+        failureCount: 1,
+        failures: [{ id: missingId ?? 'unknown', message: 'Subscription not found' }]
+      })
     }
 
-    return sendOk(reply, result)
+    const failures: Array<{ id: string; message: string }> = []
+    let successCount = 0
+
+    for (const row of rows) {
+      if (row.status === 'active') {
+        failures.push({
+          id: row.id,
+          message: 'Active subscriptions cannot be deleted directly'
+        })
+        continue
+      }
+
+      try {
+        await prisma.subscription.delete({
+          where: { id: row.id }
+        })
+        await removeSubscriptionOrder(row.id)
+        successCount += 1
+      } catch (error) {
+        failures.push({
+          id: row.id,
+          message: error instanceof Error ? error.message : 'Unknown error'
+        })
+      }
+    }
+
+    return sendOk(reply, {
+      successCount,
+      failureCount: failures.length,
+      failures
+    })
   })
 
   app.get('/subscriptions/:id', async (request, reply) => {
@@ -409,7 +469,9 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       return sendError(reply, 404, 'not_found', 'Subscription not found')
     }
 
-    return sendOk(reply, flattenSubscriptionTags(row))
+    const timezone = await getAppTimezone()
+    const detail = await buildSubscriptionDetailResponse(row, timezone)
+    return sendOk(reply, detail)
   })
 
   app.get('/subscriptions/:id/payment-records', async (request, reply) => {
@@ -665,6 +727,19 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     }
 
     try {
+      const existing = await prisma.subscription.findUnique({
+        where: { id: params.data.id },
+        select: { id: true, status: true }
+      })
+
+      if (!existing) {
+        return sendError(reply, 404, 'not_found', 'Subscription not found')
+      }
+
+      if (existing.status === 'active') {
+        return sendError(reply, 422, 'subscription_delete_not_allowed', '正常中的订阅不能直接删除，请先暂停或停用')
+      }
+
       await prisma.subscription.delete({
         where: { id: params.data.id }
       })

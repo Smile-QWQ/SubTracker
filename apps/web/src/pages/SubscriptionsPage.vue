@@ -197,7 +197,7 @@
               确认恢复该订阅为正常状态？
             </n-popconfirm>
             <n-popconfirm
-              v-else
+              v-if="item.status === 'paused' || item.status === 'cancelled' || item.status === 'expired'"
               positive-text="删除"
               negative-text="保留"
               @positive-click="removeSubscription(item.id, item.name)"
@@ -205,7 +205,7 @@
               <template #trigger>
                 <n-button size="small" type="error" ghost>删除</n-button>
               </template>
-              该订阅已停用，确认彻底删除？
+              将删除“{{ item.name }}”及其续订记录与相关历史，此操作不可恢复，确认继续？
             </n-popconfirm>
           </n-space>
         </n-card>
@@ -309,6 +309,7 @@ import { createSingleFlight } from '@/utils/single-flight'
 import { formatDateInTimezone } from '@/utils/timezone'
 import {
   areAllVisibleSubscriptionsSelected,
+  countBatchDeletableSubscriptions,
   getBatchStatusText,
   getVisiblePageSubscriptionIds,
   mergeSelectedSubscriptionIds,
@@ -410,9 +411,8 @@ const selectedSubscriptions = computed(() =>
   subscriptions.value.filter((item) => selectedSubscriptionIds.value.includes(item.id))
 )
 const selectedCount = computed(() => selectedSubscriptionIds.value.length)
-const canBatchDelete = computed(
-  () => selectedCount.value > 0 && selectedSubscriptions.value.every((item) => item.status !== 'active')
-)
+const batchDeleteSummary = computed(() => countBatchDeletableSubscriptions(selectedSubscriptions.value))
+const canBatchDelete = computed(() => batchDeleteSummary.value.deletableCount > 0)
 const visibleSelectionIds = computed(() =>
   getVisiblePageSubscriptionIds({
     isMobile: isMobile.value,
@@ -675,6 +675,14 @@ const mainColumns = [
                     trigger: () => h(NButton, { size: 'small', type: 'primary', ghost: true }, { default: () => '恢复' }),
                     default: () => '确认恢复该订阅为正常状态？'
                   }
+                ),
+                h(
+                  NPopconfirm,
+                  { positiveText: '删除', negativeText: '保留', onPositiveClick: () => void removeSubscription(row.id, row.name) },
+                  {
+                    trigger: () => h(NButton, { size: 'small', type: 'error', ghost: true }, { default: () => '删除' }),
+                    default: () => `将删除“${row.name}”及其续订记录与相关历史，此操作不可恢复，确认继续？`
+                  }
                 )
               ]
             : [
@@ -683,7 +691,7 @@ const mainColumns = [
                   { positiveText: '删除', negativeText: '保留', onPositiveClick: () => void removeSubscription(row.id, row.name) },
                   {
                     trigger: () => h(NButton, { size: 'small', type: 'error', ghost: true }, { default: () => '删除' }),
-                    default: () => '该订阅已停用，确认彻底删除？'
+                    default: () => `将删除“${row.name}”及其续订记录与相关历史，此操作不可恢复，确认继续？`
                   }
                 )
               ]
@@ -976,10 +984,23 @@ async function runBatchSetStatus(status: BatchSettableStatus) {
 
 async function runBatchDelete() {
   if (!ensureBatchSelection() || !canBatchDelete.value) return
-  if (!window.confirm(`确认批量删除已选的 ${selectedCount.value} 项订阅吗？此操作不可恢复。`)) return
-  const result = await api.batchDeleteSubscriptions(selectedSubscriptionIds.value)
-  summarizeBatchResult('批量删除', result)
-  if (detail.value && selectedSubscriptionIds.value.includes(detail.value.id)) {
+  const { deletableCount, blockedCount } = batchDeleteSummary.value
+  const confirmMessage =
+    blockedCount > 0
+      ? `确认批量删除吗？将删除 ${deletableCount} 项，并跳过 ${blockedCount} 项正常订阅。此操作不可恢复。`
+      : `确认批量删除已选的 ${deletableCount} 项订阅吗？此操作不可恢复。`
+  if (!window.confirm(confirmMessage)) return
+  const ids = [...selectedSubscriptionIds.value]
+  const result = await api.batchDeleteSubscriptions(ids)
+  const skippedActiveCount = result.failures.filter((item) => item.message.includes('Active subscriptions cannot be deleted directly')).length
+  const otherFailureCount = result.failureCount - skippedActiveCount
+  if (result.failureCount === 0) {
+    message.success(`批量删除成功，共 ${result.successCount} 项`)
+  } else {
+    message.warning(`批量删除完成：已删除 ${result.successCount} 项，跳过 ${skippedActiveCount} 项正常订阅，失败 ${otherFailureCount} 项`)
+  }
+  const deletedIds = ids.filter((id) => !result.failures.some((failure) => failure.id === id))
+  if (detail.value && deletedIds.includes(detail.value.id)) {
     detail.value = null
     showDetailDrawer.value = false
   }

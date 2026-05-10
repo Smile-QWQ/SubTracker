@@ -123,6 +123,26 @@ export function formatReminderRulesText(
   }
 }
 
+export function listReminderRuleDescriptions(
+  value: string | null | undefined,
+  kind: ReminderRulesKind,
+  fallback?: string | null | undefined
+) {
+  const currentValue = value?.trim() ?? ''
+
+  try {
+    const source = currentValue || fallback?.trim() || ''
+    if (!source) return []
+    const parts = parseReminderRulesStrict(source, kind)
+    return parts.map((item) => ({
+      key: `${item.days}&${item.time}`,
+      description: toInlineDescription(item, kind)
+    }))
+  } catch {
+    return []
+  }
+}
+
 export function evaluateReminderRules(
   value: string | null | undefined,
   kind: ReminderRulesKind,
