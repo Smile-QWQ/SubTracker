@@ -73,7 +73,9 @@ export async function buildApp() {
       url === '/health' ||
       url.startsWith('/static/logos/') ||
       url === '/api/v1/auth/login' ||
-      url === '/api/v1/auth/login-options'
+      url === '/api/v1/auth/login-options' ||
+      url === '/api/v1/auth/forgot-password/request' ||
+      url === '/api/v1/auth/forgot-password/reset'
     ) {
       return
     }

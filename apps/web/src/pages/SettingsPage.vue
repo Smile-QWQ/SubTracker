@@ -555,7 +555,22 @@
             <n-form-item label="新密码">
               <n-input v-model:value="credentialsForm.newPassword" type="password" show-password-on="click" />
             </n-form-item>
-            <n-button type="primary" :loading="savingCredentials" :disabled="savingCredentials" @click="submitCredentialsChange">修改</n-button>
+            <div class="switch-row">
+              <div class="switch-group switch-group--single">
+                <div class="switch-group__item">
+                  <span class="switch-inline-label">允许通过通知验证码找回密码</span>
+                  <n-switch
+                    v-model:value="settingsForm.forgotPasswordEnabled"
+                    :disabled="!forgotPasswordToggleUnlocked"
+                  />
+                </div>
+              </div>
+            </div>
+            <n-space style="margin-top: 12px">
+              <n-button type="primary" :loading="savingCredentials" :disabled="savingCredentials" @click="submitCredentialsChange">
+                修改
+              </n-button>
+            </n-space>
           </n-form>
         </n-card>
       </n-grid-item>
@@ -583,6 +598,36 @@
             </n-card>
           </n-space>
         </n-card>
+      </n-grid-item>
+
+      <n-grid-item :span="gridSpanFull">
+        <n-space vertical :size="12" style="width: 100%">
+          <n-card title="About" class="settings-card">
+            <div class="about-list">
+              <div v-for="item in aboutEntries" :key="item.title" class="about-entry">
+                <div class="about-entry__title">{{ item.title }}</div>
+                <div v-if="item.description" class="about-entry__description">{{ item.description }}</div>
+                <a class="about-entry__link" :href="item.href" target="_blank" rel="noreferrer">
+                  {{ item.linkText }}
+                  <n-icon :component="openOutline" />
+                </a>
+              </div>
+            </div>
+          </n-card>
+
+          <n-card title="Credits" class="settings-card">
+            <div class="about-list">
+              <div v-for="item in creditEntries" :key="item.title" class="about-entry">
+                <div class="about-entry__title">{{ item.title }}</div>
+                <div v-if="item.description" class="about-entry__description">{{ item.description }}</div>
+                <a class="about-entry__link" :href="item.href" target="_blank" rel="noreferrer">
+                  {{ item.linkText }}
+                  <n-icon :component="openOutline" />
+                </a>
+              </div>
+            </div>
+          </n-card>
+        </n-space>
       </n-grid-item>
     </n-grid>
 
@@ -645,6 +690,7 @@ import {
   ChevronUpOutline,
   EyeOutline,
   HelpCircleOutline,
+  OpenOutline,
   RefreshOutline,
   SaveOutline,
   SettingsOutline,
@@ -667,6 +713,7 @@ import { buildTimeZoneOptions, formatDateTimeInTimezone, normalizeAppTimezone } 
 import type { AiProviderPreset, ChangeCredentialsPayload, ExchangeRateSnapshot, NotificationWebhookSettings, Settings } from '@/types/api'
 
 const message = useMessage()
+const appVersion = __APP_VERSION__
 const authStore = useAuthStore()
 const queryClient = useQueryClient()
 const { data: settingsQueryData } = useSettingsQuery()
@@ -679,6 +726,7 @@ const swapHorizontalOutline = SwapHorizontalOutline
 const helpCircleOutline = HelpCircleOutline
 const settingsOutline = SettingsOutline
 const eyeOutline = EyeOutline
+const openOutline = OpenOutline
 const settingsReminderPreviewRef = ref<InstanceType<typeof ReminderRulesPreview> | null>(null)
 const settingsReminderPreviewVisible = ref(false)
 const AI_PROVIDER_PRESETS: Record<
@@ -720,6 +768,7 @@ const settingsForm = reactive<Settings>({
   defaultNotifyDays: 3,
   defaultAdvanceReminderRules: DEFAULT_ADVANCE_REMINDER_RULES,
   rememberSessionDays: 7,
+  forgotPasswordEnabled: false,
   notifyOnDueDay: true,
   mergeMultiSubscriptionNotifications: true,
   monthlyBudgetBase: null,
@@ -835,6 +884,78 @@ const emailProviderOptions = [
   { label: 'SMTP', value: 'smtp' },
   { label: 'Resend', value: 'resend' }
 ] satisfies Array<{ label: string; value: 'smtp' | 'resend' }>
+const forgotPasswordToggleUnlocked = computed(
+  () =>
+    settingsForm.emailNotificationsEnabled ||
+    settingsForm.pushplusNotificationsEnabled ||
+    settingsForm.telegramNotificationsEnabled ||
+    settingsForm.serverchanNotificationsEnabled ||
+    settingsForm.gotifyNotificationsEnabled
+)
+const aboutEntries = computed(() => [
+  {
+    title: `SubTracker ${appVersion}`,
+    description: '',
+    linkText: 'Release Notes',
+    href: 'https://github.com/Smile-QWQ/SubTracker/releases'
+  },
+  {
+    title: 'License',
+    description: '',
+    linkText: 'GPLv3',
+    href: 'https://www.gnu.org/licenses/gpl-3.0'
+  },
+  {
+    title: 'Issues and Requests',
+    description: '',
+    linkText: 'GitHub',
+    href: 'https://github.com/Smile-QWQ/SubTracker/issues'
+  },
+  {
+    title: 'The author',
+    description: '',
+    linkText: 'https://github.com/Smile-QWQ',
+    href: 'https://github.com/Smile-QWQ'
+  },
+  {
+    title: 'Documentation',
+    description: '',
+    linkText: 'README / DEPLOYMENT',
+    href: 'https://github.com/Smile-QWQ/SubTracker#readme'
+  }
+])
+const creditEntries = [
+  {
+    title: 'Wallos',
+    description: '',
+    linkText: 'https://github.com/ellite/Wallos',
+    href: 'https://github.com/ellite/Wallos'
+  },
+  {
+    title: 'Vue 3 / Vite',
+    description: '',
+    linkText: 'https://vite.dev/',
+    href: 'https://vite.dev/'
+  },
+  {
+    title: 'Naive UI',
+    description: '',
+    linkText: 'https://www.naiveui.com/',
+    href: 'https://www.naiveui.com/'
+  },
+  {
+    title: 'Fastify / Prisma',
+    description: '',
+    linkText: 'https://www.fastify.io/ / https://www.prisma.io/',
+    href: 'https://www.fastify.io/'
+  },
+  {
+    title: 'Pinia / TanStack Query / ECharts',
+    description: '',
+    linkText: 'https://pinia.vuejs.org/',
+    href: 'https://pinia.vuejs.org/'
+  }
+] as const
 const emailSummaryText = computed(() => {
   if (settingsForm.emailProvider === 'resend') {
     const to = settingsForm.resendConfig.to.trim() || '未填写收件人'
@@ -990,6 +1111,16 @@ watch(
   { immediate: true }
 )
 
+watch(
+  forgotPasswordToggleUnlocked,
+  (unlocked) => {
+    if (!unlocked) {
+      settingsForm.forgotPasswordEnabled = false
+    }
+  },
+  { immediate: true }
+)
+
 function applySavedSettings(result: Settings) {
   Object.assign(settingsForm, cloneSettingsForForm(result))
   queryClient.setQueryData(SETTINGS_QUERY_KEY, result)
@@ -1004,6 +1135,7 @@ async function saveBasicSettings() {
       timezone: normalizeAppTimezone(settingsForm.timezone),
       defaultAdvanceReminderRules: settingsForm.defaultAdvanceReminderRules,
       rememberSessionDays: settingsForm.rememberSessionDays,
+      forgotPasswordEnabled: settingsForm.forgotPasswordEnabled,
       mergeMultiSubscriptionNotifications: settingsForm.mergeMultiSubscriptionNotifications,
       monthlyBudgetBase: settingsForm.monthlyBudgetBase,
       yearlyBudgetBase: settingsForm.yearlyBudgetBase,
@@ -1606,6 +1738,42 @@ function previewSettingsReminderRules() {
 .settings-reminder-preview {
   margin-top: -4px;
   margin-bottom: 12px;
+}
+
+.about-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.about-entry {
+  min-width: 0;
+}
+
+.about-entry__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--app-text-strong);
+}
+
+.about-entry__description {
+  margin-top: 2px;
+  color: var(--app-text-secondary);
+  line-height: 1.6;
+}
+
+.about-entry__link {
+  margin-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #7c8db5;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.about-entry__link:hover {
+  color: #4f6ef7;
 }
 
 .webhook-advanced,

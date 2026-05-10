@@ -11,6 +11,8 @@ import type {
   ChangeCredentialsPayload,
   EmailProvider,
   ExchangeRateSnapshot,
+  ForgotPasswordRequestPayload,
+  ForgotPasswordResetPayload,
   GotifyConfig,
   LoginOptions,
   LoginPayload,
@@ -140,6 +142,14 @@ export const api = {
 
   async getLoginOptions() {
     return unwrap<LoginOptions>((await client.get('/auth/login-options')) as { data: Envelope<LoginOptions> })
+  },
+
+  async requestForgotPasswordCode(payload: ForgotPasswordRequestPayload) {
+    return postOnce<{ accepted: boolean }>('/auth/forgot-password/request', payload)
+  },
+
+  async resetForgotPassword(payload: ForgotPasswordResetPayload) {
+    return postOnce<AuthResponse>('/auth/forgot-password/reset', payload)
   },
 
   async getCurrentUser() {

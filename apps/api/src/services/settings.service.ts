@@ -62,6 +62,22 @@ function readSettingsValue<T>(settingsMap: Map<string, unknown>, key: string, fa
   return settingsMap.has(key) ? (settingsMap.get(key) as T) : fallback
 }
 
+function hasDirectForgotPasswordChannelEnabled(settings: {
+  emailNotificationsEnabled: boolean
+  pushplusNotificationsEnabled: boolean
+  telegramNotificationsEnabled: boolean
+  serverchanNotificationsEnabled: boolean
+  gotifyNotificationsEnabled: boolean
+}) {
+  return Boolean(
+    settings.emailNotificationsEnabled ||
+      settings.pushplusNotificationsEnabled ||
+      settings.telegramNotificationsEnabled ||
+      settings.serverchanNotificationsEnabled ||
+      settings.gotifyNotificationsEnabled
+  )
+}
+
 export async function getAppSettings(): Promise<SettingsInput> {
   const rows = await prisma.setting.findMany()
   const settingsMap = new Map(rows.map((row) => [row.key, row.valueJson]))
@@ -104,6 +120,15 @@ export async function getAppSettings(): Promise<SettingsInput> {
   })
   const serverchanNotificationsEnabled = readSettingsValue(settingsMap, 'serverchanNotificationsEnabled', false)
   const gotifyNotificationsEnabled = readSettingsValue(settingsMap, 'gotifyNotificationsEnabled', false)
+  const forgotPasswordEnabled =
+    readSettingsValue(settingsMap, 'forgotPasswordEnabled', false) &&
+    hasDirectForgotPasswordChannelEnabled({
+      emailNotificationsEnabled,
+      pushplusNotificationsEnabled,
+      telegramNotificationsEnabled,
+      serverchanNotificationsEnabled,
+      gotifyNotificationsEnabled
+    })
   const serverchanConfig = readSettingsValue<SettingsInput['serverchanConfig']>(settingsMap, 'serverchanConfig', DEFAULT_SERVERCHAN_CONFIG)
   const gotifyConfig = readSettingsValue<SettingsInput['gotifyConfig']>(settingsMap, 'gotifyConfig', DEFAULT_GOTIFY_CONFIG)
   const aiConfig = AiConfigSchema.parse(readSettingsValue<unknown>(settingsMap, 'aiConfig', DEFAULT_AI_CONFIG))
@@ -114,6 +139,7 @@ export async function getAppSettings(): Promise<SettingsInput> {
     defaultNotifyDays: deriveNotifyDaysBeforeFromAdvanceRules(defaultAdvanceReminderRules) || defaultNotifyDays,
     defaultAdvanceReminderRules,
     rememberSessionDays,
+    forgotPasswordEnabled,
     notifyOnDueDay,
     mergeMultiSubscriptionNotifications,
     monthlyBudgetBase,

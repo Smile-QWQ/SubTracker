@@ -72,6 +72,11 @@ function updateCredentialsCache(credentials: StoredCredentials) {
   cachedMustChangePassword = credentials.username === DEFAULT_USERNAME && verifyPassword(DEFAULT_PASSWORD, credentials)
 }
 
+async function saveCredentials(credentials: StoredCredentials) {
+  await setSetting(CREDENTIALS_KEY, credentials)
+  updateCredentialsCache(credentials)
+}
+
 export async function getStoredCredentials() {
   if (cachedCredentials) {
     return cachedCredentials
@@ -204,8 +209,7 @@ export async function changeCredentials(input: {
     ...nextPassword
   }
 
-  await setSetting(CREDENTIALS_KEY, nextCredentials)
-  updateCredentialsCache(nextCredentials)
+  await saveCredentials(nextCredentials)
 
   return {
     token: await issueToken(input.newUsername),
@@ -228,11 +232,30 @@ export async function changeDefaultPassword(newPassword: string) {
     ...nextPassword
   }
 
-  await setSetting(CREDENTIALS_KEY, nextCredentials)
-  updateCredentialsCache(nextCredentials)
+  await saveCredentials(nextCredentials)
 
   return {
     token: await issueToken(DEFAULT_USERNAME),
     user: await buildAuthUser(DEFAULT_USERNAME)
+  }
+}
+
+export async function resetPasswordForStoredUsername(username: string, newPassword: string) {
+  const credentials = await getStoredCredentials()
+  if (credentials.username !== username) {
+    return null
+  }
+
+  const nextPassword = createPasswordRecord(newPassword)
+  const nextCredentials: StoredCredentials = {
+    username,
+    ...nextPassword
+  }
+
+  await saveCredentials(nextCredentials)
+
+  return {
+    token: await issueToken(username),
+    user: await buildAuthUser(username)
   }
 }

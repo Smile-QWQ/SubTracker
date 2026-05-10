@@ -8,6 +8,7 @@ describe('app layout sidebar behavior', () => {
 
     expect(source).toContain('content-style="overflow: visible;"')
     expect(source).toContain('class="desktop-sider"')
+    expect(source).toContain('const appVersion = __APP_VERSION__')
     expect(source).toContain('position: sticky;')
     expect(source).toContain('height: 100vh;')
     expect(source).toContain('overflow: visible;')

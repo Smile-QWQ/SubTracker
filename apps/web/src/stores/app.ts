@@ -11,6 +11,7 @@ export const useAppStore = defineStore('app', () => {
     defaultNotifyDays: 3,
     defaultAdvanceReminderRules: DEFAULT_ADVANCE_REMINDER_RULES,
     rememberSessionDays: 7,
+    forgotPasswordEnabled: false,
     notifyOnDueDay: true,
     mergeMultiSubscriptionNotifications: true,
     monthlyBudgetBase: null,

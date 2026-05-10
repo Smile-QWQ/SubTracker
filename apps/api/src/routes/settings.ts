@@ -18,6 +18,22 @@ import {
 } from '../services/reminder-rules.service'
 import { createSubtrackerBackupArchive } from '../services/subtracker-backup.service'
 
+function hasDirectForgotPasswordChannelEnabled(settings: {
+  emailNotificationsEnabled: boolean
+  pushplusNotificationsEnabled: boolean
+  telegramNotificationsEnabled: boolean
+  serverchanNotificationsEnabled: boolean
+  gotifyNotificationsEnabled: boolean
+}) {
+  return Boolean(
+    settings.emailNotificationsEnabled ||
+      settings.pushplusNotificationsEnabled ||
+      settings.telegramNotificationsEnabled ||
+      settings.serverchanNotificationsEnabled ||
+      settings.gotifyNotificationsEnabled
+  )
+}
+
 function validateSettingsPayload(settings: Awaited<ReturnType<typeof getAppSettings>>) {
   if (settings.emailNotificationsEnabled) {
     const missingEmailFields =
@@ -187,6 +203,17 @@ export async function settingsRoutes(app: FastifyInstance) {
       return sendError(reply, 422, 'validation_error', error instanceof Error ? error.message : 'Invalid settings payload')
     }
 
+    if (
+      parsed.data.forgotPasswordEnabled === true &&
+      !hasDirectForgotPasswordChannelEnabled(nextSettings)
+    ) {
+      return sendError(reply, 422, 'validation_error', '请先启用至少一个可直达的通知渠道，再开启忘记密码')
+    }
+
+    if (!hasDirectForgotPasswordChannelEnabled(nextSettings)) {
+      nextSettings.forgotPasswordEnabled = false
+    }
+
     const settingsToPersist: Array<[string, unknown]> = Object.entries(parsed.data).filter(([, value]) => value !== undefined)
     const reminderRelatedKeys = new Set([
       'defaultNotifyDays',
@@ -198,6 +225,7 @@ export async function settingsRoutes(app: FastifyInstance) {
 
     const filteredEntries = settingsToPersist.filter(([key]) => !reminderRelatedKeys.has(key))
     filteredEntries.push(
+      ['forgotPasswordEnabled', nextSettings.forgotPasswordEnabled],
       ['defaultAdvanceReminderRules', normalizedReminderSettings.defaultAdvanceReminderRules],
       ['defaultOverdueReminderRules', normalizedReminderSettings.defaultOverdueReminderRules],
       ['defaultNotifyDays', normalizedReminderSettings.defaultNotifyDays],

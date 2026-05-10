@@ -52,4 +52,36 @@ describe('settings import export section', () => {
     expect(source).not.toContain('title="AI 识别设置"')
     expect(source).not.toContain('启用 AI 识别')
   })
+
+  it('adds an about section at the end of settings', () => {
+    const source = readFileSync('src/pages/SettingsPage.vue', 'utf8')
+
+    expect(source).toContain('title="About"')
+    expect(source).toContain('title="Credits"')
+    expect(source).toContain('Release Notes')
+    expect(source).toContain('GPLv3')
+    expect(source).toContain('Issues and Requests')
+    expect(source).toContain('The author')
+    expect(source).toContain('Wallos')
+    expect(source).toContain('Vue 3 / Vite')
+    expect(source).toContain('Naive UI')
+  })
+
+  it('adds forgot-password switch to credentials settings', () => {
+    const source = readFileSync('src/pages/SettingsPage.vue', 'utf8')
+
+    expect(source).toContain('title="登录凭据"')
+    expect(source).toContain('允许通过通知验证码找回密码')
+    expect(source).toContain('settingsForm.forgotPasswordEnabled')
+    expect(source).toContain('forgotPasswordToggleUnlocked')
+    expect(source).toContain(":disabled=\"!forgotPasswordToggleUnlocked\"")
+    expect(source).toContain('switch-group switch-group--single')
+    expect(source).toContain('switch-inline-label')
+    expect(source).toContain('label="新密码"')
+    expect(source).toContain('<n-space style="margin-top: 12px">')
+    expect(source).toContain('修改')
+    expect(source).not.toContain('label="找回密码说明"')
+    expect(source).not.toContain('forgotPasswordHintText')
+    expect(source).not.toContain('label="忘记密码"')
+  })
 })

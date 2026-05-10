@@ -23,12 +23,23 @@ export interface LoginPayload {
 
 export interface LoginOptions {
   rememberSessionDays: number
+  forgotPasswordEnabled: boolean
 }
 
 export interface ChangeCredentialsPayload {
   oldUsername: string
   oldPassword: string
   newUsername: string
+  newPassword: string
+}
+
+export interface ForgotPasswordRequestPayload {
+  username: string
+}
+
+export interface ForgotPasswordResetPayload {
+  username: string
+  code: string
   newPassword: string
 }
 
@@ -66,7 +77,14 @@ export interface Subscription {
   updatedAt: string
 }
 
-export interface SubscriptionDetail extends Subscription {}
+export interface SubscriptionDetail extends Subscription {
+  currentCycleStartDate: string
+  currentCycleEndDate: string
+  remainingDays: number
+  remainingRatio: number
+  remainingValue: number
+  remainingValueCurrency: string
+}
 
 export interface TagBudgetUsage {
   tagId: string
@@ -247,6 +265,7 @@ export interface Settings {
   defaultNotifyDays: number
   defaultAdvanceReminderRules: string
   rememberSessionDays: number
+  forgotPasswordEnabled: boolean
   notifyOnDueDay: boolean
   mergeMultiSubscriptionNotifications: boolean
   monthlyBudgetBase?: number | null

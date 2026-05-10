@@ -379,6 +379,7 @@ export const SettingsSchema = z.object({
   defaultNotifyDays: z.number().int().min(0).max(365).default(3),
   defaultAdvanceReminderRules: z.string().max(500).default(DEFAULT_ADVANCE_REMINDER_RULES),
   rememberSessionDays: z.number().int().min(1).max(365).default(7),
+  forgotPasswordEnabled: z.boolean().default(false),
   notifyOnDueDay: z.boolean().default(true),
   mergeMultiSubscriptionNotifications: z.boolean().default(true),
   monthlyBudgetBase: OptionalMoneySchema,
@@ -413,6 +414,19 @@ export const ChangeCredentialsSchema = z.object({
   oldUsername: z.string().min(1).max(100),
   oldPassword: z.string().min(1).max(200),
   newUsername: z.string().min(1).max(100),
+  newPassword: z.string().min(4).max(200)
+})
+
+export const ForgotPasswordRequestSchema = z.object({
+  username: z.string().min(1).max(100)
+})
+
+export const ForgotPasswordResetSchema = z.object({
+  username: z.string().min(1).max(100),
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, '验证码必须为 6 位数字'),
   newPassword: z.string().min(4).max(200)
 })
 
@@ -479,6 +493,8 @@ export type RenewSubscriptionInput = z.infer<typeof RenewSubscriptionSchema>
 export type SettingsInput = z.infer<typeof SettingsSchema>
 export type LoginInput = z.infer<typeof LoginSchema>
 export type ChangeCredentialsInput = z.infer<typeof ChangeCredentialsSchema>
+export type ForgotPasswordRequestInput = z.infer<typeof ForgotPasswordRequestSchema>
+export type ForgotPasswordResetInput = z.infer<typeof ForgotPasswordResetSchema>
 export type EmailProvider = z.infer<typeof EmailProviderSchema>
 export type EmailConfigInput = z.infer<typeof EmailConfigSchema>
 export type ResendConfigInput = z.infer<typeof ResendConfigSchema>

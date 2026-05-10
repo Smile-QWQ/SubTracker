@@ -17,6 +17,7 @@ vi.mock('../../src/services/settings.service', () => ({
     defaultNotifyDays: 3,
     defaultAdvanceReminderRules: '3&09:30;0&09:30;',
     rememberSessionDays: 7,
+    forgotPasswordEnabled: (store.get('forgotPasswordEnabled') as boolean) ?? false,
     notifyOnDueDay: true,
     mergeMultiSubscriptionNotifications: (store.get('mergeMultiSubscriptionNotifications') as boolean) ?? true,
     monthlyBudgetBase: null,
@@ -252,6 +253,43 @@ describe('settings routes validation', () => {
 
     expect(res.statusCode).toBe(422)
     expect(res.json().error.message).toContain('时间必须为 HH:mm')
+  })
+
+  it('persists forgot-password switch in settings payload', async () => {
+    store.set('emailNotificationsEnabled', true)
+    store.set('smtpConfig', {
+      host: 'smtp.example.com',
+      port: 587,
+      secure: false,
+      username: 'user',
+      password: 'pass',
+      from: 'from@example.com',
+      to: 'to@example.com'
+    })
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      payload: {
+        forgotPasswordEnabled: true
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data.forgotPasswordEnabled).toBe(true)
+    expect(store.get('forgotPasswordEnabled')).toBe(true)
+  })
+
+  it('rejects enabling forgot-password when no direct notification channel is enabled', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      payload: {
+        forgotPasswordEnabled: true
+      }
+    })
+
+    expect(res.statusCode).toBe(422)
+    expect(res.json().error.message).toContain('请先启用至少一个可直达的通知渠道')
   })
 
 })

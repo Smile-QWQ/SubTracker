@@ -71,6 +71,12 @@ export type NotificationChannelResult = {
   message?: string
 }
 
+type ForgotPasswordNotificationPayload = {
+  username: string
+  code: string
+  expiresInMinutes: number
+}
+
 const NOTIFICATION_DEDUP_KEY_PREFIX = 'notification:'
 export const NOTIFICATION_DEDUP_RETENTION_DAYS = 30
 
@@ -311,6 +317,19 @@ function buildNotificationBody(params: NotificationDispatchParams) {
   return lines.filter((line) => !line.endsWith('：')).join('\n')
 }
 
+function buildForgotPasswordTitle() {
+  return 'SubTracker 密码重置验证码'
+}
+
+function buildForgotPasswordBody(payload: ForgotPasswordNotificationPayload) {
+  return [
+    `用户名：${payload.username}`,
+    `验证码：${payload.code}`,
+    `有效期：${payload.expiresInMinutes} 分钟`,
+    '如果这不是你的操作，请忽略本次通知。'
+  ].join('\n')
+}
+
 async function sendSmtpEmailWithConfig(params: NotificationDispatchParams, config: EmailConfigInput) {
   const { host, port, secure, username, password, from, to } = config
   if (!host || !port || !username || !password || !from || !to) {
@@ -380,6 +399,69 @@ async function sendEmailWithProvider(
   }
 
   await sendSmtpEmailWithConfig(params, smtpConfig)
+}
+
+async function sendForgotPasswordEmailWithProvider(
+  payload: ForgotPasswordNotificationPayload,
+  provider: 'smtp' | 'resend',
+  smtpConfig: EmailConfigInput,
+  resendConfig: ResendConfigInput
+) {
+  if (provider === 'resend') {
+    const apiBaseUrl = resendConfig.apiBaseUrl?.trim() || DEFAULT_RESEND_API_URL
+    const apiKey = resendConfig.apiKey?.trim()
+    const from = resendConfig.from?.trim()
+    const to = resendConfig.to?.trim()
+
+    if (!apiBaseUrl || !apiKey || !from || !to) {
+      throw new Error('邮箱通知未启用或配置不完整')
+    }
+
+    const response = await fetch(apiBaseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        from,
+        to: to
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean),
+        subject: buildForgotPasswordTitle(),
+        text: buildForgotPasswordBody(payload)
+      })
+    })
+
+    const rawText = await response.text()
+    if (!response.ok) {
+      throw new Error(`Resend 请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
+    }
+    return
+  }
+
+  const { host, port, secure, username, password, from, to } = smtpConfig
+  if (!host || !port || !username || !password || !from || !to) {
+    throw new Error('邮箱通知未启用或配置不完整')
+  }
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: {
+      user: username,
+      pass: password
+    }
+  })
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject: buildForgotPasswordTitle(),
+    text: buildForgotPasswordBody(payload)
+  })
 }
 
 async function sendEmailNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
@@ -809,6 +891,145 @@ export async function sendTestEmailNotification() {
     settings.smtpConfig,
     settings.resendConfig
   )
+}
+
+export async function sendForgotPasswordVerificationCode(payload: ForgotPasswordNotificationPayload) {
+  const settings = await getNotificationChannelSettings()
+  const results: NotificationChannelResult[] = []
+
+  if (settings.emailNotificationsEnabled) {
+    try {
+      await sendForgotPasswordEmailWithProvider(payload, settings.emailProvider, settings.smtpConfig, settings.resendConfig)
+      results.push({ channel: 'email', status: 'success' })
+    } catch (error) {
+      results.push({
+        channel: 'email',
+        status: 'failed',
+        message: error instanceof Error ? error.message : 'email_dispatch_failed'
+      })
+    }
+  } else {
+    results.push({ channel: 'email', status: 'skipped', message: 'email_disabled' })
+  }
+
+  if (settings.pushplusNotificationsEnabled) {
+    try {
+      await sendPushplusWithConfig(
+        {
+          eventType: 'subscription.reminder_due',
+          resourceKey: 'forgot-password:pushplus',
+          periodKey: `forgot-password:${payload.username}`,
+          payload: {
+            name: payload.username,
+            phase: 'forgot_password',
+            code: payload.code,
+            expiresInMinutes: payload.expiresInMinutes,
+            notes: buildForgotPasswordBody(payload)
+          }
+        },
+        settings.pushplusConfig
+      )
+      results.push({ channel: 'pushplus', status: 'success' })
+    } catch (error) {
+      results.push({
+        channel: 'pushplus',
+        status: 'failed',
+        message: error instanceof Error ? error.message : 'pushplus_dispatch_failed'
+      })
+    }
+  } else {
+    results.push({ channel: 'pushplus', status: 'skipped', message: 'pushplus_disabled' })
+  }
+
+  if (settings.telegramNotificationsEnabled) {
+    try {
+      const { botToken, chatId } = settings.telegramConfig
+      if (!botToken || !chatId) {
+        throw new Error('Telegram 通知未启用或配置不完整')
+      }
+      const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: `${buildForgotPasswordTitle()}\n\n${buildForgotPasswordBody(payload)}`
+        })
+      })
+      const rawText = await response.text()
+      if (!response.ok) {
+        throw new Error(`Telegram 请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
+      }
+      const parsed = rawText ? (JSON.parse(rawText) as TelegramApiResponse) : null
+      if (!parsed?.ok) {
+        throw new Error(`Telegram 请求被拒绝：${parsed?.description || rawText || 'unknown error'}`)
+      }
+      results.push({ channel: 'telegram', status: 'success' })
+    } catch (error) {
+      results.push({
+        channel: 'telegram',
+        status: 'failed',
+        message: error instanceof Error ? error.message : 'telegram_dispatch_failed'
+      })
+    }
+  } else {
+    results.push({ channel: 'telegram', status: 'skipped', message: 'telegram_disabled' })
+  }
+
+  if (settings.serverchanNotificationsEnabled) {
+    try {
+      await sendServerchanWithConfig(
+        {
+          eventType: 'subscription.reminder_due',
+          resourceKey: 'forgot-password:serverchan',
+          periodKey: `forgot-password:${payload.username}`,
+          payload: {
+            name: payload.username,
+            notes: buildForgotPasswordBody(payload)
+          }
+        },
+        settings.serverchanConfig
+      )
+      results.push({ channel: 'serverchan', status: 'success' })
+    } catch (error) {
+      results.push({
+        channel: 'serverchan',
+        status: 'failed',
+        message: error instanceof Error ? error.message : 'serverchan_dispatch_failed'
+      })
+    }
+  } else {
+    results.push({ channel: 'serverchan', status: 'skipped', message: 'serverchan_disabled' })
+  }
+
+  if (settings.gotifyNotificationsEnabled) {
+    try {
+      await sendGotifyWithConfig(
+        {
+          eventType: 'subscription.reminder_due',
+          resourceKey: 'forgot-password:gotify',
+          periodKey: `forgot-password:${payload.username}`,
+          payload: {
+            name: payload.username,
+            notes: buildForgotPasswordBody(payload)
+          }
+        },
+        settings.gotifyConfig
+      )
+      results.push({ channel: 'gotify', status: 'success' })
+    } catch (error) {
+      results.push({
+        channel: 'gotify',
+        status: 'failed',
+        message: error instanceof Error ? error.message : 'gotify_dispatch_failed'
+      })
+    }
+  } else {
+    results.push({ channel: 'gotify', status: 'skipped', message: 'gotify_disabled' })
+  }
+
+  return results
 }
 
 export async function sendTestEmailNotificationWithConfig(config: {

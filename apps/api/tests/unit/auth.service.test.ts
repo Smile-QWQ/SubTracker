@@ -48,4 +48,36 @@ describe('auth service caching', () => {
     expect(getSettingMock).toHaveBeenCalledTimes(1)
     expect(getSettingMock).toHaveBeenCalledWith('authSessionSecret', null)
   })
+
+  it('resets password for the stored username and returns a new token', async () => {
+    const credentials = {
+      username: 'alice',
+      passwordHash: 'hash',
+      passwordSalt: 'salt'
+    }
+
+    getSettingMock.mockImplementation(async (key: string, fallback: unknown) => {
+      if (key === 'authCredentials') return credentials
+      if (key === 'authSessionSecret') return 'secret-value'
+      return fallback
+    })
+
+    const { resetPasswordForStoredUsername, verifyToken } = await import('../../src/services/auth.service')
+
+    const result = await resetPasswordForStoredUsername('alice', 'new-password')
+
+    expect(result?.user.username).toBe('alice')
+    expect(result?.user.mustChangePassword).toBe(false)
+    expect(setSettingMock).toHaveBeenCalledWith(
+      'authCredentials',
+      expect.objectContaining({
+        username: 'alice',
+        passwordHash: expect.any(String),
+        passwordSalt: expect.any(String)
+      })
+    )
+    await expect(verifyToken(result?.token)).resolves.toMatchObject({
+      username: 'alice'
+    })
+  })
 })
