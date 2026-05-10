@@ -3,9 +3,7 @@
     <n-card class="login-card" :bordered="false">
       <div class="login-header">
         <div class="login-header__icon">
-          <n-icon :size="22">
-            <lock-closed-outline />
-          </n-icon>
+          <img :src="brandLogoUrl" alt="SubTracker logo" class="login-header__logo" />
         </div>
         <div>
           <h1 class="login-title">登录 SubTracker</h1>
@@ -77,7 +75,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NCard, NCheckbox, NCollapseTransition, NForm, NFormItem, NIcon, NInput, useMessage } from 'naive-ui'
-import { LockClosedOutline } from '@vicons/ionicons5'
+import brandLogoUrl from '@/assets/brand-logo.png'
 import { api } from '@/composables/api'
 import { useAuthStore } from '@/stores/auth'
 import { validateLoginForm } from '@/utils/login-validation'
@@ -234,12 +232,17 @@ async function resetForgotPassword() {
 .login-header__icon {
   width: 46px;
   height: 46px;
-  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+  flex-shrink: 0;
+}
+
+.login-header__logo {
+  width: 46px;
+  height: 46px;
+  display: block;
+  object-fit: contain;
 }
 
 .login-title {

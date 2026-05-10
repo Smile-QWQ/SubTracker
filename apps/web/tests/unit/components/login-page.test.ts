@@ -5,6 +5,8 @@ describe('login page forgot password', () => {
   it('contains forgot-password flow gated by forgotPasswordEnabled', () => {
     const source = readFileSync('src/pages/LoginPage.vue', 'utf8')
 
+    expect(source).toContain("import brandLogoUrl from '@/assets/brand-logo.png'")
+    expect(source).toContain('class="login-header__logo"')
     expect(source).toContain('v-if="forgotPasswordEnabled"')
     expect(source).toContain('忘记密码')
     expect(source).toContain('发送验证码')
