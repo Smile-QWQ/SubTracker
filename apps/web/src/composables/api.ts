@@ -30,6 +30,7 @@ import type {
   SubscriptionStatus,
   Tag,
   TelegramConfig,
+  VersionUpdateSummary,
   WallosImportCommitResult,
   WallosImportInspectResult
 } from '@/types/api'
@@ -142,6 +143,12 @@ export const api = {
 
   async getLoginOptions() {
     return unwrap<LoginOptions>((await client.get('/auth/login-options')) as { data: Envelope<LoginOptions> })
+  },
+
+  async getVersionUpdates(currentVersion: string) {
+    return unwrap<VersionUpdateSummary>((await client.get('/version/updates', { params: { currentVersion } })) as {
+      data: Envelope<VersionUpdateSummary>
+    })
   },
 
   async requestForgotPasswordCode(payload: ForgotPasswordRequestPayload) {

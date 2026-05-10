@@ -307,6 +307,23 @@ export interface ExchangeRateSnapshot {
   isStale: boolean
 }
 
+export interface ReleaseUpdate {
+  tagName: string
+  version: string
+  name: string
+  body: string
+  htmlUrl: string
+  publishedAt: string
+  isPrerelease: boolean
+}
+
+export interface VersionUpdateSummary {
+  currentVersion: string
+  latestVersion: string | null
+  hasUpdate: boolean
+  releases: ReleaseUpdate[]
+}
+
 export interface LogoSearchResult {
   label: string
   logoUrl: string

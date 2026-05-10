@@ -15,6 +15,7 @@ import { notificationRoutes } from './routes/notifications'
 import { aiRoutes } from './routes/ai'
 import { importRoutes } from './routes/imports'
 import { tagRoutes } from './routes/tags'
+import { versionRoutes } from './routes/version'
 import { verifyToken } from './services/auth.service'
 
 export async function buildApp() {
@@ -75,7 +76,8 @@ export async function buildApp() {
       url === '/api/v1/auth/login' ||
       url === '/api/v1/auth/login-options' ||
       url === '/api/v1/auth/forgot-password/request' ||
-      url === '/api/v1/auth/forgot-password/reset'
+      url === '/api/v1/auth/forgot-password/reset' ||
+      url === '/api/v1/version/updates'
     ) {
       return
     }
@@ -103,6 +105,7 @@ export async function buildApp() {
       await notificationRoutes(router)
       await aiRoutes(router)
       await importRoutes(router)
+      await versionRoutes(router)
     },
     { prefix: '/api/v1' }
   )
