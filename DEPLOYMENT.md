@@ -254,6 +254,7 @@ HOST=0.0.0.0
 DATABASE_URL=file:/app/data/subtracker.db
 WEB_ORIGIN=https://subtracker.example.com
 LOG_LEVEL=warn
+DEFAULT_APP_LOCALE=zh-CN
 ```
 
 说明：

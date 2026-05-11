@@ -254,6 +254,7 @@ export interface AiDashboardSummary {
   errorMessage: string | null
   generatedAt: string | null
   updatedAt: string | null
+  generatedLocale: AppLocale | null
   sourceDataHash: string | null
   fromCache: boolean
   isStale: boolean
@@ -261,8 +262,11 @@ export interface AiDashboardSummary {
   needsGeneration: boolean
 }
 
+export interface AppLocaleResponse {
+  locale: AppLocale
+}
+
 export interface Settings {
-  systemDefaultLocale: AppLocale
   baseCurrency: string
   timezone: string
   defaultNotifyDays: number

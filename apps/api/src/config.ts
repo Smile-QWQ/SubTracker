@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import { DEFAULT_APP_LOCALE, normalizeAppLocale } from '@subtracker/shared'
 
 let envFileLoaded = false
 
@@ -44,6 +45,7 @@ export const config = {
   port: Number(process.env.PORT ?? 3001),
   host: process.env.HOST ?? '0.0.0.0',
   webOrigin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
+  defaultAppLocale: normalizeAppLocale(process.env.DEFAULT_APP_LOCALE, DEFAULT_APP_LOCALE),
   baseCurrency: (process.env.BASE_CURRENCY ?? 'CNY').toUpperCase(),
   defaultNotifyDays: Number(process.env.DEFAULT_NOTIFY_DAYS ?? 3),
   exchangeRateProvider: process.env.EXCHANGE_RATE_PROVIDER ?? 'ExchangeRate-API',

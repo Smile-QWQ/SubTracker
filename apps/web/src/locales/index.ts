@@ -38,13 +38,22 @@ function syncLocale(locale: AppLocale) {
   i18n.global.locale.value = locale
 }
 
+function persistLocalePreference(locale: AppLocale) {
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(LOCALE_PREFERENCE_STORAGE_KEY, locale)
+  }
+}
+
 export function setAppLocale(locale: AppLocale) {
   const normalized = normalizeAppLocale(locale, DEFAULT_APP_LOCALE)
   syncLocale(normalized)
+  persistLocalePreference(normalized)
+}
 
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(LOCALE_PREFERENCE_STORAGE_KEY, normalized)
-  }
+export function hydrateAppLocale(locale: AppLocale) {
+  const normalized = normalizeAppLocale(locale, DEFAULT_APP_LOCALE)
+  syncLocale(normalized)
+  persistLocalePreference(normalized)
 }
 
 export function useAppLocale() {

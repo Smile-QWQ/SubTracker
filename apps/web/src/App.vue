@@ -33,7 +33,7 @@
                   v-model:value="currentLocale"
                   size="small"
                   :options="localeOptions"
-                  style="width: 132px"
+                  class="locale-select"
                   @update:value="handleLocaleChange"
                 />
                 </div>
@@ -104,7 +104,7 @@
                   v-model:value="currentLocale"
                   size="small"
                   :options="localeOptions"
-                  style="width: 132px"
+                  class="locale-select"
                   @update:value="handleLocaleChange"
                 />
               </div>
@@ -214,7 +214,6 @@
 
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref, watchEffect } from 'vue'
-import { useQueryClient } from '@tanstack/vue-query'
 import { useRoute, useRouter } from 'vue-router'
 import { useWindowSize } from '@vueuse/core'
 import {
@@ -258,10 +257,10 @@ import {
 } from '@vicons/ionicons5'
 import brandLogoUrl from '@/assets/brand-logo.png'
 import { api } from '@/composables/api'
-import { SETTINGS_QUERY_KEY, useSettingsQuery } from '@/composables/settings-query'
+import { useSettingsQuery } from '@/composables/settings-query'
 import { useVersionUpdateQuery } from '@/composables/version-update-query'
 import { useThemePreference, type ThemePreference } from '@/composables/theme-preference'
-import { t, useAppLocale } from '@/locales'
+import { hydrateAppLocale, t, useAppLocale } from '@/locales'
 import { useAuthStore } from '@/stores/auth'
 import { isRememberedSession } from '@/utils/auth-storage'
 import { renderMarkdownToHtml } from '@/utils/simple-markdown'
@@ -269,7 +268,6 @@ import { createLocalizedDiscreteMessage } from '@/utils/localized-message'
 
 const route = useRoute()
 const router = useRouter()
-const queryClient = useQueryClient()
 const authStore = useAuthStore()
 const { resolvedTheme, setThemePreference } = useThemePreference()
 const { locale, naiveLocale, naiveDateLocale, setLocale } = useAppLocale()
@@ -337,15 +335,29 @@ watchEffect(() => {
 })
 
 onMounted(async () => {
-  if (!authStore.isAuthenticated) {
-    return
-  }
+  await Promise.allSettled([
+    (async () => {
+      try {
+        const { locale: resolvedLocale } = await api.getAppLocale()
+        if (resolvedLocale !== locale.value) {
+          hydrateAppLocale(resolvedLocale)
+        }
+      } catch {
+        // Ignore bootstrap locale sync failure and keep cached/browser locale.
+      }
+    })(),
+    (async () => {
+      if (!authStore.isAuthenticated) {
+        return
+      }
 
-  try {
-    await authStore.refreshCurrentUser()
-  } catch {
-    // handled by axios interceptor
-  }
+      try {
+        await authStore.refreshCurrentUser()
+      } catch {
+        // handled by axios interceptor
+      }
+    })()
+  ])
 })
 
 function handleMenuClick(key: string) {
@@ -364,22 +376,16 @@ function cycleThemePreference() {
 
 function handleLocaleChange(value: string) {
   const nextLocale = value as 'zh-CN' | 'en-US'
+  const previousLocale = locale.value
   setLocale(nextLocale)
-  void syncSystemDefaultLocale(nextLocale)
-}
-
-async function syncSystemDefaultLocale(localeValue: 'zh-CN' | 'en-US') {
-  try {
-    const currentSettings = settings.value
-    if (currentSettings?.systemDefaultLocale === localeValue) {
-      return
+  void (async () => {
+    try {
+      await api.setAppLocale(nextLocale)
+    } catch (error) {
+      setLocale(previousLocale)
+      message.error(error instanceof Error ? error.message : t('common.errors.requestFailed'))
     }
-
-    const updatedSettings = await api.updateSettings({ systemDefaultLocale: localeValue })
-    queryClient.setQueryData(SETTINGS_QUERY_KEY, updatedSettings)
-  } catch {
-    // Ignore sync failures here to avoid blocking immediate UI language switch.
-  }
+  })()
 }
 
 async function logout() {
@@ -490,6 +496,7 @@ function formatReleaseDate(value: string) {
   align-items: center;
   gap: 10px;
   justify-content: flex-start;
+  flex-wrap: wrap;
   padding: 12px;
   margin-top: auto;
   border-top: 1px solid var(--app-border);
@@ -497,6 +504,12 @@ function formatReleaseDate(value: string) {
 
 .sider-footer--collapsed {
   justify-content: center;
+}
+
+.locale-select {
+  width: min(180px, 100%);
+  min-width: 0;
+  flex: 1 1 132px;
 }
 
 .theme-toggle {

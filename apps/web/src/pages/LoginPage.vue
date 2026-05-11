@@ -82,7 +82,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { NButton, NCard, NCheckbox, NCollapseTransition, NForm, NFormItem, NIcon, NInput } from 'naive-ui'
 import brandLogoUrl from '@/assets/brand-logo.png'
 import { api } from '@/composables/api'
-import { t } from '@/locales'
+import { hydrateAppLocale, t } from '@/locales'
 import { useAuthStore } from '@/stores/auth'
 import { validateLoginForm } from '@/utils/login-validation'
 import { useLocalizedMessage } from '@/utils/localized-message'
@@ -113,7 +113,8 @@ const forgotPasswordForm = reactive({
 
 onMounted(async () => {
   try {
-    const options = await api.getLoginOptions()
+    const [options, localeResponse] = await Promise.all([api.getLoginOptions(), api.getAppLocale()])
+    hydrateAppLocale(localeResponse.locale)
     rememberSessionDays.value = options.rememberSessionDays
     forgotPasswordEnabled.value = options.forgotPasswordEnabled
   } catch {

@@ -1,6 +1,5 @@
 import {
   AiConfigSchema,
-  DEFAULT_APP_LOCALE,
   DEFAULT_RESEND_API_URL,
   DEFAULT_AI_CONFIG,
   DEFAULT_TIMEZONE,
@@ -60,6 +59,12 @@ export async function setSetting<T>(key: string, value: T): Promise<void> {
   })
 }
 
+export async function deleteSetting(key: string): Promise<void> {
+  await prisma.setting.deleteMany({
+    where: { key }
+  })
+}
+
 function readSettingsValue<T>(settingsMap: Map<string, unknown>, key: string, fallback: T): T {
   return settingsMap.has(key) ? (settingsMap.get(key) as T) : fallback
 }
@@ -84,7 +89,6 @@ export async function getAppSettings(): Promise<SettingsInput> {
   const rows = await prisma.setting.findMany()
   const settingsMap = new Map(rows.map((row) => [row.key, row.valueJson]))
 
-  const systemDefaultLocale = readSettingsValue(settingsMap, 'systemDefaultLocale', DEFAULT_APP_LOCALE)
   const baseCurrency = readSettingsValue(settingsMap, 'baseCurrency', config.baseCurrency)
   const timezoneFallback = normalizeAppTimezone(process.env.TZ ?? DEFAULT_TIMEZONE)
   const timezone = readSettingsValue(settingsMap, 'timezone', timezoneFallback)
@@ -137,7 +141,6 @@ export async function getAppSettings(): Promise<SettingsInput> {
   const aiConfig = AiConfigSchema.parse(readSettingsValue<unknown>(settingsMap, 'aiConfig', DEFAULT_AI_CONFIG))
 
   return SettingsSchema.parse({
-    systemDefaultLocale,
     baseCurrency,
     timezone,
     defaultNotifyDays: deriveNotifyDaysBeforeFromAdvanceRules(defaultAdvanceReminderRules) || defaultNotifyDays,
@@ -180,8 +183,30 @@ export async function getAiConfig() {
   return AiConfigSchema.parse(await getSetting<unknown>('aiConfig', DEFAULT_AI_CONFIG))
 }
 
-export async function getSystemDefaultLocale(): Promise<AppLocale> {
-  return getSetting<AppLocale>('systemDefaultLocale', DEFAULT_APP_LOCALE)
+export async function getStoredAppLocale(): Promise<AppLocale | null> {
+  const appLocale = await getSetting<AppLocale | null>('appLocale', null)
+  if (appLocale) {
+    return appLocale
+  }
+
+  const legacySystemLocale = await getSetting<AppLocale | null>('systemDefaultLocale', null)
+  if (!legacySystemLocale) {
+    return null
+  }
+
+  await setSetting('appLocale', legacySystemLocale)
+  await deleteSetting('systemDefaultLocale')
+  return legacySystemLocale
+}
+
+export async function getResolvedAppLocale(): Promise<AppLocale> {
+  return (await getStoredAppLocale()) ?? config.defaultAppLocale
+}
+
+export async function setAppLocale(locale: AppLocale): Promise<AppLocale> {
+  await setSetting('appLocale', locale)
+  await deleteSetting('systemDefaultLocale')
+  return locale
 }
 
 export async function getDefaultAdvanceReminderRulesSetting() {
@@ -249,7 +274,7 @@ export async function getNotificationChannelSettings() {
 }
 
 export async function getNotificationScanSettings() {
-  const [defaultAdvanceReminderRules, defaultOverdueReminderRules, mergeMultiSubscriptionNotifications, timezone] = await Promise.all([
+  const [defaultAdvanceReminderRules, defaultOverdueReminderRules, mergeMultiSubscriptionNotifications, timezone, locale] = await Promise.all([
     getDefaultAdvanceReminderRulesSetting(),
     (async () => {
       const overdueReminderDays = await getSetting<Array<1 | 2 | 3>>('overdueReminderDays', [1, 2, 3])
@@ -259,13 +284,15 @@ export async function getNotificationScanSettings() {
       )
     })(),
     getSetting('mergeMultiSubscriptionNotifications', true),
-    getSetting('timezone', normalizeAppTimezone(process.env.TZ ?? DEFAULT_TIMEZONE))
+    getSetting('timezone', normalizeAppTimezone(process.env.TZ ?? DEFAULT_TIMEZONE)),
+    getResolvedAppLocale()
   ])
 
   return {
     defaultAdvanceReminderRules,
     defaultOverdueReminderRules,
     mergeMultiSubscriptionNotifications,
-    timezone
+    timezone,
+    locale
   }
 }

@@ -12,6 +12,8 @@ describe('login page forgot password', () => {
     expect(source).toContain("t('login.sendCode')")
     expect(source).toContain("t('common.labels.code')")
     expect(source).toContain("t('login.verifyAndResetPassword')")
+    expect(source).toContain('api.getAppLocale')
+    expect(source).toContain('hydrateAppLocale(localeResponse.locale)')
     expect(source).toContain('api.requestForgotPasswordCode')
     expect(source).toContain('api.resetForgotPassword')
   })

@@ -39,7 +39,6 @@ describe('shared schema', () => {
   it('should provide reminder-related setting defaults', () => {
     const parsed = SettingsSchema.parse({})
 
-    expect(parsed.systemDefaultLocale).toBe('zh-CN')
     expect(parsed.timezone).toBe('Asia/Shanghai')
     expect(parsed.defaultNotifyDays).toBe(3)
     expect(parsed.defaultAdvanceReminderRules).toBe(DEFAULT_ADVANCE_REMINDER_RULES)

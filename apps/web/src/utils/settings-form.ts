@@ -31,22 +31,20 @@ export interface SettingsPageForm {
 }
 
 export function cloneSettingsForForm(settings: Settings): SettingsPageForm {
-  const { systemDefaultLocale: _ignoredSystemDefaultLocale, ...rest } = settings
-
   return {
-    ...rest,
-    overdueReminderDays: [...rest.overdueReminderDays],
-    tagBudgets: { ...rest.tagBudgets },
-    smtpConfig: { ...rest.smtpConfig },
-    resendConfig: { ...rest.resendConfig },
-    pushplusConfig: { ...rest.pushplusConfig },
-    telegramConfig: { ...rest.telegramConfig },
-    serverchanConfig: { ...rest.serverchanConfig },
-    gotifyConfig: { ...rest.gotifyConfig },
+    ...settings,
+    overdueReminderDays: [...settings.overdueReminderDays],
+    tagBudgets: { ...settings.tagBudgets },
+    smtpConfig: { ...settings.smtpConfig },
+    resendConfig: { ...settings.resendConfig },
+    pushplusConfig: { ...settings.pushplusConfig },
+    telegramConfig: { ...settings.telegramConfig },
+    serverchanConfig: { ...settings.serverchanConfig },
+    gotifyConfig: { ...settings.gotifyConfig },
     aiConfig: {
-      ...rest.aiConfig,
+      ...settings.aiConfig,
       capabilities: {
-        ...rest.aiConfig.capabilities
+        ...settings.aiConfig.capabilities
       }
     }
   }

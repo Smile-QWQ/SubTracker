@@ -197,6 +197,13 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.patch('/settings', async (request, reply) => {
     const locale = request.locale ?? detectRequestLocale(request)
+    const rawBody = request.body as Record<string, unknown> | null | undefined
+    if (rawBody && typeof rawBody === 'object' && ('systemDefaultLocale' in rawBody || 'appLocale' in rawBody)) {
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidSettingsPayload', undefined, {
+        locale
+      })
+    }
+
     const parsed = SettingsSchema.partial().safeParse(request.body)
     if (!parsed.success) {
       return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidSettingsPayload', parsed.error.flatten(), {

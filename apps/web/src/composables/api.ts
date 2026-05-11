@@ -1,5 +1,7 @@
 import axios from 'axios'
 import type {
+  AppLocale,
+  AppLocaleResponse,
   AiDashboardSummary,
   AiRecognitionResult,
   AiTestResponse,
@@ -147,6 +149,14 @@ export const api = {
 
   async getLoginOptions() {
     return unwrap<LoginOptions>((await client.get('/auth/login-options')) as { data: Envelope<LoginOptions> })
+  },
+
+  async getAppLocale() {
+    return unwrap<AppLocaleResponse>((await client.get('/app/locale')) as { data: Envelope<AppLocaleResponse> })
+  },
+
+  async setAppLocale(locale: AppLocale) {
+    return putOnce<AppLocaleResponse>('/app/locale', { locale })
   },
 
   async getVersionUpdates(currentVersion: string) {

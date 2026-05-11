@@ -191,6 +191,18 @@ describe('settings routes validation', () => {
     expect(res.json().data.aiConfig.dashboardSummaryPromptTemplate).toBe('你是一个统计摘要助手。')
   })
 
+  it('rejects locale fields in PATCH /settings', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      payload: {
+        appLocale: 'en-US'
+      }
+    })
+
+    expect(res.statusCode).toBe(422)
+  })
+
   it('rejects incomplete email config when enabling email notifications', async () => {
     const res = await app.inject({
       method: 'PATCH',

@@ -342,8 +342,11 @@ export const AiConfigSchema = z.object({
   })
 })
 
+export const SetAppLocaleSchema = z.object({
+  locale: AppLocaleSchema
+})
+
 export const SettingsSchema = z.object({
-  systemDefaultLocale: AppLocaleSchema.default(DEFAULT_APP_LOCALE),
   baseCurrency: z.string().length(3).default('CNY').transform((v) => v.toUpperCase()),
   timezone: TimeZoneSchema.default(DEFAULT_TIMEZONE),
   defaultNotifyDays: z.number().int().min(0).max(365).default(3),
@@ -476,6 +479,7 @@ export type NotificationWebhookSettingsInput = z.infer<typeof NotificationWebhoo
 export type AiProviderPreset = z.infer<typeof AiProviderPresetSchema>
 export type AiCapabilitiesInput = z.infer<typeof AiCapabilitiesSchema>
 export type AiConfigInput = z.infer<typeof AiConfigSchema>
+export type SetAppLocaleInput = z.infer<typeof SetAppLocaleSchema>
 export type LogoSearchInput = z.infer<typeof LogoSearchSchema>
 export type LogoUploadInput = z.infer<typeof LogoUploadSchema>
 export type AiRecognizeSubscriptionInput = z.infer<typeof AiRecognizeSubscriptionSchema>
@@ -558,11 +562,16 @@ export interface AiDashboardSummaryDto {
   errorMessage: string | null
   generatedAt: string | null
   updatedAt: string | null
+  generatedLocale: AppLocale | null
   sourceDataHash: string | null
   fromCache: boolean
   isStale: boolean
   canGenerate: boolean
   needsGeneration: boolean
+}
+
+export interface AppLocaleResponseDto {
+  locale: AppLocale
 }
 
 export interface DashboardOverview {
