@@ -1035,6 +1035,9 @@ export default {
 - 每个小节控制在 2~5 条要点内。
 - 如果某部分没有明显异常，直接说明“暂无显著异常”或“整体平稳”。`
         },
+        user: {
+          request: '以下是当前订阅统计数据，请输出 Markdown 总结：\n\n{payload}'
+        },
         preview: {
           default: `你是订阅统计摘要压缩助手。请根据已经生成好的完整 AI 总结，提炼出一个默认折叠展示用的超简短摘要。
 
@@ -1045,6 +1048,9 @@ export default {
 - 只保留最重要的结论：订阅规模、预算压力、近期风险。
 - 不要发散，不要补充原文没有的信息。
 - 如果原文信息有限，就直接给出 1 到 2 句自然语言摘要。`
+        },
+        previewUser: {
+          request: '以下是已经生成好的完整 AI 总结，请提炼一个默认折叠展示用的超简短摘要：\n\n{payload}'
         }
       }
     }
@@ -1131,6 +1137,10 @@ export default {
         connectionTestFailed: 'AI 连接测试失败',
         visionTestFailed: 'AI 视觉测试失败',
         recognitionFailed: 'AI 识别失败',
+        summaryRequestFailed: 'AI 总结请求失败',
+        summaryEmpty: 'AI 总结返回空内容',
+        summaryPreviewRequestFailed: 'AI 摘要提炼失败',
+        summaryPreviewEmpty: 'AI 摘要提炼返回空内容',
         summaryFetchFailed: '获取 AI 总结失败',
         summaryGenerateFailed: '生成 AI 总结失败'
       },

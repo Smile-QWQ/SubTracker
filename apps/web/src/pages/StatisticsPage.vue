@@ -146,7 +146,7 @@ import { useWindowSize } from '@vueuse/core'
 import { useQueryClient } from '@tanstack/vue-query'
 import { NAlert, NButton, NCard, NCollapseTransition, NEmpty, NGrid, NGridItem, NSpace, NSpin, useThemeVars } from 'naive-ui'
 import { BarChartOutline } from '@vicons/ionicons5'
-import { t } from '@/locales'
+import { t, useAppLocale } from '@/locales'
 import { api } from '@/composables/api'
 import { DASHBOARD_AI_SUMMARY_QUERY_KEY, useDashboardAiSummaryQuery } from '@/composables/dashboard-ai-summary-query'
 import { useSettingsQuery } from '@/composables/settings-query'
@@ -166,6 +166,7 @@ const barChartOutline = BarChartOutline
 const themeVars = useThemeVars()
 const queryClient = useQueryClient()
 const message = useLocalizedMessage()
+const { locale } = useAppLocale()
 
 const { data: overview } = useStatisticsOverviewQuery()
 
@@ -451,7 +452,7 @@ function summaryGeneratedAtText(value: string) {
 }
 
 watch(
-  [() => dashboardAiSummaryQuery.isLoading.value, dashboardAiSummary, overview],
+  [() => dashboardAiSummaryQuery.isLoading.value, dashboardAiSummary, overview, locale],
   async ([loading, summary, currentOverview]) => {
     if (!showAiSummaryCard.value || loading || generatingSummary.value || autoGenerateAttempted.value || !currentOverview) return
     if (!summary) {
@@ -466,6 +467,10 @@ watch(
   },
   { immediate: true }
 )
+
+watch(locale, () => {
+  autoGenerateAttempted.value = false
+})
 </script>
 
 <style scoped>

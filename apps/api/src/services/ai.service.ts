@@ -3,7 +3,7 @@ import path from 'node:path'
 import { createWorker, type Worker } from 'tesseract.js'
 import { AiRecognizeSubscriptionSchema, getDefaultAiSubscriptionPrompt, type AppLocale } from '@subtracker/shared'
 import type { AiRecognitionResultDto } from '@subtracker/shared'
-import { getAiConfig, getSystemDefaultLocale } from './settings.service'
+import { getAiConfig, getResolvedAppLocale } from './settings.service'
 
 export type AiSettings = Awaited<ReturnType<typeof getAiConfig>>
 
@@ -116,7 +116,7 @@ async function extractTextFromImageWithOcr(imageBase64: string) {
 }
 
 async function buildRecognitionSystemPrompt(aiConfig: AiSettings, forceJsonPromptOnly = false, locale?: AppLocale) {
-  const resolvedLocale = locale ?? (await getSystemDefaultLocale())
+  const resolvedLocale = locale ?? (await getResolvedAppLocale())
   const basePrompt = aiConfig.promptTemplate?.trim() || getDefaultAiSubscriptionPrompt(resolvedLocale)
   if (!forceJsonPromptOnly) {
     return basePrompt

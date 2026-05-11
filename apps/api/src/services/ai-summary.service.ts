@@ -1,14 +1,8 @@
 import crypto from 'node:crypto'
-import {
-  formatAiSummaryPreviewText,
-  getDefaultAiDashboardSummaryPreviewPrompt,
-  getDefaultAiDashboardSummaryPrompt,
-  type AiDashboardSummaryDto,
-  type DashboardOverview
-} from '@subtracker/shared'
+import { formatAiSummaryPreviewText, getDefaultAiDashboardSummaryPreviewPrompt, getDefaultAiDashboardSummaryPrompt, getMessage, type AppLocale, type AiDashboardSummaryDto, type DashboardOverview } from '@subtracker/shared'
 import { ensureAiSummaryConfig } from './ai.service'
 import { getOverviewStatistics } from './statistics.service'
-import { getAiConfig, getSystemDefaultLocale } from './settings.service'
+import { getAiConfig, getResolvedAppLocale } from './settings.service'
 
 type CachedDashboardSummary = {
   scope: 'dashboard-overview'
@@ -18,6 +12,7 @@ type CachedDashboardSummary = {
   errorMessage: string | null
   generatedAt: string | null
   updatedAt: string | null
+  generatedLocale: AppLocale | null
   sourceDataHash: string | null
 }
 
@@ -39,15 +34,16 @@ let dashboardSummaryCache: CachedDashboardSummary = {
   errorMessage: null,
   generatedAt: null,
   updatedAt: null,
+  generatedLocale: null,
   sourceDataHash: null
 }
 
 let inflightGeneratePromise: Promise<AiDashboardSummaryDto> | null = null
 
-function inferUnconfiguredMessage(aiConfig: Awaited<ReturnType<typeof getAiConfig>>) {
-  if (!aiConfig.dashboardSummaryEnabled) return 'AI 总结未启用'
-  if (!aiConfig.enabled) return 'AI 能力未启用'
-  return 'AI 总结配置不完整'
+function inferUnconfiguredMessage(aiConfig: Awaited<ReturnType<typeof getAiConfig>>, locale: AppLocale) {
+  if (!aiConfig.dashboardSummaryEnabled) return getMessage(locale, 'api.errors.ai.summaryDisabled')
+  if (!aiConfig.enabled) return getMessage(locale, 'api.errors.ai.disabled')
+  return getMessage(locale, 'api.errors.ai.summaryConfigIncomplete')
 }
 
 function logAiSummary(stage: string, details?: Record<string, unknown>) {
@@ -59,14 +55,14 @@ function logAiSummary(stage: string, details?: Record<string, unknown>) {
   console.log(`[ai-summary] ${stage}`, details)
 }
 
-async function resolveDashboardSummaryPrompt(promptTemplate?: string | null) {
+async function resolveDashboardSummaryPrompt(locale: AppLocale, promptTemplate?: string | null) {
   const normalized = String(promptTemplate ?? '').trim()
-  return normalized || getDefaultAiDashboardSummaryPrompt(await getSystemDefaultLocale())
+  return normalized || getDefaultAiDashboardSummaryPrompt(locale)
 }
 
 
-async function resolveDashboardSummaryPreviewPrompt() {
-  return getDefaultAiDashboardSummaryPreviewPrompt(await getSystemDefaultLocale())
+async function resolveDashboardSummaryPreviewPrompt(locale: AppLocale) {
+  return getDefaultAiDashboardSummaryPreviewPrompt(locale)
 }
 
 function extractChatCompletionText(payload: ChatCompletionPayload) {
@@ -153,9 +149,11 @@ function buildSummaryResponse(params: {
   currentHash: string | null
   canGenerate: boolean
   fromCache: boolean
+  locale: AppLocale
 }): AiDashboardSummaryDto {
   const hasContent = Boolean(dashboardSummaryCache.content?.trim())
   const hashMatches = Boolean(params.currentHash && dashboardSummaryCache.sourceDataHash === params.currentHash)
+  const localeMatches = dashboardSummaryCache.generatedLocale === params.locale
   const isFailed = dashboardSummaryCache.status === 'failed'
   const isUnconfigured = dashboardSummaryCache.status === 'unconfigured'
 
@@ -167,11 +165,12 @@ function buildSummaryResponse(params: {
     errorMessage: dashboardSummaryCache.errorMessage,
     generatedAt: dashboardSummaryCache.generatedAt,
     updatedAt: dashboardSummaryCache.updatedAt,
+    generatedLocale: dashboardSummaryCache.generatedLocale,
     sourceDataHash: dashboardSummaryCache.sourceDataHash,
     fromCache: params.fromCache,
     isStale: hasContent ? !hashMatches : false,
     canGenerate: params.canGenerate,
-    needsGeneration: params.canGenerate && (!hasContent || !hashMatches || isFailed || isUnconfigured)
+    needsGeneration: params.canGenerate && (!hasContent || !hashMatches || !localeMatches || isFailed || isUnconfigured)
   }
 }
 
@@ -191,6 +190,7 @@ async function requestDashboardSummaryPreviewMarkdown(params: {
   model: string
   timeoutMs: number
   summaryMarkdown: string
+  locale: AppLocale
 }) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), Math.max(params.timeoutMs, 20000))
@@ -208,11 +208,13 @@ async function requestDashboardSummaryPreviewMarkdown(params: {
         messages: [
           {
             role: 'system',
-            content: await resolveDashboardSummaryPreviewPrompt()
+            content: await resolveDashboardSummaryPreviewPrompt(params.locale)
           },
           {
             role: 'user',
-            content: `以下是已经生成好的完整 AI 总结，请提炼一个默认折叠展示用的超简短摘要：\n\n${params.summaryMarkdown}`
+            content: getMessage(params.locale, 'ai.prompts.dashboard.previewUser.request', {
+              payload: params.summaryMarkdown
+            })
           }
         ]
       }),
@@ -221,14 +223,16 @@ async function requestDashboardSummaryPreviewMarkdown(params: {
 
     if (!response.ok) {
       const errorText = await response.text()
-      throw new Error(`AI 摘要提炼失败：${response.status}${errorText ? ` - ${errorText}` : ''}`)
+      throw new Error(
+        `${getMessage(params.locale, 'api.errors.ai.summaryPreviewRequestFailed')}: ${response.status}${errorText ? ` - ${errorText}` : ''}`
+      )
     }
 
     const payload = (await response.json()) as ChatCompletionPayload
     const previewMarkdown = extractChatCompletionText(payload)
 
     if (!previewMarkdown.trim()) {
-      throw new Error('AI 摘要提炼返回空内容')
+      throw new Error(getMessage(params.locale, 'api.errors.ai.summaryPreviewEmpty'))
     }
 
     return previewMarkdown
@@ -244,6 +248,7 @@ async function requestDashboardSummaryMarkdown(params: {
   timeoutMs: number
   promptTemplate?: string | null
   input: ReturnType<typeof buildSummaryInput>
+  locale: AppLocale
 }) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), Math.max(params.timeoutMs, 45000))
@@ -261,11 +266,13 @@ async function requestDashboardSummaryMarkdown(params: {
         messages: [
           {
             role: 'system',
-            content: await resolveDashboardSummaryPrompt(params.promptTemplate)
+            content: await resolveDashboardSummaryPrompt(params.locale, params.promptTemplate)
           },
           {
             role: 'user',
-            content: `以下是当前订阅统计数据，请输出 Markdown 总结：\n\n${JSON.stringify(params.input, null, 2)}`
+            content: getMessage(params.locale, 'ai.prompts.dashboard.user.request', {
+              payload: JSON.stringify(params.input, null, 2)
+            })
           }
         ]
       }),
@@ -274,14 +281,16 @@ async function requestDashboardSummaryMarkdown(params: {
 
     if (!response.ok) {
       const errorText = await response.text()
-      throw new Error(`AI 接口请求失败：${response.status}${errorText ? ` - ${errorText}` : ''}`)
+      throw new Error(
+        `${getMessage(params.locale, 'api.errors.ai.summaryRequestFailed')}: ${response.status}${errorText ? ` - ${errorText}` : ''}`
+      )
     }
 
     const payload = (await response.json()) as ChatCompletionPayload
     const markdown = extractChatCompletionText(payload)
 
     if (!markdown.trim()) {
-      throw new Error('AI 总结返回空内容')
+      throw new Error(getMessage(params.locale, 'api.errors.ai.summaryEmpty'))
     }
 
     return markdown
@@ -290,8 +299,9 @@ async function requestDashboardSummaryMarkdown(params: {
   }
 }
 
-export async function getDashboardAiSummary(): Promise<AiDashboardSummaryDto> {
+export async function getDashboardAiSummary(locale?: AppLocale): Promise<AiDashboardSummaryDto> {
   const [aiConfig, overview] = await Promise.all([getAiConfig(), getOverviewStatistics()])
+  const resolvedLocale = locale ?? (await getResolvedAppLocale())
   const summaryInput = buildSummaryInput(overview)
   const currentHash = hashSummaryInput(summaryInput)
   const canGenerate = canGenerateSummary(aiConfig)
@@ -301,14 +311,16 @@ export async function getDashboardAiSummary(): Promise<AiDashboardSummaryDto> {
       status: 'unconfigured',
       content: null,
       previewContent: null,
-      errorMessage: inferUnconfiguredMessage(aiConfig),
+      errorMessage: inferUnconfiguredMessage(aiConfig, resolvedLocale),
+      generatedLocale: null,
       sourceDataHash: currentHash,
       generatedAt: null
     })
     return buildSummaryResponse({
       currentHash,
       canGenerate: false,
-      fromCache: true
+      fromCache: true,
+      locale: resolvedLocale
     })
   }
 
@@ -316,24 +328,27 @@ export async function getDashboardAiSummary(): Promise<AiDashboardSummaryDto> {
     return buildSummaryResponse({
       currentHash,
       canGenerate: true,
-      fromCache: true
+      fromCache: true,
+      locale: resolvedLocale
     })
   }
 
   return buildSummaryResponse({
     currentHash,
     canGenerate: true,
-    fromCache: true
+    fromCache: true,
+    locale: resolvedLocale
   })
 }
 
-export async function generateDashboardAiSummary(): Promise<AiDashboardSummaryDto> {
+export async function generateDashboardAiSummary(locale?: AppLocale): Promise<AiDashboardSummaryDto> {
   if (inflightGeneratePromise) {
     return inflightGeneratePromise
   }
 
   inflightGeneratePromise = (async () => {
     const [aiConfig, overview] = await Promise.all([getAiConfig(), getOverviewStatistics()])
+    const resolvedLocale = locale ?? (await getResolvedAppLocale())
     const summaryInput = buildSummaryInput(overview)
     const currentHash = hashSummaryInput(summaryInput)
     const canGenerate = canGenerateSummary(aiConfig)
@@ -351,7 +366,8 @@ export async function generateDashboardAiSummary(): Promise<AiDashboardSummaryDt
         status: 'unconfigured',
         content: null,
         previewContent: null,
-        errorMessage: inferUnconfiguredMessage(aiConfig),
+        errorMessage: inferUnconfiguredMessage(aiConfig, resolvedLocale),
+        generatedLocale: null,
         sourceDataHash: currentHash,
         generatedAt: null
       })
@@ -359,7 +375,8 @@ export async function generateDashboardAiSummary(): Promise<AiDashboardSummaryDt
       return buildSummaryResponse({
         currentHash,
         canGenerate: false,
-        fromCache: false
+        fromCache: false,
+        locale: resolvedLocale
       })
     }
 
@@ -381,7 +398,8 @@ export async function generateDashboardAiSummary(): Promise<AiDashboardSummaryDt
         model: aiConfig.model,
         timeoutMs: aiConfig.timeoutMs,
         promptTemplate: aiConfig.dashboardSummaryPromptTemplate,
-        input: summaryInput
+        input: summaryInput,
+        locale: resolvedLocale
       })
 
       const previewMarkdown = await requestDashboardSummaryPreviewMarkdown({
@@ -389,7 +407,8 @@ export async function generateDashboardAiSummary(): Promise<AiDashboardSummaryDt
         apiKey: aiConfig.apiKey,
         model: aiConfig.model,
         timeoutMs: aiConfig.timeoutMs,
-        summaryMarkdown: markdown
+        summaryMarkdown: markdown,
+        locale: resolvedLocale
       }).catch(() => formatAiSummaryPreviewText(markdown))
 
       const now = new Date().toISOString()
@@ -401,6 +420,7 @@ export async function generateDashboardAiSummary(): Promise<AiDashboardSummaryDt
         errorMessage: null,
         generatedAt: now,
         updatedAt: now,
+        generatedLocale: resolvedLocale,
         sourceDataHash: currentHash
       }
 
@@ -413,15 +433,17 @@ export async function generateDashboardAiSummary(): Promise<AiDashboardSummaryDt
       return buildSummaryResponse({
         currentHash,
         canGenerate: true,
-        fromCache: false
+        fromCache: false,
+        locale: resolvedLocale
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'AI 总结生成失败'
+      const message = error instanceof Error ? error.message : getMessage(resolvedLocale, 'api.errors.ai.summaryGenerateFailed')
       setCacheState({
         status: 'failed',
         content: null,
         previewContent: null,
         errorMessage: message,
+        generatedLocale: null,
         sourceDataHash: currentHash,
         generatedAt: null
       })
@@ -432,7 +454,8 @@ export async function generateDashboardAiSummary(): Promise<AiDashboardSummaryDt
       return buildSummaryResponse({
         currentHash,
         canGenerate: true,
-        fromCache: false
+        fromCache: false,
+        locale: resolvedLocale
       })
     }
   })()
@@ -453,6 +476,7 @@ export function resetDashboardAiSummaryCacheForTests() {
     errorMessage: null,
     generatedAt: null,
     updatedAt: null,
+    generatedLocale: null,
     sourceDataHash: null
   }
   inflightGeneratePromise = null

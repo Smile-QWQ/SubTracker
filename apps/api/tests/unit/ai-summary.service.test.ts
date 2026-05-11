@@ -8,7 +8,7 @@ const aiSummaryMocks = vi.hoisted(() => ({
 
 vi.mock('../../src/services/settings.service', () => ({
   getAiConfig: aiSummaryMocks.getAiConfigMock,
-  getSystemDefaultLocale: vi.fn(async () => 'en-US')
+  getResolvedAppLocale: vi.fn(async () => 'en-US')
 }))
 
 vi.mock('../../src/services/statistics.service', () => ({
@@ -125,7 +125,7 @@ describe('ai summary service', () => {
     expect(result.status).toBe('unconfigured')
     expect(result.canGenerate).toBe(false)
     expect(result.content).toBeNull()
-    expect(result.errorMessage).toContain('未启用')
+    expect(result.errorMessage).toContain('disabled')
   })
 
   it('returns unconfigured state when dashboard summary switch is disabled', async () => {
@@ -141,7 +141,7 @@ describe('ai summary service', () => {
 
     expect(result.status).toBe('unconfigured')
     expect(result.canGenerate).toBe(false)
-    expect(result.errorMessage).toContain('AI 总结未启用')
+    expect(result.errorMessage).toContain('AI summary is disabled')
   })
 
   it('generates markdown summary and caches latest result in memory', async () => {
@@ -165,6 +165,7 @@ describe('ai summary service', () => {
     expect(generated.fromCache).toBe(false)
     expect(generated.content).toContain('## 总览')
     expect(generated.previewContent).toBeTruthy()
+    expect(generated.generatedLocale).toBe('en-US')
     expect(cached.fromCache).toBe(true)
     expect(cached.content).toBe(generated.content)
     expect(cached.previewContent).toBe(generated.previewContent)
@@ -223,6 +224,30 @@ describe('ai summary service', () => {
     expect(result.needsGeneration).toBe(true)
   })
 
+  it('marks locale mismatch as needing regeneration', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () =>
+        jsonResponse({
+          choices: [
+            {
+              message: {
+                content: '## Overview\n- Stable'
+              }
+            }
+          ]
+        })
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await generateDashboardAiSummary('zh-CN')
+    const result = await getDashboardAiSummary('en-US')
+
+    expect(result.status).toBe('success')
+    expect(result.generatedLocale).toBe('zh-CN')
+    expect(result.needsGeneration).toBe(true)
+  })
+
 
   it('falls back to full summary when preview generation fails', async () => {
     const fetchMock = vi
@@ -267,7 +292,7 @@ describe('ai summary service', () => {
     const result = await generateDashboardAiSummary()
 
     expect(result.status).toBe('failed')
-    expect(result.errorMessage).toContain('空内容')
+    expect(result.errorMessage).toContain('empty content')
     expect(result.canGenerate).toBe(true)
   })
 
@@ -289,9 +314,11 @@ describe('ai summary service', () => {
 
     const requestBody = JSON.parse(String((((fetchMock.mock.calls[0] as unknown) as [unknown, RequestInit])[1])?.body))
     expect(requestBody.messages[0].content).toContain('subscription operations summary assistant')
+    expect(requestBody.messages[1].content).toContain('Here are the current subscription statistics')
 
     const previewRequestBody = JSON.parse(String((((fetchMock.mock.calls[1] as unknown) as [unknown, RequestInit])[1])?.body))
     expect(previewRequestBody.messages[0].content).toContain('summary compression assistant')
+    expect(previewRequestBody.messages[1].content).toContain('Here is the full AI summary that has already been generated')
   })
 
   it('always uses dedicated dashboard summary prompt even if recognition prompt is customized', async () => {

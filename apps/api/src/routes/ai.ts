@@ -18,7 +18,7 @@ function normalizeAiConfigPayload(payload: Partial<AiConfigInput>) {
 export async function aiRoutes(app: FastifyInstance) {
   app.get('/ai/summary/dashboard', async (_request, reply) => {
     try {
-      return sendOk(reply, await getDashboardAiSummary())
+      return sendOk(reply, await getDashboardAiSummary(_request.locale))
     } catch (error) {
       return sendError(reply, 400, 'ai_summary_fetch_failed', error instanceof Error ? error.message : 'api.errors.ai.summaryFetchFailed', undefined, {
         locale: _request.locale
@@ -28,7 +28,7 @@ export async function aiRoutes(app: FastifyInstance) {
 
   app.post('/ai/summary/dashboard/generate', async (_request, reply) => {
     try {
-      return sendOk(reply, await generateDashboardAiSummary())
+      return sendOk(reply, await generateDashboardAiSummary(_request.locale))
     } catch (error) {
       return sendError(
         reply,

@@ -88,7 +88,7 @@ export default {
       list: ', '
     },
     locales: {
-      zhCN: 'Simplified Chinese',
+      zhCN: '简体中文',
       enUS: 'English'
     },
     units: {
@@ -118,9 +118,9 @@ export default {
     menu: {
       dashboard: 'Dashboard',
       subscriptions: 'Subscriptions',
-      calendar: 'Subscription Calendar',
-      statistics: 'Expense Statistics',
-      budgets: 'Budget Statistics',
+      calendar: 'Calendar',
+      statistics: 'Spending',
+      budgets: 'Budgets',
       settings: 'Settings'
     },
     auth: {
@@ -256,7 +256,7 @@ export default {
     },
     buttons: {
       previewReminderRules: 'Preview reminder rules',
-      collapseReminderPreview: 'Collapse reminder preview',
+      collapseReminderPreview: 'Hide reminder preview',
       exportBackup: 'Export backup',
       restoreBackup: 'Restore backup',
       importWallos: 'Import Wallos',
@@ -737,9 +737,9 @@ export default {
         }
       },
       actions: {
-        aiRecognize: 'AI recognition',
-        previewReminderRules: 'Preview reminder rules',
-        collapseReminderPreview: 'Collapse reminder preview'
+        aiRecognize: 'AI fill',
+        previewReminderRules: 'Preview reminders',
+        collapseReminderPreview: 'Hide reminder preview'
       }
     },
     aiModal: {
@@ -1036,6 +1036,9 @@ Writing requirements:
 - Keep each section to 2 to 5 bullets.
 - If a section has no clear anomaly, say so directly.`
         },
+        user: {
+          request: 'Here are the current subscription statistics. Generate a Markdown summary:\n\n{payload}'
+        },
         preview: {
           default: `You are a summary compression assistant. Based on an already generated full AI summary, condense it into a very short preview suitable for a collapsed default view.
 
@@ -1046,6 +1049,9 @@ Hard requirements:
 - Keep only the most important conclusions: subscription scale, budget pressure, and short-term risk.
 - Do not add information that was not present in the original summary.
 - If the original summary is limited, return 1 to 2 natural sentences directly.`
+        },
+        previewUser: {
+          request: 'Here is the full AI summary that has already been generated. Condense it into a very short default collapsed preview:\n\n{payload}'
         }
       }
     }
@@ -1132,6 +1138,10 @@ Hard requirements:
         connectionTestFailed: 'AI connection test failed',
         visionTestFailed: 'AI vision test failed',
         recognitionFailed: 'AI recognition failed',
+        summaryRequestFailed: 'AI summary request failed',
+        summaryEmpty: 'AI summary returned empty content',
+        summaryPreviewRequestFailed: 'AI summary preview request failed',
+        summaryPreviewEmpty: 'AI summary preview returned empty content',
         summaryFetchFailed: 'Failed to fetch AI summary',
         summaryGenerateFailed: 'Failed to generate AI summary'
       },

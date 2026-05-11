@@ -15,7 +15,7 @@ import {
   type WebhookEventType
 } from '@subtracker/shared'
 import { dispatchWebhookEvent } from './webhook.service'
-import { getAppTimezone, getNotificationChannelSettings, getSetting, getSystemDefaultLocale, setSetting } from './settings.service'
+import { getAppTimezone, getNotificationChannelSettings, getResolvedAppLocale, getSetting, setSetting } from './settings.service'
 import { validateNotificationTargetUrl } from './notification-url.service'
 import { toIsoDate } from '../utils/date'
 import { formatDateInTimezone } from '../utils/timezone'
@@ -103,7 +103,7 @@ export async function cleanupOldNotificationDedupSettings(
 }
 
 async function resolveNotificationLocale(locale?: AppLocale): Promise<AppLocale> {
-  return locale ?? (await getSystemDefaultLocale().catch(() => DEFAULT_APP_LOCALE))
+  return locale ?? (await getResolvedAppLocale().catch(() => DEFAULT_APP_LOCALE))
 }
 
 function getNotificationLogName(params: NotificationDispatchParams) {

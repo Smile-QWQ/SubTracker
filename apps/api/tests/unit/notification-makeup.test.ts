@@ -14,7 +14,8 @@ vi.mock('../../src/services/settings.service', () => ({
     defaultAdvanceReminderRules: notificationState.defaultAdvanceReminderRules,
     defaultOverdueReminderRules: notificationState.defaultOverdueReminderRules,
     mergeMultiSubscriptionNotifications: notificationState.mergeMultiSubscriptionNotifications,
-    timezone: notificationState.timezone
+    timezone: notificationState.timezone,
+    locale: 'zh-CN'
   }))
 }))
 
