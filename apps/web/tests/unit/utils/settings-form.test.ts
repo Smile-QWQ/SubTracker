@@ -6,6 +6,7 @@ import type { Settings } from '@/types/api'
 describe('cloneSettingsForForm', () => {
   it('deep clones nested settings objects used by SettingsPage forms', () => {
     const original: Settings = {
+      systemDefaultLocale: 'zh-CN',
       baseCurrency: 'CNY',
       defaultNotifyDays: 3,
       defaultAdvanceReminderRules: '3&09:30;0&09:30;',
@@ -74,8 +75,10 @@ describe('cloneSettingsForForm', () => {
     }
 
     const cloned = cloneSettingsForForm(original)
+    const { systemDefaultLocale: _ignoredSystemDefaultLocale, ...expectedForm } = original
 
-    expect(cloned).toEqual(original)
+    expect(cloned).toEqual(expectedForm)
+    expect('systemDefaultLocale' in cloned).toBe(false)
     expect(cloned).not.toBe(original)
     expect(cloned.smtpConfig).not.toBe(original.smtpConfig)
     expect(cloned.resendConfig).not.toBe(original.resendConfig)

@@ -1,5 +1,5 @@
 <template>
-  <n-config-provider :locale="zhCN" :date-locale="dateZhCN" :theme="naiveTheme">
+  <n-config-provider :locale="naiveLocale" :date-locale="naiveDateLocale" :theme="naiveTheme">
     <n-message-provider>
       <router-view v-if="isLoginPage" />
       <template v-else>
@@ -27,8 +27,15 @@
                         </template>
                       </n-button>
                     </template>
-                    <span>{{ themeToggleTooltip }}</span>
-                  </n-tooltip>
+                  <span>{{ themeToggleTooltip }}</span>
+                </n-tooltip>
+                <n-select
+                  v-model:value="currentLocale"
+                  size="small"
+                  :options="localeOptions"
+                  style="width: 132px"
+                  @update:value="handleLocaleChange"
+                />
                 </div>
               </div>
             </n-drawer-content>
@@ -44,7 +51,7 @@
             class="desktop-sider"
           >
             <div class="sider-shell">
-              <div>
+              <div class="sider-menu-shell">
                 <div class="logo" :class="{ 'logo--collapsed': siderCollapsed }">
                   <template v-if="!siderCollapsed">
                     <div class="logo__brand">
@@ -79,6 +86,28 @@
                 </div>
                 <n-menu :collapsed="siderCollapsed" :collapsed-width="64" :options="menuOptions" :value="activeKey" @update:value="handleMenuClick" />
               </div>
+              <div class="sider-footer" :class="{ 'sider-footer--collapsed': siderCollapsed }">
+                <n-tooltip trigger="hover">
+                  <template #trigger>
+                    <n-button quaternary circle class="theme-toggle" @click="cycleThemePreference">
+                      <template #icon>
+                        <n-icon>
+                          <component :is="themePreferenceIcon" />
+                        </n-icon>
+                      </template>
+                    </n-button>
+                  </template>
+                  <span>{{ themeToggleTooltip }}</span>
+                </n-tooltip>
+                <n-select
+                  v-if="!siderCollapsed"
+                  v-model:value="currentLocale"
+                  size="small"
+                  :options="localeOptions"
+                  style="width: 132px"
+                  @update:value="handleLocaleChange"
+                />
+              </div>
             </div>
           </n-layout-sider>
 
@@ -96,15 +125,15 @@
                     <n-icon :size="18">
                       <sparkles-outline />
                     </n-icon>
-                    <strong>订阅管理台</strong>
+                    <strong>{{ t('app.shellTitle') }}</strong>
                   </div>
-                  <div v-if="!isCompact" class="card-muted">多币种 · 提醒 · 统计 · 日历</div>
+                  <div v-if="!isCompact" class="card-muted">{{ t('app.shellSubtitle') }}</div>
                 </div>
               </div>
 
               <n-space align="center" :size="8" class="header__right">
-                <n-tag type="info" round>{{ authStore.username || '未登录' }}</n-tag>
-                <n-button quaternary @click="logout">退出登录</n-button>
+                <n-tag type="info" round>{{ authStore.username || t('app.notSignedIn') }}</n-tag>
+                <n-button quaternary @click="logout">{{ t('common.actions.signOut') }}</n-button>
               </n-space>
             </n-layout-header>
 
@@ -114,44 +143,29 @@
           </n-layout>
         </n-layout>
 
-        <div v-if="!isMobile" class="theme-fab-shell">
-          <n-tooltip trigger="hover">
-            <template #trigger>
-              <n-button quaternary circle class="theme-toggle theme-toggle--floating" @click="cycleThemePreference">
-                <template #icon>
-                  <n-icon>
-                    <component :is="themePreferenceIcon" />
-                  </n-icon>
-                </template>
-              </n-button>
-            </template>
-            <span>{{ themeToggleTooltip }}</span>
-          </n-tooltip>
-        </div>
-
         <n-modal
           :show="authStore.mustChangePassword"
           preset="card"
-          title="请先修改默认密码"
+          :title="t('app.changeDefaultPasswordTitle')"
           :mask-closable="false"
           :closable="false"
           style="width: min(480px, calc(100vw - 24px))"
         >
           <n-space vertical>
             <n-alert type="warning" :show-icon="false">
-              当前仍在使用默认管理员密码。为了继续使用系统，请先修改密码。
+              {{ t('app.changeDefaultPasswordWarning') }}
             </n-alert>
             <n-form :model="defaultPasswordForm" label-placement="top">
-              <n-form-item label="新密码">
+              <n-form-item :label="t('app.newPassword')">
                 <n-input v-model:value="defaultPasswordForm.newPassword" type="password" show-password-on="click" />
               </n-form-item>
-              <n-form-item label="再次输入新密码">
+              <n-form-item :label="t('app.confirmNewPassword')">
                 <n-input v-model:value="defaultPasswordForm.confirmPassword" type="password" show-password-on="click" />
               </n-form-item>
             </n-form>
             <n-space justify="end">
-              <n-button @click="logout">退出登录</n-button>
-              <n-button type="primary" :loading="changingDefaultPassword" @click="submitDefaultPasswordChange">确认修改</n-button>
+              <n-button @click="logout">{{ t('common.actions.signOut') }}</n-button>
+              <n-button type="primary" :loading="changingDefaultPassword" @click="submitDefaultPasswordChange">{{ t('common.actions.confirm') }}</n-button>
             </n-space>
           </n-space>
         </n-modal>
@@ -159,16 +173,16 @@
         <n-modal
           :show="versionUpdateModalVisible"
           preset="card"
-          title="版本更新"
+          :title="t('app.versionUpdates')"
           style="width: min(860px, calc(100vw - 24px))"
           @update:show="versionUpdateModalVisible = $event"
         >
           <n-space vertical :size="16">
             <n-alert v-if="versionUpdateState?.hasUpdate" type="warning" :show-icon="false">
-              检测到新版本，当前版本 {{ versionUpdateState.currentVersion }}，最新版本 {{ versionUpdateState.latestVersion }}
+              {{ t('app.updateAvailable', { currentVersion: versionUpdateState.currentVersion, latestVersion: versionUpdateState.latestVersion }) }}
             </n-alert>
             <n-alert v-else type="success" :show-icon="false">
-              当前已经是最新版本（{{ versionUpdateState?.currentVersion || appVersion }}）
+              {{ t('app.alreadyLatest', { version: versionUpdateState?.currentVersion || appVersion }) }}
             </n-alert>
 
             <n-space vertical v-if="versionUpdateState?.releases?.length" :size="12">
@@ -178,11 +192,11 @@
                     <div>
                       <div class="release-item__title">{{ release.name }}</div>
                       <div class="release-item__meta">
-                        {{ release.tagName }} · {{ release.publishedAt ? formatReleaseDate(release.publishedAt) : '发布时间未知' }}
+                        {{ release.tagName }} · {{ release.publishedAt ? formatReleaseDate(release.publishedAt) : t('app.releaseUnknown') }}
                       </div>
                     </div>
                     <n-button tag="a" :href="release.htmlUrl" target="_blank" rel="noreferrer" secondary>
-                      查看 Release
+                      {{ t('app.viewRelease') }}
                     </n-button>
                   </n-space>
                   <div class="release-item__markdown" v-html="renderReleaseBody(release.body)" />
@@ -190,7 +204,7 @@
               </n-card>
             </n-space>
 
-            <div v-else class="card-muted">暂无比当前版本更高的 release。</div>
+            <div v-else class="card-muted">{{ t('app.noNewRelease') }}</div>
           </n-space>
         </n-modal>
       </template>
@@ -200,6 +214,7 @@
 
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref, watchEffect } from 'vue'
+import { useQueryClient } from '@tanstack/vue-query'
 import { useRoute, useRouter } from 'vue-router'
 import { useWindowSize } from '@vueuse/core'
 import {
@@ -220,13 +235,11 @@ import {
   NMenu,
   NMessageProvider,
   NModal,
+  NSelect,
   NSpace,
   NTag,
   NTooltip,
-  createDiscreteApi,
-  darkTheme,
-  dateZhCN,
-  zhCN
+  darkTheme
 } from 'naive-ui'
 import type { MenuOption } from 'naive-ui'
 import {
@@ -245,18 +258,22 @@ import {
 } from '@vicons/ionicons5'
 import brandLogoUrl from '@/assets/brand-logo.png'
 import { api } from '@/composables/api'
-import { useSettingsQuery } from '@/composables/settings-query'
+import { SETTINGS_QUERY_KEY, useSettingsQuery } from '@/composables/settings-query'
 import { useVersionUpdateQuery } from '@/composables/version-update-query'
 import { useThemePreference, type ThemePreference } from '@/composables/theme-preference'
+import { t, useAppLocale } from '@/locales'
 import { useAuthStore } from '@/stores/auth'
 import { isRememberedSession } from '@/utils/auth-storage'
 import { renderMarkdownToHtml } from '@/utils/simple-markdown'
+import { createLocalizedDiscreteMessage } from '@/utils/localized-message'
 
 const route = useRoute()
 const router = useRouter()
+const queryClient = useQueryClient()
 const authStore = useAuthStore()
 const { resolvedTheme, setThemePreference } = useThemePreference()
-const { message } = createDiscreteApi(['message'])
+const { locale, naiveLocale, naiveDateLocale, setLocale } = useAppLocale()
+const message = createLocalizedDiscreteMessage()
 const appVersion = __APP_VERSION__
 const mobileMenuVisible = ref(false)
 const siderCollapsed = ref(false)
@@ -277,17 +294,17 @@ function renderMenuIcon(icon: typeof GridOutline) {
 
 const menuOptions = computed<MenuOption[]>(() => {
   const options: MenuOption[] = [
-    { label: '仪表盘', key: '/dashboard', icon: renderMenuIcon(GridOutline) },
-    { label: '订阅管理', key: '/subscriptions', icon: renderMenuIcon(LayersOutline) },
-    { label: '订阅日历', key: '/calendar', icon: renderMenuIcon(CalendarOutline) },
-    { label: '费用统计', key: '/statistics', icon: renderMenuIcon(BarChartOutline) }
+    { label: t('app.menu.dashboard'), key: '/dashboard', icon: renderMenuIcon(GridOutline) },
+    { label: t('app.menu.subscriptions'), key: '/subscriptions', icon: renderMenuIcon(LayersOutline) },
+    { label: t('app.menu.calendar'), key: '/calendar', icon: renderMenuIcon(CalendarOutline) },
+    { label: t('app.menu.statistics'), key: '/statistics', icon: renderMenuIcon(BarChartOutline) }
   ]
 
   if (settings.value?.enableTagBudgets) {
-    options.push({ label: '预算统计', key: '/budgets', icon: renderMenuIcon(WalletOutline) })
+    options.push({ label: t('app.menu.budgets'), key: '/budgets', icon: renderMenuIcon(WalletOutline) })
   }
 
-  options.push({ label: '系统设置', key: '/settings', icon: renderMenuIcon(SettingsOutline) })
+  options.push({ label: t('app.menu.settings'), key: '/settings', icon: renderMenuIcon(SettingsOutline) })
   return options
 })
 
@@ -298,12 +315,21 @@ const isCompact = computed(() => width.value < 640)
 const contentStyle = computed(() => (isMobile.value ? 'padding: 12px;' : 'padding: 20px 24px;'))
 const naiveTheme = computed(() => (resolvedTheme.value === 'dark' ? darkTheme : null))
 const themePreferenceIcon = computed(() => (resolvedTheme.value === 'dark' ? MoonOutline : SunnyOutline))
+const currentLocale = ref(locale.value)
+const localeOptions = computed(() => [
+  { label: t('common.locales.zhCN'), value: 'zh-CN' },
+  { label: t('common.locales.enUS'), value: 'en-US' }
+])
 const themeToggleTooltip = computed(() => {
-  const currentLabel = resolvedTheme.value === 'dark' ? '深色' : '浅色'
-  const nextLabel = currentLabel === '深色' ? '浅色' : '深色'
-  return `当前主题：${currentLabel}，点击切换到${nextLabel}`
+  const currentLabel = resolvedTheme.value === 'dark' ? t('app.theme.dark') : t('app.theme.light')
+  const nextLabel = resolvedTheme.value === 'dark' ? t('app.theme.light') : t('app.theme.dark')
+  return t('app.theme.current', { current: currentLabel, next: nextLabel })
 })
 const hasVersionUpdate = computed(() => Boolean(versionUpdateState.value?.hasUpdate))
+
+watchEffect(() => {
+  currentLocale.value = locale.value
+})
 
 watchEffect(() => {
   if (typeof document === 'undefined') return
@@ -336,6 +362,26 @@ function cycleThemePreference() {
   setThemePreference(nextTheme)
 }
 
+function handleLocaleChange(value: string) {
+  const nextLocale = value as 'zh-CN' | 'en-US'
+  setLocale(nextLocale)
+  void syncSystemDefaultLocale(nextLocale)
+}
+
+async function syncSystemDefaultLocale(localeValue: 'zh-CN' | 'en-US') {
+  try {
+    const currentSettings = settings.value
+    if (currentSettings?.systemDefaultLocale === localeValue) {
+      return
+    }
+
+    const updatedSettings = await api.updateSettings({ systemDefaultLocale: localeValue })
+    queryClient.setQueryData(SETTINGS_QUERY_KEY, updatedSettings)
+  } catch {
+    // Ignore sync failures here to avoid blocking immediate UI language switch.
+  }
+}
+
 async function logout() {
   authStore.clearSession()
   await router.replace('/login')
@@ -348,17 +394,17 @@ async function submitDefaultPasswordChange() {
   const confirmPassword = defaultPasswordForm.confirmPassword.trim()
 
   if (!newPassword) {
-    message.error('请输入新密码')
+    message.error(t('auth.validation.newPasswordRequired'))
     return
   }
 
   if (newPassword.length < 4) {
-    message.error('新密码至少 4 位')
+    message.error(t('auth.validation.newPasswordMin'))
     return
   }
 
   if (newPassword !== confirmPassword) {
-    message.error('两次输入的新密码不一致')
+    message.error(t('auth.validation.passwordMismatch'))
     return
   }
 
@@ -373,9 +419,9 @@ async function submitDefaultPasswordChange() {
     )
     defaultPasswordForm.newPassword = ''
     defaultPasswordForm.confirmPassword = ''
-    message.success('默认密码已修改')
+    message.success(t('auth.success.defaultPasswordChanged'))
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '修改默认密码失败')
+    message.error(error instanceof Error ? error.message : t('auth.error.passwordReset'))
   } finally {
     changingDefaultPassword.value = false
   }
@@ -391,7 +437,7 @@ function renderReleaseBody(body: string) {
 
 function formatReleaseDate(value: string) {
   try {
-    return new Date(value).toLocaleString('zh-CN')
+    return new Date(value).toLocaleString(locale.value)
   } catch {
     return value
   }
@@ -426,6 +472,13 @@ function formatReleaseDate(value: string) {
   flex-direction: column;
 }
 
+.sider-menu-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .sider-menu {
   flex: 1;
   min-height: 0;
@@ -434,9 +487,12 @@ function formatReleaseDate(value: string) {
 
 .sider-footer {
   display: flex;
+  align-items: center;
+  gap: 10px;
   justify-content: flex-start;
   padding: 12px;
   margin-top: auto;
+  border-top: 1px solid var(--app-border);
 }
 
 .sider-footer--collapsed {
@@ -445,22 +501,6 @@ function formatReleaseDate(value: string) {
 
 .theme-toggle {
   box-shadow: inset 0 0 0 1px var(--app-border-soft);
-}
-
-.theme-toggle--floating {
-  position: fixed;
-  left: 12px;
-  bottom: 16px;
-  z-index: 30;
-  background: var(--app-surface);
-}
-
-.theme-fab-shell {
-  pointer-events: none;
-}
-
-.theme-fab-shell :deep(.n-button) {
-  pointer-events: auto;
 }
 
 .logo {

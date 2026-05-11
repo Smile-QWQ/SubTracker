@@ -594,7 +594,6 @@ const tagListStyle = {
   gap: '6px'
 }
 
-<<<<<<< HEAD
 function getTagDisplay(tags?: Tag[] | null) {
   return splitSubscriptionTagsForDisplay(tags)
 }
@@ -603,10 +602,7 @@ function formatTagOverflowTooltip(tags: Tag[]) {
   return formatSubscriptionTagOverflowTooltip(tags)
 }
 
-const mainColumns = [
-=======
 const mainColumns = computed(() => [
->>>>>>> 48ca025 (feat: add web i18n with shared messages)
   {
     title: t('common.labels.name'),
     key: 'name',

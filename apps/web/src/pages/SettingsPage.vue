@@ -1,24 +1,24 @@
 <template>
   <div>
     <page-header
-      title="系统设置"
-      subtitle="管理基础参数、预算、汇率、通知与 AI 能力"
+      :title="t('settings.page.title')"
+      :subtitle="t('settings.page.subtitle')"
       :icon="settingsOutline"
       icon-background="linear-gradient(135deg, #64748b 0%, #334155 100%)"
     />
 
     <n-grid :cols="gridCols" :x-gap="12" :y-gap="12">
       <n-grid-item>
-        <n-card title="基础设置" class="settings-card">
+        <n-card :title="t('settings.sections.basic')" class="settings-card">
           <n-form :model="settingsForm" label-placement="top">
             <n-grid :cols="formCols" :x-gap="12">
               <n-grid-item>
-                <n-form-item label="基准货币">
+                <n-form-item :label="t('settings.labels.baseCurrency')">
                   <n-select v-model:value="settingsForm.baseCurrency" :options="allCurrencyOptions" filterable />
                 </n-form-item>
               </n-grid-item>
               <n-grid-item>
-                <n-form-item label="业务时区">
+                <n-form-item :label="t('settings.labels.timezone')">
                   <n-select v-model:value="settingsForm.timezone" :options="timeZoneOptions" filterable />
                 </n-form-item>
               </n-grid-item>
@@ -26,12 +26,12 @@
 
             <n-grid :cols="formCols" :x-gap="12">
               <n-grid-item>
-                <n-form-item label="记住登录天数">
+                <n-form-item :label="t('settings.labels.rememberSessionDays')">
                   <n-input-number v-model:value="settingsForm.rememberSessionDays" :min="1" :max="365" style="width: 100%" />
                 </n-form-item>
               </n-grid-item>
               <n-grid-item>
-                <n-form-item label="当前时区示例">
+                <n-form-item :label="t('settings.labels.timezoneSample')">
                   <n-input :value="formatTime(new Date().toISOString())" readonly />
                 </n-form-item>
               </n-grid-item>
@@ -39,12 +39,12 @@
 
             <n-grid :cols="formCols" :x-gap="12">
               <n-grid-item>
-                <n-form-item label="月预算（基准货币）">
+                <n-form-item :label="t('settings.labels.monthlyBudget')">
                   <n-input-number v-model:value="settingsForm.monthlyBudgetBase" :min="0" :precision="2" style="width: 100%" />
                 </n-form-item>
               </n-grid-item>
               <n-grid-item>
-                <n-form-item label="年预算（基准货币）">
+                <n-form-item :label="t('settings.labels.yearlyBudget')">
                   <n-input-number v-model:value="settingsForm.yearlyBudgetBase" :min="0" :precision="2" style="width: 100%" />
                 </n-form-item>
               </n-grid-item>
@@ -55,18 +55,18 @@
                 <n-form-item>
                   <template #label>
                     <span class="label-with-tip">
-                      <span>到期前提醒规则</span>
+                      <span>{{ t('settings.labels.advanceReminderRules') }}</span>
                       <n-tooltip trigger="hover">
                         <template #trigger>
                           <n-icon class="label-with-tip__icon" :component="helpCircleOutline" />
                         </template>
-                        <span>格式说明：天数&时间;，例如 3&09:30; 表示提前 3 天在 09:30 提醒，0&09:30; 表示到期当天提醒；多条规则用 ; 分隔</span>
+                        <span>{{ t('settings.helps.advanceReminderRules') }}</span>
                       </n-tooltip>
                     </span>
                   </template>
                   <n-input
                     v-model:value="settingsForm.defaultAdvanceReminderRules"
-                    placeholder="例如：3&09:30;0&09:30;"
+                    :placeholder="t('settings.placeholders.advanceReminderRules')"
                   />
                 </n-form-item>
               </n-grid-item>
@@ -74,18 +74,18 @@
                 <n-form-item>
                   <template #label>
                     <span class="label-with-tip">
-                      <span>过期提醒规则</span>
+                      <span>{{ t('settings.labels.overdueReminderRules') }}</span>
                       <n-tooltip trigger="hover">
                         <template #trigger>
                           <n-icon class="label-with-tip__icon" :component="helpCircleOutline" />
                         </template>
-                        <span>格式说明：天数&时间;，例如 1&09:30; 表示过期 1 天后在 09:30 提醒；多条规则用 ; 分隔</span>
+                        <span>{{ t('settings.helps.overdueReminderRules') }}</span>
                       </n-tooltip>
                     </span>
                   </template>
                   <n-input
                     v-model:value="settingsForm.defaultOverdueReminderRules"
-                    placeholder="例如：1&09:30;2&09:30;3&09:30;"
+                    :placeholder="t('settings.placeholders.overdueReminderRules')"
                   />
                 </n-form-item>
               </n-grid-item>
@@ -103,9 +103,9 @@
             <n-grid :cols="formCols" :x-gap="12">
               <n-grid-item>
                 <div class="switch-row">
-                  <div class="switch-group">
-                    <div class="switch-group__item">
-                      <span class="switch-inline-label">多订阅合并通知</span>
+                    <div class="switch-group">
+                      <div class="switch-group__item">
+                      <span class="switch-inline-label">{{ t('settings.labels.mergeNotifications') }}</span>
                       <n-switch v-model:value="settingsForm.mergeMultiSubscriptionNotifications" />
                     </div>
                   </div>
@@ -115,7 +115,7 @@
                 <div class="switch-row">
                   <div class="switch-group switch-group--single">
                     <div class="switch-group__item">
-                      <span class="switch-label">启用标签月预算</span>
+                      <span class="switch-label">{{ t('settings.labels.enableTagBudgets') }}</span>
                       <n-switch v-model:value="settingsForm.enableTagBudgets" />
                     </div>
                   </div>
@@ -128,7 +128,7 @@
                 <template #icon>
                   <n-icon><save-outline /></n-icon>
                 </template>
-                保存
+                {{ t('common.actions.save') }}
               </n-button>
               <n-button
                 :type="settingsReminderPreviewVisible ? 'primary' : 'default'"
@@ -138,7 +138,7 @@
                 <template #icon>
                   <n-icon :component="eyeOutline" />
                 </template>
-                {{ settingsReminderPreviewVisible ? '收起提醒预览' : '预览提醒规则' }}
+                {{ settingsReminderPreviewVisible ? t('settings.buttons.collapseReminderPreview') : t('settings.buttons.previewReminderRules') }}
               </n-button>
             </n-space>
           </n-form>
@@ -146,16 +146,16 @@
       </n-grid-item>
 
       <n-grid-item>
-        <n-card title="汇率快照" class="settings-card">
+        <n-card :title="t('settings.sections.exchangeSnapshot')" class="settings-card">
           <n-descriptions v-if="snapshot" :column="1" bordered>
-            <n-descriptions-item label="基准货币">{{ snapshot.baseCurrency }}</n-descriptions-item>
-            <n-descriptions-item label="来源名称">{{ snapshot.provider }}</n-descriptions-item>
-            <n-descriptions-item label="接口地址">
+            <n-descriptions-item :label="t('settings.labels.baseCurrency')">{{ snapshot.baseCurrency }}</n-descriptions-item>
+            <n-descriptions-item :label="t('common.labels.provider')">{{ snapshot.provider }}</n-descriptions-item>
+            <n-descriptions-item :label="t('settings.labels.providerUrl')">
               <a :href="snapshot.providerUrl" target="_blank" rel="noreferrer" class="provider-link">{{ snapshot.providerUrl }}</a>
             </n-descriptions-item>
-            <n-descriptions-item label="拉取时间">{{ formatTime(snapshot.fetchedAt) }}</n-descriptions-item>
-            <n-descriptions-item label="数据状态">
-              <n-tag :type="snapshot.isStale ? 'warning' : 'success'">{{ snapshot.isStale ? '旧快照' : '最新' }}</n-tag>
+            <n-descriptions-item :label="t('settings.labels.fetchedAt')">{{ formatTime(snapshot.fetchedAt) }}</n-descriptions-item>
+            <n-descriptions-item :label="t('settings.labels.snapshotStatus')">
+              <n-tag :type="snapshot.isStale ? 'warning' : 'success'">{{ snapshot.isStale ? t('common.status.stale') : t('common.status.fresh') }}</n-tag>
             </n-descriptions-item>
           </n-descriptions>
 
@@ -164,18 +164,18 @@
               <template #icon>
                 <n-icon><refresh-outline /></n-icon>
               </template>
-              刷新
+              {{ t('common.actions.refresh') }}
             </n-button>
           </n-space>
         </n-card>
       </n-grid-item>
 
       <n-grid-item>
-        <n-card title="当前汇率（常用货币）" class="settings-card">
+        <n-card :title="t('settings.sections.currentRates')" class="settings-card">
           <template #header-extra>
             <n-space>
-              <n-tag type="success">基准货币 {{ settingsForm.baseCurrency }}</n-tag>
-              <n-tag type="info">支持 {{ supportedCurrencyCount }} 种货币</n-tag>
+              <n-tag type="success">{{ t('settings.summary.baseCurrencyTag', { currency: settingsForm.baseCurrency }) }}</n-tag>
+              <n-tag type="info">{{ t('settings.summary.supportedCurrenciesTag', { count: supportedCurrencyCount }) }}</n-tag>
             </n-space>
           </template>
           <n-data-table :columns="rateColumns" :data="currentRates" :pagination="false" />
@@ -183,19 +183,19 @@
       </n-grid-item>
 
       <n-grid-item>
-        <n-card title="汇率转换器" class="settings-card">
+        <n-card :title="t('settings.sections.converter')" class="settings-card">
           <n-space vertical style="width: 100%">
             <div class="converter-currency-row">
               <div class="converter-currency-row__select">
-                <n-select v-model:value="sourceCurrency" :options="allCurrencyOptions" filterable placeholder="源货币" />
+                <n-select v-model:value="sourceCurrency" :options="allCurrencyOptions" filterable :placeholder="t('settings.labels.sourceCurrency')" />
               </div>
-              <n-button quaternary circle class="converter-swap-button" title="交换源货币和目标货币" @click="swapConverterCurrencies">
+              <n-button quaternary circle class="converter-swap-button" :title="t('settings.buttons.swapCurrencies')" @click="swapConverterCurrencies">
                 <template #icon>
                   <n-icon><swap-horizontal-outline /></n-icon>
                 </template>
               </n-button>
               <div class="converter-currency-row__select">
-                <n-select v-model:value="targetCurrency" :options="allCurrencyOptions" filterable placeholder="目标货币" />
+                <n-select v-model:value="targetCurrency" :options="allCurrencyOptions" filterable :placeholder="t('settings.labels.targetCurrency')" />
               </div>
             </div>
             <n-input-number v-model:value="converterAmount" :min="0" :precision="4" style="width: 100%" />
@@ -206,41 +206,41 @@
                 </div>
                 <div class="converter-sub">1 {{ sourceCurrency }} = {{ converterRateDisplay }} {{ targetCurrency }}</div>
               </template>
-              <template v-else>请选择要转换的货币</template>
+              <template v-else>{{ t('settings.summary.selectCurrenciesToConvert') }}</template>
             </n-card>
           </n-space>
         </n-card>
       </n-grid-item>
 
       <n-grid-item :span="gridSpanFull">
-        <n-card title="通知设置" class="settings-card">
+        <n-card :title="t('settings.sections.notifications')" class="settings-card">
           <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
-            统一管理邮箱、PushPlus、Telegram、Server 酱、Gotify 与 Webhook。每个渠道都可以单独保存并单独测试。
+            {{ t('settings.helps.notificationSettings') }}
           </n-alert>
 
           <n-grid :cols="notificationGridCols" :x-gap="12" :y-gap="12">
             <n-grid-item>
               <div class="channel-card">
                 <div class="channel-card__header">
-                  <span>邮箱通知</span>
+                  <span>{{ t('settings.channels.email') }}</span>
                   <n-switch v-model:value="settingsForm.emailNotificationsEnabled" />
                 </div>
                 <n-form label-placement="top">
                   <n-grid :cols="formCols" :x-gap="8">
                     <n-grid-item>
-                      <n-form-item label="通知提供商">
+                      <n-form-item :label="t('settings.labels.notificationProvider')">
                         <n-select v-model:value="settingsForm.emailProvider" :options="emailProviderOptions" />
                       </n-form-item>
                     </n-grid-item>
                     <n-grid-item>
-                      <n-form-item label="配置详情">
+                      <n-form-item :label="t('settings.labels.configurationDetails')">
                         <n-button quaternary class="email-details-toggle" @click="emailDetailsExpanded = !emailDetailsExpanded">
                           <template #icon>
                             <n-icon>
                               <component :is="emailDetailsExpanded ? chevronUpOutline : chevronDownOutline" />
                             </n-icon>
                           </template>
-                          {{ emailDetailsExpanded ? '收起' : '展开' }}
+                          {{ emailDetailsExpanded ? t('common.actions.collapse') : t('common.actions.expand') }}
                         </n-button>
                       </n-form-item>
                     </n-grid-item>
@@ -252,53 +252,53 @@
 
                   <n-collapse-transition :show="emailDetailsExpanded">
                     <template v-if="settingsForm.emailProvider === 'smtp'">
-                      <n-form-item label="SMTP Host">
+                      <n-form-item :label="t('common.labels.host')">
                         <n-input v-model:value="settingsForm.smtpConfig.host" />
                       </n-form-item>
                       <n-grid :cols="formCols" :x-gap="8">
                         <n-grid-item>
-                          <n-form-item label="端口">
+                          <n-form-item :label="t('common.labels.port')">
                             <n-input-number v-model:value="settingsForm.smtpConfig.port" :min="1" :max="65535" style="width: 100%" />
                           </n-form-item>
                         </n-grid-item>
                         <n-grid-item>
-                          <n-form-item label="Secure">
+                          <n-form-item :label="t('common.labels.secure')">
                             <n-switch v-model:value="settingsForm.smtpConfig.secure" />
                           </n-form-item>
                         </n-grid-item>
                       </n-grid>
-                      <n-form-item label="用户名">
+                      <n-form-item :label="t('common.labels.username')">
                         <n-input v-model:value="settingsForm.smtpConfig.username" />
                       </n-form-item>
-                      <n-form-item label="密码">
+                      <n-form-item :label="t('common.labels.password')">
                         <n-input v-model:value="settingsForm.smtpConfig.password" type="password" show-password-on="click" />
                       </n-form-item>
-                      <n-form-item label="发件人">
-                        <n-input v-model:value="settingsForm.smtpConfig.from" placeholder="SubTracker <noreply@example.com>" />
+                      <n-form-item :label="t('common.labels.from')">
+                        <n-input v-model:value="settingsForm.smtpConfig.from" :placeholder="t('settings.placeholders.fromAddress')" />
                       </n-form-item>
-                      <n-form-item label="收件人">
-                        <n-input v-model:value="settingsForm.smtpConfig.to" placeholder="多个邮箱请用英文逗号分隔" />
+                      <n-form-item :label="t('common.labels.to')">
+                        <n-input v-model:value="settingsForm.smtpConfig.to" :placeholder="t('settings.placeholders.multiEmail')" />
                       </n-form-item>
                     </template>
                     <template v-else>
-                      <n-form-item label="Resend API URL">
+                      <n-form-item :label="t('common.labels.apiBaseUrl')">
                         <n-input v-model:value="settingsForm.resendConfig.apiBaseUrl" />
                       </n-form-item>
-                      <n-form-item label="Resend API Key">
-                        <n-input v-model:value="settingsForm.resendConfig.apiKey" type="password" show-password-on="click" placeholder="re_xxxxx" />
+                      <n-form-item :label="t('common.labels.apiKey')">
+                        <n-input v-model:value="settingsForm.resendConfig.apiKey" type="password" show-password-on="click" />
                       </n-form-item>
-                      <n-form-item label="发件人">
-                        <n-input v-model:value="settingsForm.resendConfig.from" placeholder="SubTracker <noreply@example.com>" />
+                      <n-form-item :label="t('common.labels.from')">
+                        <n-input v-model:value="settingsForm.resendConfig.from" :placeholder="t('settings.placeholders.fromAddress')" />
                       </n-form-item>
-                      <n-form-item label="收件人">
-                        <n-input v-model:value="settingsForm.resendConfig.to" placeholder="多个邮箱请用英文逗号分隔" />
+                      <n-form-item :label="t('common.labels.to')">
+                        <n-input v-model:value="settingsForm.resendConfig.to" :placeholder="t('settings.placeholders.multiEmail')" />
                       </n-form-item>
                     </template>
                   </n-collapse-transition>
 
                   <n-space>
-                    <n-button :loading="savingEmailSettings" :disabled="savingEmailSettings" @click="saveEmailSettings">保存</n-button>
-                    <n-button type="primary" @click="testEmail">测试</n-button>
+                    <n-button :loading="savingEmailSettings" :disabled="savingEmailSettings" @click="saveEmailSettings">{{ t('common.actions.save') }}</n-button>
+                    <n-button type="primary" @click="testEmail">{{ t('common.actions.test') }}</n-button>
                   </n-space>
                 </n-form>
               </div>
@@ -307,19 +307,19 @@
             <n-grid-item>
               <div class="channel-card">
                 <div class="channel-card__header">
-                  <span>PushPlus</span>
+                  <span>{{ t('settings.channels.pushplus') }}</span>
                   <n-switch v-model:value="settingsForm.pushplusNotificationsEnabled" />
                 </div>
                 <n-form label-placement="top">
-                  <n-form-item label="Token">
+                  <n-form-item :label="t('common.labels.token')">
                     <n-input v-model:value="settingsForm.pushplusConfig.token" />
                   </n-form-item>
-                  <n-form-item label="Topic">
-                    <n-input v-model:value="settingsForm.pushplusConfig.topic" placeholder="可选" />
+                  <n-form-item :label="t('common.labels.topic')">
+                    <n-input v-model:value="settingsForm.pushplusConfig.topic" :placeholder="t('settings.placeholders.optional')" />
                   </n-form-item>
                   <n-space>
-                    <n-button :loading="savingPushplusSettings" :disabled="savingPushplusSettings" @click="savePushplusSettings">保存</n-button>
-                    <n-button type="primary" @click="testPushplus">测试</n-button>
+                    <n-button :loading="savingPushplusSettings" :disabled="savingPushplusSettings" @click="savePushplusSettings">{{ t('common.actions.save') }}</n-button>
+                    <n-button type="primary" @click="testPushplus">{{ t('common.actions.test') }}</n-button>
                   </n-space>
                 </n-form>
               </div>
@@ -327,20 +327,20 @@
 
             <n-grid-item>
               <div class="channel-card">
-                <div class="channel-card__header">
-                  <span>Telegram Bot</span>
+                  <div class="channel-card__header">
+                  <span>{{ t('settings.channels.telegram') }}</span>
                   <n-switch v-model:value="settingsForm.telegramNotificationsEnabled" />
                 </div>
                 <n-form label-placement="top">
-                  <n-form-item label="Bot Token">
+                  <n-form-item :label="t('common.labels.botToken')">
                     <n-input v-model:value="settingsForm.telegramConfig.botToken" type="password" show-password-on="click" />
                   </n-form-item>
-                  <n-form-item label="Chat ID">
-                    <n-input v-model:value="settingsForm.telegramConfig.chatId" placeholder="例如：123456789 或 -100xxxxxxxxxx" />
+                  <n-form-item :label="t('common.labels.chatId')">
+                    <n-input v-model:value="settingsForm.telegramConfig.chatId" :placeholder="t('settings.placeholders.chatIdExample')" />
                   </n-form-item>
                   <n-space>
-                    <n-button :loading="savingTelegramSettings" :disabled="savingTelegramSettings" @click="saveTelegramSettings">保存</n-button>
-                    <n-button type="primary" @click="testTelegram">测试</n-button>
+                    <n-button :loading="savingTelegramSettings" :disabled="savingTelegramSettings" @click="saveTelegramSettings">{{ t('common.actions.save') }}</n-button>
+                    <n-button type="primary" @click="testTelegram">{{ t('common.actions.test') }}</n-button>
                   </n-space>
                 </n-form>
               </div>
@@ -349,16 +349,16 @@
             <n-grid-item>
               <div class="channel-card">
                 <div class="channel-card__header">
-                  <span>Server 酱</span>
+                  <span>{{ t('settings.channels.serverchan') }}</span>
                   <n-switch v-model:value="settingsForm.serverchanNotificationsEnabled" />
                 </div>
                 <n-form label-placement="top">
-                  <n-form-item label="SendKey">
+                  <n-form-item :label="t('common.labels.sendKey')">
                     <n-input v-model:value="settingsForm.serverchanConfig.sendkey" />
                   </n-form-item>
                   <n-space>
-                    <n-button :loading="savingServerchanSettings" :disabled="savingServerchanSettings" @click="saveServerchanSettings">保存</n-button>
-                    <n-button type="primary" @click="testServerchan">测试</n-button>
+                    <n-button :loading="savingServerchanSettings" :disabled="savingServerchanSettings" @click="saveServerchanSettings">{{ t('common.actions.save') }}</n-button>
+                    <n-button type="primary" @click="testServerchan">{{ t('common.actions.test') }}</n-button>
                   </n-space>
                 </n-form>
               </div>
@@ -367,23 +367,23 @@
             <n-grid-item>
               <div class="channel-card">
                 <div class="channel-card__header">
-                  <span>Gotify</span>
+                  <span>{{ t('settings.channels.gotify') }}</span>
                   <n-switch v-model:value="settingsForm.gotifyNotificationsEnabled" />
                 </div>
                 <n-form label-placement="top">
-                  <n-form-item label="URL">
-                    <n-input v-model:value="settingsForm.gotifyConfig.url" placeholder="https://gotify.example.com" />
+                  <n-form-item :label="t('common.labels.url')">
+                    <n-input v-model:value="settingsForm.gotifyConfig.url" :placeholder="t('settings.placeholders.gotifyUrl')" />
                   </n-form-item>
-                  <n-form-item label="Token">
+                  <n-form-item :label="t('common.labels.token')">
                     <n-input v-model:value="settingsForm.gotifyConfig.token" type="password" show-password-on="click" />
                   </n-form-item>
                   <div class="compact-switch-row">
                     <n-switch v-model:value="settingsForm.gotifyConfig.ignoreSsl" />
-                    <span class="switch-inline-label">忽略 SSL 校验</span>
+                    <span class="switch-inline-label">{{ t('settings.labels.ignoreSsl') }}</span>
                   </div>
                   <n-space>
-                    <n-button :loading="savingGotifySettings" :disabled="savingGotifySettings" @click="saveGotifySettings">保存</n-button>
-                    <n-button type="primary" @click="testGotify">测试</n-button>
+                    <n-button :loading="savingGotifySettings" :disabled="savingGotifySettings" @click="saveGotifySettings">{{ t('common.actions.save') }}</n-button>
+                    <n-button type="primary" @click="testGotify">{{ t('common.actions.test') }}</n-button>
                   </n-space>
                 </n-form>
               </div>
@@ -392,40 +392,40 @@
             <n-grid-item>
               <div class="channel-card">
                 <div class="channel-card__header">
-                  <span>Webhook</span>
+                  <span>{{ t('settings.channels.webhook') }}</span>
                   <n-switch v-model:value="webhookForm.enabled" />
                 </div>
                 <n-form label-placement="top">
                   <n-grid :cols="formCols" :x-gap="8">
                     <n-grid-item :span="formCols === 1 ? 1 : 2">
-                      <n-form-item label="URL">
-                        <n-input v-model:value="webhookForm.url" placeholder="https://example.com/hook" />
+                      <n-form-item :label="t('common.labels.url')">
+                        <n-input v-model:value="webhookForm.url" :placeholder="t('settings.placeholders.webhookUrl')" />
                       </n-form-item>
                     </n-grid-item>
                     <n-grid-item>
-                      <n-form-item label="请求方法">
+                      <n-form-item :label="t('settings.labels.requestMethod')">
                         <n-select v-model:value="webhookForm.requestMethod" :options="webhookMethodOptions" />
                       </n-form-item>
                     </n-grid-item>
                       <n-grid-item>
                         <n-form-item>
                           <n-switch v-model:value="webhookForm.ignoreSsl" />
-                          <span class="switch-label">忽略 SSL 校验</span>
+                          <span class="switch-label">{{ t('settings.labels.ignoreSsl') }}</span>
                         </n-form-item>
                       </n-grid-item>
                   </n-grid>
 
                   <n-collapse arrow-placement="right" class="webhook-advanced">
-                    <n-collapse-item title="高级配置" name="advanced">
-                      <n-form-item label="自定义请求头">
+                    <n-collapse-item :title="t('settings.labels.advancedConfig')" name="advanced">
+                      <n-form-item :label="t('settings.labels.customHeaders')">
                         <n-input
                           v-model:value="webhookForm.headers"
                           type="textarea"
                           :autosize="{ minRows: 3, maxRows: 6 }"
-                          placeholder="支持 JSON 对象或每行一个 Header，例如：&#10;Content-Type: application/json&#10;X-App: SubTracker"
+                          :placeholder="t('settings.placeholders.customHeaders')"
                         />
                       </n-form-item>
-                      <n-form-item label="Payload 模板">
+                      <n-form-item :label="t('settings.labels.payloadTemplate')">
                         <n-input
                           v-model:value="webhookForm.payloadTemplate"
                           type="textarea"
@@ -433,13 +433,13 @@
                         />
                       </n-form-item>
                       <n-alert type="info" :show-icon="false">
-                        可用变量：{{ webhookVariablesText }}
+                        {{ t('settings.labels.availableVariables') }}{{ webhookVariablesText }}
                       </n-alert>
                     </n-collapse-item>
                   </n-collapse>
                   <n-space>
-                    <n-button :loading="savingWebhookSettings" :disabled="savingWebhookSettings" @click="saveWebhook">保存</n-button>
-                    <n-button type="primary" @click="testWebhook">测试</n-button>
+                    <n-button :loading="savingWebhookSettings" :disabled="savingWebhookSettings" @click="saveWebhook">{{ t('common.actions.save') }}</n-button>
+                    <n-button type="primary" @click="testWebhook">{{ t('common.actions.test') }}</n-button>
                   </n-space>
                 </n-form>
               </div>
@@ -449,16 +449,19 @@
       </n-grid-item>
 
       <n-grid-item>
-        <n-card title="AI 能力设置" class="settings-card">
+        <n-card :title="t('settings.sections.ai')" class="settings-card">
           <n-form :model="settingsForm.aiConfig" label-placement="top">
             <n-form-item>
               <n-switch v-model:value="settingsForm.aiConfig.enabled" />
-              <span class="switch-label">启用 AI 能力</span>
+              <span class="switch-label">{{ t('settings.labels.enableAi') }}</span>
             </n-form-item>
+            <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
+              {{ t('settings.helps.aiSettings') }}
+            </n-alert>
 
             <n-grid :cols="formCols" :x-gap="12" :y-gap="12">
               <n-grid-item>
-                <n-form-item label="Provider 预设">
+                <n-form-item :label="t('settings.labels.providerPreset')">
                   <n-select
                     :value="settingsForm.aiConfig.providerPreset"
                     :options="aiProviderPresetOptions"
@@ -467,95 +470,95 @@
                 </n-form-item>
               </n-grid-item>
               <n-grid-item>
-                <n-form-item label="Provider 名称">
+                <n-form-item :label="t('common.labels.provider')">
                   <n-input v-model:value="settingsForm.aiConfig.providerName" />
                 </n-form-item>
               </n-grid-item>
               <n-grid-item>
-                <n-form-item label="Model">
+                <n-form-item :label="t('common.labels.model')">
                   <n-input v-model:value="settingsForm.aiConfig.model" />
                 </n-form-item>
               </n-grid-item>
               <n-grid-item>
-                <n-form-item label="能力开关">
+                <n-form-item :label="t('settings.labels.capabilitySwitches')">
                   <div class="switch-group switch-group--ai-capabilities-inline">
                     <div class="switch-group__item">
                       <n-switch v-model:value="settingsForm.aiConfig.capabilities.vision" />
-                      <span class="switch-label switch-label--compact">模型视觉输入</span>
+                      <span class="switch-label switch-label--compact">{{ t('settings.labels.aiVisionCapability') }}</span>
                     </div>
                     <div class="switch-group__item">
                       <n-switch v-model:value="settingsForm.aiConfig.dashboardSummaryEnabled" :disabled="!settingsForm.aiConfig.enabled" />
-                      <span class="switch-label switch-label--compact">AI 总结</span>
+                      <span class="switch-label switch-label--compact">{{ t('settings.labels.aiSummary') }}</span>
                     </div>
                   </div>
                 </n-form-item>
               </n-grid-item>
             </n-grid>
 
-            <n-form-item label="API Base URL">
-              <n-input v-model:value="settingsForm.aiConfig.baseUrl" placeholder="https://api.deepseek.com" />
+            <n-form-item :label="t('common.labels.apiBaseUrl')">
+              <n-input v-model:value="settingsForm.aiConfig.baseUrl" :placeholder="t('settings.placeholders.aiBaseUrl')" />
             </n-form-item>
-            <n-form-item label="API Key">
+            <n-form-item :label="t('common.labels.apiKey')">
               <n-input v-model:value="settingsForm.aiConfig.apiKey" type="password" show-password-on="click" />
             </n-form-item>
             <n-collapse arrow-placement="right" class="ai-advanced">
-              <n-collapse-item title="高级配置" name="advanced">
+              <n-collapse-item :title="t('settings.labels.advancedConfig')" name="advanced">
                 <n-form-item>
                   <n-switch v-model:value="settingsForm.aiConfig.capabilities.structuredOutput" />
-                  <span class="switch-label">优先结构化 JSON 输出</span>
+                  <span class="switch-label">{{ t('settings.labels.structuredOutput') }}</span>
                 </n-form-item>
                 <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
-                  开启后会优先使用厂商支持的结构化 JSON 输出；若不支持，系统会自动降级为普通 JSON 提示词模式。
+                  {{ t('settings.helps.structuredOutput') }}
                 </n-alert>
-                <n-form-item label="请求超时（毫秒）">
+                <n-form-item :label="t('settings.labels.requestTimeout')">
                   <n-input-number v-model:value="settingsForm.aiConfig.timeoutMs" :min="5000" :max="120000" style="width: 100%" />
                 </n-form-item>
-                <n-form-item label="自定义识别提示词">
+                <n-form-item :label="t('settings.labels.customRecognitionPrompt')">
                   <n-input
                     v-model:value="aiPromptInput"
                     type="textarea"
                     :autosize="{ minRows: 6, maxRows: 12 }"
-                    placeholder="留空时，订阅识别使用系统识别提示词；仪表盘 AI 总结始终使用系统总结提示词"
+                    :placeholder="t('settings.placeholders.customRecognitionPrompt')"
                   />
                 </n-form-item>
-                <n-form-item label="自定义总结提示词">
+                <n-form-item :label="t('settings.labels.customSummaryPrompt')">
                   <n-input
                     v-model:value="dashboardSummaryPromptInput"
                     type="textarea"
                     :autosize="{ minRows: 6, maxRows: 12 }"
-                    placeholder="留空时，AI 总结使用系统预设总结提示词"
+                    :placeholder="t('settings.placeholders.customSummaryPrompt')"
                   />
                 </n-form-item>
               </n-collapse-item>
             </n-collapse>
             <n-space>
-              <n-button :loading="savingAiSettings" :disabled="savingAiSettings" @click="saveAiSettings">保存</n-button>
-              <n-button type="primary" ghost @click="testAiConnectionSettings">连接测试</n-button>
-              <n-button v-if="settingsForm.aiConfig.capabilities.vision" type="primary" @click="testAiVisionSettings">视觉测试</n-button>
+              <n-button :loading="savingAiSettings" :disabled="savingAiSettings" @click="saveAiSettings">{{ t('common.actions.save') }}</n-button>
+              <n-button type="primary" ghost @click="testAiConnectionSettings">{{ t('common.actions.connectionTest') }}</n-button>
+              <n-button v-if="settingsForm.aiConfig.capabilities.vision" type="primary" @click="testAiVisionSettings">{{ t('common.actions.visionTest') }}</n-button>
             </n-space>
           </n-form>
         </n-card>
       </n-grid-item>
 
       <n-grid-item>
-        <n-card title="登录凭据" class="settings-card">
+        <n-card :title="t('settings.sections.credentials')" class="settings-card">
           <n-form :model="credentialsForm" label-placement="top">
-            <n-form-item label="原用户名">
+            <n-form-item :label="t('settings.labels.oldUsername')">
               <n-input v-model:value="credentialsForm.oldUsername" />
             </n-form-item>
-            <n-form-item label="原密码">
+            <n-form-item :label="t('settings.labels.oldPassword')">
               <n-input v-model:value="credentialsForm.oldPassword" type="password" show-password-on="click" />
             </n-form-item>
-            <n-form-item label="新用户名">
+            <n-form-item :label="t('settings.labels.newUsername')">
               <n-input v-model:value="credentialsForm.newUsername" />
             </n-form-item>
-            <n-form-item label="新密码">
+            <n-form-item :label="t('settings.labels.newPassword')">
               <n-input v-model:value="credentialsForm.newPassword" type="password" show-password-on="click" />
             </n-form-item>
             <div class="switch-row">
               <div class="switch-group switch-group--single">
                 <div class="switch-group__item">
-                  <span class="switch-inline-label">允许通过通知验证码找回密码</span>
+                  <span class="switch-inline-label">{{ t('settings.labels.enableForgotPassword') }}</span>
                   <n-tooltip v-if="!forgotPasswordToggleUnlocked" trigger="hover">
                     <template #trigger>
                       <div class="switch-disabled-wrapper">
@@ -579,7 +582,7 @@
             </div>
             <n-space style="margin-top: 12px">
               <n-button type="primary" :loading="savingCredentials" :disabled="savingCredentials" @click="submitCredentialsChange">
-                修改
+                {{ t('common.actions.update') }}
               </n-button>
             </n-space>
           </n-form>
@@ -587,23 +590,23 @@
       </n-grid-item>
 
       <n-grid-item>
-        <n-card title="导入和导出" class="settings-card">
+        <n-card :title="t('settings.sections.importExport')" class="settings-card">
           <n-space vertical style="width: 100%">
-            <n-card size="small" embedded title="备份">
+            <n-card size="small" embedded :title="t('settings.sections.backup')">
               <n-space vertical style="width: 100%">
-                <div class="card-muted">支持通过 ZIP 进行备份与恢复，包含订阅、标签、支付记录、排序、系统设置与本地 Logo</div>
+                <div class="card-muted">{{ t('settings.helps.backup') }}</div>
                 <n-space wrap>
-                  <n-button type="primary" @click="exportBackup">导出备份</n-button>
-                  <n-button type="success" ghost @click="showSubtrackerBackupModal = true">恢复备份</n-button>
+                  <n-button type="primary" @click="exportBackup">{{ t('settings.buttons.exportBackup') }}</n-button>
+                  <n-button type="success" ghost @click="showSubtrackerBackupModal = true">{{ t('settings.buttons.restoreBackup') }}</n-button>
                 </n-space>
               </n-space>
             </n-card>
 
-            <n-card size="small" embedded title="迁移">
+            <n-card size="small" embedded :title="t('settings.sections.migration')">
               <n-space vertical style="width: 100%">
-                <div class="card-muted">从第三方同类项目导入数据</div>
+                <div class="card-muted">{{ t('settings.helps.migration') }}</div>
                 <n-space wrap>
-                  <n-button type="success" @click="showWallosImportModal = true">导入 Wallos</n-button>
+                  <n-button type="success" @click="showWallosImportModal = true">{{ t('settings.buttons.importWallos') }}</n-button>
                 </n-space>
               </n-space>
             </n-card>
@@ -613,7 +616,7 @@
 
       <n-grid-item :span="gridSpanFull">
         <n-space vertical :size="12" style="width: 100%">
-          <n-card title="About" class="settings-card">
+          <n-card :title="t('settings.sections.about')" class="settings-card">
             <div class="about-list">
               <div v-for="item in aboutEntries" :key="item.title" class="about-entry">
                 <div class="about-entry__title">{{ item.title }}</div>
@@ -626,7 +629,7 @@
             </div>
           </n-card>
 
-          <n-card title="Credits" class="settings-card">
+          <n-card :title="t('settings.sections.credits')" class="settings-card">
             <div class="about-list">
               <div v-for="item in creditEntries" :key="item.title" class="about-entry">
                 <div class="about-entry__title">{{ item.title }}</div>
@@ -666,8 +669,6 @@ import { useQueryClient } from '@tanstack/vue-query'
 import {
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_AI_CONFIG,
-  DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT,
-  DEFAULT_AI_SUBSCRIPTION_PROMPT,
   DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
   DEFAULT_OVERDUE_REMINDER_RULES,
   DEFAULT_RESEND_API_URL
@@ -693,8 +694,7 @@ import {
   NSpace,
   NSwitch,
   NTag,
-  NTooltip,
-  useMessage
+  NTooltip
 } from 'naive-ui'
 import {
   ChevronDownOutline,
@@ -707,6 +707,7 @@ import {
   SettingsOutline,
   SwapHorizontalOutline
 } from '@vicons/ionicons5'
+import { t, getDefaultAiPromptByLocale, getDefaultAiSummaryPromptByLocale } from '@/locales'
 import { api } from '@/composables/api'
 import { EXCHANGE_RATE_SNAPSHOT_QUERY_KEY, useExchangeRateSnapshotQuery } from '@/composables/exchange-rate-query'
 import { NOTIFICATION_WEBHOOK_QUERY_KEY, useNotificationWebhookQuery } from '@/composables/notification-webhook-query'
@@ -719,11 +720,12 @@ import { useAuthStore } from '@/stores/auth'
 import { isRememberedSession } from '@/utils/auth-storage'
 import { buildCurrencyOptions } from '@/utils/currency'
 import { swapCurrencyPair } from '@/utils/currency-converter'
-import { cloneSettingsForForm } from '@/utils/settings-form'
+import { cloneSettingsForForm, type SettingsPageForm } from '@/utils/settings-form'
 import { buildTimeZoneOptions, formatDateTimeInTimezone, normalizeAppTimezone } from '@/utils/timezone'
+import { useLocalizedMessage } from '@/utils/localized-message'
 import type { AiProviderPreset, ChangeCredentialsPayload, ExchangeRateSnapshot, NotificationWebhookSettings, Settings } from '@/types/api'
 
-const message = useMessage()
+const message = useLocalizedMessage()
 const appVersion = __APP_VERSION__
 const authStore = useAuthStore()
 const queryClient = useQueryClient()
@@ -738,14 +740,17 @@ const helpCircleOutline = HelpCircleOutline
 const settingsOutline = SettingsOutline
 const eyeOutline = EyeOutline
 const openOutline = OpenOutline
+const listSeparator = computed(() => t('common.separators.list'))
 const settingsReminderPreviewRef = ref<InstanceType<typeof ReminderRulesPreview> | null>(null)
 const settingsReminderPreviewVisible = ref(false)
 const AI_PROVIDER_PRESETS: Record<
   Exclude<AiProviderPreset, 'custom'>,
-  Pick<Settings['aiConfig'], 'providerName' | 'baseUrl' | 'model' | 'capabilities'>
+  {
+    providerNameKey: string
+  } & Pick<Settings['aiConfig'], 'baseUrl' | 'model' | 'capabilities'>
 > = {
   'aliyun-bailian': {
-    providerName: '阿里百炼',
+    providerNameKey: 'settings.options.aiProviderPreset.aliyunBailian',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     model: 'qwen3-vl-plus',
     capabilities: {
@@ -754,7 +759,7 @@ const AI_PROVIDER_PRESETS: Record<
     }
   },
   'tencent-hunyuan': {
-    providerName: '腾讯混元',
+    providerNameKey: 'settings.options.aiProviderPreset.tencentHunyuan',
     baseUrl: 'https://api.hunyuan.cloud.tencent.com/v1',
     model: 'hunyuan-vision',
     capabilities: {
@@ -763,7 +768,7 @@ const AI_PROVIDER_PRESETS: Record<
     }
   },
   'volcengine-ark': {
-    providerName: '火山方舟',
+    providerNameKey: 'settings.options.aiProviderPreset.volcengineArk',
     baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
     model: 'doubao-1-5-vision-pro-32k-250115',
     capabilities: {
@@ -773,7 +778,7 @@ const AI_PROVIDER_PRESETS: Record<
   }
 }
 
-const settingsForm = reactive<Settings>({
+const settingsForm = reactive<SettingsPageForm>({
   baseCurrency: 'CNY',
   timezone: 'Asia/Shanghai',
   defaultNotifyDays: 3,
@@ -850,8 +855,8 @@ const webhookForm = reactive<NotificationWebhookSettings>({
 })
 
 const snapshot = ref<ExchangeRateSnapshot | null>(null)
-const aiPromptInput = ref(DEFAULT_AI_SUBSCRIPTION_PROMPT)
-const dashboardSummaryPromptInput = ref(DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT)
+const aiPromptInput = ref(getDefaultAiPromptByLocale())
+const dashboardSummaryPromptInput = ref(getDefaultAiSummaryPromptByLocale())
 const savingBasicSettings = ref(false)
 const savingEmailSettings = ref(false)
 const savingPushplusSettings = ref(false)
@@ -886,16 +891,16 @@ const webhookMethodOptions = [
 ]
 const webhookVariablesText =
   '{{phase}}、{{days_until}}、{{days_overdue}}、{{subscription_id}}、{{subscription_name}}、{{subscription_amount}}、{{subscription_currency}}、{{subscription_next_renewal_date}}、{{subscription_tags}}、{{subscription_url}}、{{subscription_notes}}'
-const aiProviderPresetOptions = [
-  { label: '自定义', value: 'custom' },
-  { label: '阿里百炼', value: 'aliyun-bailian' },
-  { label: '腾讯混元', value: 'tencent-hunyuan' },
-  { label: '火山方舟', value: 'volcengine-ark' }
-] satisfies Array<{ label: string; value: AiProviderPreset }>
-const emailProviderOptions = [
-  { label: 'SMTP', value: 'smtp' },
-  { label: 'Resend', value: 'resend' }
-] satisfies Array<{ label: string; value: 'smtp' | 'resend' }>
+const aiProviderPresetOptions = computed(() => [
+  { label: t('settings.options.aiProviderPreset.custom'), value: 'custom' },
+  { label: t('settings.options.aiProviderPreset.aliyunBailian'), value: 'aliyun-bailian' },
+  { label: t('settings.options.aiProviderPreset.tencentHunyuan'), value: 'tencent-hunyuan' },
+  { label: t('settings.options.aiProviderPreset.volcengineArk'), value: 'volcengine-ark' }
+] satisfies Array<{ label: string; value: AiProviderPreset }>)
+const emailProviderOptions = computed(() => [
+  { label: t('settings.options.emailProvider.smtp'), value: 'smtp' },
+  { label: t('settings.options.emailProvider.resend'), value: 'resend' }
+] satisfies Array<{ label: string; value: 'smtp' | 'resend' }>)
 const forgotPasswordToggleUnlocked = computed(
   () =>
     settingsForm.emailNotificationsEnabled ||
@@ -908,61 +913,61 @@ const aboutEntries = computed(() => [
   {
     title: `SubTracker ${appVersion}`,
     description: '',
-    linkText: 'Release Notes',
+    linkText: t('settings.about.releaseNotes'),
     href: 'https://github.com/Smile-QWQ/SubTracker/releases'
   },
   {
-    title: 'License',
+    title: t('settings.about.license'),
     description: '',
     linkText: 'GPLv3',
     href: 'https://www.gnu.org/licenses/gpl-3.0'
   },
   {
-    title: 'Issues and Requests',
+    title: t('settings.about.issues'),
     description: '',
     linkText: 'GitHub',
     href: 'https://github.com/Smile-QWQ/SubTracker/issues'
   },
   {
-    title: 'The author',
+    title: t('settings.about.author'),
     description: '',
     linkText: 'https://github.com/Smile-QWQ',
     href: 'https://github.com/Smile-QWQ'
   },
   {
-    title: 'Documentation',
+    title: t('settings.about.documentation'),
     description: '',
-    linkText: 'README / DEPLOYMENT',
+    linkText: t('settings.about.readmeDeployment'),
     href: 'https://github.com/Smile-QWQ/SubTracker#readme'
   }
 ])
 const creditEntries = [
   {
-    title: 'Wallos',
+    title: t('settings.about.credits.wallos'),
     description: '',
     linkText: 'https://github.com/ellite/Wallos',
     href: 'https://github.com/ellite/Wallos'
   },
   {
-    title: 'Vue 3 / Vite',
+    title: t('settings.about.credits.vueVite'),
     description: '',
     linkText: 'https://vite.dev/',
     href: 'https://vite.dev/'
   },
   {
-    title: 'Naive UI',
+    title: t('settings.about.credits.naiveUi'),
     description: '',
     linkText: 'https://www.naiveui.com/',
     href: 'https://www.naiveui.com/'
   },
   {
-    title: 'Fastify / Prisma',
+    title: t('settings.about.credits.fastifyPrisma'),
     description: '',
     linkText: 'https://www.fastify.io/ / https://www.prisma.io/',
     href: 'https://www.fastify.io/'
   },
   {
-    title: 'Pinia / TanStack Query / ECharts',
+    title: t('settings.about.credits.piniaTanstackEcharts'),
     description: '',
     linkText: 'https://pinia.vuejs.org/',
     href: 'https://pinia.vuejs.org/'
@@ -970,13 +975,13 @@ const creditEntries = [
 ] as const
 const emailSummaryText = computed(() => {
   if (settingsForm.emailProvider === 'resend') {
-    const to = settingsForm.resendConfig.to.trim() || '未填写收件人'
-    return `Resend · 收件人：${to}`
+    const to = settingsForm.resendConfig.to.trim() || t('settings.placeholders.notFilledRecipient')
+    return t('settings.summary.emailResend', { to })
   }
 
-  const host = settingsForm.smtpConfig.host.trim() || '未填写 SMTP Host'
-  const to = settingsForm.smtpConfig.to.trim() || '未填写收件人'
-  return `Host：${host} · 收件人：${to}`
+  const host = settingsForm.smtpConfig.host.trim() || t('settings.placeholders.notFilledSmtpHost')
+  const to = settingsForm.smtpConfig.to.trim() || t('settings.placeholders.notFilledRecipient')
+  return t('settings.summary.emailSmtp', { host, to })
 })
 function getMissingRequiredFields(fields: Array<[string, unknown]>) {
   return fields
@@ -987,6 +992,10 @@ function getMissingRequiredFields(fields: Array<[string, unknown]>) {
     .map(([label]) => label)
 }
 
+function joinFieldLabels(fields: string[]) {
+  return fields.join(listSeparator.value)
+}
+
 function validateEmailSettings(action: 'save' | 'test') {
   if (action === 'save' && !settingsForm.emailNotificationsEnabled) {
     return true
@@ -995,22 +1004,22 @@ function validateEmailSettings(action: 'save' | 'test') {
   const missing =
     settingsForm.emailProvider === 'resend'
       ? getMissingRequiredFields([
-          ['Resend API URL', settingsForm.resendConfig.apiBaseUrl],
-          ['Resend API Key', settingsForm.resendConfig.apiKey],
-          ['发件人', settingsForm.resendConfig.from],
-          ['收件人', settingsForm.resendConfig.to]
+          [t('common.labels.apiBaseUrl'), settingsForm.resendConfig.apiBaseUrl],
+          [t('common.labels.apiKey'), settingsForm.resendConfig.apiKey],
+          [t('common.labels.from'), settingsForm.resendConfig.from],
+          [t('common.labels.to'), settingsForm.resendConfig.to]
         ])
       : getMissingRequiredFields([
-          ['SMTP Host', settingsForm.smtpConfig.host],
-          ['端口', settingsForm.smtpConfig.port],
-          ['用户名', settingsForm.smtpConfig.username],
-          ['密码', settingsForm.smtpConfig.password],
-          ['发件人', settingsForm.smtpConfig.from],
-          ['收件人', settingsForm.smtpConfig.to]
+          [t('common.labels.host'), settingsForm.smtpConfig.host],
+          [t('common.labels.port'), settingsForm.smtpConfig.port],
+          [t('common.labels.username'), settingsForm.smtpConfig.username],
+          [t('common.labels.password'), settingsForm.smtpConfig.password],
+          [t('common.labels.from'), settingsForm.smtpConfig.from],
+          [t('common.labels.to'), settingsForm.smtpConfig.to]
         ])
 
   if (!missing.length) return true
-  message.error(`邮箱通知缺少必填项：${missing.join('、')}`)
+  message.error(t('settings.validation.emailMissingFields', { fields: joinFieldLabels(missing) }))
   return false
 }
 
@@ -1019,9 +1028,9 @@ function validatePushplusSettings(action: 'save' | 'test') {
     return true
   }
 
-  const missing = getMissingRequiredFields([['Token', settingsForm.pushplusConfig.token]])
+  const missing = getMissingRequiredFields([[t('common.labels.token'), settingsForm.pushplusConfig.token]])
   if (!missing.length) return true
-  message.error(`PushPlus 缺少必填项：${missing.join('、')}`)
+  message.error(t('settings.validation.pushplusMissingFields', { fields: joinFieldLabels(missing) }))
   return false
 }
 
@@ -1031,11 +1040,11 @@ function validateTelegramSettings(action: 'save' | 'test') {
   }
 
   const missing = getMissingRequiredFields([
-    ['Bot Token', settingsForm.telegramConfig.botToken],
-    ['Chat ID', settingsForm.telegramConfig.chatId]
+    [t('common.labels.botToken'), settingsForm.telegramConfig.botToken],
+    [t('common.labels.chatId'), settingsForm.telegramConfig.chatId]
   ])
   if (!missing.length) return true
-  message.error(`Telegram 缺少必填项：${missing.join('、')}`)
+  message.error(t('settings.validation.telegramMissingFields', { fields: joinFieldLabels(missing) }))
   return false
 }
 
@@ -1044,9 +1053,9 @@ function validateServerchanSettings(action: 'save' | 'test') {
     return true
   }
 
-  const missing = getMissingRequiredFields([['SendKey', settingsForm.serverchanConfig.sendkey]])
+  const missing = getMissingRequiredFields([[t('common.labels.sendKey'), settingsForm.serverchanConfig.sendkey]])
   if (!missing.length) return true
-  message.error(`Server 酱缺少必填项：${missing.join('、')}`)
+  message.error(t('settings.validation.serverchanMissingFields', { fields: joinFieldLabels(missing) }))
   return false
 }
 
@@ -1056,11 +1065,11 @@ function validateGotifySettings(action: 'save' | 'test') {
   }
 
   const missing = getMissingRequiredFields([
-    ['URL', settingsForm.gotifyConfig.url],
-    ['Token', settingsForm.gotifyConfig.token]
+    [t('common.labels.url'), settingsForm.gotifyConfig.url],
+    [t('common.labels.token'), settingsForm.gotifyConfig.token]
   ])
   if (!missing.length) return true
-  message.error(`Gotify 缺少必填项：${missing.join('、')}`)
+  message.error(t('settings.validation.gotifyMissingFields', { fields: joinFieldLabels(missing) }))
   return false
 }
 
@@ -1069,9 +1078,9 @@ function validateWebhookSettings(action: 'save' | 'test') {
     return true
   }
 
-  const missing = getMissingRequiredFields([['URL', webhookForm.url]])
+  const missing = getMissingRequiredFields([[t('common.labels.url'), webhookForm.url]])
   if (!missing.length) return true
-  message.error(`Webhook 缺少必填项：${missing.join('、')}`)
+  message.error(t('settings.validation.webhookMissingFields', { fields: joinFieldLabels(missing) }))
   return false
 }
 
@@ -1081,14 +1090,14 @@ function validateAiSettings(action: 'save' | 'connection-test' | 'vision-test') 
   }
 
   const missing = getMissingRequiredFields([
-    ['Provider 名称', settingsForm.aiConfig.providerName],
-    ['Model', settingsForm.aiConfig.model],
-    ['API Base URL', settingsForm.aiConfig.baseUrl],
-    ['API Key', settingsForm.aiConfig.apiKey]
+    [t('common.labels.provider'), settingsForm.aiConfig.providerName],
+    [t('common.labels.model'), settingsForm.aiConfig.model],
+    [t('common.labels.apiBaseUrl'), settingsForm.aiConfig.baseUrl],
+    [t('common.labels.apiKey'), settingsForm.aiConfig.apiKey]
   ])
 
   if (!missing.length) return true
-  message.error(`AI 能力缺少必填项：${missing.join('、')}`)
+  message.error(t('settings.validation.aiMissingFields', { fields: joinFieldLabels(missing) }))
   return false
 }
 
@@ -1097,8 +1106,8 @@ watch(
   (settings) => {
     if (!settings) return
     Object.assign(settingsForm, cloneSettingsForForm(settings))
-    aiPromptInput.value = settings.aiConfig.promptTemplate.trim() || DEFAULT_AI_SUBSCRIPTION_PROMPT
-    dashboardSummaryPromptInput.value = settings.aiConfig.dashboardSummaryPromptTemplate.trim() || DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT
+    aiPromptInput.value = settings.aiConfig.promptTemplate.trim() || getDefaultAiPromptByLocale()
+    dashboardSummaryPromptInput.value = settings.aiConfig.dashboardSummaryPromptTemplate.trim() || getDefaultAiSummaryPromptByLocale()
     credentialsForm.oldUsername = authStore.username
     credentialsForm.newUsername = authStore.username
     targetCurrency.value = settings.baseCurrency
@@ -1156,7 +1165,7 @@ async function saveBasicSettings() {
       tagBudgets: settingsForm.tagBudgets
     })
     applySavedSettings(result)
-    message.success('基础设置已保存')
+    message.success(t('settings.messages.basicSaved'))
     targetCurrency.value = settingsForm.baseCurrency.toUpperCase()
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEY }),
@@ -1165,7 +1174,7 @@ async function saveBasicSettings() {
     ])
     await queryClient.invalidateQueries({ queryKey: EXCHANGE_RATE_SNAPSHOT_QUERY_KEY })
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '基础设置保存失败')
+    message.error(error instanceof Error ? error.message : t('settings.messages.basicSaveFailed'))
   } finally {
     savingBasicSettings.value = false
   }
@@ -1183,7 +1192,7 @@ async function saveEmailSettings() {
       resendConfig: settingsForm.resendConfig
     })
     applySavedSettings(result)
-    message.success(settingsForm.emailNotificationsEnabled ? '邮箱通知配置已保存' : '邮箱通知已关闭')
+    message.success(settingsForm.emailNotificationsEnabled ? t('settings.messages.emailSaved') : t('settings.messages.emailDisabled'))
   } finally {
     savingEmailSettings.value = false
   }
@@ -1199,7 +1208,7 @@ async function savePushplusSettings() {
       pushplusConfig: settingsForm.pushplusConfig
     })
     applySavedSettings(result)
-    message.success(settingsForm.pushplusNotificationsEnabled ? 'PushPlus 配置已保存' : 'PushPlus 已关闭')
+    message.success(settingsForm.pushplusNotificationsEnabled ? t('settings.messages.pushplusSaved') : t('settings.messages.pushplusDisabled'))
   } finally {
     savingPushplusSettings.value = false
   }
@@ -1215,7 +1224,7 @@ async function saveTelegramSettings() {
       telegramConfig: settingsForm.telegramConfig
     })
     applySavedSettings(result)
-    message.success(settingsForm.telegramNotificationsEnabled ? 'Telegram 配置已保存' : 'Telegram 已关闭')
+    message.success(settingsForm.telegramNotificationsEnabled ? t('settings.messages.telegramSaved') : t('settings.messages.telegramDisabled'))
   } finally {
     savingTelegramSettings.value = false
   }
@@ -1231,7 +1240,7 @@ async function saveServerchanSettings() {
       serverchanConfig: settingsForm.serverchanConfig
     })
     applySavedSettings(result)
-    message.success(settingsForm.serverchanNotificationsEnabled ? 'Server 酱配置已保存' : 'Server 酱已关闭')
+    message.success(settingsForm.serverchanNotificationsEnabled ? t('settings.messages.serverchanSaved') : t('settings.messages.serverchanDisabled'))
   } finally {
     savingServerchanSettings.value = false
   }
@@ -1247,7 +1256,7 @@ async function saveGotifySettings() {
       gotifyConfig: settingsForm.gotifyConfig
     })
     applySavedSettings(result)
-    message.success(settingsForm.gotifyNotificationsEnabled ? 'Gotify 配置已保存' : 'Gotify 已关闭')
+    message.success(settingsForm.gotifyNotificationsEnabled ? t('settings.messages.gotifySaved') : t('settings.messages.gotifyDisabled'))
   } finally {
     savingGotifySettings.value = false
   }
@@ -1260,8 +1269,8 @@ async function saveAiSettings() {
   const dashboardSummaryPromptTemplate = normalizeDashboardSummaryPrompt(dashboardSummaryPromptInput.value)
   settingsForm.aiConfig.promptTemplate = promptTemplate
   settingsForm.aiConfig.dashboardSummaryPromptTemplate = dashboardSummaryPromptTemplate
-  aiPromptInput.value = promptTemplate || DEFAULT_AI_SUBSCRIPTION_PROMPT
-  dashboardSummaryPromptInput.value = dashboardSummaryPromptTemplate || DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT
+  aiPromptInput.value = promptTemplate || getDefaultAiPromptByLocale()
+  dashboardSummaryPromptInput.value = dashboardSummaryPromptTemplate || getDefaultAiSummaryPromptByLocale()
   savingAiSettings.value = true
   try {
     const result = await api.updateSettings({
@@ -1275,9 +1284,9 @@ async function saveAiSettings() {
       }
     })
     applySavedSettings(result)
-    aiPromptInput.value = result.aiConfig.promptTemplate.trim() || DEFAULT_AI_SUBSCRIPTION_PROMPT
-    dashboardSummaryPromptInput.value = result.aiConfig.dashboardSummaryPromptTemplate.trim() || DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT
-    message.success(settingsForm.aiConfig.enabled ? 'AI 能力配置已保存' : 'AI 能力已关闭')
+    aiPromptInput.value = result.aiConfig.promptTemplate.trim() || getDefaultAiPromptByLocale()
+    dashboardSummaryPromptInput.value = result.aiConfig.dashboardSummaryPromptTemplate.trim() || getDefaultAiSummaryPromptByLocale()
+    message.success(settingsForm.aiConfig.enabled ? t('settings.messages.aiSaved') : t('settings.messages.aiDisabled'))
   } finally {
     savingAiSettings.value = false
   }
@@ -1296,9 +1305,9 @@ async function testAiConnectionSettings() {
         ...settingsForm.aiConfig.capabilities
       }
     })
-    message.success(`连接测试成功：${result.providerName} / ${result.model} / ${result.response}`)
+    message.success(t('settings.messages.aiConnectionTestSuccess', { provider: result.providerName, model: result.model, response: result.response }))
   } catch (error) {
-    message.error(error instanceof Error ? error.message : 'AI 连接测试失败')
+    message.error(error instanceof Error ? error.message : t('settings.messages.aiConnectionTestFailed'))
   }
 }
 
@@ -1315,23 +1324,23 @@ async function testAiVisionSettings() {
         ...settingsForm.aiConfig.capabilities
       }
     })
-    message.success(`视觉测试成功：${result.providerName} / ${result.model} / ${result.response}`)
+    message.success(t('settings.messages.aiVisionTestSuccess', { provider: result.providerName, model: result.model, response: result.response }))
   } catch (error) {
-    message.error(error instanceof Error ? error.message : 'AI 视觉测试失败')
+    message.error(error instanceof Error ? error.message : t('settings.messages.aiVisionTestFailed'))
   }
 }
 
 function normalizeAiPrompt(value: string) {
   const normalized = value.trim()
   if (!normalized) return ''
-  if (normalized === DEFAULT_AI_SUBSCRIPTION_PROMPT.trim()) return ''
+  if (normalized === getDefaultAiPromptByLocale().trim()) return ''
   return normalized
 }
 
 function normalizeDashboardSummaryPrompt(value: string) {
   const normalized = value.trim()
   if (!normalized) return ''
-  if (normalized === DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT.trim()) return ''
+  if (normalized === getDefaultAiSummaryPromptByLocale().trim()) return ''
   return normalized
 }
 
@@ -1342,7 +1351,7 @@ function handleAiPresetChange(value: AiProviderPreset) {
   }
 
   const preset = AI_PROVIDER_PRESETS[value]
-  settingsForm.aiConfig.providerName = preset.providerName
+  settingsForm.aiConfig.providerName = t(preset.providerNameKey)
   settingsForm.aiConfig.baseUrl = preset.baseUrl
   settingsForm.aiConfig.model = preset.model
   settingsForm.aiConfig.capabilities = {
@@ -1353,7 +1362,7 @@ function handleAiPresetChange(value: AiProviderPreset) {
 async function refreshRates() {
   snapshot.value = await api.refreshExchangeRates()
   queryClient.setQueryData(EXCHANGE_RATE_SNAPSHOT_QUERY_KEY, snapshot.value)
-  message.success('汇率已刷新')
+  message.success(t('settings.messages.ratesRefreshed'))
 }
 
 function swapConverterCurrencies() {
@@ -1375,7 +1384,7 @@ async function submitCredentialsChange() {
     credentialsForm.newPassword = ''
     credentialsForm.oldUsername = result.user.username
     credentialsForm.newUsername = result.user.username
-    message.success('登录凭据已更新')
+    message.success(t('settings.messages.credentialsUpdated'))
   } finally {
     savingCredentials.value = false
   }
@@ -1408,9 +1417,9 @@ async function testEmail() {
       smtpConfig: settingsForm.smtpConfig,
       resendConfig: settingsForm.resendConfig
     })
-    message.success('测试邮件已发送')
+    message.success(t('settings.messages.emailTestSent'))
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '邮箱测试失败')
+    message.error(error instanceof Error ? error.message : t('settings.messages.emailTestFailed'))
   }
 }
 
@@ -1420,11 +1429,11 @@ async function testPushplus() {
     const result = await api.testPushplusNotificationWithPayload(settingsForm.pushplusConfig)
     message.success(
       result.shortCode
-        ? `PushPlus 测试请求已提交，流水号：${result.shortCode}`
-        : result.message || 'PushPlus 测试请求已提交'
+        ? t('settings.messages.pushplusTestSubmittedWithCode', { code: result.shortCode })
+        : result.message || t('settings.messages.pushplusTestSubmitted')
     )
   } catch (error) {
-    message.error(error instanceof Error ? error.message : 'PushPlus 测试失败')
+    message.error(error instanceof Error ? error.message : t('settings.messages.pushplusTestFailed'))
   }
 }
 
@@ -1432,9 +1441,9 @@ async function testTelegram() {
   if (!validateTelegramSettings('test')) return
   try {
     await api.testTelegramNotificationWithPayload(settingsForm.telegramConfig)
-    message.success('Telegram 测试消息已发送')
+    message.success(t('settings.messages.telegramTestSent'))
   } catch (error) {
-    message.error(error instanceof Error ? error.message : 'Telegram 测试失败')
+    message.error(error instanceof Error ? error.message : t('settings.messages.telegramTestFailed'))
   }
 }
 
@@ -1442,9 +1451,9 @@ async function testServerchan() {
   if (!validateServerchanSettings('test')) return
   try {
     await api.testServerchanNotificationWithPayload(settingsForm.serverchanConfig)
-    message.success('Server 酱测试消息已发送')
+    message.success(t('settings.messages.serverchanTestSent'))
   } catch (error) {
-    message.error(error instanceof Error ? error.message : 'Server 酱测试失败')
+    message.error(error instanceof Error ? error.message : t('settings.messages.serverchanTestFailed'))
   }
 }
 
@@ -1452,9 +1461,9 @@ async function testGotify() {
   if (!validateGotifySettings('test')) return
   try {
     await api.testGotifyNotificationWithPayload(settingsForm.gotifyConfig)
-    message.success('Gotify 测试消息已发送')
+    message.success(t('settings.messages.gotifyTestSent'))
   } catch (error) {
-    message.error(error instanceof Error ? error.message : 'Gotify 测试失败')
+    message.error(error instanceof Error ? error.message : t('settings.messages.gotifyTestFailed'))
   }
 }
 
@@ -1462,9 +1471,9 @@ async function exportBackup() {
   try {
     const result = await api.exportBackup()
     downloadBlob(result.blob, result.filename)
-    message.success('ZIP 导出已开始')
+    message.success(t('settings.messages.zipExportStarted'))
   } catch (error) {
-    message.error(error instanceof Error ? error.message : 'ZIP 导出失败')
+    message.error(error instanceof Error ? error.message : t('settings.messages.zipExportFailed'))
   }
 }
 
@@ -1493,17 +1502,17 @@ function handleSubtrackerBackupImported(result: { mode: 'replace' | 'append'; re
   showSubtrackerBackupModal.value = false
   message.success(
     result.mode === 'replace'
-      ? '备份已恢复'
+      ? t('settings.messages.backupRestored')
       : result.restoredSettings
-        ? '备份已追加恢复，并覆盖了系统设置'
-        : '备份已追加恢复'
+        ? t('settings.messages.backupAppendedWithSettings')
+        : t('settings.messages.backupAppended')
   )
 }
 
 function handleWallosImported() {
   refreshAppQueries()
   showWallosImportModal.value = false
-  message.success('Wallos 数据已导入')
+  message.success(t('settings.messages.wallosImported'))
 }
 
 async function saveWebhook() {
@@ -1521,7 +1530,7 @@ async function saveWebhook() {
     })
     Object.assign(webhookForm, saved)
     queryClient.setQueryData(NOTIFICATION_WEBHOOK_QUERY_KEY, saved)
-    message.success(webhookForm.enabled ? 'Webhook 配置已保存' : 'Webhook 已关闭')
+    message.success(webhookForm.enabled ? t('settings.messages.webhookSaved') : t('settings.messages.webhookDisabled'))
   } finally {
     savingWebhookSettings.value = false
   }
@@ -1539,9 +1548,13 @@ async function testWebhook() {
       ignoreSsl: webhookForm.ignoreSsl
     })
     const preview = result.responseBody?.trim()
-    message.success(preview ? `Webhook 测试成功，HTTP ${result.statusCode}：${preview}` : `Webhook 测试成功，HTTP ${result.statusCode}`)
+    message.success(
+      preview
+        ? t('settings.messages.webhookTestSuccessWithPreview', { statusCode: result.statusCode, preview })
+        : t('settings.messages.webhookTestSuccess', { statusCode: result.statusCode })
+    )
   } catch (error) {
-    message.error(error instanceof Error ? error.message : 'Webhook 测试失败')
+    message.error(error instanceof Error ? error.message : t('settings.messages.webhookTestFailed'))
   }
 }
 
@@ -1592,7 +1605,7 @@ const converterRateDisplay = computed(() => {
 })
 
 const rateColumns = computed(() => [
-  { title: '货币', key: 'currency' },
+  { title: t('common.labels.currency'), key: 'currency' },
   {
     title: settingsForm.baseCurrency.toUpperCase(),
     key: 'rate',
