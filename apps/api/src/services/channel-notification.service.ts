@@ -77,6 +77,12 @@ type ForgotPasswordNotificationPayload = {
   expiresInMinutes: number
 }
 
+type DirectNotificationMessage = {
+  title: string
+  text: string
+  html?: string
+}
+
 const NOTIFICATION_DEDUP_KEY_PREFIX = 'notification:'
 export const NOTIFICATION_DEDUP_RETENTION_DAYS = 30
 
@@ -330,7 +336,25 @@ function buildForgotPasswordBody(payload: ForgotPasswordNotificationPayload) {
   ].join('\n')
 }
 
-async function sendSmtpEmailWithConfig(params: NotificationDispatchParams, config: EmailConfigInput) {
+function buildNotificationMessage(params: NotificationDispatchParams): DirectNotificationMessage {
+  const text = buildNotificationBody(params)
+  return {
+    title: buildNotificationTitle(params),
+    text,
+    html: `<pre>${text}</pre>`
+  }
+}
+
+function buildForgotPasswordMessage(payload: ForgotPasswordNotificationPayload): DirectNotificationMessage {
+  const text = buildForgotPasswordBody(payload)
+  return {
+    title: buildForgotPasswordTitle(),
+    text,
+    html: `<pre>${text}</pre>`
+  }
+}
+
+async function sendSmtpEmailWithConfig(message: DirectNotificationMessage, config: EmailConfigInput) {
   const { host, port, secure, username, password, from, to } = config
   if (!host || !port || !username || !password || !from || !to) {
     throw new Error('邮箱通知未启用或配置不完整')
@@ -349,12 +373,12 @@ async function sendSmtpEmailWithConfig(params: NotificationDispatchParams, confi
   await transporter.sendMail({
     from,
     to,
-    subject: buildNotificationTitle(params),
-    text: buildNotificationBody(params)
+    subject: message.title,
+    text: message.text
   })
 }
 
-async function sendResendEmailWithConfig(params: NotificationDispatchParams, config: ResendConfigInput) {
+async function sendResendEmailWithConfig(message: DirectNotificationMessage, config: ResendConfigInput) {
   const apiBaseUrl = config.apiBaseUrl?.trim() || DEFAULT_RESEND_API_URL
   const apiKey = config.apiKey?.trim()
   const from = config.from?.trim()
@@ -376,8 +400,8 @@ async function sendResendEmailWithConfig(params: NotificationDispatchParams, con
         .split(',')
         .map((item) => item.trim())
         .filter(Boolean),
-      subject: buildNotificationTitle(params),
-      text: buildNotificationBody(params)
+      subject: message.title,
+      text: message.text
     })
   })
 
@@ -388,80 +412,17 @@ async function sendResendEmailWithConfig(params: NotificationDispatchParams, con
 }
 
 async function sendEmailWithProvider(
-  params: NotificationDispatchParams,
+  message: DirectNotificationMessage,
   provider: 'smtp' | 'resend',
   smtpConfig: EmailConfigInput,
   resendConfig: ResendConfigInput
 ) {
   if (provider === 'resend') {
-    await sendResendEmailWithConfig(params, resendConfig)
+    await sendResendEmailWithConfig(message, resendConfig)
     return
   }
 
-  await sendSmtpEmailWithConfig(params, smtpConfig)
-}
-
-async function sendForgotPasswordEmailWithProvider(
-  payload: ForgotPasswordNotificationPayload,
-  provider: 'smtp' | 'resend',
-  smtpConfig: EmailConfigInput,
-  resendConfig: ResendConfigInput
-) {
-  if (provider === 'resend') {
-    const apiBaseUrl = resendConfig.apiBaseUrl?.trim() || DEFAULT_RESEND_API_URL
-    const apiKey = resendConfig.apiKey?.trim()
-    const from = resendConfig.from?.trim()
-    const to = resendConfig.to?.trim()
-
-    if (!apiBaseUrl || !apiKey || !from || !to) {
-      throw new Error('邮箱通知未启用或配置不完整')
-    }
-
-    const response = await fetch(apiBaseUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        from,
-        to: to
-          .split(',')
-          .map((item) => item.trim())
-          .filter(Boolean),
-        subject: buildForgotPasswordTitle(),
-        text: buildForgotPasswordBody(payload)
-      })
-    })
-
-    const rawText = await response.text()
-    if (!response.ok) {
-      throw new Error(`Resend 请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
-    }
-    return
-  }
-
-  const { host, port, secure, username, password, from, to } = smtpConfig
-  if (!host || !port || !username || !password || !from || !to) {
-    throw new Error('邮箱通知未启用或配置不完整')
-  }
-
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: {
-      user: username,
-      pass: password
-    }
-  })
-
-  await transporter.sendMail({
-    from,
-    to,
-    subject: buildForgotPasswordTitle(),
-    text: buildForgotPasswordBody(payload)
-  })
+  await sendSmtpEmailWithConfig(message, smtpConfig)
 }
 
 async function sendEmailNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
@@ -483,7 +444,7 @@ async function sendEmailNotification(params: NotificationDispatchParams): Promis
     }
   }
 
-  await sendEmailWithProvider(params, settings.emailProvider, settings.smtpConfig, settings.resendConfig)
+  await sendEmailWithProvider(buildNotificationMessage(params), settings.emailProvider, settings.smtpConfig, settings.resendConfig)
   await markNotificationSent('email', params)
 
   return {
@@ -512,7 +473,7 @@ function extractPushplusShortCode(data: unknown): string | undefined {
 }
 
 async function sendPushplusWithConfig(
-  params: NotificationDispatchParams,
+  message: DirectNotificationMessage,
   config: PushPlusConfigInput
 ): Promise<PushplusSendResult> {
   const { token, topic } = config
@@ -528,8 +489,8 @@ async function sendPushplusWithConfig(
     body: JSON.stringify({
       token,
       topic: topic || undefined,
-      title: buildNotificationTitle(params),
-      content: `<pre>${buildNotificationBody(params)}</pre>`,
+      title: message.title,
+      content: message.html || `<pre>${message.text}</pre>`,
       template: 'html'
     })
   })
@@ -577,7 +538,7 @@ async function sendPushplusNotification(params: NotificationDispatchParams): Pro
     }
   }
 
-  await sendPushplusWithConfig(params, settings.pushplusConfig)
+  await sendPushplusWithConfig(buildNotificationMessage(params), settings.pushplusConfig)
   await markNotificationSent('pushplus', params)
 
   return {
@@ -586,7 +547,7 @@ async function sendPushplusNotification(params: NotificationDispatchParams): Pro
   }
 }
 
-async function sendTelegramWithConfig(params: NotificationDispatchParams, config: TelegramConfigInput) {
+async function sendTelegramWithConfig(message: DirectNotificationMessage, config: TelegramConfigInput) {
   const { botToken, chatId } = config
   if (!botToken || !chatId) {
     throw new Error('Telegram 通知未启用或配置不完整')
@@ -599,7 +560,7 @@ async function sendTelegramWithConfig(params: NotificationDispatchParams, config
     },
     body: JSON.stringify({
       chat_id: chatId,
-      text: `${buildNotificationTitle(params)}\n\n${buildNotificationBody(params)}`
+      text: `${message.title}\n\n${message.text}`
     })
   })
 
@@ -639,7 +600,7 @@ async function sendTelegramNotification(params: NotificationDispatchParams): Pro
     }
   }
 
-  await sendTelegramWithConfig(params, settings.telegramConfig)
+  await sendTelegramWithConfig(buildNotificationMessage(params), settings.telegramConfig)
   await markNotificationSent('telegram', params)
 
   return {
@@ -665,11 +626,11 @@ function resolveServerchanUrl(sendkey: string) {
   return `https://sctapi.ftqq.com/${trimmed}.send`
 }
 
-async function sendServerchanWithConfig(params: NotificationDispatchParams, config: ServerchanConfigInput) {
+async function sendServerchanWithConfig(message: DirectNotificationMessage, config: ServerchanConfigInput) {
   const url = resolveServerchanUrl(config.sendkey)
   const body = new URLSearchParams({
-    text: buildNotificationTitle(params),
-    desp: buildNotificationBody(params)
+    text: message.title,
+    desp: message.text
   })
 
   const response = await fetch(url, {
@@ -716,7 +677,7 @@ async function sendServerchanNotification(params: NotificationDispatchParams): P
     }
   }
 
-  await sendServerchanWithConfig(params, settings.serverchanConfig)
+  await sendServerchanWithConfig(buildNotificationMessage(params), settings.serverchanConfig)
   await markNotificationSent('serverchan', params)
 
   return {
@@ -725,7 +686,7 @@ async function sendServerchanNotification(params: NotificationDispatchParams): P
   }
 }
 
-async function sendGotifyWithConfig(params: NotificationDispatchParams, config: GotifyConfigInput) {
+async function sendGotifyWithConfig(message: DirectNotificationMessage, config: GotifyConfigInput) {
   const target = validateNotificationTargetUrl(config.url.trim(), 'Gotify URL')
   const token = config.token?.trim()
   if (!token) {
@@ -735,8 +696,8 @@ async function sendGotifyWithConfig(params: NotificationDispatchParams, config: 
   const isHttps = target.protocol === 'https:'
   const transport = isHttps ? https : http
   const payload = new URLSearchParams({
-    title: buildNotificationTitle(params),
-    message: buildNotificationBody(params),
+    title: message.title,
+    message: message.text,
     priority: '5'
   }).toString()
   const requestUrl = new URL(`/message?token=${encodeURIComponent(token)}`, target.toString())
@@ -792,7 +753,7 @@ async function sendGotifyNotification(params: NotificationDispatchParams): Promi
     }
   }
 
-  await sendGotifyWithConfig(params, settings.gotifyConfig)
+  await sendGotifyWithConfig(buildNotificationMessage(params), settings.gotifyConfig)
   await markNotificationSent('gotify', params)
 
   return {
@@ -870,36 +831,36 @@ function buildTestReminderPayload() {
   }
 }
 
+async function buildTestReminderMessage() {
+  const timezone = await getAppTimezone()
+  return buildNotificationMessage({
+    eventType: 'subscription.reminder_due',
+    resourceKey: 'test:notification',
+    periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
+    payload: {
+      ...buildTestReminderPayload(),
+      nextRenewalDate: formatDateInTimezone(new Date(), timezone)
+    }
+  })
+}
+
 export async function sendTestEmailNotification() {
   const settings = await getNotificationChannelSettings()
   if (!settings.emailNotificationsEnabled) {
     throw new Error('邮箱通知未启用或配置不完整')
   }
 
-  const timezone = await getAppTimezone()
-  await sendEmailWithProvider(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:email',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    settings.emailProvider,
-    settings.smtpConfig,
-    settings.resendConfig
-  )
+  await sendEmailWithProvider(await buildTestReminderMessage(), settings.emailProvider, settings.smtpConfig, settings.resendConfig)
 }
 
 export async function sendForgotPasswordVerificationCode(payload: ForgotPasswordNotificationPayload) {
   const settings = await getNotificationChannelSettings()
   const results: NotificationChannelResult[] = []
+  const message = buildForgotPasswordMessage(payload)
 
   if (settings.emailNotificationsEnabled) {
     try {
-      await sendForgotPasswordEmailWithProvider(payload, settings.emailProvider, settings.smtpConfig, settings.resendConfig)
+      await sendEmailWithProvider(message, settings.emailProvider, settings.smtpConfig, settings.resendConfig)
       results.push({ channel: 'email', status: 'success' })
     } catch (error) {
       results.push({
@@ -914,21 +875,7 @@ export async function sendForgotPasswordVerificationCode(payload: ForgotPassword
 
   if (settings.pushplusNotificationsEnabled) {
     try {
-      await sendPushplusWithConfig(
-        {
-          eventType: 'subscription.reminder_due',
-          resourceKey: 'forgot-password:pushplus',
-          periodKey: `forgot-password:${payload.username}`,
-          payload: {
-            name: payload.username,
-            phase: 'forgot_password',
-            code: payload.code,
-            expiresInMinutes: payload.expiresInMinutes,
-            notes: buildForgotPasswordBody(payload)
-          }
-        },
-        settings.pushplusConfig
-      )
+      await sendPushplusWithConfig(message, settings.pushplusConfig)
       results.push({ channel: 'pushplus', status: 'success' })
     } catch (error) {
       results.push({
@@ -943,28 +890,7 @@ export async function sendForgotPasswordVerificationCode(payload: ForgotPassword
 
   if (settings.telegramNotificationsEnabled) {
     try {
-      const { botToken, chatId } = settings.telegramConfig
-      if (!botToken || !chatId) {
-        throw new Error('Telegram 通知未启用或配置不完整')
-      }
-      const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: `${buildForgotPasswordTitle()}\n\n${buildForgotPasswordBody(payload)}`
-        })
-      })
-      const rawText = await response.text()
-      if (!response.ok) {
-        throw new Error(`Telegram 请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
-      }
-      const parsed = rawText ? (JSON.parse(rawText) as TelegramApiResponse) : null
-      if (!parsed?.ok) {
-        throw new Error(`Telegram 请求被拒绝：${parsed?.description || rawText || 'unknown error'}`)
-      }
+      await sendTelegramWithConfig(message, settings.telegramConfig)
       results.push({ channel: 'telegram', status: 'success' })
     } catch (error) {
       results.push({
@@ -979,18 +905,7 @@ export async function sendForgotPasswordVerificationCode(payload: ForgotPassword
 
   if (settings.serverchanNotificationsEnabled) {
     try {
-      await sendServerchanWithConfig(
-        {
-          eventType: 'subscription.reminder_due',
-          resourceKey: 'forgot-password:serverchan',
-          periodKey: `forgot-password:${payload.username}`,
-          payload: {
-            name: payload.username,
-            notes: buildForgotPasswordBody(payload)
-          }
-        },
-        settings.serverchanConfig
-      )
+      await sendServerchanWithConfig(message, settings.serverchanConfig)
       results.push({ channel: 'serverchan', status: 'success' })
     } catch (error) {
       results.push({
@@ -1005,18 +920,7 @@ export async function sendForgotPasswordVerificationCode(payload: ForgotPassword
 
   if (settings.gotifyNotificationsEnabled) {
     try {
-      await sendGotifyWithConfig(
-        {
-          eventType: 'subscription.reminder_due',
-          resourceKey: 'forgot-password:gotify',
-          periodKey: `forgot-password:${payload.username}`,
-          payload: {
-            name: payload.username,
-            notes: buildForgotPasswordBody(payload)
-          }
-        },
-        settings.gotifyConfig
-      )
+      await sendGotifyWithConfig(message, settings.gotifyConfig)
       results.push({ channel: 'gotify', status: 'success' })
     } catch (error) {
       results.push({
@@ -1037,21 +941,7 @@ export async function sendTestEmailNotificationWithConfig(config: {
   smtpConfig: EmailConfigInput
   resendConfig: ResendConfigInput
 }) {
-  const timezone = await getAppTimezone()
-  await sendEmailWithProvider(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:email',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    config.emailProvider,
-    config.smtpConfig,
-    config.resendConfig
-  )
+  await sendEmailWithProvider(await buildTestReminderMessage(), config.emailProvider, config.smtpConfig, config.resendConfig)
 }
 
 export async function sendTestPushplusNotification() {
@@ -1060,19 +950,7 @@ export async function sendTestPushplusNotification() {
     throw new Error('PushPlus 通知未启用或配置不完整')
   }
 
-  const timezone = await getAppTimezone()
-  await sendPushplusWithConfig(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:pushplus',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    settings.pushplusConfig
-  )
+  await sendPushplusWithConfig(await buildTestReminderMessage(), settings.pushplusConfig)
 
   return {
     accepted: true,
@@ -1081,19 +959,7 @@ export async function sendTestPushplusNotification() {
 }
 
 export async function sendTestPushplusNotificationWithConfig(config: PushPlusConfigInput) {
-  const timezone = await getAppTimezone()
-  return sendPushplusWithConfig(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:pushplus',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    config
-  )
+  return sendPushplusWithConfig(await buildTestReminderMessage(), config)
 }
 
 export async function sendTestTelegramNotification() {
@@ -1102,37 +968,13 @@ export async function sendTestTelegramNotification() {
     throw new Error('Telegram 通知未启用或配置不完整')
   }
 
-  const timezone = await getAppTimezone()
-  await sendTelegramWithConfig(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:telegram',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    settings.telegramConfig
-  )
+  await sendTelegramWithConfig(await buildTestReminderMessage(), settings.telegramConfig)
 
   return { success: true }
 }
 
 export async function sendTestTelegramNotificationWithConfig(config: TelegramConfigInput) {
-  const timezone = await getAppTimezone()
-  await sendTelegramWithConfig(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:telegram',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    config
-  )
+  await sendTelegramWithConfig(await buildTestReminderMessage(), config)
 
   return { success: true }
 }
@@ -1143,37 +985,13 @@ export async function sendTestServerchanNotification() {
     throw new Error('Server 酱通知未启用或配置不完整')
   }
 
-  const timezone = await getAppTimezone()
-  await sendServerchanWithConfig(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:serverchan',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    settings.serverchanConfig
-  )
+  await sendServerchanWithConfig(await buildTestReminderMessage(), settings.serverchanConfig)
 
   return { success: true }
 }
 
 export async function sendTestServerchanNotificationWithConfig(config: ServerchanConfigInput) {
-  const timezone = await getAppTimezone()
-  await sendServerchanWithConfig(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:serverchan',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    config
-  )
+  await sendServerchanWithConfig(await buildTestReminderMessage(), config)
 
   return { success: true }
 }
@@ -1184,37 +1002,13 @@ export async function sendTestGotifyNotification() {
     throw new Error('Gotify 通知未启用或配置不完整')
   }
 
-  const timezone = await getAppTimezone()
-  await sendGotifyWithConfig(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:gotify',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    settings.gotifyConfig
-  )
+  await sendGotifyWithConfig(await buildTestReminderMessage(), settings.gotifyConfig)
 
   return { success: true }
 }
 
 export async function sendTestGotifyNotificationWithConfig(config: GotifyConfigInput) {
-  const timezone = await getAppTimezone()
-  await sendGotifyWithConfig(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:gotify',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    config
-  )
+  await sendGotifyWithConfig(await buildTestReminderMessage(), config)
 
   return { success: true }
 }
