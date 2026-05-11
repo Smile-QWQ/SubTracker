@@ -2,6 +2,7 @@ import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc.js'
 import timezone from 'dayjs/plugin/timezone.js'
 import customParseFormat from 'dayjs/plugin/customParseFormat.js'
+import { getAppLocale } from '@/locales'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -151,7 +152,9 @@ export function addIntervalToPickerTs(
 }
 
 export function formatMonthLabelInTimezone(value: Date | string | number, timezoneValue = DEFAULT_APP_TIMEZONE) {
-  return toTimezonedDayjs(typeof value === 'number' ? new Date(value) : value, timezoneValue).format('YYYY 年 M 月')
+  const locale = getAppLocale()
+  const date = toTimezonedDayjs(typeof value === 'number' ? new Date(value) : value, timezoneValue)
+  return locale === 'en-US' ? date.format('MMMM YYYY') : date.format('YYYY 年 M 月')
 }
 
 export function addIntervalToBusinessDateString(

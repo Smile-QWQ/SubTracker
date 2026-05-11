@@ -5,14 +5,15 @@ describe('subscription detail drawer remaining value', () => {
   it('renders remaining value fields in detail drawer', () => {
     const source = readFileSync('src/components/SubscriptionDetailDrawer.vue', 'utf8')
 
-    expect(source).toContain('label="当前周期"')
-    expect(source).toContain('label="剩余价值"')
+    expect(source).toContain("t('subscriptions.labels.currentCycle')")
+    expect(source).toContain("t('subscriptions.labels.remainingValue')")
     expect(source).toContain('detail.currentCycleStartDate')
     expect(source).toContain('detail.currentCycleEndDate')
     expect(source).toContain('detail.remainingValue')
     expect(source).toContain('detail.remainingDays')
     expect(source).toContain('detail.remainingRatio')
     expect(source).toContain('listReminderRuleDescriptions')
+    expect(source).toContain('reminderRulesI18n')
     expect(source).toContain('detail-descriptions')
     expect(source).toContain('white-space: nowrap;')
     expect(source).toContain('detail-value-block')

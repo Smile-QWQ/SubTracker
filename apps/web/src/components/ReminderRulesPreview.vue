@@ -11,13 +11,13 @@
       <template #icon>
         <n-icon :component="eyeOutline" />
       </template>
-      {{ isPreviewVisible ? '收起提醒预览' : '预览提醒规则' }}
+      {{ isPreviewVisible ? t('common.actions.collapse') : t('settings.buttons.previewReminderRules') }}
     </n-button>
 
     <transition name="reminder-preview">
       <div v-if="isPreviewVisible && (advanceEvaluation || overdueEvaluation)" class="reminder-rules-preview__panel">
         <div class="reminder-rules-preview__section">
-          <div class="reminder-rules-preview__title">到期前提醒</div>
+          <div class="reminder-rules-preview__title">{{ t('subscriptions.labels.advanceReminders') }}</div>
           <div v-if="advanceEvaluation?.error" class="reminder-rules-preview__error">
             {{ advanceEvaluation.error }}
           </div>
@@ -26,11 +26,11 @@
               {{ entry.description }}
             </li>
           </ul>
-          <div v-else class="reminder-rules-preview__empty">暂无到期前提醒规则</div>
+          <div v-else class="reminder-rules-preview__empty">{{ t('validation.reminderRules.noAdvance') }}</div>
         </div>
 
         <div class="reminder-rules-preview__section">
-          <div class="reminder-rules-preview__title">过期提醒</div>
+          <div class="reminder-rules-preview__title">{{ t('subscriptions.labels.overdueReminders') }}</div>
           <div v-if="overdueEvaluation?.error" class="reminder-rules-preview__error">
             {{ overdueEvaluation.error }}
           </div>
@@ -39,7 +39,7 @@
               {{ entry.description }}
             </li>
           </ul>
-          <div v-else class="reminder-rules-preview__empty">暂无过期提醒规则</div>
+          <div v-else class="reminder-rules-preview__empty">{{ t('validation.reminderRules.noOverdue') }}</div>
         </div>
       </div>
     </transition>
@@ -47,9 +47,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { NButton, NIcon } from 'naive-ui'
 import { EyeOutline } from '@vicons/ionicons5'
+import { t } from '@/locales'
 import { evaluateReminderRules, type ReminderRulesEvaluation } from '@/utils/reminder-rules'
 
 const props = withDefaults(
@@ -94,14 +95,64 @@ function close() {
 function preview() {
   advanceEvaluation.value = evaluateReminderRules(props.advanceValue, 'advance', {
     fallbackValue: props.defaultAdvanceValue,
-    fallbackLabel: '系统默认到期前规则',
-    emptyTitle: '暂无到期前提醒规则'
+    fallbackLabel: t('validation.reminderRules.defaultAdvanceRulesLabel'),
+    emptyTitle: t('validation.reminderRules.noAdvance'),
+    i18n: {
+      defaultAdvanceRulesLabel: t('validation.reminderRules.defaultAdvanceRulesLabel'),
+      defaultOverdueRulesLabel: t('validation.reminderRules.defaultOverdueRulesLabel'),
+      noAdvance: t('validation.reminderRules.noAdvance'),
+      noOverdue: t('validation.reminderRules.noOverdue'),
+      fallback: t('validation.reminderRules.fallback'),
+      emptyTitle: t('validation.reminderRules.emptyTitle'),
+      resultTitle: t('validation.reminderRules.resultTitle'),
+      invalidTitle: t('validation.reminderRules.invalidTitle'),
+      defaultRulesLabel: t('validation.reminderRules.defaultRulesLabel'),
+      fallbackPreviewTitle: t('validation.reminderRules.fallbackPreviewTitle'),
+      fallbackInvalidTitle: t('validation.reminderRules.fallbackInvalidTitle'),
+      parseFailed: t('validation.reminderRules.parseFailed'),
+      invalidSegmentFormat: t('validation.reminderRules.invalidSegmentFormat', { segment: '{segment}' }),
+      invalidDaysInteger: t('validation.reminderRules.invalidDaysInteger', { segment: '{segment}' }),
+      invalidOverdueDays: t('validation.reminderRules.invalidOverdueDays', { segment: '{segment}' }),
+      invalidAdvanceDays: t('validation.reminderRules.invalidAdvanceDays', { segment: '{segment}' }),
+      invalidTime: t('validation.reminderRules.invalidTime', { segment: '{segment}' }),
+      inlineAdvanceSameDay: t('validation.reminderRules.inlineAdvanceSameDay', { time: '{time}' }),
+      inlineAdvanceBefore: t('validation.reminderRules.inlineAdvanceBefore', { days: '{days}', time: '{time}' }),
+      inlineOverdue: t('validation.reminderRules.inlineOverdue', { days: '{days}', time: '{time}' }),
+      evalAdvanceSameDay: t('validation.reminderRules.evalAdvanceSameDay', { time: '{time}' }),
+      evalAdvanceBefore: t('validation.reminderRules.evalAdvanceBefore', { days: '{days}', time: '{time}' }),
+      evalOverdue: t('validation.reminderRules.evalOverdue', { days: '{days}', time: '{time}' })
+    }
   })
 
   overdueEvaluation.value = evaluateReminderRules(props.overdueValue, 'overdue', {
     fallbackValue: props.defaultOverdueValue,
-    fallbackLabel: '系统默认过期规则',
-    emptyTitle: '暂无过期提醒规则'
+    fallbackLabel: t('validation.reminderRules.defaultOverdueRulesLabel'),
+    emptyTitle: t('validation.reminderRules.noOverdue'),
+    i18n: {
+      defaultAdvanceRulesLabel: t('validation.reminderRules.defaultAdvanceRulesLabel'),
+      defaultOverdueRulesLabel: t('validation.reminderRules.defaultOverdueRulesLabel'),
+      noAdvance: t('validation.reminderRules.noAdvance'),
+      noOverdue: t('validation.reminderRules.noOverdue'),
+      fallback: t('validation.reminderRules.fallback'),
+      emptyTitle: t('validation.reminderRules.emptyTitle'),
+      resultTitle: t('validation.reminderRules.resultTitle'),
+      invalidTitle: t('validation.reminderRules.invalidTitle'),
+      defaultRulesLabel: t('validation.reminderRules.defaultRulesLabel'),
+      fallbackPreviewTitle: t('validation.reminderRules.fallbackPreviewTitle'),
+      fallbackInvalidTitle: t('validation.reminderRules.fallbackInvalidTitle'),
+      parseFailed: t('validation.reminderRules.parseFailed'),
+      invalidSegmentFormat: t('validation.reminderRules.invalidSegmentFormat', { segment: '{segment}' }),
+      invalidDaysInteger: t('validation.reminderRules.invalidDaysInteger', { segment: '{segment}' }),
+      invalidOverdueDays: t('validation.reminderRules.invalidOverdueDays', { segment: '{segment}' }),
+      invalidAdvanceDays: t('validation.reminderRules.invalidAdvanceDays', { segment: '{segment}' }),
+      invalidTime: t('validation.reminderRules.invalidTime', { segment: '{segment}' }),
+      inlineAdvanceSameDay: t('validation.reminderRules.inlineAdvanceSameDay', { time: '{time}' }),
+      inlineAdvanceBefore: t('validation.reminderRules.inlineAdvanceBefore', { days: '{days}', time: '{time}' }),
+      inlineOverdue: t('validation.reminderRules.inlineOverdue', { days: '{days}', time: '{time}' }),
+      evalAdvanceSameDay: t('validation.reminderRules.evalAdvanceSameDay', { time: '{time}' }),
+      evalAdvanceBefore: t('validation.reminderRules.evalAdvanceBefore', { days: '{days}', time: '{time}' }),
+      evalOverdue: t('validation.reminderRules.evalOverdue', { days: '{days}', time: '{time}' })
+    }
   })
   isPreviewVisible.value = true
   emit('visibilityChange', true)

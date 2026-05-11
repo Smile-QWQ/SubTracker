@@ -6,8 +6,8 @@
       </n-icon>
     </div>
     <div>
-      <h1 class="page-title">{{ title }}</h1>
-      <p class="page-subtitle">{{ subtitle }}</p>
+      <h1 class="page-title">{{ props.title }}</h1>
+      <p class="page-subtitle">{{ props.subtitle }}</p>
     </div>
   </div>
 </template>
@@ -16,7 +16,7 @@
 import type { Component } from 'vue'
 import { NIcon } from 'naive-ui'
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     title: string
     subtitle: string

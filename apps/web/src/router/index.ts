@@ -7,43 +7,43 @@ export const routes = [
     path: '/login',
     name: 'login',
     component: () => import('@/pages/LoginPage.vue'),
-    meta: { public: true, label: '登录' }
+    meta: { public: true, labelKey: 'app.auth.login' }
   },
   {
     path: '/dashboard',
     name: 'dashboard',
     component: () => import('@/pages/DashboardPage.vue'),
-    meta: { label: '仪表盘' }
+    meta: { labelKey: 'app.menu.dashboard' }
   },
   {
     path: '/subscriptions',
     name: 'subscriptions',
     component: () => import('@/pages/SubscriptionsPage.vue'),
-    meta: { label: '订阅管理' }
+    meta: { labelKey: 'app.menu.subscriptions' }
   },
   {
     path: '/calendar',
     name: 'calendar',
     component: () => import('@/pages/CalendarPage.vue'),
-    meta: { label: '订阅日历' }
+    meta: { labelKey: 'app.menu.calendar' }
   },
   {
     path: '/statistics',
     name: 'statistics',
     component: () => import('@/pages/StatisticsPage.vue'),
-    meta: { label: '费用统计' }
+    meta: { labelKey: 'app.menu.statistics' }
   },
   {
     path: '/budgets',
     name: 'budgets',
     component: () => import('@/pages/BudgetPage.vue'),
-    meta: { label: '预算统计' }
+    meta: { labelKey: 'app.menu.budgets' }
   },
   {
     path: '/settings',
     name: 'settings',
     component: () => import('@/pages/SettingsPage.vue'),
-    meta: { label: '系统设置' }
+    meta: { labelKey: 'app.menu.settings' }
   }
 ]
 

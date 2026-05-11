@@ -1,22 +1,22 @@
 <template>
   <div>
     <n-space justify="space-between" align="start" class="page-top">
-      <page-header title="订阅管理" subtitle="管理不同周期、不同币种的订阅" :icon="layersOutline" />
+      <page-header :title="t('subscriptions.page.title')" :subtitle="t('subscriptions.page.subtitle')" :icon="layersOutline" />
       <n-space>
         <n-button :type="batchMode ? 'primary' : 'default'" ghost @click="toggleBatchMode">
-          {{ batchMode ? '退出批量管理' : '批量管理' }}
+          {{ batchMode ? t('subscriptions.page.exitBatchMode') : t('subscriptions.page.batchMode') }}
         </n-button>
         <n-button @click="showTagManageModal = true">
           <template #icon>
             <n-icon><pricetags-outline /></n-icon>
           </template>
-          标签管理
+          {{ t('subscriptions.actions.tagManagement') }}
         </n-button>
         <n-button type="primary" @click="openCreate">
           <template #icon>
             <n-icon><add-circle-outline /></n-icon>
           </template>
-          新建订阅
+          {{ t('subscriptions.actions.create') }}
         </n-button>
       </n-space>
     </n-space>
@@ -24,17 +24,27 @@
     <n-card style="margin-bottom: 12px">
       <n-space vertical :size="12" style="width: 100%">
         <div class="filters-grid">
-          <n-input v-model:value="filters.q" placeholder="搜索名称/描述" clearable @keyup.enter="loadSubscriptions" />
-          <n-select v-model:value="filters.status" clearable placeholder="状态" :options="statusOptions" />
-          <n-select v-model:value="sortMode" placeholder="排序方式" :options="sortOptions" />
+          <n-input
+            v-model:value="filters.q"
+            :placeholder="t('subscriptions.page.searchPlaceholder')"
+            clearable
+            @keyup.enter="loadSubscriptions"
+          />
+          <n-select
+            v-model:value="filters.status"
+            clearable
+            :placeholder="t('subscriptions.page.statusPlaceholder')"
+            :options="statusOptions"
+          />
+          <n-select v-model:value="sortMode" :placeholder="t('subscriptions.page.sortPlaceholder')" :options="sortOptions" />
           <n-button @click="loadSubscriptions">
             <template #icon>
               <n-icon><search-outline /></n-icon>
             </template>
-            查询
+            {{ t('common.actions.search') }}
           </n-button>
           <n-button quaternary @click="showTagFilter = !showTagFilter">
-            {{ showTagFilter ? '收起标签筛选' : '展开标签筛选' }}
+            {{ showTagFilter ? t('subscriptions.page.collapseTagFilter') : t('subscriptions.page.expandTagFilter') }}
           </n-button>
         </div>
 
@@ -71,7 +81,7 @@
     </n-card>
 
     <n-card>
-      <template #header>订阅列表</template>
+      <template #header>{{ t('subscriptions.page.listTitle') }}</template>
       <template #header-extra>
         <n-button
           v-if="sortMode === 'custom' && !batchMode"
@@ -80,29 +90,41 @@
           ghost
           @click="toggleDragHandles"
         >
-          {{ showDragHandles ? '完成调整' : '调整顺序' }}
+          {{ showDragHandles ? t('subscriptions.actions.finishReorder') : t('subscriptions.actions.reorder') }}
         </n-button>
       </template>
 
       <n-space v-if="batchMode" justify="space-between" align="center" style="margin-bottom: 12px" wrap>
         <n-space align="center" wrap>
-          <n-tag type="info">已选 {{ selectedCount }} 项</n-tag>
+          <n-tag type="info">{{ t('subscriptions.page.selectedItems', { count: selectedCount }) }}</n-tag>
           <n-button size="small" :disabled="visibleSelectionIds.length === 0 || allVisibleSubscriptionsSelected" @click="selectVisibleSubscriptions">
-            全选当前页
+            {{ t('subscriptions.page.selectCurrentPage') }}
           </n-button>
-          <n-button size="small" :disabled="selectedCount === 0" @click="clearSelectedSubscriptions">清空选择</n-button>
+          <n-button size="small" :disabled="selectedCount === 0" @click="clearSelectedSubscriptions">
+            {{ t('subscriptions.page.clearSelection') }}
+          </n-button>
         </n-space>
         <n-space wrap>
-          <n-button size="small" type="primary" ghost :disabled="selectedCount === 0" @click="runBatchRenew">批量续订</n-button>
-          <n-button size="small" :disabled="selectedCount === 0" @click="runBatchSetStatus('active')">设为正常</n-button>
-          <n-button size="small" :disabled="selectedCount === 0" @click="runBatchSetStatus('paused')">设为暂停</n-button>
-          <n-button size="small" type="warning" ghost :disabled="selectedCount === 0" @click="runBatchSetStatus('cancelled')">设为停用</n-button>
-          <n-button size="small" type="error" ghost :disabled="!canBatchDelete" @click="runBatchDelete">批量删除</n-button>
+          <n-button size="small" type="primary" ghost :disabled="selectedCount === 0" @click="runBatchRenew">
+            {{ t('subscriptions.actions.batchRenew') }}
+          </n-button>
+          <n-button size="small" :disabled="selectedCount === 0" @click="runBatchSetStatus('active')">
+            {{ t('subscriptions.actions.setActive') }}
+          </n-button>
+          <n-button size="small" :disabled="selectedCount === 0" @click="runBatchSetStatus('paused')">
+            {{ t('subscriptions.actions.setPaused') }}
+          </n-button>
+          <n-button size="small" type="warning" ghost :disabled="selectedCount === 0" @click="runBatchSetStatus('cancelled')">
+            {{ t('subscriptions.actions.setCancelled') }}
+          </n-button>
+          <n-button size="small" type="error" ghost :disabled="!canBatchDelete" @click="runBatchDelete">
+            {{ t('subscriptions.actions.batchDelete') }}
+          </n-button>
         </n-space>
       </n-space>
 
       <div v-if="isMobile" class="mobile-list">
-        <n-empty v-if="orderedSubscriptions.length === 0" description="暂无订阅" />
+        <n-empty v-if="orderedSubscriptions.length === 0" :description="t('subscriptions.page.noSubscriptions')" />
 
         <n-card v-for="item in orderedSubscriptions" :key="item.id" size="small" class="mobile-subscription-card">
           <div class="mobile-subscription-card__header">
@@ -120,7 +142,8 @@
               <div class="mobile-subscription-card__title-group">
                 <div class="mobile-subscription-card__title">{{ item.name }}</div>
                 <div class="mobile-subscription-card__meta">
-                  {{ item.currency }} {{ Number(item.amount).toFixed(2) }} · 每 {{ item.billingIntervalCount }} {{ unitLabel(item.billingIntervalUnit) }}
+                  {{ item.currency }} {{ Number(item.amount).toFixed(2) }} ·
+                  {{ formatInterval(item.billingIntervalCount, unitLabel(item.billingIntervalUnit)) }}
                 </div>
               </div>
             </div>
@@ -144,30 +167,30 @@
               </template>
               <span>{{ formatTagOverflowTooltip(getTagDisplay(item.tags).overflow) }}</span>
             </n-tooltip>
-            <span v-if="!(item.tags?.length)" class="muted-text">未打标签</span>
+            <span v-if="!(item.tags?.length)" class="muted-text">{{ t('common.empty.noTags') }}</span>
           </n-space>
 
           <div class="mobile-subscription-card__rows">
             <div class="mobile-subscription-card__row">
-              <span>下次续订</span>
+              <span>{{ t('common.labels.nextRenewal') }}</span>
               <span>{{ formatDate(item.nextRenewalDate) }}</span>
             </div>
             <div class="mobile-subscription-card__row">
-              <span>自动续订</span>
-              <span>{{ item.autoRenew ? '已启用' : '未启用' }}</span>
+              <span>{{ t('common.labels.autoRenew') }}</span>
+              <span>{{ item.autoRenew ? t('common.status.enabled') : t('common.status.disabled') }}</span>
             </div>
           </div>
 
           <div v-if="item.notes?.trim()" class="note-strip">
             <n-icon :size="14"><document-text-outline /></n-icon>
-            <span class="note-strip__label">备注：</span>
+            <span class="note-strip__label">{{ t('subscriptions.labels.note') }}</span>
             <span class="note-strip__content">{{ item.notes.trim() }}</span>
           </div>
 
           <n-space v-if="!batchMode" wrap style="margin-top: 12px">
-            <n-button size="small" @click="openDetail(item.id)">详情</n-button>
-            <n-button size="small" @click="openRecords(item.id)">记录</n-button>
-            <n-button size="small" @click="openEdit(item)">编辑</n-button>
+            <n-button size="small" @click="openDetail(item.id)">{{ t('subscriptions.actions.detail') }}</n-button>
+            <n-button size="small" @click="openRecords(item.id)">{{ t('subscriptions.actions.records') }}</n-button>
+            <n-button size="small" @click="openEdit(item)">{{ t('subscriptions.actions.edit') }}</n-button>
             <n-button
               v-if="item.status === 'active' || item.status === 'expired'"
               size="small"
@@ -175,43 +198,43 @@
               ghost
               @click="quickRenew(item)"
             >
-              续订
+              {{ t('subscriptions.actions.renew') }}
             </n-button>
             <template v-if="item.status === 'active'">
-              <n-popconfirm positive-text="确认" negative-text="取消" @positive-click="pause(item.id)">
+              <n-popconfirm :positive-text="t('common.actions.confirm')" :negative-text="t('subscriptions.actions.cancel')" @positive-click="pause(item.id)">
                 <template #trigger>
-                  <n-button size="small">暂停</n-button>
+                  <n-button size="small">{{ t('subscriptions.actions.pause') }}</n-button>
                 </template>
-                确认暂停该订阅？
+                {{ t('subscriptions.confirm.pause') }}
               </n-popconfirm>
-              <n-popconfirm positive-text="确认" negative-text="取消" @positive-click="cancel(item.id)">
+              <n-popconfirm :positive-text="t('common.actions.confirm')" :negative-text="t('subscriptions.actions.cancel')" @positive-click="cancel(item.id)">
                 <template #trigger>
-                  <n-button size="small" type="error" ghost>取消</n-button>
+                  <n-button size="small" type="error" ghost>{{ t('subscriptions.actions.cancel') }}</n-button>
                 </template>
-                确认取消该订阅？
+                {{ t('subscriptions.confirm.cancel') }}
               </n-popconfirm>
             </template>
             <n-popconfirm
               v-else-if="item.status === 'paused'"
-              positive-text="恢复"
-              negative-text="取消"
+              :positive-text="t('subscriptions.actions.resume')"
+              :negative-text="t('subscriptions.actions.cancel')"
               @positive-click="resume(item.id)"
             >
               <template #trigger>
-                <n-button size="small" type="primary" ghost>恢复</n-button>
+                <n-button size="small" type="primary" ghost>{{ t('subscriptions.actions.resume') }}</n-button>
               </template>
-              确认恢复该订阅为正常状态？
+              {{ t('subscriptions.confirm.resume') }}
             </n-popconfirm>
             <n-popconfirm
               v-if="item.status === 'paused' || item.status === 'cancelled' || item.status === 'expired'"
-              positive-text="删除"
-              negative-text="保留"
+              :positive-text="t('common.actions.delete')"
+              :negative-text="t('common.actions.keep')"
               @positive-click="removeSubscription(item.id, item.name)"
             >
               <template #trigger>
-                <n-button size="small" type="error" ghost>删除</n-button>
+                <n-button size="small" type="error" ghost>{{ t('common.actions.delete') }}</n-button>
               </template>
-              将删除“{{ item.name }}”及其续订记录与相关历史，此操作不可恢复，确认继续？
+              {{ t('subscriptions.confirm.delete', { name: item.name }) }}
             </n-popconfirm>
           </n-space>
         </n-card>
@@ -290,8 +313,7 @@ import {
   NSelect,
   NSpace,
   NTag,
-  NTooltip,
-  useMessage
+  NTooltip
 } from 'naive-ui'
 import {
   AddCircleOutline,
@@ -301,6 +323,7 @@ import {
   ReorderThreeOutline,
   SearchOutline
 } from '@vicons/ionicons5'
+import { t } from '@/locales'
 import { api } from '@/composables/api'
 import { useExchangeRateSnapshotQuery } from '@/composables/exchange-rate-query'
 import { useSettingsQuery } from '@/composables/settings-query'
@@ -330,10 +353,11 @@ import {
   setStoredSubscriptionPageSize
 } from '@/utils/subscription-pagination'
 import { buildSubscriptionTableRows, paginateSubscriptions, type SubscriptionTableRow } from '@/utils/subscription-table'
+import { useLocalizedMessage } from '@/utils/localized-message'
 
 type SortMode = 'custom' | 'renewal' | 'amount-desc' | 'name'
 
-const message = useMessage()
+const message = useLocalizedMessage()
 const { width } = useWindowSize()
 const queryClient = useQueryClient()
 const layersOutline = LayersOutline
@@ -379,19 +403,19 @@ const desktopPageSize = ref<number>(DEFAULT_SUBSCRIPTION_PAGE_SIZE)
 const batchMode = ref(false)
 const selectedSubscriptionIds = ref<string[]>([])
 
-const statusOptions = [
-  { label: '正常', value: 'active' },
-  { label: '暂停', value: 'paused' },
-  { label: '停用', value: 'cancelled' },
-  { label: '过期', value: 'expired' }
-]
+const statusOptions = computed(() => [
+  { label: t('subscriptions.status.active'), value: 'active' },
+  { label: t('subscriptions.status.paused'), value: 'paused' },
+  { label: t('subscriptions.status.cancelled'), value: 'cancelled' },
+  { label: t('subscriptions.status.expired'), value: 'expired' }
+])
 
-const sortOptions = [
-  { label: '自定义顺序', value: 'custom' },
-  { label: '按下次续订', value: 'renewal' },
-  { label: '按金额从高到低', value: 'amount-desc' },
-  { label: '按名称', value: 'name' }
-]
+const sortOptions = computed(() => [
+  { label: t('subscriptions.sort.custom'), value: 'custom' },
+  { label: t('subscriptions.sort.renewal'), value: 'renewal' },
+  { label: t('subscriptions.sort.amountDesc'), value: 'amount-desc' },
+  { label: t('subscriptions.sort.name'), value: 'name' }
+])
 
 const tagSubscriptionCounts = computed<Record<string, number>>(() => {
   const counts: Record<string, number> = {}
@@ -479,7 +503,7 @@ const dragColumn = {
       'div',
       {
         class: ['drag-handle-cell', 'drag-handle-cell--enabled', canDragReorder.value ? 'drag-handle-cell--active' : ''].join(' ').trim(),
-        title: canDragReorder.value ? '拖拽调整顺序' : '当前排序不可拖拽',
+        title: canDragReorder.value ? t('subscriptions.page.dragHandleEnabledTitle') : t('subscriptions.page.dragHandleDisabledTitle'),
         onMousedown: () => armDrag(row.id),
         onMouseup: resetArmedDrag
       },
@@ -570,6 +594,7 @@ const tagListStyle = {
   gap: '6px'
 }
 
+<<<<<<< HEAD
 function getTagDisplay(tags?: Tag[] | null) {
   return splitSubscriptionTagsForDisplay(tags)
 }
@@ -579,8 +604,11 @@ function formatTagOverflowTooltip(tags: Tag[]) {
 }
 
 const mainColumns = [
+=======
+const mainColumns = computed(() => [
+>>>>>>> 48ca025 (feat: add web i18n with shared messages)
   {
-    title: '名称',
+    title: t('common.labels.name'),
     key: 'name',
     colSpan: (row: SubscriptionTableRow) =>
       row.__rowType === 'note' ? (batchMode.value ? 8 : dragHandleVisible.value ? 8 : 7) : 1,
@@ -588,7 +616,7 @@ const mainColumns = [
       if (row.__rowType === 'note') {
         return h('div', { style: noteContainerStyle }, [
           h(NIcon, { size: 14 }, { default: () => h(DocumentTextOutline) }),
-          h('span', { style: noteLabelStyle }, '备注：'),
+          h('span', { style: noteLabelStyle }, t('subscriptions.labels.note')),
           h('span', { style: noteContentStyle }, row.note)
         ])
       }
@@ -606,12 +634,12 @@ const mainColumns = [
     }
   },
   {
-    title: '标签',
+    title: t('common.labels.tags'),
     key: 'tags',
     colSpan: (row: SubscriptionTableRow) => (row.__rowType === 'note' ? 0 : 1),
     render: (row: SubscriptionTableRow) => {
       if (row.__rowType === 'note') return null
-      if (!(row.tags?.length)) return '未打标签'
+      if (!(row.tags?.length)) return t('common.empty.noTags')
 
       const { visible, overflow, overflowCount } = splitSubscriptionTagsForDisplay(row.tags)
 
@@ -653,33 +681,32 @@ const mainColumns = [
     }
   },
   {
-    title: '金额',
+    title: t('common.labels.amount'),
     key: 'amount',
     colSpan: (row: SubscriptionTableRow) => (row.__rowType === 'note' ? 0 : 1),
     render: (row: SubscriptionTableRow) => (row.__rowType === 'note' ? null : `${row.currency} ${Number(row.amount).toFixed(2)}`)
   },
   {
-    title: '频率',
+    title: t('subscriptions.labels.interval'),
     key: 'interval',
     colSpan: (row: SubscriptionTableRow) => (row.__rowType === 'note' ? 0 : 1),
-    render: (row: SubscriptionTableRow) =>
-      row.__rowType === 'note' ? null : `每 ${row.billingIntervalCount} ${unitLabel(row.billingIntervalUnit)}`
+    render: (row: SubscriptionTableRow) => (row.__rowType === 'note' ? null : formatInterval(row.billingIntervalCount, unitLabel(row.billingIntervalUnit)))
   },
   {
-    title: '下次续订',
+    title: t('common.labels.nextRenewal'),
     key: 'nextRenewalDate',
     colSpan: (row: SubscriptionTableRow) => (row.__rowType === 'note' ? 0 : 1),
     render: (row: SubscriptionTableRow) => (row.__rowType === 'note' ? null : formatDate(row.nextRenewalDate))
   },
   {
-    title: '状态',
+    title: t('common.labels.status'),
     key: 'status',
     colSpan: (row: SubscriptionTableRow) => (row.__rowType === 'note' ? 0 : 1),
     render: (row: SubscriptionTableRow) =>
       row.__rowType === 'note' ? null : h(NTag, { type: statusTagType(row.status) }, { default: () => statusText(row.status) })
   },
   {
-    title: '操作',
+    title: t('common.labels.actions'),
     key: 'actions',
     render: (row: SubscriptionTableRow) => {
       if (row.__rowType === 'note') return null
@@ -689,18 +716,18 @@ const mainColumns = [
           ? [
               h(
                 NPopconfirm,
-                { positiveText: '确认', negativeText: '取消', onPositiveClick: () => void pause(row.id) },
+                { positiveText: t('common.actions.confirm'), negativeText: t('subscriptions.actions.cancel'), onPositiveClick: () => void pause(row.id) },
                 {
-                  trigger: () => h(NButton, { size: 'small' }, { default: () => '暂停' }),
-                  default: () => '确认暂停该订阅？'
+                  trigger: () => h(NButton, { size: 'small' }, { default: () => t('subscriptions.actions.pause') }),
+                  default: () => t('subscriptions.confirm.pause')
                 }
               ),
               h(
                 NPopconfirm,
-                { positiveText: '确认', negativeText: '取消', onPositiveClick: () => void cancel(row.id) },
+                { positiveText: t('common.actions.confirm'), negativeText: t('subscriptions.actions.cancel'), onPositiveClick: () => void cancel(row.id) },
                 {
-                  trigger: () => h(NButton, { size: 'small', type: 'error', ghost: true }, { default: () => '取消' }),
-                  default: () => '确认取消该订阅？'
+                  trigger: () => h(NButton, { size: 'small', type: 'error', ghost: true }, { default: () => t('subscriptions.actions.cancel') }),
+                  default: () => t('subscriptions.confirm.cancel')
                 }
               )
             ]
@@ -708,49 +735,49 @@ const mainColumns = [
             ? [
                 h(
                   NPopconfirm,
-                  { positiveText: '恢复', negativeText: '取消', onPositiveClick: () => void resume(row.id) },
+                  { positiveText: t('subscriptions.actions.resume'), negativeText: t('subscriptions.actions.cancel'), onPositiveClick: () => void resume(row.id) },
                   {
-                    trigger: () => h(NButton, { size: 'small', type: 'primary', ghost: true }, { default: () => '恢复' }),
-                    default: () => '确认恢复该订阅为正常状态？'
+                    trigger: () => h(NButton, { size: 'small', type: 'primary', ghost: true }, { default: () => t('subscriptions.actions.resume') }),
+                    default: () => t('subscriptions.confirm.resume')
                   }
                 ),
                 h(
                   NPopconfirm,
-                  { positiveText: '删除', negativeText: '保留', onPositiveClick: () => void removeSubscription(row.id, row.name) },
+                  { positiveText: t('common.actions.delete'), negativeText: t('common.actions.keep'), onPositiveClick: () => void removeSubscription(row.id, row.name) },
                   {
-                    trigger: () => h(NButton, { size: 'small', type: 'error', ghost: true }, { default: () => '删除' }),
-                    default: () => `将删除“${row.name}”及其续订记录与相关历史，此操作不可恢复，确认继续？`
+                    trigger: () => h(NButton, { size: 'small', type: 'error', ghost: true }, { default: () => t('common.actions.delete') }),
+                    default: () => t('subscriptions.confirm.delete', { name: row.name })
                   }
                 )
               ]
             : [
                 h(
                   NPopconfirm,
-                  { positiveText: '删除', negativeText: '保留', onPositiveClick: () => void removeSubscription(row.id, row.name) },
+                  { positiveText: t('common.actions.delete'), negativeText: t('common.actions.keep'), onPositiveClick: () => void removeSubscription(row.id, row.name) },
                   {
-                    trigger: () => h(NButton, { size: 'small', type: 'error', ghost: true }, { default: () => '删除' }),
-                    default: () => `将删除“${row.name}”及其续订记录与相关历史，此操作不可恢复，确认继续？`
+                    trigger: () => h(NButton, { size: 'small', type: 'error', ghost: true }, { default: () => t('common.actions.delete') }),
+                    default: () => t('subscriptions.confirm.delete', { name: row.name })
                   }
                 )
               ]
 
       return h(NSpace, { size: 6, wrapItem: false }, {
         default: () => [
-          h(NButton, { size: 'small', onClick: () => void openDetail(row.id) }, { default: () => '详情' }),
-          h(NButton, { size: 'small', onClick: () => void openRecords(row.id) }, { default: () => '记录' }),
-          h(NButton, { size: 'small', onClick: () => openEdit(row) }, { default: () => '编辑' }),
+          h(NButton, { size: 'small', onClick: () => void openDetail(row.id) }, { default: () => t('subscriptions.actions.detail') }),
+          h(NButton, { size: 'small', onClick: () => void openRecords(row.id) }, { default: () => t('subscriptions.actions.records') }),
+          h(NButton, { size: 'small', onClick: () => openEdit(row) }, { default: () => t('subscriptions.actions.edit') }),
           ...(row.status === 'active' || row.status === 'expired'
-            ? [h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => void quickRenew(row) }, { default: () => '续订' })]
+            ? [h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => void quickRenew(row) }, { default: () => t('subscriptions.actions.renew') })]
             : []),
           ...statusActions
         ]
       })
     }
   }
-]
+])
 
 const columns = computed(() => {
-  const result = [...mainColumns]
+  const result = [...mainColumns.value]
   if (batchMode.value) {
     return [selectionColumn, ...result]
   }
@@ -901,16 +928,20 @@ const submitSubscriptionTask = createSingleFlight(async (payload: Record<string,
   try {
     if (editingId) {
       await api.updateSubscription(editingId, payload)
-      message.success('订阅已更新')
+      message.success(t('subscriptions.messages.subscriptionUpdated'))
     } else {
       await api.createSubscription(payload)
-      message.success('订阅已创建')
+      message.success(t('subscriptions.messages.subscriptionCreated'))
     }
 
     closeModal()
     await refetchCurrentSubscriptions()
   } catch (error) {
-    message.error(`保存失败：${error instanceof Error ? error.message : 'Unknown'}`)
+    message.error(
+      t('subscriptions.messages.subscriptionSaveFailed', {
+        message: error instanceof Error ? error.message : t('common.errors.requestFailed')
+      })
+    )
   } finally {
     savingSubscription.value = false
   }
@@ -923,31 +954,43 @@ function submitSubscription(payload: Record<string, unknown>, editingId?: string
 async function createTag(payload: { name: string; color: string; sortOrder: number }) {
   try {
     await api.createTag(payload)
-    message.success('标签已创建')
+    message.success(t('subscriptions.messages.tagCreated'))
     await Promise.all([queryClient.invalidateQueries({ queryKey: TAGS_QUERY_KEY }), refetchCurrentSubscriptions()])
   } catch (error) {
-    message.error(`标签创建失败：${error instanceof Error ? error.message : 'Unknown'}`)
+    message.error(
+      t('subscriptions.messages.tagCreateFailed', {
+        message: error instanceof Error ? error.message : t('common.errors.requestFailed')
+      })
+    )
   }
 }
 
 async function updateTag(payload: { name: string; color: string; sortOrder: number }, id: string) {
   try {
     await api.updateTag(id, payload)
-    message.success('标签已更新')
+    message.success(t('subscriptions.messages.tagUpdated'))
     await Promise.all([queryClient.invalidateQueries({ queryKey: TAGS_QUERY_KEY }), refetchCurrentSubscriptions()])
   } catch (error) {
-    message.error(`标签更新失败：${error instanceof Error ? error.message : 'Unknown'}`)
+    message.error(
+      t('subscriptions.messages.tagUpdateFailed', {
+        message: error instanceof Error ? error.message : t('common.errors.requestFailed')
+      })
+    )
   }
 }
 
 async function deleteTag(tag: Tag) {
   try {
     await api.deleteTag(tag.id)
-    message.success(`已删除标签：${tag.name}`)
+    message.success(t('subscriptions.messages.tagDeleted', { name: tag.name }))
     filters.tagIds = filters.tagIds.filter((item) => item !== tag.id)
     await Promise.all([queryClient.invalidateQueries({ queryKey: TAGS_QUERY_KEY }), refetchCurrentSubscriptions()])
   } catch (error) {
-    message.error(`标签删除失败：${error instanceof Error ? error.message : 'Unknown'}`)
+    message.error(
+      t('subscriptions.messages.tagDeleteFailed', {
+        message: error instanceof Error ? error.message : t('common.errors.requestFailed')
+      })
+    )
   }
 }
 
@@ -979,7 +1022,7 @@ function selectVisibleSubscriptions() {
 
 function ensureBatchSelection() {
   if (!selectedCount.value) {
-    message.warning('请先选择订阅')
+    message.warning(t('subscriptions.batch.selectFirst'))
     return false
   }
   return true
@@ -987,11 +1030,11 @@ function ensureBatchSelection() {
 
 function summarizeBatchResult(label: string, result: { successCount: number; failureCount: number }) {
   if (result.failureCount === 0) {
-    message.success(`${label}成功，共 ${result.successCount} 项`)
+    message.success(t('subscriptions.messages.batchActionSuccess', { label, count: result.successCount }))
     return
   }
 
-  message.warning(`${label}完成：成功 ${result.successCount} 项，失败 ${result.failureCount} 项`)
+  message.warning(t('subscriptions.messages.batchActionPartial', { label, success: result.successCount, failure: result.failureCount }))
 }
 
 async function refreshOpenDetailIfNeeded(ids: string[]) {
@@ -1004,7 +1047,7 @@ async function runBatchRenew() {
   if (!ensureBatchSelection()) return
   const ids = [...selectedSubscriptionIds.value]
   const result = await api.batchRenewSubscriptions(ids)
-  summarizeBatchResult('批量续订', result)
+  summarizeBatchResult(t('subscriptions.actions.batchRenew'), result)
   await refetchCurrentSubscriptions()
   await refreshOpenDetailIfNeeded(ids)
 }
@@ -1012,10 +1055,16 @@ async function runBatchRenew() {
 async function runBatchSetStatus(status: BatchSettableStatus) {
   if (!ensureBatchSelection()) return
   const statusLabel = getBatchStatusText(status)
-  if (!window.confirm(`确认将已选的 ${selectedCount.value} 项订阅设为${statusLabel}吗？`)) return
+  if (!window.confirm(t('subscriptions.batch.statusConfirm', { count: selectedCount.value, status: statusLabel }))) return
   const ids = [...selectedSubscriptionIds.value]
   const result = await api.batchUpdateSubscriptionStatus(ids, status)
-  summarizeBatchResult(`批量设为${statusLabel}`, result)
+  const actionLabel =
+    status === 'active'
+      ? t('subscriptions.actions.setActive')
+      : status === 'paused'
+        ? t('subscriptions.actions.setPaused')
+        : t('subscriptions.actions.setCancelled')
+  summarizeBatchResult(actionLabel, result)
   await refetchCurrentSubscriptions()
   await refreshOpenDetailIfNeeded(ids)
 }
@@ -1025,17 +1074,23 @@ async function runBatchDelete() {
   const { deletableCount, blockedCount } = batchDeleteSummary.value
   const confirmMessage =
     blockedCount > 0
-      ? `确认批量删除吗？将删除 ${deletableCount} 项，并跳过 ${blockedCount} 项正常订阅。此操作不可恢复。`
-      : `确认批量删除已选的 ${deletableCount} 项订阅吗？此操作不可恢复。`
+      ? t('subscriptions.batch.deleteConfirmPartial', { deletable: deletableCount, blocked: blockedCount })
+      : t('subscriptions.batch.deleteConfirmAll', { count: deletableCount })
   if (!window.confirm(confirmMessage)) return
   const ids = [...selectedSubscriptionIds.value]
   const result = await api.batchDeleteSubscriptions(ids)
-  const skippedActiveCount = result.failures.filter((item) => item.message.includes('Active subscriptions cannot be deleted directly')).length
+  const skippedActiveCount = result.failures.filter((item) => item.message === 'api.errors.subscriptions.activeDeleteBlocked').length
   const otherFailureCount = result.failureCount - skippedActiveCount
   if (result.failureCount === 0) {
-    message.success(`批量删除成功，共 ${result.successCount} 项`)
+    message.success(t('subscriptions.messages.batchDeleteSuccess', { count: result.successCount }))
   } else {
-    message.warning(`批量删除完成：已删除 ${result.successCount} 项，跳过 ${skippedActiveCount} 项正常订阅，失败 ${otherFailureCount} 项`)
+    message.warning(
+      t('subscriptions.messages.batchDeletePartial', {
+        success: result.successCount,
+        skipped: skippedActiveCount,
+        failure: otherFailureCount
+      })
+    )
   }
   const deletedIds = ids.filter((id) => !result.failures.some((failure) => failure.id === id))
   if (detail.value && deletedIds.includes(detail.value.id)) {
@@ -1048,7 +1103,7 @@ async function runBatchDelete() {
 
 async function quickRenew(row: Subscription) {
   await api.renewSubscription(row.id)
-  message.success(`已续订：${row.name}`)
+  message.success(t('subscriptions.messages.renewed', { name: row.name }))
   await refetchCurrentSubscriptions()
   if (detail.value?.id === row.id) {
     detail.value = await api.getSubscription(row.id)
@@ -1057,7 +1112,7 @@ async function quickRenew(row: Subscription) {
 
 async function pause(id: string) {
   await api.pauseSubscription(id)
-  message.success('已暂停')
+  message.success(t('subscriptions.messages.paused'))
   await refetchCurrentSubscriptions()
   if (detail.value?.id === id) {
     detail.value = await api.getSubscription(id)
@@ -1066,7 +1121,7 @@ async function pause(id: string) {
 
 async function resume(id: string) {
   await api.updateSubscription(id, { status: 'active' })
-  message.success('已恢复')
+  message.success(t('subscriptions.messages.resumed'))
   await refetchCurrentSubscriptions()
   if (detail.value?.id === id) {
     detail.value = await api.getSubscription(id)
@@ -1075,7 +1130,7 @@ async function resume(id: string) {
 
 async function cancel(id: string) {
   await api.cancelSubscription(id)
-  message.success('已停用')
+  message.success(t('subscriptions.messages.cancelled'))
   await refetchCurrentSubscriptions()
   if (detail.value?.id === id) {
     detail.value = await api.getSubscription(id)
@@ -1084,7 +1139,7 @@ async function cancel(id: string) {
 
 async function removeSubscription(id: string, name: string) {
   await api.deleteSubscription(id)
-  message.success(`已删除：${name}`)
+  message.success(t('subscriptions.messages.deleted', { name }))
   await refetchCurrentSubscriptions()
   if (detail.value?.id === id) {
     detail.value = null
@@ -1154,9 +1209,9 @@ async function handleDrop(event: DragEvent, targetId: string) {
     savingOrder.value = true
     await api.reorderSubscriptions(nextIds)
     await refetchCurrentSubscriptions()
-    message.success('顺序已更新')
+    message.success(t('subscriptions.messages.orderUpdated'))
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '排序更新失败')
+    message.error(error instanceof Error ? error.message : t('subscriptions.messages.orderUpdateFailed'))
   } finally {
     savingOrder.value = false
     resetDragState()
@@ -1183,16 +1238,16 @@ function toggleDragHandles() {
   resetDragState()
 
   if (showDragHandles.value) {
-    message.info('已开启拖拽排序，仅拖拽手柄可调整顺序')
+    message.info(t('subscriptions.messages.dragSortEnabled'))
   }
 }
 
 function statusText(status: Subscription['status']) {
   return {
-    active: '正常',
-    paused: '暂停',
-    cancelled: '停用',
-    expired: '过期'
+    active: t('subscriptions.status.active'),
+    paused: t('subscriptions.status.paused'),
+    cancelled: t('subscriptions.status.cancelled'),
+    expired: t('subscriptions.status.expired')
   }[status]
 }
 
@@ -1209,13 +1264,17 @@ function formatDate(value: string) {
   return formatDateInTimezone(value, settings.value?.timezone)
 }
 
+function formatInterval(count: number, unit: string) {
+  return t('subscriptions.values.interval', { count, unit })
+}
+
 function unitLabel(unit: string) {
   return {
-    day: '天',
-    week: '周',
-    month: '月',
-    quarter: '季',
-    year: '年'
+    day: t('common.units.day'),
+    week: t('common.units.week'),
+    month: t('common.units.month'),
+    quarter: t('common.units.quarter'),
+    year: t('common.units.year')
   }[unit] ?? unit
 }
 </script>

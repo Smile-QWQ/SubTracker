@@ -1,3 +1,5 @@
+export type AppLocale = 'zh-CN' | 'en-US'
+
 export type SubscriptionStatus = 'active' | 'paused' | 'cancelled' | 'expired'
 
 export interface AuthUser {
@@ -260,6 +262,7 @@ export interface AiDashboardSummary {
 }
 
 export interface Settings {
+  systemDefaultLocale: AppLocale
   baseCurrency: string
   timezone: string
   defaultNotifyDays: number

@@ -1,15 +1,15 @@
 <template>
   <div>
     <page-header
-      title="预算统计"
-      subtitle="查看总预算使用情况与标签月预算分析"
+      :title="t('budgets.page.title')"
+      :subtitle="t('budgets.page.subtitle')"
       :icon="walletOutline"
       icon-background="linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)"
     />
 
     <n-grid :cols="gridCols" :x-gap="12" :y-gap="12">
       <n-grid-item>
-        <n-card title="月预算使用">
+        <n-card :title="t('budgets.sections.monthlyBudgetUsage')">
           <template v-if="budgetStats?.budgetSummary.monthly.budget">
             <div class="budget-progress-row">
               <n-progress
@@ -23,19 +23,19 @@
               </span>
             </div>
             <div class="budget-meta">
-              已使用
+              {{ t('budgets.labels.usedPrefix') }}
               <span :class="usedValueClass(budgetStats.budgetSummary.monthly.status)">
                 {{ formatMoney(budgetStats.budgetSummary.monthly.spent, baseCurrency) }}
               </span>
-              / 预算 {{ formatMoney(budgetStats.budgetSummary.monthly.budget ?? 0, baseCurrency) }}
+              {{ t('budgets.labels.budgetPrefix') }} {{ formatMoney(budgetStats.budgetSummary.monthly.budget ?? 0, baseCurrency) }}
             </div>
           </template>
-          <n-empty v-else description="未设置月预算" />
+          <n-empty v-else :description="t('budgets.empty.noMonthlyBudget')" />
         </n-card>
       </n-grid-item>
 
       <n-grid-item>
-        <n-card title="年预算使用">
+        <n-card :title="t('budgets.sections.yearlyBudgetUsage')">
           <template v-if="budgetStats?.budgetSummary.yearly.budget">
             <div class="budget-progress-row">
               <n-progress
@@ -49,14 +49,14 @@
               </span>
             </div>
             <div class="budget-meta">
-              已使用
+              {{ t('budgets.labels.usedPrefix') }}
               <span :class="usedValueClass(budgetStats.budgetSummary.yearly.status)">
                 {{ formatMoney(budgetStats.budgetSummary.yearly.spent, baseCurrency) }}
               </span>
-              / 预算 {{ formatMoney(budgetStats.budgetSummary.yearly.budget ?? 0, baseCurrency) }}
+              {{ t('budgets.labels.budgetPrefix') }} {{ formatMoney(budgetStats.budgetSummary.yearly.budget ?? 0, baseCurrency) }}
             </div>
           </template>
-          <n-empty v-else description="未设置年预算" />
+          <n-empty v-else :description="t('budgets.empty.noYearlyBudget')" />
         </n-card>
       </n-grid-item>
     </n-grid>
@@ -64,9 +64,9 @@
     <template v-if="budgetStats?.enabledTagBudgets">
       <n-space justify="space-between" align="center" style="margin-top: 12px; flex-wrap: wrap; gap: 12px">
         <div class="section-hint">
-          标签月预算与总预算相互独立，仅对已配置预算的标签生效。
+          {{ t('budgets.hints.section') }}
         </div>
-        <n-button type="primary" @click="tagBudgetModalVisible = true">设置标签月预算</n-button>
+        <n-button type="primary" @click="tagBudgetModalVisible = true">{{ t('budgets.buttons.setTagBudgets') }}</n-button>
       </n-space>
 
       <n-grid :cols="summaryCols" :x-gap="12" :y-gap="12" style="margin-top: 12px">
@@ -83,25 +83,25 @@
       <template v-if="hasConfiguredTagBudgets">
         <n-grid :cols="gridCols" :x-gap="12" :y-gap="12" style="margin-top: 12px">
           <n-grid-item>
-            <n-card title="标签预算使用率">
+            <n-card :title="t('budgets.sections.tagBudgetUsageRate')">
               <chart-view v-if="tagBudgetOption" :option="tagBudgetOption" />
-              <n-empty v-else description="暂无标签预算数据" />
+              <n-empty v-else :description="t('budgets.empty.noTagBudgetData')" />
             </n-card>
           </n-grid-item>
 
           <n-grid-item>
-            <n-card title="预算摘要">
+            <n-card :title="t('budgets.sections.budgetSummary')">
               <div class="summary-list">
                 <div class="summary-list__item">
-                  <span>已配置标签预算</span>
+                  <span>{{ t('budgets.labels.configuredTagBudgets') }}</span>
                   <strong>{{ budgetStats.tagBudgetSummary?.configuredCount ?? 0 }}</strong>
                 </div>
                 <div class="summary-list__item">
-                  <span>接近预算</span>
+                  <span>{{ t('budgets.labels.nearingBudget') }}</span>
                   <strong class="text-warning">{{ budgetStats.tagBudgetSummary?.warningCount ?? 0 }}</strong>
                 </div>
                 <div class="summary-list__item">
-                  <span>超标</span>
+                  <span>{{ t('budgets.labels.overBudget') }}</span>
                   <strong class="text-danger">{{ budgetStats.tagBudgetSummary?.overBudgetCount ?? 0 }}</strong>
                 </div>
               </div>
@@ -109,7 +109,7 @@
               <n-divider />
 
               <div class="top-tags">
-                <div class="top-tags__title">使用率最高 Top 3</div>
+                <div class="top-tags__title">{{ t('budgets.sections.topUsageRate') }}</div>
                 <div v-if="budgetStats.tagBudgetSummary?.topTags.length" class="top-tags__list">
                   <div v-for="tag in budgetStats.tagBudgetSummary.topTags" :key="tag.tagId" class="top-tags__item">
                     <div class="top-tags__name">{{ tag.name }}</div>
@@ -119,19 +119,19 @@
                     </div>
                   </div>
                 </div>
-                <n-empty v-else description="暂无标签预算数据" />
+                <n-empty v-else :description="t('budgets.empty.noTagBudgetData')" />
               </div>
             </n-card>
           </n-grid-item>
         </n-grid>
 
-        <n-card title="标签预算使用表" style="margin-top: 12px">
+        <n-card :title="t('budgets.sections.tagBudgetUsageTable')" style="margin-top: 12px">
           <n-data-table :columns="columns" :data="budgetStats.tagBudgetUsage" :pagination="false" />
         </n-card>
       </template>
 
-      <n-card v-else title="标签预算" style="margin-top: 12px">
-        <n-empty description="尚未配置标签预算" />
+      <n-card v-else :title="t('budgets.sections.tagBudget')" style="margin-top: 12px">
+        <n-empty :description="t('budgets.empty.noConfiguredTagBudgets')" />
       </n-card>
     </template>
 
@@ -151,8 +151,9 @@ import { computed, h, ref, watch } from 'vue'
 import { useQueryClient } from '@tanstack/vue-query'
 import { useWindowSize } from '@vueuse/core'
 import { useRouter } from 'vue-router'
-import { NButton, NCard, NDataTable, NDivider, NEmpty, NGrid, NGridItem, NProgress, NSpace, NTag, useMessage, useThemeVars } from 'naive-ui'
+import { NButton, NCard, NDataTable, NDivider, NEmpty, NGrid, NGridItem, NProgress, NSpace, NTag, useThemeVars } from 'naive-ui'
 import { WalletOutline } from '@vicons/ionicons5'
+import { t } from '@/locales'
 import { api } from '@/composables/api'
 import { BUDGET_STATISTICS_QUERY_KEY, useBudgetStatisticsQuery } from '@/composables/budget-statistics-query'
 import { SETTINGS_QUERY_KEY, useSettingsQuery } from '@/composables/settings-query'
@@ -161,11 +162,12 @@ import ChartView from '@/components/ChartView.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import TagBudgetSettingsModal from '@/components/TagBudgetSettingsModal.vue'
 import type { BudgetStatistics, TagBudgetUsage } from '@/types/api'
+import { useLocalizedMessage } from '@/utils/localized-message'
 
 const walletOutline = WalletOutline
 const { width } = useWindowSize()
 const router = useRouter()
-const message = useMessage()
+const message = useLocalizedMessage()
 const queryClient = useQueryClient()
 const tagBudgetModalVisible = ref(false)
 const themeVars = useThemeVars()
@@ -195,9 +197,9 @@ const hasConfiguredTagBudgets = computed(() => (budgetStats.value?.tagBudgetSumm
 const summaryCards = computed(() => {
   const summary = budgetStats.value?.tagBudgetSummary
   return [
-    { label: '已配置标签预算', value: summary?.configuredCount ?? 0, className: '' },
-    { label: '接近预算', value: summary?.warningCount ?? 0, className: 'text-warning' },
-    { label: '超标', value: summary?.overBudgetCount ?? 0, className: 'text-danger' }
+    { label: t('budgets.labels.configuredTagBudgets'), value: summary?.configuredCount ?? 0, className: '' },
+    { label: t('budgets.labels.nearingBudget'), value: summary?.warningCount ?? 0, className: 'text-warning' },
+    { label: t('budgets.labels.overBudget'), value: summary?.overBudgetCount ?? 0, className: 'text-danger' }
   ]
 })
 
@@ -217,9 +219,9 @@ const tagBudgetOption = computed(() => {
         if (!row) return ''
         return [
           `${row.name}`,
-          `使用率：${formatPercentage(row.ratio)}%`,
-          `已使用：${formatMoney(row.spent, baseCurrency.value)}`,
-          `预算：${formatMoney(row.budget, baseCurrency.value)}`
+          `${t('budgets.labels.usageRate')}：${formatPercentage(row.ratio)}%`,
+          `${t('budgets.labels.spent')}：${formatMoney(row.spent, baseCurrency.value)}`,
+          `${t('budgets.labels.budget')}：${formatMoney(row.budget, baseCurrency.value)}`
         ].join('<br/>')
       }
     },
@@ -251,27 +253,27 @@ const tagBudgetOption = computed(() => {
 })
 
 const columns = [
-  { title: '标签', key: 'name' },
+  { title: t('budgets.labels.tag'), key: 'name' },
   {
-    title: '已使用',
+    title: t('budgets.labels.spent'),
     key: 'spent',
     render: (row: TagBudgetUsage) => formatMoney(row.spent, baseCurrency.value)
   },
   {
-    title: '预算',
+    title: t('budgets.labels.budget'),
     key: 'budget',
     render: (row: TagBudgetUsage) => formatMoney(row.budget, baseCurrency.value)
   },
   {
-    title: '剩余 / 超出',
+    title: t('budgets.labels.remainingOrOver'),
     key: 'remaining',
     render: (row: TagBudgetUsage) =>
       row.overBudget > 0
-        ? `超出 ${formatMoney(row.overBudget, baseCurrency.value)}`
-        : `剩余 ${formatMoney(row.remaining, baseCurrency.value)}`
+        ? `${t('budgets.labels.overPrefix')} ${formatMoney(row.overBudget, baseCurrency.value)}`
+        : `${t('budgets.labels.remainingPrefix')} ${formatMoney(row.remaining, baseCurrency.value)}`
   },
   {
-    title: '使用率',
+    title: t('budgets.labels.usageRate'),
     key: 'ratio',
     render: (row: TagBudgetUsage) =>
       h(
@@ -283,13 +285,20 @@ const columns = [
       )
   },
   {
-    title: '状态',
+    title: t('budgets.labels.status'),
     key: 'status',
     render: (row: TagBudgetUsage) =>
       h(
         NTag,
         { type: row.status === 'over' ? 'error' : row.status === 'warning' ? 'warning' : 'success' },
-        { default: () => (row.status === 'over' ? '超标' : row.status === 'warning' ? '接近预算' : '正常') }
+        {
+          default: () =>
+            row.status === 'over'
+              ? t('budgets.status.over')
+              : row.status === 'warning'
+                ? t('budgets.status.warning')
+                : t('budgets.status.normal')
+        }
       )
   }
 ]
@@ -297,7 +306,7 @@ const columns = [
 async function saveTagBudgets(tagBudgets: Record<string, number>) {
   await api.updateSettings({ tagBudgets })
   tagBudgetModalVisible.value = false
-  message.success('标签月预算已保存')
+  message.success(t('budgets.messages.saved'))
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: BUDGET_STATISTICS_QUERY_KEY }),
     queryClient.invalidateQueries({ queryKey: ['statistics-overview'] }),

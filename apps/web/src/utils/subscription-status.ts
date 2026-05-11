@@ -1,15 +1,16 @@
 import type { SubscriptionStatus } from '@/types/api'
+import { t } from '@/locales'
 
 export function getSubscriptionStatusText(status: SubscriptionStatus | string) {
   switch (status) {
     case 'active':
-      return '正常'
+      return t('subscriptions.status.active')
     case 'paused':
-      return '暂停'
+      return t('subscriptions.status.paused')
     case 'cancelled':
-      return '停用'
+      return t('subscriptions.status.cancelled')
     case 'expired':
-      return '过期'
+      return t('subscriptions.status.expired')
     default:
       return status
   }

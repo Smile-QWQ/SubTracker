@@ -2,15 +2,15 @@
   <n-modal
     :show="show"
     preset="card"
-    title="标签管理"
+    :title="t('tags.manage.title')"
     style="width: min(760px, calc(100vw - 24px))"
     @mask-click="$emit('close')"
     @update:show="handleUpdateShow"
   >
     <n-space vertical :size="16">
       <n-space justify="space-between" align="center">
-        <n-text depth="3">在这里统一新增、编辑和删除标签。</n-text>
-        <n-button type="primary" @click="openCreate">新增标签</n-button>
+        <n-text depth="3">{{ t('tags.manage.description') }}</n-text>
+        <n-button type="primary" @click="openCreate">{{ t('tags.manage.create') }}</n-button>
       </n-space>
 
       <n-data-table :columns="columns" :data="tags" :pagination="{ pageSize: 8 }" :bordered="false" />
@@ -23,6 +23,7 @@
 <script setup lang="ts">
 import { computed, h, ref } from 'vue'
 import { NButton, NDataTable, NModal, NPopconfirm, NSpace, NText } from 'naive-ui'
+import { t } from '@/locales'
 import TagFormModal from '@/components/TagFormModal.vue'
 import type { Tag } from '@/types/api'
 
@@ -51,7 +52,7 @@ const editing = ref<Tag | null>(null)
 
 const columns = computed(() => [
   {
-    title: '标签',
+    title: t('tags.manage.tag'),
     key: 'name',
     render: (row: Tag) =>
       h(
@@ -87,18 +88,18 @@ const columns = computed(() => [
       )
   },
   {
-    title: '排序',
+    title: t('tags.manage.sortOrder'),
     key: 'sortOrder',
     width: 90
   },
   {
-    title: '订阅数',
+    title: t('tags.manage.subscriptionCount'),
     key: 'subscriptionCount',
     width: 100,
     render: (row: Tag) => props.subscriptionCounts?.[row.id] ?? 0
   },
   {
-    title: '操作',
+    title: t('tags.manage.actions'),
     key: 'actions',
     width: 180,
     render: (row: Tag) =>
@@ -110,13 +111,13 @@ const columns = computed(() => [
               size: 'small',
               onClick: () => openEdit(row)
             },
-            { default: () => '编辑' }
+            { default: () => t('common.actions.edit') }
           ),
           h(
             NPopconfirm,
             {
-              positiveText: '删除',
-              negativeText: '取消',
+              positiveText: t('common.actions.delete'),
+              negativeText: t('common.actions.cancel'),
               onPositiveClick: () => emit('delete', row)
             },
             {
@@ -128,10 +129,12 @@ const columns = computed(() => [
                     type: 'error',
                     ghost: true
                   },
-                  { default: () => '删除' }
+                  { default: () => t('common.actions.delete') }
                 ),
               default: () =>
-                (props.subscriptionCounts?.[row.id] ?? 0) > 0 ? '删除后，该标签会从订阅上移除，确认继续？' : '确认删除该标签？'
+                (props.subscriptionCounts?.[row.id] ?? 0) > 0
+                  ? t('tags.manage.deleteInUseConfirm')
+                  : t('tags.manage.deleteConfirm')
             }
           )
         ]

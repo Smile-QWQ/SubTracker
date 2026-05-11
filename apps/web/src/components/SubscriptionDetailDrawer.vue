@@ -1,7 +1,7 @@
 <template>
   <n-drawer :show="show" :width="drawerWidth" @mask-click="emit('close')" @update:show="handleShowUpdate">
-    <n-drawer-content title="订阅详情" closable>
-      <n-empty v-if="!detail" description="暂无数据" />
+    <n-drawer-content :title="t('subscriptions.detail.title')" closable>
+      <n-empty v-if="!detail" :description="t('common.empty.noData')" />
       <template v-else>
         <n-space vertical :size="16">
           <n-space align="center">
@@ -16,11 +16,11 @@
           </n-space>
 
           <n-descriptions class="detail-descriptions" label-placement="left" :column="descriptionColumns" bordered>
-            <n-descriptions-item label="名称">{{ detail.name }}</n-descriptions-item>
-            <n-descriptions-item label="状态">
+            <n-descriptions-item :label="t('common.labels.name')">{{ detail.name }}</n-descriptions-item>
+            <n-descriptions-item :label="t('common.labels.status')">
               <n-tag :type="getSubscriptionStatusTagType(detail.status)">{{ getSubscriptionStatusText(detail.status) }}</n-tag>
             </n-descriptions-item>
-            <n-descriptions-item label="标签">
+            <n-descriptions-item :label="t('common.labels.tags')">
               <n-space size="small" wrap>
                 <n-tag
                   v-for="item in detail.tags ?? []"
@@ -31,55 +31,63 @@
                 >
                   {{ item.name }}
                 </n-tag>
-                <span v-if="!(detail.tags?.length)">未打标签</span>
+                <span v-if="!(detail.tags?.length)">{{ t('common.empty.noTags') }}</span>
               </n-space>
             </n-descriptions-item>
-            <n-descriptions-item label="自动续订" :label-style="middleAlignedCellStyle" :content-style="middleAlignedCellStyle">
-              {{ detail.autoRenew ? '已启用' : '未启用' }}
+            <n-descriptions-item :label="t('common.labels.autoRenew')">
+              {{ detail.autoRenew ? t('common.status.enabled') : t('common.status.disabled') }}
             </n-descriptions-item>
-            <n-descriptions-item label="订阅频率">每 {{ detail.billingIntervalCount }} {{ unitLabel(detail.billingIntervalUnit) }}</n-descriptions-item>
-            <n-descriptions-item label="开始日期">{{ formatDate(detail.startDate) }}</n-descriptions-item>
-            <n-descriptions-item label="下次续订">{{ formatDate(detail.nextRenewalDate) }}</n-descriptions-item>
-            <n-descriptions-item label="原始金额">{{ formatMoney(detail.amount, detail.currency) }}</n-descriptions-item>
-            <n-descriptions-item label="当前周期" :label-style="middleAlignedCellStyle" :content-style="middleAlignedCellStyle">
+            <n-descriptions-item :label="t('subscriptions.labels.interval')">
+              {{ formatInterval(detail.billingIntervalCount, detail.billingIntervalUnit) }}
+            </n-descriptions-item>
+            <n-descriptions-item :label="t('common.labels.startDate')">{{ formatDate(detail.startDate) }}</n-descriptions-item>
+            <n-descriptions-item :label="t('common.labels.nextRenewal')">{{ formatDate(detail.nextRenewalDate) }}</n-descriptions-item>
+            <n-descriptions-item :label="t('subscriptions.labels.originalAmount')">{{ formatMoney(detail.amount, detail.currency) }}</n-descriptions-item>
+            <n-descriptions-item
+              :label="t('subscriptions.labels.currentCycle')"
+              :label-style="middleAlignedCellStyle"
+              :content-style="middleAlignedCellStyle"
+            >
               {{ detail.currentCycleStartDate }} ~ {{ detail.currentCycleEndDate }}
             </n-descriptions-item>
-            <n-descriptions-item label="剩余价值">
+            <n-descriptions-item :label="t('subscriptions.labels.remainingValue')">
               <div class="detail-value-block">
                 <div class="detail-value-block__amount">
                   {{ formatMoney(detail.remainingValue, detail.remainingValueCurrency) }}
                 </div>
-                <div class="detail-value-block__meta">剩余 {{ detail.remainingDays }} 天 / {{ formatRatio(detail.remainingRatio) }}</div>
+                <div class="detail-value-block__meta">
+                  {{ t('subscriptions.detail.remainingDays', { days: detail.remainingDays, ratio: formatRatio(detail.remainingRatio) }) }}
+                </div>
               </div>
             </n-descriptions-item>
-            <n-descriptions-item label="到期前提醒">
+            <n-descriptions-item :label="t('subscriptions.labels.advanceReminders')">
               <n-space v-if="advanceReminderRuleItems.length" vertical size="small">
                 <n-tag v-for="item in advanceReminderRuleItems" :key="item.key" size="small" type="info" :bordered="false">
                   {{ item.description }}
                 </n-tag>
               </n-space>
-              <span v-else>{{ formatReminderRulesText(detail.advanceReminderRules, 'advance') }}</span>
+              <span v-else>{{ formatReminderRulesText(detail.advanceReminderRules, 'advance', t('validation.reminderRules.fallback'), { i18n: reminderRulesI18n }) }}</span>
             </n-descriptions-item>
-            <n-descriptions-item label="过期提醒">
+            <n-descriptions-item :label="t('subscriptions.labels.overdueReminders')">
               <n-space v-if="overdueReminderRuleItems.length" vertical size="small">
                 <n-tag v-for="item in overdueReminderRuleItems" :key="item.key" size="small" type="warning" :bordered="false">
                   {{ item.description }}
                 </n-tag>
               </n-space>
-              <span v-else>{{ formatReminderRulesText(detail.overdueReminderRules, 'overdue') }}</span>
+              <span v-else>{{ formatReminderRulesText(detail.overdueReminderRules, 'overdue', t('validation.reminderRules.fallback'), { i18n: reminderRulesI18n }) }}</span>
             </n-descriptions-item>
-            <n-descriptions-item label="提醒通知" :label-style="middleAlignedCellStyle" :content-style="middleAlignedCellStyle">
-              {{ detail.webhookEnabled ? '已启用' : '未启用' }}
+            <n-descriptions-item :label="t('common.labels.notifications')">
+              {{ detail.webhookEnabled ? t('common.status.enabled') : t('common.status.disabled') }}
             </n-descriptions-item>
-            <n-descriptions-item label="创建时间">{{ formatDateTime(detail.createdAt) }}</n-descriptions-item>
+            <n-descriptions-item :label="t('common.labels.createdAt')">{{ formatDateTime(detail.createdAt) }}</n-descriptions-item>
           </n-descriptions>
 
-          <n-card title="描述">
-            {{ detail.description || '暂无描述' }}
+          <n-card :title="t('common.labels.description')">
+            {{ detail.description || t('common.empty.noDescription') }}
           </n-card>
 
-          <n-card title="备注">
-            {{ detail.notes || '暂无备注' }}
+          <n-card :title="t('common.labels.notes')">
+            {{ detail.notes || t('common.empty.noNotes') }}
           </n-card>
         </n-space>
       </template>
@@ -91,6 +99,7 @@
 import { computed } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { NCard, NDescriptions, NDescriptionsItem, NDrawer, NDrawerContent, NEmpty, NSpace, NTag } from 'naive-ui'
+import { t } from '@/locales'
 import { useSettingsQuery } from '@/composables/settings-query'
 import type { SubscriptionDetail } from '@/types/api'
 import { resolveLogoUrl } from '@/utils/logo'
@@ -112,11 +121,40 @@ const descriptionColumns = computed(() => (width.value < 760 ? 1 : 2))
 const middleAlignedCellStyle = {
   verticalAlign: 'middle'
 } as const
+const reminderRulesI18n = computed(() => ({
+  fallback: t('validation.reminderRules.fallback'),
+  emptyTitle: t('validation.reminderRules.emptyTitle'),
+  resultTitle: t('validation.reminderRules.resultTitle'),
+  invalidTitle: t('validation.reminderRules.invalidTitle'),
+  defaultRulesLabel: t('validation.reminderRules.defaultRulesLabel'),
+  defaultAdvanceRulesLabel: t('validation.reminderRules.defaultAdvanceRulesLabel'),
+  defaultOverdueRulesLabel: t('validation.reminderRules.defaultOverdueRulesLabel'),
+  fallbackPreviewTitle: t('validation.reminderRules.fallbackPreviewTitle'),
+  fallbackInvalidTitle: t('validation.reminderRules.fallbackInvalidTitle'),
+  noAdvance: t('validation.reminderRules.noAdvance'),
+  noOverdue: t('validation.reminderRules.noOverdue'),
+  parseFailed: t('validation.reminderRules.parseFailed'),
+  invalidSegmentFormat: t('validation.reminderRules.invalidSegmentFormat', { segment: '{segment}' }),
+  invalidDaysInteger: t('validation.reminderRules.invalidDaysInteger', { segment: '{segment}' }),
+  invalidOverdueDays: t('validation.reminderRules.invalidOverdueDays', { segment: '{segment}' }),
+  invalidAdvanceDays: t('validation.reminderRules.invalidAdvanceDays', { segment: '{segment}' }),
+  invalidTime: t('validation.reminderRules.invalidTime', { segment: '{segment}' }),
+  inlineAdvanceSameDay: t('validation.reminderRules.inlineAdvanceSameDay', { time: '{time}' }),
+  inlineAdvanceBefore: t('validation.reminderRules.inlineAdvanceBefore', { days: '{days}', time: '{time}' }),
+  inlineOverdue: t('validation.reminderRules.inlineOverdue', { days: '{days}', time: '{time}' }),
+  evalAdvanceSameDay: t('validation.reminderRules.evalAdvanceSameDay', { time: '{time}' }),
+  evalAdvanceBefore: t('validation.reminderRules.evalAdvanceBefore', { days: '{days}', time: '{time}' }),
+  evalOverdue: t('validation.reminderRules.evalOverdue', { days: '{days}', time: '{time}' })
+}))
 const advanceReminderRuleItems = computed(() =>
-  listReminderRuleDescriptions(props.detail?.advanceReminderRules, 'advance')
+  listReminderRuleDescriptions(props.detail?.advanceReminderRules, 'advance', undefined, {
+    i18n: reminderRulesI18n.value
+  })
 )
 const overdueReminderRuleItems = computed(() =>
-  listReminderRuleDescriptions(props.detail?.overdueReminderRules, 'overdue')
+  listReminderRuleDescriptions(props.detail?.overdueReminderRules, 'overdue', undefined, {
+    i18n: reminderRulesI18n.value
+  })
 )
 
 function formatMoney(amount: number, currency: string) {
@@ -135,14 +173,18 @@ function formatDateTime(value: string) {
   return formatDateTimeInTimezone(value, settings.value?.timezone)
 }
 
-function unitLabel(unit: string) {
+function intervalUnitLabel(unit: string) {
   return {
-    day: '天',
-    week: '周',
-    month: '月',
-    quarter: '季',
-    year: '年'
+    day: t('common.units.day'),
+    week: t('common.units.week'),
+    month: t('common.units.month'),
+    quarter: t('common.units.quarter'),
+    year: t('common.units.year')
   }[unit] ?? unit
+}
+
+function formatInterval(count: number, unit: string) {
+  return t('subscriptions.values.interval', { count, unit: intervalUnitLabel(unit) })
 }
 
 function handleShowUpdate(value: boolean) {

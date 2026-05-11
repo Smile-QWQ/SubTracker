@@ -1,10 +1,10 @@
 <template>
-  <n-modal :show="show" preset="card" title="设置标签月预算" :style="modalStyle" @update:show="handleShowChange">
+  <n-modal :show="show" preset="card" :title="t('tags.budget.title')" :style="modalStyle" @update:show="handleShowChange">
     <div class="modal-intro">
-      为需要单独控制支出的标签设置月预算。未设置的标签不会参与标签预算分析。
+      {{ t('tags.budget.description') }}
     </div>
 
-    <n-input v-model:value="keyword" placeholder="搜索标签" clearable style="margin-bottom: 12px" />
+    <n-input v-model:value="keyword" :placeholder="t('tags.budget.searchPlaceholder')" clearable style="margin-bottom: 12px" />
 
     <div class="budget-list">
       <div v-for="tag in filteredTags" :key="tag.id" class="budget-item">
@@ -16,7 +16,7 @@
           v-model:value="draftBudgets[tag.id]"
           :min="0"
           :precision="2"
-          :placeholder="`未设置（${baseCurrency}）`"
+          :placeholder="t('tags.budget.budgetPlaceholder', { currency: baseCurrency })"
           style="width: 180px"
         />
       </div>
@@ -24,9 +24,9 @@
 
     <template #footer>
       <n-space justify="end">
-        <n-button @click="emit('close')">取消</n-button>
-        <n-button @click="resetDraft">重置</n-button>
-        <n-button type="primary" @click="handleSave">保存</n-button>
+        <n-button @click="emit('close')">{{ t('common.actions.cancel') }}</n-button>
+        <n-button @click="resetDraft">{{ t('common.actions.reset') }}</n-button>
+        <n-button type="primary" @click="handleSave">{{ t('common.actions.save') }}</n-button>
       </n-space>
     </template>
   </n-modal>
@@ -35,6 +35,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { NButton, NInput, NInputNumber, NModal, NSpace } from 'naive-ui'
+import { t } from '@/locales'
 import type { Tag } from '@/types/api'
 
 const props = defineProps<{

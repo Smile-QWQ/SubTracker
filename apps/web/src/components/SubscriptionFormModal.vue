@@ -1,10 +1,17 @@
 <template>
-  <n-modal :show="show" preset="card" title="订阅信息" style="width: min(920px, calc(100vw - 24px))" @mask-click="close" @update:show="handleUpdateShow">
-    <n-spin :show="saving" description="保存中，请稍候...">
+  <n-modal
+    :show="show"
+    preset="card"
+    :title="model ? t('subscriptions.form.titleEdit') : t('subscriptions.form.titleCreate')"
+    style="width: min(920px, calc(100vw - 24px))"
+    @mask-click="close"
+    @update:show="handleUpdateShow"
+  >
+    <n-spin :show="saving" :description="t('subscriptions.form.savingDescription')">
     <n-form :model="form" label-placement="top">
       <div class="name-logo-row">
-        <n-form-item label="名称" class="name-logo-row__name" :validation-status="validationStatusOf('name')" :feedback="formErrors.name">
-          <n-input v-model:value="form.name" placeholder="例如：GitHub Pro" />
+        <n-form-item :label="t('common.labels.name')" class="name-logo-row__name" :validation-status="validationStatusOf('name')" :feedback="formErrors.name">
+          <n-input v-model:value="form.name" :placeholder="t('subscriptions.form.namePlaceholder')" />
         </n-form-item>
 
         <div class="logo-dock">
@@ -13,7 +20,7 @@
               <button type="button" class="logo-dock__preview" @click="pickLogoFile">
                 <img v-if="resolvedLogoUrl" :src="resolvedLogoUrl" alt="logo" class="logo-dock__image" />
                 <div v-else class="logo-dock__placeholder">
-                  <span>{{ form.name.trim() ? '点击上传' : 'Logo' }}</span>
+                  <span>{{ form.name.trim() ? t('subscriptions.form.logo.upload') : t('subscriptions.form.logo.placeholder') }}</span>
                 </div>
               </button>
 
@@ -33,17 +40,17 @@
 
           <div v-if="showLogoPanel" class="logo-panel">
             <div class="logo-panel__header">
-              <span>选择 Logo</span>
+              <span>{{ t('subscriptions.form.logo.panelTitle') }}</span>
               <button type="button" class="logo-panel__close" @click="showLogoPanel = false">
                 <n-icon :component="CloseOutline" />
               </button>
             </div>
 
             <n-tabs v-model:value="logoPanelTab" type="segment" animated class="logo-panel__tabs">
-              <n-tab-pane :name="LOGO_TAB_WEB" :tab="`网络搜索 (${logoCandidates.length})`">
+              <n-tab-pane :name="LOGO_TAB_WEB" :tab="t('subscriptions.form.logo.webTab', { count: logoCandidates.length })">
                 <div v-if="searchingLogoCandidates" class="logo-panel__state">
                   <n-spin size="small" />
-                  <span>正在搜索 Logo...</span>
+                  <span>{{ t('subscriptions.form.logo.searching') }}</span>
                 </div>
 
                 <div v-else-if="logoCandidates.length" class="logo-panel__list">
@@ -63,13 +70,13 @@
                   </button>
                 </div>
 
-                <n-empty v-else description="当前没有可用的网络搜索结果" size="small" class="logo-panel__empty" />
+                <n-empty v-else :description="t('subscriptions.form.logo.noSearchResults')" size="small" class="logo-panel__empty" />
               </n-tab-pane>
 
-              <n-tab-pane :name="LOGO_TAB_LIBRARY" :tab="`本地已保存 (${localLogoLibrary.length})`">
+              <n-tab-pane :name="LOGO_TAB_LIBRARY" :tab="t('subscriptions.form.logo.libraryTab', { count: localLogoLibrary.length })">
                 <div v-if="loadingLocalLogoLibrary" class="logo-panel__state">
                   <n-spin size="small" />
-                  <span>正在加载本地 Logo...</span>
+                  <span>{{ t('subscriptions.form.logo.loadingLocal') }}</span>
                 </div>
 
                 <div v-else-if="localLogoLibrary.length" class="logo-panel__list">
@@ -88,7 +95,7 @@
                       <span class="logo-panel__item-label">{{ item.label }}</span>
                       <span class="logo-panel__item-meta">
                         {{ formatLogoSource(item.source) }}
-                        <template v-if="item.usageCount !== undefined"> · 已用 {{ item.usageCount }} 次</template>
+                        <template v-if="item.usageCount !== undefined"> · {{ t('subscriptions.form.logo.usedCount', { count: item.usageCount }) }}</template>
                       </span>
                       <span v-if="item.relatedSubscriptionNames?.length" class="logo-panel__item-related">
                         {{ item.relatedSubscriptionNames.join(' / ') }}
@@ -97,7 +104,7 @@
                   </div>
                 </div>
 
-                <n-empty v-else description="本地还没有可复用的 Logo" size="small" class="logo-panel__empty" />
+                <n-empty v-else :description="t('subscriptions.form.logo.noLocalResults')" size="small" class="logo-panel__empty" />
               </n-tab-pane>
             </n-tabs>
           </div>
@@ -106,53 +113,53 @@
 
       <n-grid :cols="layoutCols" :x-gap="16" :y-gap="8">
         <n-grid-item>
-          <n-form-item label="标签">
-            <n-select v-model:value="form.tagIds" :options="tagOptions" multiple filterable clearable placeholder="选择标签" />
+          <n-form-item :label="t('common.labels.tags')">
+            <n-select v-model:value="form.tagIds" :options="tagOptions" multiple filterable clearable :placeholder="t('subscriptions.form.tagPlaceholder')" />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
-          <n-form-item label="官网 / 平台地址" :validation-status="validationStatusOf('websiteUrl')" :feedback="formErrors.websiteUrl">
+          <n-form-item :label="t('subscriptions.form.websiteLabel')" :validation-status="validationStatusOf('websiteUrl')" :feedback="formErrors.websiteUrl">
             <n-input v-model:value="form.websiteUrl" placeholder="https://example.com" @blur="handleWebsiteUrlBlur" />
           </n-form-item>
         </n-grid-item>
       </n-grid>
 
-      <n-form-item label="描述" :validation-status="validationStatusOf('description')" :feedback="formErrors.description">
+      <n-form-item :label="t('common.labels.description')" :validation-status="validationStatusOf('description')" :feedback="formErrors.description">
         <n-input
           v-model:value="form.description"
           type="textarea"
           :autosize="{ minRows: 2, maxRows: 4 }"
           :maxlength="500"
-          placeholder="可选，简单记录订阅用途"
+          :placeholder="t('subscriptions.form.descriptionPlaceholder')"
         />
       </n-form-item>
 
       <n-grid :cols="moneyCols" :x-gap="16" :y-gap="8">
         <n-grid-item>
-          <n-form-item label="金额" :validation-status="validationStatusOf('amount')" :feedback="formErrors.amount">
-            <n-input-number v-model:value="form.amount" :min="0" :precision="2" style="width: 100%" placeholder="输入金额，免费可填 0" />
+          <n-form-item :label="t('common.labels.amount')" :validation-status="validationStatusOf('amount')" :feedback="formErrors.amount">
+            <n-input-number v-model:value="form.amount" :min="0" :precision="2" style="width: 100%" :placeholder="t('subscriptions.form.amountPlaceholder')" />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
-          <n-form-item label="货币" :validation-status="validationStatusOf('currency')" :feedback="formErrors.currency">
-            <n-select v-model:value="form.currency" :options="currencyOptions" filterable placeholder="选择货币" />
+          <n-form-item :label="t('common.labels.currency')" :validation-status="validationStatusOf('currency')" :feedback="formErrors.currency">
+            <n-select v-model:value="form.currency" :options="currencyOptions" filterable :placeholder="t('subscriptions.form.currencyPlaceholder')" />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
-          <n-form-item label="频率" :validation-status="validationStatusOf('billingIntervalCount')" :feedback="formErrors.billingIntervalCount">
-            <n-select v-model:value="form.billingIntervalCount" :options="frequencyOptions" placeholder="选择频率" />
+          <n-form-item :label="t('common.labels.frequency')" :validation-status="validationStatusOf('billingIntervalCount')" :feedback="formErrors.billingIntervalCount">
+            <n-select v-model:value="form.billingIntervalCount" :options="frequencyOptions" :placeholder="t('subscriptions.form.frequencyPlaceholder')" />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
-          <n-form-item label="单位" :validation-status="validationStatusOf('billingIntervalUnit')" :feedback="formErrors.billingIntervalUnit">
-            <n-select v-model:value="form.billingIntervalUnit" :options="intervalOptions" placeholder="选择单位" />
+          <n-form-item :label="t('common.labels.unit')" :validation-status="validationStatusOf('billingIntervalUnit')" :feedback="formErrors.billingIntervalUnit">
+            <n-select v-model:value="form.billingIntervalUnit" :options="intervalOptions" :placeholder="t('subscriptions.form.unitPlaceholder')" />
           </n-form-item>
         </n-grid-item>
       </n-grid>
 
       <n-grid :cols="dateCols" :x-gap="16" :y-gap="8">
         <n-grid-item>
-          <n-form-item label="开始日期" :validation-status="validationStatusOf('startDateTs')" :feedback="formErrors.startDateTs">
+          <n-form-item :label="t('common.labels.startDate')" :validation-status="validationStatusOf('startDateTs')" :feedback="formErrors.startDateTs">
             <n-date-picker
               v-model:value="form.startDateTs"
               type="date"
@@ -166,7 +173,7 @@
           <n-form-item :validation-status="validationStatusOf('nextRenewalDateTs')" :feedback="formErrors.nextRenewalDateTs">
             <template #label>
               <span class="label-with-action">
-                <span>下次续订</span>
+                <span>{{ t('subscriptions.form.nextRenewalLabel') }}</span>
                 <n-tooltip trigger="hover">
                   <template #trigger>
                     <n-button
@@ -182,7 +189,7 @@
                       </template>
                     </n-button>
                   </template>
-                  <span>按开始日期和频率重新计算下次续订</span>
+                  <span>{{ t('subscriptions.form.recalculateNextRenewal') }}</span>
                 </n-tooltip>
               </span>
             </template>
@@ -199,32 +206,32 @@
           <n-form-item>
             <template #label>
               <span class="label-with-tip">
-                <span>到期前提醒规则</span>
+                <span>{{ t('settings.labels.advanceReminderRules') }}</span>
                 <n-tooltip trigger="hover">
                   <template #trigger>
                     <n-icon class="label-with-tip__icon" :component="helpCircleOutline" />
                   </template>
-                  <span>格式说明：天数&时间;，例如 3&09:30; 表示提前 3 天在 09:30 提醒，0&09:30; 表示到期当天提醒；多条规则用 ; 分隔，留空则沿用系统默认</span>
+                  <span>{{ t('settings.helps.advanceReminderRules') }}</span>
                 </n-tooltip>
               </span>
             </template>
-            <n-input v-model:value="form.advanceReminderRules" placeholder="留空则沿用系统默认，例如：3&09:30;0&09:30;" />
+            <n-input v-model:value="form.advanceReminderRules" :placeholder="t('subscriptions.form.advanceReminderRulesPlaceholder')" />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
           <n-form-item>
             <template #label>
               <span class="label-with-tip">
-                <span>过期提醒规则</span>
+                <span>{{ t('settings.labels.overdueReminderRules') }}</span>
                 <n-tooltip trigger="hover">
                   <template #trigger>
                     <n-icon class="label-with-tip__icon" :component="helpCircleOutline" />
                   </template>
-                  <span>格式说明：天数&时间;，例如 1&09:30; 表示过期 1 天后在 09:30 提醒；多条规则用 ; 分隔，留空则沿用系统默认</span>
+                  <span>{{ t('settings.helps.overdueReminderRules') }}</span>
                 </n-tooltip>
               </span>
             </template>
-            <n-input v-model:value="form.overdueReminderRules" placeholder="留空则沿用系统默认，例如：1&09:30;2&09:30;" />
+            <n-input v-model:value="form.overdueReminderRules" :placeholder="t('subscriptions.form.overdueReminderRulesPlaceholder')" />
           </n-form-item>
         </n-grid-item>
       </n-grid>
@@ -240,36 +247,36 @@
         @visibility-change="subscriptionReminderPreviewVisible = $event"
       />
 
-      <n-form-item label="备注" :validation-status="validationStatusOf('notes')" :feedback="formErrors.notes">
+      <n-form-item :label="t('common.labels.notes')" :validation-status="validationStatusOf('notes')" :feedback="formErrors.notes">
         <n-input
           v-model:value="form.notes"
           type="textarea"
           :autosize="{ minRows: 2, maxRows: 4 }"
           :maxlength="1000"
-          placeholder="可选，记录账号、套餐或特别说明"
+          :placeholder="t('subscriptions.form.notesPlaceholder')"
         />
       </n-form-item>
 
       <div class="form-footer">
         <n-space>
           <n-switch v-model:value="form.webhookEnabled" />
-          <span>启用提醒通知</span>
+          <span>{{ t('subscriptions.form.notificationEnabledLabel') }}</span>
           <n-switch v-model:value="form.autoRenew" />
-          <span>自动续订</span>
+          <span>{{ t('common.labels.autoRenew') }}</span>
         </n-space>
         <n-space wrap>
-          <n-button :disabled="saving" @click="showAiModal = true">AI 识别</n-button>
+          <n-button :disabled="saving" @click="showAiModal = true">{{ t('subscriptions.form.actions.aiRecognize') }}</n-button>
           <n-button
             :disabled="saving"
             :type="subscriptionReminderPreviewVisible ? 'primary' : 'default'"
             :secondary="subscriptionReminderPreviewVisible"
             @click="previewSubscriptionReminderRules"
           >
-            {{ subscriptionReminderPreviewVisible ? '收起提醒预览' : '预览提醒规则' }}
+            {{ subscriptionReminderPreviewVisible ? t('subscriptions.form.actions.collapseReminderPreview') : t('subscriptions.form.actions.previewReminderRules') }}
           </n-button>
-          <n-button :disabled="saving" @click="handleReset">重置</n-button>
-          <n-button :disabled="saving" @click="close">取消</n-button>
-          <n-button type="primary" :loading="saving" :disabled="saving" @click="submit">保存</n-button>
+          <n-button :disabled="saving" @click="handleReset">{{ t('common.actions.reset') }}</n-button>
+          <n-button :disabled="saving" @click="close">{{ t('common.actions.cancel') }}</n-button>
+          <n-button type="primary" :loading="saving" :disabled="saving" @click="submit">{{ t('common.actions.save') }}</n-button>
         </n-space>
       </div>
     </n-form>
@@ -300,10 +307,10 @@ import {
   NSwitch,
   NTabPane,
   NTabs,
-  NTooltip,
-  useMessage
+  NTooltip
 } from 'naive-ui'
 import { CloseOutline, ColorWandOutline, HelpCircleOutline, SearchOutline } from '@vicons/ionicons5'
+import { t } from '@/locales'
 import { api } from '@/composables/api'
 import { useSettingsQuery } from '@/composables/settings-query'
 import ReminderRulesPreview from '@/components/ReminderRulesPreview.vue'
@@ -317,6 +324,7 @@ import {
   type SubscriptionFormErrors,
   validateSubscriptionForm
 } from '@/utils/subscription-form'
+import { useLocalizedMessage } from '@/utils/localized-message'
 import type { AiRecognitionResult, LogoSearchResult, Subscription, Tag } from '@/types/api'
 
 const LOGO_TAB_WEB = 'web'
@@ -339,7 +347,7 @@ const emit = defineEmits<{
 
 const { width } = useWindowSize()
 const { data: settings } = useSettingsQuery()
-const message = useMessage()
+const message = useLocalizedMessage()
 const helpCircleOutline = HelpCircleOutline
 const subscriptionReminderPreviewRef = ref<InstanceType<typeof ReminderRulesPreview> | null>(null)
 const subscriptionReminderPreviewVisible = ref(false)
@@ -358,13 +366,13 @@ const layoutCols = computed(() => (width.value < 700 ? 1 : 2))
 const moneyCols = computed(() => (width.value < 900 ? 2 : 4))
 const dateCols = computed(() => (width.value < 900 ? 1 : 2))
 
-const intervalOptions = [
-  { label: '天', value: 'day' },
-  { label: '周', value: 'week' },
-  { label: '月', value: 'month' },
-  { label: '季', value: 'quarter' },
-  { label: '年', value: 'year' }
-]
+const intervalOptions = computed(() => [
+  { label: t('common.units.day'), value: 'day' },
+  { label: t('common.units.week'), value: 'week' },
+  { label: t('common.units.month'), value: 'month' },
+  { label: t('common.units.quarter'), value: 'quarter' },
+  { label: t('common.units.year'), value: 'year' }
+])
 
 const frequencyOptions = Array.from({ length: 12 }, (_, index) => ({
   label: `${index + 1}`,
@@ -528,12 +536,12 @@ function hydrateFromModel(model: Subscription) {
 function handleReset() {
   if (props.model) {
     hydrateFromModel(props.model)
-    message.success('已重置为当前订阅内容')
+    message.success(t('subscriptions.messages.resetToCurrent'))
     return
   }
 
   resetForm()
-  message.success('已重置表单')
+  message.success(t('subscriptions.messages.resetForm'))
 }
 
 async function openLogoPanel() {
@@ -542,7 +550,7 @@ async function openLogoPanel() {
 
   if (!form.name.trim() && !form.websiteUrl.trim()) {
     logoPanelTab.value = LOGO_TAB_LIBRARY
-    message.info('未填写名称或官网时，先为你展示本地已保存 Logo。')
+    message.info(t('subscriptions.messages.localLogoFirst'))
     return
   }
 
@@ -565,11 +573,11 @@ async function searchLogos() {
     })
 
     if (!logoCandidates.value.length) {
-      message.warning('没有找到可用 Logo')
+      message.warning(t('subscriptions.messages.logoSearchEmpty'))
     }
   } catch (error) {
     logoCandidates.value = []
-    message.error(error instanceof Error ? error.message : 'Logo 搜索失败')
+    message.error(error instanceof Error ? error.message : t('subscriptions.messages.logoSearchFailed'))
   } finally {
     searchingLogoCandidates.value = false
   }
@@ -583,7 +591,7 @@ async function loadLocalLogoLibrary(force = false) {
   try {
     localLogoLibrary.value = await api.getSubscriptionLogoLibrary()
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '读取本地 Logo 失败')
+    message.error(error instanceof Error ? error.message : t('subscriptions.messages.localLogoLoadFailed'))
   } finally {
     loadingLocalLogoLibrary.value = false
   }
@@ -608,9 +616,9 @@ async function applyRemoteLogoCandidate(item: LogoSearchResult) {
 
     showLogoPanel.value = false
     await loadLocalLogoLibrary(true)
-    message.success('已保存到本地并应用')
+    message.success(t('subscriptions.messages.logoSavedAndApplied'))
   } catch (error) {
-    message.error(error instanceof Error ? error.message : 'Logo 导入失败')
+    message.error(error instanceof Error ? error.message : t('subscriptions.messages.logoImportFailed'))
   }
 }
 
@@ -618,7 +626,7 @@ function applyLocalLogoCandidate(item: LogoSearchResult) {
   form.logoUrl = item.logoUrl
   form.logoSource = item.source
   showLogoPanel.value = false
-  message.success('已从本地库复用')
+  message.success(t('subscriptions.messages.logoReused'))
 }
 
 async function deleteLocalLogo(item: LogoSearchResult) {
@@ -631,9 +639,9 @@ async function deleteLocalLogo(item: LogoSearchResult) {
       form.logoUrl = ''
       form.logoSource = ''
     }
-    message.success('本地 Logo 已删除')
+    message.success(t('subscriptions.messages.localLogoDeleted'))
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '删除 Logo 失败')
+    message.error(error instanceof Error ? error.message : t('subscriptions.messages.logoDeleteFailed'))
   }
 }
 
@@ -652,9 +660,9 @@ async function handleLogoFileChange(event: Event) {
     form.logoUrl = uploaded.logoUrl
     form.logoSource = uploaded.logoSource
     await loadLocalLogoLibrary(true)
-    message.success('Logo 上传成功')
+    message.success(t('subscriptions.messages.logoUploadSuccess'))
   } catch (error) {
-    message.error(error instanceof Error ? error.message : 'Logo 上传失败')
+    message.error(error instanceof Error ? error.message : t('subscriptions.messages.logoUploadFailed'))
   } finally {
     if (logoFileInputRef.value) {
       logoFileInputRef.value.value = ''
@@ -775,7 +783,7 @@ function submit() {
   form.websiteUrl = validation.normalizedWebsiteUrl ?? ''
 
   if (form.startDateTs === null || form.nextRenewalDateTs === null) {
-    message.warning('请选择开始日期和下次续订日期')
+    message.warning(t('subscriptions.messages.chooseRequiredDates'))
     return
   }
 
@@ -833,10 +841,10 @@ function readFileAsBase64(file: File) {
 
 function formatLogoSource(source: string) {
   const map: Record<string, string> = {
-    upload: '本地上传',
-    remote: '远程导入',
+    upload: t('subscriptions.form.logo.source.upload'),
+    remote: t('subscriptions.form.logo.source.remote'),
     'wallos-zip': 'Wallos ZIP',
-    local: '本地库'
+    local: t('subscriptions.form.logo.source.local')
   }
   return map[source] ?? source
 }

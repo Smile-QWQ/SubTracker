@@ -6,63 +6,68 @@
           <img :src="brandLogoUrl" alt="SubTracker logo" class="login-header__logo" />
         </div>
         <div>
-          <h1 class="login-title">登录 SubTracker</h1>
-          <p class="login-subtitle">请输入您的用户名和密码</p>
+          <h1 class="login-title">{{ t('login.title') }}</h1>
+          <p class="login-subtitle">{{ t('login.subtitle') }}</p>
         </div>
       </div>
 
       <n-form :model="form" label-placement="top" @submit.prevent="submit">
-        <n-form-item label="用户名">
+        <n-form-item :label="t('common.labels.username')">
           <n-input
             v-model:value="form.username"
-            placeholder="请输入用户名"
+            :placeholder="t('login.usernamePlaceholder')"
             @keydown.enter.prevent="submit"
           />
         </n-form-item>
-        <n-form-item label="密码">
+        <n-form-item :label="t('common.labels.password')">
           <n-input
             v-model:value="form.password"
             type="password"
             show-password-on="click"
-            placeholder="请输入密码"
+            :placeholder="t('login.passwordPlaceholder')"
             @keydown.enter.prevent="submit"
           />
         </n-form-item>
         <div class="login-options">
           <n-checkbox v-model:checked="form.rememberMe">
-            记住我
-            <span class="login-options__hint">（{{ rememberSessionDays }} 天）</span>
+            {{ t('login.rememberMe') }}
+            <span class="login-options__hint">{{ t('login.rememberMeDays', { days: rememberSessionDays }) }}</span>
           </n-checkbox>
           <n-button v-if="forgotPasswordEnabled" text type="primary" @click="forgotPasswordVisible = !forgotPasswordVisible">
-            {{ forgotPasswordVisible ? '收起找回密码' : '忘记密码' }}
+            {{ forgotPasswordVisible ? t('login.collapseForgotPassword') : t('login.forgotPassword') }}
           </n-button>
         </div>
-        <n-button type="primary" block attr-type="submit" :loading="submitting" @click="submit">登录</n-button>
+        <n-button type="primary" block attr-type="submit" :loading="submitting" @click="submit">{{ t('app.auth.login') }}</n-button>
       </n-form>
 
       <n-collapse-transition :show="forgotPasswordVisible">
         <div class="forgot-password-panel">
           <n-form label-placement="top">
-            <n-form-item label="用户名">
-              <n-input v-model:value="forgotPasswordForm.username" placeholder="请输入用户名" />
+            <n-form-item :label="t('common.labels.username')">
+              <n-input v-model:value="forgotPasswordForm.username" :placeholder="t('login.usernamePlaceholder')" />
             </n-form-item>
-            <n-button block secondary :loading="sendingCode" @click="sendForgotPasswordCode">发送验证码</n-button>
-            <n-form-item label="验证码" style="margin-top: 12px">
-              <n-input v-model:value="forgotPasswordForm.code" placeholder="请输入 6 位验证码" />
+            <n-button block secondary :loading="sendingCode" @click="sendForgotPasswordCode">{{ t('login.sendCode') }}</n-button>
+            <n-form-item :label="t('common.labels.code')" style="margin-top: 12px">
+              <n-input v-model:value="forgotPasswordForm.code" :placeholder="t('login.codePlaceholder')" />
             </n-form-item>
-            <n-form-item label="新密码">
-              <n-input v-model:value="forgotPasswordForm.newPassword" type="password" show-password-on="click" placeholder="请输入新密码" />
+            <n-form-item :label="t('app.newPassword')">
+              <n-input
+                v-model:value="forgotPasswordForm.newPassword"
+                type="password"
+                show-password-on="click"
+                :placeholder="t('login.newPasswordPlaceholder')"
+              />
             </n-form-item>
-            <n-form-item label="确认新密码">
+            <n-form-item :label="t('app.confirmNewPassword')">
               <n-input
                 v-model:value="forgotPasswordForm.confirmPassword"
                 type="password"
                 show-password-on="click"
-                placeholder="请再次输入新密码"
+                :placeholder="t('login.confirmNewPasswordPlaceholder')"
               />
             </n-form-item>
             <n-button block type="primary" ghost :loading="resettingPassword" @click="resetForgotPassword">
-              验证并重置密码
+              {{ t('login.verifyAndResetPassword') }}
             </n-button>
           </n-form>
         </div>
@@ -74,15 +79,17 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NCard, NCheckbox, NCollapseTransition, NForm, NFormItem, NIcon, NInput, useMessage } from 'naive-ui'
+import { NButton, NCard, NCheckbox, NCollapseTransition, NForm, NFormItem, NIcon, NInput } from 'naive-ui'
 import brandLogoUrl from '@/assets/brand-logo.png'
 import { api } from '@/composables/api'
+import { t } from '@/locales'
 import { useAuthStore } from '@/stores/auth'
 import { validateLoginForm } from '@/utils/login-validation'
+import { useLocalizedMessage } from '@/utils/localized-message'
 
 const route = useRoute()
 const router = useRouter()
-const message = useMessage()
+const message = useLocalizedMessage()
 const authStore = useAuthStore()
 const rememberSessionDays = ref(7)
 const forgotPasswordEnabled = ref(false)
@@ -132,11 +139,11 @@ async function submit() {
       form.rememberMe,
       form.rememberMe ? rememberSessionDays.value : undefined
     )
-    message.success('登录成功')
+    message.success(t('auth.success.login'))
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard'
     await router.replace(redirect)
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '登录失败')
+    message.error(error instanceof Error ? error.message : t('auth.error.login'))
   } finally {
     submitting.value = false
   }
@@ -145,7 +152,7 @@ async function submit() {
 async function sendForgotPasswordCode() {
   if (sendingCode.value) return
   if (!forgotPasswordForm.username.trim()) {
-    message.error('请输入用户名')
+    message.error(t('auth.validation.usernameRequired'))
     return
   }
 
@@ -154,9 +161,9 @@ async function sendForgotPasswordCode() {
     await api.requestForgotPasswordCode({
       username: forgotPasswordForm.username.trim()
     })
-    message.success('如果用户名有效且通知已启用，验证码已发送')
+    message.success(t('auth.success.forgotPasswordCodeSent'))
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '验证码发送失败')
+    message.error(error instanceof Error ? error.message : t('auth.error.forgotPasswordCodeSend'))
   } finally {
     sendingCode.value = false
   }
@@ -165,25 +172,25 @@ async function sendForgotPasswordCode() {
 async function resetForgotPassword() {
   if (resettingPassword.value) return
   if (!forgotPasswordForm.username.trim()) {
-    message.error('请输入用户名')
+    message.error(t('auth.validation.usernameRequired'))
     return
   }
   if (!/^\d{6}$/.test(forgotPasswordForm.code.trim())) {
-    message.error('请输入 6 位验证码')
+    message.error(t('auth.validation.codeRequired'))
     return
   }
   const newPassword = forgotPasswordForm.newPassword.trim()
   const confirmPassword = forgotPasswordForm.confirmPassword.trim()
   if (!newPassword) {
-    message.error('请输入新密码')
+    message.error(t('auth.validation.newPasswordRequired'))
     return
   }
   if (newPassword.length < 4) {
-    message.error('新密码至少 4 位')
+    message.error(t('auth.validation.newPasswordMin'))
     return
   }
   if (newPassword !== confirmPassword) {
-    message.error('两次输入的新密码不一致')
+    message.error(t('auth.validation.passwordMismatch'))
     return
   }
 
@@ -195,11 +202,11 @@ async function resetForgotPassword() {
       newPassword
     })
     authStore.setSession(result.token, result.user.username, false, result.user.mustChangePassword)
-    message.success('密码已重置并自动登录')
+    message.success(t('auth.success.passwordResetAndLoggedIn'))
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard'
     await router.replace(redirect)
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '密码重置失败')
+    message.error(error instanceof Error ? error.message : t('auth.error.passwordReset'))
   } finally {
     resettingPassword.value = false
   }

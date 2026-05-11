@@ -1,4 +1,5 @@
 import type { Subscription, SubscriptionStatus } from '@/types/api'
+import { t } from '@/locales'
 
 export type BatchSettableStatus = Extract<SubscriptionStatus, 'active' | 'paused' | 'cancelled'>
 
@@ -26,9 +27,9 @@ export function areAllVisibleSubscriptionsSelected(visibleIds: string[], selecte
 
 export function getBatchStatusText(status: BatchSettableStatus) {
   return {
-    active: '正常',
-    paused: '暂停',
-    cancelled: '停用'
+    active: t('subscriptions.status.active'),
+    paused: t('subscriptions.status.paused'),
+    cancelled: t('subscriptions.status.cancelled')
   }[status]
 }
 

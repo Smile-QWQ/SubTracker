@@ -2,44 +2,45 @@
   <n-modal
     :show="show"
     preset="card"
-    :title="model ? '编辑标签' : '新增标签'"
+    :title="model ? t('tags.form.editTitle') : t('tags.form.createTitle')"
     style="width: min(560px, calc(100vw - 24px))"
     @mask-click="close"
     @update:show="handleUpdateShow"
   >
     <n-form :model="form" label-placement="top">
-      <n-form-item label="标签名称">
-        <n-input v-model:value="form.name" placeholder="例如：云服务" />
+      <n-form-item :label="t('tags.form.nameLabel')">
+        <n-input v-model:value="form.name" :placeholder="t('tags.form.namePlaceholder')" />
       </n-form-item>
 
       <n-grid :cols="2" :x-gap="16">
         <n-grid-item>
-          <n-form-item label="颜色">
+          <n-form-item :label="t('tags.form.colorLabel')">
             <div class="color-field">
-              <n-input v-model:value="form.color" placeholder="#3b82f6 或 rgb(59,130,246)" />
+              <n-input v-model:value="form.color" :placeholder="t('tags.form.colorPlaceholder')" />
               <n-color-picker v-model:value="form.color" :modes="['hex', 'rgb']" :show-alpha="false" class="color-field__picker" />
             </div>
           </n-form-item>
         </n-grid-item>
 
         <n-grid-item>
-          <n-form-item label="排序">
+          <n-form-item :label="t('tags.form.sortOrderLabel')">
             <n-input-number v-model:value="form.sortOrder" :min="0" style="width: 100%" />
           </n-form-item>
         </n-grid-item>
       </n-grid>
 
       <n-space justify="end">
-        <n-button @click="close">取消</n-button>
-        <n-button type="primary" @click="submit">保存</n-button>
+        <n-button @click="close">{{ t('common.actions.cancel') }}</n-button>
+        <n-button type="primary" @click="submit">{{ t('common.actions.save') }}</n-button>
       </n-space>
     </n-form>
   </n-modal>
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
+import { computed, reactive, watch } from 'vue'
 import { NButton, NColorPicker, NForm, NFormItem, NGrid, NGridItem, NInput, NInputNumber, NModal, NSpace } from 'naive-ui'
+import { t } from '@/locales'
 import type { Tag } from '@/types/api'
 
 type TagFormPayload = {

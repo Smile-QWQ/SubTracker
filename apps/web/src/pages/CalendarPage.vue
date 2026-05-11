@@ -1,30 +1,30 @@
 <template>
   <div>
     <page-header
-      title="订阅日历"
-      subtitle="查看订阅日期分布，支持月视图和列表视图"
+      :title="t('calendar.page.title')"
+      :subtitle="t('calendar.page.subtitle')"
       :icon="calendarOutline"
       icon-background="linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)"
     />
 
     <n-grid :cols="summaryCols" :x-gap="12" :y-gap="12" style="margin-bottom: 12px">
       <n-grid-item>
-        <stat-card label="当前月份" :value="panelMonthLabel" suffix="当前正在查看的月份" :icon="calendarClearOutline" />
+        <stat-card :label="t('calendar.cards.currentMonth')" :value="panelMonthLabel" :suffix="t('calendar.cards.currentMonthSuffix')" :icon="calendarClearOutline" />
       </n-grid-item>
       <n-grid-item>
-        <stat-card label="本月应续订数量" :value="monthEventCount" suffix="当前月份内的订阅数" :icon="notificationsOutline" />
+        <stat-card :label="t('calendar.cards.monthlyRenewalCount')" :value="monthEventCount" :suffix="t('calendar.cards.monthlyRenewalCountSuffix')" :icon="notificationsOutline" />
       </n-grid-item>
       <n-grid-item>
         <stat-card
-          label="本月预计需支出"
+          :label="t('calendar.cards.monthlySpend')"
           :value="`${baseCurrency} ${monthConvertedAmount.toFixed(2)}`"
-          suffix="已按汇率折算"
+          :suffix="t('calendar.cards.convertedSuffix')"
           :icon="walletOutline"
         />
       </n-grid-item>
       <n-grid-item>
         <stat-card
-          label="选中日期订阅数"
+          :label="t('calendar.cards.selectedDateRenewals')"
           :value="selectedDateEvents.length"
           :suffix="`${selectedDateLabel} · ${baseCurrency} ${selectedDateConvertedAmount.toFixed(2)}`"
           :icon="todayOutline"
@@ -34,14 +34,14 @@
 
     <n-card class="calendar-panel-card">
       <n-tabs v-model:value="tab">
-        <n-tab-pane name="month" tab="月视图">
+        <n-tab-pane name="month" :tab="t('calendar.tabs.month')">
           <n-grid :cols="calendarCols" :x-gap="12" :y-gap="12">
             <n-grid-item>
               <div class="calendar-wrapper">
                 <n-calendar v-model:value="selectedDateTs" @panel-change="handlePanelChange">
                   <template #default="{ year, month, date }">
                     <div v-if="getDaySummary(year, month, date)" class="calendar-cell-summary">
-                      <div class="calendar-cell-summary__count">{{ getDaySummary(year, month, date)?.count }} 笔</div>
+                      <div class="calendar-cell-summary__count">{{ getDaySummary(year, month, date)?.count }} {{ t('calendar.detail.itemsSuffix') }}</div>
                       <div class="calendar-cell-summary__amount">
                         {{ baseCurrency }} {{ getDaySummary(year, month, date)?.convertedAmount.toFixed(0) }}
                       </div>
@@ -52,14 +52,14 @@
             </n-grid-item>
 
             <n-grid-item>
-              <n-card :title="`当天续订（${selectedDateLabel}）`" size="small" class="day-detail-card">
+              <n-card :title="t('calendar.detail.dayRenewalsTitle', { date: selectedDateLabel })" size="small" class="day-detail-card">
                 <template #header-extra>
                   <span class="day-summary-inline">
-                    共 {{ selectedDateEvents.length }} 笔 · {{ baseCurrency }} {{ selectedDateConvertedAmount.toFixed(2) }}
+                    {{ t('calendar.detail.dayRenewalsSummary', { count: selectedDateEvents.length, currency: baseCurrency, amount: selectedDateConvertedAmount.toFixed(2) }) }}
                   </span>
                 </template>
 
-                <n-empty v-if="selectedDateEvents.length === 0" description="当天无续订" />
+                <n-empty v-if="selectedDateEvents.length === 0" :description="t('calendar.detail.noRenewalOnDay')" />
 
                 <n-space v-else vertical :size="10">
                   <div v-for="item in selectedDateEvents" :key="item.id" class="day-event-item">
@@ -71,7 +71,7 @@
                     </div>
 
                     <div class="day-event-item__meta">
-                      {{ item.currency }} {{ item.amount.toFixed(2) }} / 折算 {{ baseCurrency }}
+                      {{ item.currency }} {{ item.amount.toFixed(2) }} / {{ t('calendar.detail.converted') }} {{ baseCurrency }}
                       {{ item.convertedAmount.toFixed(2) }}
                     </div>
                   </div>
@@ -81,7 +81,7 @@
           </n-grid>
         </n-tab-pane>
 
-        <n-tab-pane name="list" tab="列表视图">
+        <n-tab-pane name="list" :tab="t('calendar.tabs.list')">
           <n-data-table :columns="columns" :data="events" :pagination="{ pageSize: 12 }" />
         </n-tab-pane>
       </n-tabs>
@@ -100,6 +100,7 @@ import {
   TodayOutline,
   WalletOutline
 } from '@vicons/ionicons5'
+import { t } from '@/locales'
 import { useCalendarEventsQuery } from '@/composables/calendar-events-query'
 import { useSettingsQuery } from '@/composables/settings-query'
 import PageHeader from '@/components/PageHeader.vue'
@@ -204,24 +205,24 @@ const monthEventCount = computed(() => events.value.length)
 const monthConvertedAmount = computed(() => events.value.reduce((sum, item) => sum + item.convertedAmount, 0))
 
 const columns = [
-  { title: '订阅', key: 'title' },
+  { title: t('calendar.table.subscription'), key: 'title' },
   {
-    title: '日期',
+    title: t('calendar.table.date'),
     key: 'date',
     render: (row: CalendarEvent) => formatDateInTimezone(row.date, settings.value?.timezone)
   },
   {
-    title: '原始金额',
+    title: t('calendar.table.amount'),
     key: 'amount',
     render: (row: CalendarEvent) => `${row.currency} ${row.amount.toFixed(2)}`
   },
   {
-    title: '折算金额',
+    title: t('calendar.table.convertedAmount'),
     key: 'convertedAmount',
     render: (row: CalendarEvent) => `${baseCurrency.value} ${row.convertedAmount.toFixed(2)}`
   },
   {
-    title: '状态',
+    title: t('calendar.table.status'),
     key: 'status',
     render: (row: CalendarEvent) => getSubscriptionStatusText(row.status)
   }

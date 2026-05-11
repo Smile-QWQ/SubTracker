@@ -4,6 +4,7 @@ import { createPinia } from 'pinia'
 import { create, NConfigProvider, NMessageProvider } from 'naive-ui'
 import App from './App.vue'
 import { router } from './router'
+import { i18n } from './locales'
 import './style.css'
 
 const naive = create({
@@ -16,5 +17,6 @@ const queryClient = new QueryClient()
 app.use(createPinia())
 app.use(router)
 app.use(naive)
+app.use(i18n)
 app.use(VueQueryPlugin, { queryClient })
 app.mount('#app')

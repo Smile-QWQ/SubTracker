@@ -36,6 +36,8 @@ import type {
 } from '@/types/api'
 import { clearAuthSession, getStoredToken } from '@/utils/auth-storage'
 import { getApiBaseUrl } from '@/utils/api-base'
+import { getAppLocale } from '@/locales'
+import { getMessage } from '@subtracker/shared'
 
 const client = axios.create({
   baseURL: getApiBaseUrl(import.meta.env.VITE_API_BASE_URL),
@@ -49,6 +51,7 @@ client.interceptors.request.use((request) => {
   if (token) {
     request.headers.Authorization = `Bearer ${token}`
   }
+  request.headers['X-SubTracker-Locale'] = getAppLocale()
   return request
 })
 
@@ -68,7 +71,8 @@ client.interceptors.response.use(
       ? Object.values(fieldErrors).flatMap((messages) => messages ?? []).find(Boolean)
       : null
     const message = firstFieldError || errorPayload?.message
-    return Promise.reject(new Error(message || error.message || '请求失败'))
+    const fallback = getMessage(getAppLocale(), 'common.errors.requestFailed')
+    return Promise.reject(new Error(message || error.message || fallback))
   }
 )
 
