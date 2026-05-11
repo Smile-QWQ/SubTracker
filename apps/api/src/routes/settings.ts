@@ -2,10 +2,13 @@ import { FastifyInstance } from 'fastify'
 import {
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_OVERDUE_REMINDER_RULES,
-  SettingsSchema
+  SettingsSchema,
+  getMessage,
+  type AppLocale
 } from '@subtracker/shared'
 import { prisma } from '../db'
 import { sendError, sendOk } from '../http'
+import { detectRequestLocale } from '../i18n'
 import { getAppSettings, setSetting } from '../services/settings.service'
 import { validateNotificationTargetUrl } from '../services/notification-url.service'
 import {
@@ -34,23 +37,46 @@ function hasDirectForgotPasswordChannelEnabled(settings: {
   )
 }
 
-function validateSettingsPayload(settings: Awaited<ReturnType<typeof getAppSettings>>) {
+function validateSettingsPayload(
+  settings: Awaited<ReturnType<typeof getAppSettings>>,
+  locale: AppLocale = 'zh-CN'
+) {
+  const labels = {
+    smtpHost: getMessage(locale, 'settings.labels.smtpHost'),
+    port: getMessage(locale, 'common.labels.port'),
+    username: getMessage(locale, 'common.labels.username'),
+    password: getMessage(locale, 'common.labels.password'),
+    from: getMessage(locale, 'common.labels.from'),
+    to: getMessage(locale, 'common.labels.to'),
+    resendApiUrl: getMessage(locale, 'settings.labels.resendApiUrl'),
+    resendApiKey: getMessage(locale, 'settings.labels.resendApiKey'),
+    botToken: getMessage(locale, 'settings.labels.botToken'),
+    chatId: getMessage(locale, 'settings.labels.chatId'),
+    sendKey: getMessage(locale, 'settings.labels.sendKey'),
+    url: getMessage(locale, 'common.labels.url'),
+    token: getMessage(locale, 'common.labels.token'),
+    providerName: getMessage(locale, 'settings.labels.providerName'),
+    model: getMessage(locale, 'common.labels.model'),
+    apiBaseUrl: getMessage(locale, 'settings.labels.apiBaseUrl'),
+    apiKey: getMessage(locale, 'settings.labels.apiKey')
+  }
+
   if (settings.emailNotificationsEnabled) {
     const missingEmailFields =
       settings.emailProvider === 'resend'
         ? [
-            ['Resend API URL', settings.resendConfig.apiBaseUrl],
-            ['Resend API Key', settings.resendConfig.apiKey],
-            ['发件人', settings.resendConfig.from],
-            ['收件人', settings.resendConfig.to]
+            [labels.resendApiUrl, settings.resendConfig.apiBaseUrl],
+            [labels.resendApiKey, settings.resendConfig.apiKey],
+            [labels.from, settings.resendConfig.from],
+            [labels.to, settings.resendConfig.to]
           ]
         : [
-            ['SMTP Host', settings.smtpConfig.host],
-            ['端口', settings.smtpConfig.port],
-            ['用户名', settings.smtpConfig.username],
-            ['密码', settings.smtpConfig.password],
-            ['发件人', settings.smtpConfig.from],
-            ['收件人', settings.smtpConfig.to]
+            [labels.smtpHost, settings.smtpConfig.host],
+            [labels.port, settings.smtpConfig.port],
+            [labels.username, settings.smtpConfig.username],
+            [labels.password, settings.smtpConfig.password],
+            [labels.from, settings.smtpConfig.from],
+            [labels.to, settings.smtpConfig.to]
           ]
 
     const missingEmailLabels = missingEmailFields
@@ -58,55 +84,71 @@ function validateSettingsPayload(settings: Awaited<ReturnType<typeof getAppSetti
       .map(([label]) => label)
 
     if (missingEmailLabels.length) {
-      throw new Error(`启用邮箱通知时必须填写：${missingEmailLabels.join('、')}`)
+      throw new Error(
+        getMessage(locale, 'api.errors.settings.emailFieldsRequired', {
+          fields: missingEmailLabels.join(locale === 'en-US' ? ', ' : '、')
+        })
+      )
     }
   }
 
   if (settings.pushplusNotificationsEnabled && !settings.pushplusConfig.token.trim()) {
-    throw new Error('启用 PushPlus 时必须填写 Token')
+    throw new Error(getMessage(locale, 'api.errors.settings.pushplusTokenRequired'))
   }
 
   const missingTelegramFields = [
-    ['Bot Token', settings.telegramConfig.botToken],
-    ['Chat ID', settings.telegramConfig.chatId]
+    [labels.botToken, settings.telegramConfig.botToken],
+    [labels.chatId, settings.telegramConfig.chatId]
   ]
     .filter(([, value]) => !String(value ?? '').trim())
     .map(([label]) => label)
 
   if (settings.telegramNotificationsEnabled && missingTelegramFields.length) {
-    throw new Error(`启用 Telegram 通知时必须填写：${missingTelegramFields.join('、')}`)
+    throw new Error(
+      getMessage(locale, 'api.errors.settings.telegramFieldsRequired', {
+        fields: missingTelegramFields.join(locale === 'en-US' ? ', ' : '、')
+      })
+    )
   }
 
   if (settings.serverchanNotificationsEnabled && !settings.serverchanConfig.sendkey.trim()) {
-    throw new Error('启用 Server 酱时必须填写 SendKey')
+    throw new Error(getMessage(locale, 'api.errors.settings.serverchanSendKeyRequired'))
   }
 
   if (settings.gotifyNotificationsEnabled) {
     const missingGotifyFields = [
-      ['URL', settings.gotifyConfig.url],
-      ['Token', settings.gotifyConfig.token]
+      [labels.url, settings.gotifyConfig.url],
+      [labels.token, settings.gotifyConfig.token]
     ]
       .filter(([, value]) => !String(value ?? '').trim())
       .map(([label]) => label)
 
     if (missingGotifyFields.length) {
-      throw new Error(`启用 Gotify 时必须填写：${missingGotifyFields.join('、')}`)
+      throw new Error(
+        getMessage(locale, 'api.errors.settings.gotifyFieldsRequired', {
+          fields: missingGotifyFields.join(locale === 'en-US' ? ', ' : '、')
+        })
+      )
     }
 
     validateNotificationTargetUrl(settings.gotifyConfig.url.trim(), 'Gotify URL')
   }
 
   const missingAiFields = [
-    ['Provider 名称', settings.aiConfig.providerName],
-    ['Model', settings.aiConfig.model],
-    ['API Base URL', settings.aiConfig.baseUrl],
-    ['API Key', settings.aiConfig.apiKey]
+    [labels.providerName, settings.aiConfig.providerName],
+    [labels.model, settings.aiConfig.model],
+    [labels.apiBaseUrl, settings.aiConfig.baseUrl],
+    [labels.apiKey, settings.aiConfig.apiKey]
   ]
     .filter(([, value]) => !String(value ?? '').trim())
     .map(([label]) => label)
 
   if (settings.aiConfig.enabled && missingAiFields.length) {
-    throw new Error(`启用 AI 能力时必须填写：${missingAiFields.join('、')}`)
+    throw new Error(
+      getMessage(locale, 'api.errors.settings.aiFieldsRequired', {
+        fields: missingAiFields.join(locale === 'en-US' ? ', ' : '、')
+      })
+    )
   }
 }
 
@@ -154,9 +196,12 @@ export async function settingsRoutes(app: FastifyInstance) {
   })
 
   app.patch('/settings', async (request, reply) => {
+    const locale = request.locale ?? detectRequestLocale(request)
     const parsed = SettingsSchema.partial().safeParse(request.body)
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid settings payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidSettingsPayload', parsed.error.flatten(), {
+        locale
+      })
     }
 
     const currentSettings = await getAppSettings()
@@ -165,7 +210,9 @@ export async function settingsRoutes(app: FastifyInstance) {
     try {
       normalizedReminderSettings = normalizeReminderSettingsPayload(parsed.data, currentSettings)
     } catch (error) {
-      return sendError(reply, 422, 'validation_error', error instanceof Error ? error.message : 'Invalid reminder rules')
+      return sendError(reply, 422, 'validation_error', error instanceof Error ? error.message : 'api.errors.validation.invalidReminderRules', undefined, {
+        locale
+      })
     }
 
     const nextSettings = {
@@ -198,16 +245,20 @@ export async function settingsRoutes(app: FastifyInstance) {
     }
 
     try {
-      validateSettingsPayload(nextSettings)
+      validateSettingsPayload(nextSettings, locale)
     } catch (error) {
-      return sendError(reply, 422, 'validation_error', error instanceof Error ? error.message : 'Invalid settings payload')
+      return sendError(reply, 422, 'validation_error', error instanceof Error ? error.message : 'api.errors.validation.invalidSettingsPayload', undefined, {
+        locale
+      })
     }
 
     if (
       parsed.data.forgotPasswordEnabled === true &&
       !hasDirectForgotPasswordChannelEnabled(nextSettings)
     ) {
-      return sendError(reply, 422, 'validation_error', '请先启用至少一个可直达的通知渠道，再开启忘记密码')
+      return sendError(reply, 422, 'validation_error', 'api.errors.auth.forgotPasswordChannelRequired', undefined, {
+        locale
+      })
     }
 
     if (!hasDirectForgotPasswordChannelEnabled(nextSettings)) {

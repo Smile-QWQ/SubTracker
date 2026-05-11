@@ -135,6 +135,32 @@ describe('settings routes validation', () => {
     expect(res.json().error.message).toContain('启用 AI 能力时必须填写')
   })
 
+  it('returns english validation errors when locale header is en-US', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      headers: {
+        'X-SubTracker-Locale': 'en-US'
+      },
+      payload: {
+        emailNotificationsEnabled: true,
+        emailProvider: 'smtp',
+        smtpConfig: {
+          host: '',
+          port: 587,
+          secure: false,
+          username: '',
+          password: '',
+          from: '',
+          to: ''
+        }
+      }
+    })
+
+    expect(res.statusCode).toBe(422)
+    expect(res.json().error.message).toBe('To enable Email notifications, fill in: SMTP Host, Username, Password, From, To')
+  })
+
   it('accepts dashboard summary switch without forcing AI recognition to be enabled', async () => {
     const res = await app.inject({
       method: 'PATCH',

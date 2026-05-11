@@ -1,4 +1,12 @@
 import { z } from 'zod'
+import {
+  AppLocaleSchema,
+  DEFAULT_APP_LOCALE,
+  LOCALE_PREFERENCE_STORAGE_KEY,
+  normalizeAppLocale,
+  resolveAppLocaleFromAcceptLanguage,
+  type AppLocale
+} from './locale-core'
 
 const WEBSITE_URL_ERROR_MESSAGE = '请输入合法网址，例如 https://example.com'
 const FQDN_LABEL_RE = /^[a-z_\u00a1-\uffff0-9-]+$/i
@@ -107,66 +115,6 @@ function formatWebsiteUrl(url: URL): string {
   return href
 }
 
-export const DEFAULT_AI_SUBSCRIPTION_PROMPT = `你是订阅账单信息提取助手。请从输入的文本或截图中提取订阅信息，并且只返回 JSON。
-输出字段：
-- name
-- description
-- amount
-- currency
-- billingIntervalCount
-- billingIntervalUnit(day|week|month|quarter|year)
-- startDate(YYYY-MM-DD)
-- nextRenewalDate(YYYY-MM-DD)
-- notifyDaysBefore
-- websiteUrl
-- notes
-- confidence(0~1)
-- rawText
-
-规则：
-1. 不确定就留空，不要猜。
-2. 金额必须是数字。
-3. 币种必须是 3 位大写代码，例如 CNY、USD。
-4. 周期单位必须在 day/week/month/quarter/year 中。
-5. 只返回 JSON，不要返回 Markdown。`
-
-export const DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT = `你是订阅运营摘要助手。请基于用户当前的订阅统计数据，输出一份简洁、准确、可执行的 Markdown 总结。
-
-目标：
-1. 帮助用户快速理解当前订阅规模、支出结构、预算压力和近期续订风险。
-2. 总结数据中的明显模式、异常点和需要关注的事项。
-3. 给出中性、可执行、但不依赖具体服务功能知识的建议。
-
-硬性要求：
-- 只能基于输入数据分析，不要虚构事实。
-- 不要假设你了解某个订阅服务的功能细节。
-- 不要输出“取消某服务更省钱”“某两个服务功能重叠”之类的建议。
-- 不要臆测用户偏好、使用频率或用途。
-- 不要输出 JSON，不要输出代码块，只输出 Markdown 正文。
-
-输出建议结构：
-## 总览
-## 支出结构
-## 近期风险
-## 值得注意的模式
-## 中性建议
-
-写作要求：
-- 使用简体中文。
-- 结论明确，少空话。
-- 每个小节控制在 2~5 条要点内。
-- 如果某部分没有明显异常，直接说明“暂无显著异常”或“整体平稳”。`
-
-export const DEFAULT_AI_DASHBOARD_SUMMARY_PREVIEW_PROMPT = `你是订阅统计摘要压缩助手。请根据已经生成好的完整 AI 总结，提炼出一个默认折叠展示用的超简短摘要。
-
-硬性要求：
-- 只输出简体中文纯文本，不要输出 Markdown，不要输出代码块。
-- 输出 2 到 3 行，每行一句，自然换行。
-- 不要输出标题，不要输出项目符号，不要编号。
-- 只保留最重要的结论：订阅规模、预算压力、近期风险。
-- 不要发散，不要补充原文没有的信息。
-- 如果原文信息有限，就直接给出 1 到 2 句自然语言摘要。`
-
 function normalizePreviewSource(text: string) {
   return String(text ?? '')
     .replace(/\r\n/g, '\n')
@@ -188,6 +136,27 @@ function normalizePreviewSource(text: string) {
 export function formatAiSummaryPreviewText(text: string) {
   return normalizePreviewSource(text)
 }
+
+export {
+  DEFAULT_AI_DASHBOARD_SUMMARY_PREVIEW_PROMPT,
+  DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT,
+  DEFAULT_AI_SUBSCRIPTION_PROMPT,
+  SUPPORTED_APP_LOCALES,
+  detectLocaleFromAcceptLanguage,
+  getDefaultAiDashboardSummaryPreviewPrompt,
+  getDefaultAiDashboardSummaryPrompt,
+  getDefaultAiSubscriptionPrompt,
+  getMessage,
+  sharedMessages
+} from './i18n'
+export {
+  type AppLocale,
+  AppLocaleSchema,
+  DEFAULT_APP_LOCALE,
+  LOCALE_PREFERENCE_STORAGE_KEY,
+  normalizeAppLocale,
+  resolveAppLocaleFromAcceptLanguage
+} from './locale-core'
 
 export const SubscriptionStatusSchema = z.enum(['active', 'paused', 'cancelled', 'expired'])
 export const BillingIntervalUnitSchema = z.enum(['day', 'week', 'month', 'quarter', 'year'])
@@ -374,6 +343,7 @@ export const AiConfigSchema = z.object({
 })
 
 export const SettingsSchema = z.object({
+  systemDefaultLocale: AppLocaleSchema.default(DEFAULT_APP_LOCALE),
   baseCurrency: z.string().length(3).default('CNY').transform((v) => v.toUpperCase()),
   timezone: TimeZoneSchema.default(DEFAULT_TIMEZONE),
   defaultNotifyDays: z.number().int().min(0).max(365).default(3),

@@ -1,4 +1,5 @@
 import { createHash, randomInt } from 'node:crypto'
+import type { AppLocale } from '@subtracker/shared'
 import { getNotificationChannelSettings, getSetting, setSetting } from './settings.service'
 import { getStoredCredentials, resetPasswordForStoredUsername } from './auth.service'
 import { sendForgotPasswordVerificationCode } from './channel-notification.service'
@@ -26,6 +27,33 @@ type StoredRateLimitRecord = {
   count: number
   windowStartedAt: number
 }
+
+type ForgotPasswordError = {
+  status: number
+  code: string
+  message: string
+  retryAfterSeconds?: number
+  messageParams?: Record<string, string | number | boolean | null | undefined>
+}
+
+type ForgotPasswordFailure = {
+  ok: false
+  error: ForgotPasswordError
+}
+
+type ForgotPasswordRequestResult =
+  | {
+      ok: true
+      accepted: true
+    }
+  | ForgotPasswordFailure
+
+type ForgotPasswordResetResult =
+  | {
+      ok: true
+      result: NonNullable<Awaited<ReturnType<typeof resetPasswordForStoredUsername>>>
+    }
+  | ForgotPasswordFailure
 
 function hashVerificationCode(code: string) {
   return createHash('sha256').update(code).digest('hex')
@@ -95,15 +123,19 @@ export async function clearForgotPasswordChallenge() {
   await setSetting(FORGOT_PASSWORD_CHALLENGE_KEY, null)
 }
 
-export async function requestForgotPasswordChallenge(username: string, remoteAddress: string) {
+export async function requestForgotPasswordChallenge(
+  username: string,
+  remoteAddress: string,
+  locale?: AppLocale
+): Promise<ForgotPasswordRequestResult> {
   if (!(await isForgotPasswordEnabled())) {
     return {
       ok: false as const,
       error: {
         status: 403,
         code: 'forgot_password_disabled',
-        message: '当前未开启忘记密码，或未配置可用通知渠道'
-      }
+        message: 'api.errors.auth.forgotPasswordDisabled'
+      } satisfies ForgotPasswordError
     }
   }
 
@@ -120,9 +152,9 @@ export async function requestForgotPasswordChallenge(username: string, remoteAdd
       error: {
         status: 429,
         code: 'forgot_password_request_rate_limited',
-        message: '验证码发送过于频繁，请稍后再试',
+        message: 'api.errors.auth.forgotPasswordRequestRateLimited',
         retryAfterSeconds
-      }
+      } satisfies ForgotPasswordError
     }
   }
 
@@ -143,9 +175,9 @@ export async function requestForgotPasswordChallenge(username: string, remoteAdd
         error: {
           status: 429,
           code: 'forgot_password_request_cooldown',
-          message: '验证码刚刚发送过，请稍后再试',
+          message: 'api.errors.auth.forgotPasswordRequestCooldown',
           retryAfterSeconds: Math.max(1, Math.ceil(remainingCooldownMs / 1000))
-        }
+        } satisfies ForgotPasswordError
       }
     }
   }
@@ -155,7 +187,7 @@ export async function requestForgotPasswordChallenge(username: string, remoteAdd
     username: credentials.username,
     code,
     expiresInMinutes: CHALLENGE_TTL_MS / 60_000
-  })
+  }, { locale })
 
   if (!dispatchResults.some((item) => item.status === 'success')) {
     return {
@@ -163,8 +195,8 @@ export async function requestForgotPasswordChallenge(username: string, remoteAdd
       error: {
         status: 400,
         code: 'forgot_password_delivery_failed',
-        message: '验证码发送失败，请检查通知配置'
-      }
+        message: 'api.errors.auth.forgotPasswordDeliveryFailed'
+      } satisfies ForgotPasswordError
     }
   }
 
@@ -187,15 +219,15 @@ export async function resetPasswordWithForgotPasswordCode(input: {
   code: string
   newPassword: string
   remoteAddress: string
-}) {
+}): Promise<ForgotPasswordResetResult> {
   if (!(await isForgotPasswordEnabled())) {
     return {
       ok: false as const,
       error: {
         status: 403,
         code: 'forgot_password_disabled',
-        message: '当前未开启忘记密码，或未配置可用通知渠道'
-      }
+        message: 'api.errors.auth.forgotPasswordDisabled'
+      } satisfies ForgotPasswordError
     }
   }
 
@@ -212,9 +244,9 @@ export async function resetPasswordWithForgotPasswordCode(input: {
       error: {
         status: 429,
         code: 'forgot_password_reset_rate_limited',
-        message: '验证失败次数过多，请稍后再试',
+        message: 'api.errors.auth.forgotPasswordResetRateLimited',
         retryAfterSeconds
-      }
+      } satisfies ForgotPasswordError
     }
   }
 
@@ -227,8 +259,8 @@ export async function resetPasswordWithForgotPasswordCode(input: {
       error: {
         status: 400,
         code: 'forgot_password_challenge_not_found',
-        message: '验证码无效或已失效'
-      }
+        message: 'api.errors.auth.forgotPasswordChallengeNotFound'
+      } satisfies ForgotPasswordError
     }
   }
 
@@ -239,8 +271,8 @@ export async function resetPasswordWithForgotPasswordCode(input: {
       error: {
         status: 400,
         code: 'forgot_password_attempts_exhausted',
-        message: '验证码尝试次数已用尽，请重新获取'
-      }
+        message: 'api.errors.auth.forgotPasswordAttemptsExhausted'
+      } satisfies ForgotPasswordError
     }
   }
 
@@ -260,8 +292,17 @@ export async function resetPasswordWithForgotPasswordCode(input: {
       error: {
         status: 400,
         code: 'forgot_password_code_invalid',
-        message: nextAttempts > 0 ? `验证码错误，还可重试 ${nextAttempts} 次` : '验证码错误次数过多，请重新获取'
-      }
+        message:
+          nextAttempts > 0
+            ? 'api.errors.auth.forgotPasswordCodeInvalidWithAttempts'
+            : 'api.errors.auth.forgotPasswordCodeInvalid',
+        messageParams:
+          nextAttempts > 0
+            ? {
+                attempts: nextAttempts
+              }
+            : undefined
+      } satisfies ForgotPasswordError
     }
   }
 
@@ -272,8 +313,8 @@ export async function resetPasswordWithForgotPasswordCode(input: {
       error: {
         status: 400,
         code: 'forgot_password_reset_failed',
-        message: '密码重置失败'
-      }
+        message: 'api.errors.auth.forgotPasswordResetFailed'
+      } satisfies ForgotPasswordError
     }
   }
 

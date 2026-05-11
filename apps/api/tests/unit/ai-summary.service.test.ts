@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_AI_CONFIG, DEFAULT_AI_DASHBOARD_SUMMARY_PREVIEW_PROMPT, DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT, type DashboardOverview } from '@subtracker/shared'
+import { DEFAULT_AI_CONFIG, type DashboardOverview } from '@subtracker/shared'
 
 const aiSummaryMocks = vi.hoisted(() => ({
   getAiConfigMock: vi.fn(),
@@ -7,7 +7,8 @@ const aiSummaryMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../../src/services/settings.service', () => ({
-  getAiConfig: aiSummaryMocks.getAiConfigMock
+  getAiConfig: aiSummaryMocks.getAiConfigMock,
+  getSystemDefaultLocale: vi.fn(async () => 'en-US')
 }))
 
 vi.mock('../../src/services/statistics.service', () => ({
@@ -287,10 +288,10 @@ describe('ai summary service', () => {
     await generateDashboardAiSummary()
 
     const requestBody = JSON.parse(String((((fetchMock.mock.calls[0] as unknown) as [unknown, RequestInit])[1])?.body))
-    expect(requestBody.messages[0].content).toContain(DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT.trim().slice(0, 20))
+    expect(requestBody.messages[0].content).toContain('subscription operations summary assistant')
 
     const previewRequestBody = JSON.parse(String((((fetchMock.mock.calls[1] as unknown) as [unknown, RequestInit])[1])?.body))
-    expect(previewRequestBody.messages[0].content).toContain(DEFAULT_AI_DASHBOARD_SUMMARY_PREVIEW_PROMPT.trim().slice(0, 20))
+    expect(previewRequestBody.messages[0].content).toContain('summary compression assistant')
   })
 
   it('always uses dedicated dashboard summary prompt even if recognition prompt is customized', async () => {
@@ -322,7 +323,7 @@ describe('ai summary service', () => {
     await generateDashboardAiSummary()
 
     const requestBody = JSON.parse(String((((fetchMock.mock.calls[0] as unknown) as [unknown, RequestInit])[1])?.body))
-    expect(requestBody.messages[0].content).toContain(DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT.trim().slice(0, 20))
+    expect(requestBody.messages[0].content).toContain('subscription operations summary assistant')
     expect(requestBody.messages[0].content).not.toContain('只返回 JSON')
   })
 

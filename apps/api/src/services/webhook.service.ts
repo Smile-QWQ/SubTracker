@@ -3,12 +3,15 @@ import https from 'node:https'
 import { Prisma } from '@prisma/client'
 import {
   DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
+  DEFAULT_APP_LOCALE,
   NotificationWebhookSettingsSchema,
+  getMessage,
+  type AppLocale,
   type NotificationWebhookSettingsInput,
   type WebhookEventType
 } from '@subtracker/shared'
 import { prisma } from '../db'
-import { getSetting, setSetting } from './settings.service'
+import { getSetting, getSystemDefaultLocale, setSetting } from './settings.service'
 import { validateNotificationTargetUrl } from './notification-url.service'
 import {
   buildDispatchParamsFromDedupEntries,
@@ -24,6 +27,10 @@ export type WebhookTestResult = {
   success: boolean
   statusCode: number
   responseBody: string
+}
+
+type WebhookLocaleContext = {
+  locale?: AppLocale
 }
 
 const PRIMARY_WEBHOOK_SETTINGS_KEY = 'notificationWebhook'
@@ -97,6 +104,10 @@ function applyPayloadTemplate(template: string, params: { eventType: WebhookEven
   return Object.entries(values).reduce((result, [key, value]) => result.replaceAll(`{{${key}}}`, value), template)
 }
 
+async function resolveWebhookLocale(locale?: AppLocale) {
+  return locale ?? (await getSystemDefaultLocale().catch(() => DEFAULT_APP_LOCALE))
+}
+
 async function sendWebhookRequest(
   input: NotificationWebhookSettingsInput,
   params: { eventType: WebhookEventType | 'test'; payload: DeliveryPayload }
@@ -146,32 +157,36 @@ export async function upsertPrimaryWebhookEndpoint(input: PrimaryWebhookInput) {
   return normalized
 }
 
-export async function sendTestWebhookNotification() {
+export async function sendTestWebhookNotification(context: WebhookLocaleContext = {}) {
   const endpoint = await getPrimaryWebhookEndpoint()
   if (!endpoint.url) {
-    throw new Error('Webhook 配置不完整，请先填写 URL')
+    throw new Error('api.errors.notifications.webhookConfigIncomplete')
   }
 
-  return sendTestWebhookNotificationWithConfig(endpoint)
+  return sendTestWebhookNotificationWithConfig(endpoint, context)
 }
 
-export async function sendTestWebhookNotificationWithConfig(input: PrimaryWebhookInput): Promise<WebhookTestResult> {
+export async function sendTestWebhookNotificationWithConfig(
+  input: PrimaryWebhookInput,
+  context: WebhookLocaleContext = {}
+): Promise<WebhookTestResult> {
   const normalized = normalizeWebhookSettings(input)
   if (!normalized.url) {
-    throw new Error('Webhook 配置不完整，请先填写 URL')
+    throw new Error('api.errors.notifications.webhookConfigIncomplete')
   }
+  const locale = await resolveWebhookLocale(context.locale)
 
   const result = await sendWebhookRequest(normalized, {
     eventType: 'test',
     payload: {
       id: 'test-subscription',
-      name: '测试订阅',
+      name: getMessage(locale, 'notifications.tests.subscriptionName'),
       amount: 10,
       currency: 'USD',
       nextRenewalDate: new Date().toISOString(),
-      tagNames: ['测试标签'],
+      tagNames: [getMessage(locale, 'notifications.tests.tagName')],
       websiteUrl: 'https://example.com/test-subscription',
-      notes: '这是一条测试通知',
+      notes: getMessage(locale, 'notifications.tests.note'),
       phase: 'upcoming',
       daysUntilRenewal: 5,
       daysOverdue: 0
@@ -179,7 +194,7 @@ export async function sendTestWebhookNotificationWithConfig(input: PrimaryWebhoo
   })
 
   if (result.statusCode >= 400) {
-    throw new Error(`Webhook 测试失败：HTTP ${result.statusCode} ${result.responseBody || ''}`.trim())
+    throw new Error(`${getMessage(locale, 'api.errors.notifications.webhookTestFailed')}: HTTP ${result.statusCode} ${result.responseBody || ''}`.trim())
   }
 
   return {
@@ -285,7 +300,10 @@ async function updateWebhookDeliveryRecords(
   )
 }
 
-export async function dispatchWebhookEvent(params: NotificationDispatchParams) {
+export async function dispatchWebhookEvent(
+  params: NotificationDispatchParams,
+  _context: WebhookLocaleContext = {}
+) {
   const config = normalizeWebhookSettings(await getPrimaryWebhookEndpoint())
   if (!config.enabled || !config.url) {
     return {

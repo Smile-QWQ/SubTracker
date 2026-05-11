@@ -260,7 +260,7 @@ describe('subscription routes', () => {
     expect(res.json().data).toMatchObject({
       successCount: 1,
       failureCount: 1,
-      failures: [{ id: 'sub_1', message: 'Active subscriptions cannot be deleted directly' }]
+      failures: [{ id: 'sub_1', message: 'api.errors.subscriptions.activeDeleteBlocked' }]
     })
   })
 
@@ -291,6 +291,24 @@ describe('subscription routes', () => {
 
     expect(res.statusCode).toBe(422)
     expect(res.json().error.code).toBe('subscription_delete_not_allowed')
+  })
+
+  it('returns english delete-not-allowed errors when X-SubTracker-Locale is en-US', async () => {
+    routeMocks.prismaMock.subscription.findUnique.mockResolvedValue({
+      id: 'sub_1',
+      status: 'active'
+    })
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/subscriptions/sub_1',
+      headers: {
+        'X-SubTracker-Locale': 'en-US'
+      }
+    })
+
+    expect(res.statusCode).toBe(422)
+    expect(res.json().error.message).toBe('Active subscriptions cannot be deleted directly. Pause or cancel them first.')
   })
 
   it('allows deleting a paused subscription directly', async () => {

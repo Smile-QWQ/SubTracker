@@ -11,6 +11,7 @@ import {
   TelegramConfigSchema
 } from '@subtracker/shared'
 import { sendError, sendOk } from '../http'
+import { detectRequestLocale } from '../i18n'
 import {
   sendTestEmailNotification,
   sendTestEmailNotificationWithConfig,
@@ -51,11 +52,15 @@ export async function notificationRoutes(app: FastifyInstance) {
   app.put('/notifications/webhook', async (request, reply) => {
     const parsed = NotificationWebhookSettingsSchema.safeParse(request.body)
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid webhook settings payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidWebhookSettingsPayload', parsed.error.flatten(), {
+        locale: request.locale
+      })
     }
 
     if (parsed.data.enabled && !parsed.data.url) {
-      return sendError(reply, 422, 'validation_error', '启用 Webhook 时必须填写 URL')
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidWebhookUrlRequired', undefined, {
+        locale: request.locale
+      })
     }
 
     const saved = await upsertPrimaryWebhookEndpoint(parsed.data)
@@ -63,24 +68,31 @@ export async function notificationRoutes(app: FastifyInstance) {
   })
 
   app.post('/notifications/scan-debug', async (request, reply) => {
+    const locale = request.locale ?? detectRequestLocale(request)
     const parsed = NotificationScanDebugSchema.safeParse(request.body ?? {})
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid scan debug payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidScanDebugPayload', parsed.error.flatten(), {
+        locale: request.locale
+      })
     }
 
     const result = await scanRenewalNotifications(parsed.data.now ? new Date(parsed.data.now) : new Date(), {
       dryRun: parsed.data.dryRun,
-      includeDebugCandidates: true
+      includeDebugCandidates: true,
+      locale
     })
     return sendOk(reply, result)
   })
 
   app.post('/notifications/test/email', async (request, reply) => {
+    const locale = request.locale ?? detectRequestLocale(request)
     try {
       if (request.body) {
         const parsed = EmailNotificationTestSchema.safeParse(request.body)
         if (!parsed.success) {
-          return sendError(reply, 422, 'validation_error', 'Invalid email config payload', parsed.error.flatten())
+          return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidEmailConfigPayload', parsed.error.flatten(), {
+            locale: request.locale
+          })
         }
         await sendTestEmailNotificationWithConfig({
           emailProvider: parsed.data.emailProvider,
@@ -99,115 +111,142 @@ export async function notificationRoutes(app: FastifyInstance) {
             from: parsed.data.resendConfig.from ?? '',
             to: parsed.data.resendConfig.to ?? ''
           }
-        })
+        }, { locale })
       } else {
-        await sendTestEmailNotification()
+        await sendTestEmailNotification({ locale })
       }
       return sendOk(reply, { success: true })
     } catch (error) {
-      return sendError(reply, 400, 'email_test_failed', error instanceof Error ? error.message : 'Email test failed')
+      return sendError(reply, 400, 'email_test_failed', error instanceof Error ? error.message : 'api.errors.notifications.emailTestFailed', undefined, {
+        locale: request.locale
+      })
     }
   })
 
   app.post('/notifications/test/pushplus', async (request, reply) => {
+    const locale = request.locale ?? detectRequestLocale(request)
     try {
       if (request.body) {
         const parsed = PushPlusConfigSchema.partial().safeParse(request.body)
         if (!parsed.success) {
-          return sendError(reply, 422, 'validation_error', 'Invalid PushPlus config payload', parsed.error.flatten())
+          return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidPushplusConfigPayload', parsed.error.flatten(), {
+            locale: request.locale
+          })
         }
         const result = await sendTestPushplusNotificationWithConfig({
           token: parsed.data.token ?? '',
           topic: parsed.data.topic ?? ''
-        })
+        }, { locale })
         return sendOk(reply, result)
       }
 
-      const result = await sendTestPushplusNotification()
+      const result = await sendTestPushplusNotification({ locale })
       return sendOk(reply, result)
     } catch (error) {
-      return sendError(reply, 400, 'pushplus_test_failed', error instanceof Error ? error.message : 'PushPlus test failed')
+      return sendError(reply, 400, 'pushplus_test_failed', error instanceof Error ? error.message : 'api.errors.notifications.pushplusTestFailed', undefined, {
+        locale: request.locale
+      })
     }
   })
 
   app.post('/notifications/test/telegram', async (request, reply) => {
+    const locale = request.locale ?? detectRequestLocale(request)
     try {
       if (request.body) {
         const parsed = TelegramConfigSchema.partial().safeParse(request.body)
         if (!parsed.success) {
-          return sendError(reply, 422, 'validation_error', 'Invalid Telegram config payload', parsed.error.flatten())
+          return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidTelegramConfigPayload', parsed.error.flatten(), {
+            locale: request.locale
+          })
         }
         const result = await sendTestTelegramNotificationWithConfig({
           botToken: parsed.data.botToken ?? '',
           chatId: parsed.data.chatId ?? ''
-        })
+        }, { locale })
         return sendOk(reply, result)
       }
 
-      const result = await sendTestTelegramNotification()
+      const result = await sendTestTelegramNotification({ locale })
       return sendOk(reply, result)
     } catch (error) {
-      return sendError(reply, 400, 'telegram_test_failed', error instanceof Error ? error.message : 'Telegram test failed')
+      return sendError(reply, 400, 'telegram_test_failed', error instanceof Error ? error.message : 'api.errors.notifications.telegramTestFailed', undefined, {
+        locale: request.locale
+      })
     }
   })
 
   app.post('/notifications/test/serverchan', async (request, reply) => {
+    const locale = request.locale ?? detectRequestLocale(request)
     try {
       if (request.body) {
         const parsed = ServerchanConfigSchema.partial().safeParse(request.body)
         if (!parsed.success) {
-          return sendError(reply, 422, 'validation_error', 'Invalid Server 酱 config payload', parsed.error.flatten())
+          return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidServerchanConfigPayload', parsed.error.flatten(), {
+            locale: request.locale
+          })
         }
         const result = await sendTestServerchanNotificationWithConfig({
           sendkey: parsed.data.sendkey ?? ''
-        })
+        }, { locale })
         return sendOk(reply, result)
       }
 
-      const result = await sendTestServerchanNotification()
+      const result = await sendTestServerchanNotification({ locale })
       return sendOk(reply, result)
     } catch (error) {
-      return sendError(reply, 400, 'serverchan_test_failed', error instanceof Error ? error.message : 'Serverchan test failed')
+      return sendError(reply, 400, 'serverchan_test_failed', error instanceof Error ? error.message : 'api.errors.notifications.serverchanTestFailed', undefined, {
+        locale: request.locale
+      })
     }
   })
 
   app.post('/notifications/test/gotify', async (request, reply) => {
+    const locale = request.locale ?? detectRequestLocale(request)
     try {
       if (request.body) {
         const parsed = GotifyConfigSchema.partial().safeParse(request.body)
         if (!parsed.success) {
-          return sendError(reply, 422, 'validation_error', 'Invalid Gotify config payload', parsed.error.flatten())
+          return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidGotifyConfigPayload', parsed.error.flatten(), {
+            locale: request.locale
+          })
         }
         const result = await sendTestGotifyNotificationWithConfig({
           url: parsed.data.url ?? '',
           token: parsed.data.token ?? '',
           ignoreSsl: parsed.data.ignoreSsl ?? false
-        })
+        }, { locale })
         return sendOk(reply, result)
       }
 
-      const result = await sendTestGotifyNotification()
+      const result = await sendTestGotifyNotification({ locale })
       return sendOk(reply, result)
     } catch (error) {
-      return sendError(reply, 400, 'gotify_test_failed', error instanceof Error ? error.message : 'Gotify test failed')
+      return sendError(reply, 400, 'gotify_test_failed', error instanceof Error ? error.message : 'api.errors.notifications.gotifyTestFailed', undefined, {
+        locale: request.locale
+      })
     }
   })
 
   app.post('/notifications/test/webhook', async (request, reply) => {
+    const locale = request.locale ?? detectRequestLocale(request)
     try {
       if (request.body) {
         const parsed = NotificationWebhookSettingsSchema.safeParse(request.body)
         if (!parsed.success) {
-          return sendError(reply, 422, 'validation_error', 'Invalid webhook settings payload', parsed.error.flatten())
+          return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidWebhookSettingsPayload', parsed.error.flatten(), {
+            locale: request.locale
+          })
         }
-        const result = await sendTestWebhookNotificationWithConfig(parsed.data)
+        const result = await sendTestWebhookNotificationWithConfig(parsed.data, { locale })
         return sendOk(reply, result)
       }
 
-      const result = await sendTestWebhookNotification()
+      const result = await sendTestWebhookNotification({ locale })
       return sendOk(reply, result)
     } catch (error) {
-      return sendError(reply, 400, 'webhook_test_failed', error instanceof Error ? error.message : 'Webhook test failed')
+      return sendError(reply, 400, 'webhook_test_failed', error instanceof Error ? error.message : 'api.errors.notifications.webhookTestFailed', undefined, {
+        locale: request.locale
+      })
     }
   })
 }

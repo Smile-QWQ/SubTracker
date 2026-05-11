@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  AppLocaleSchema,
   AiDashboardSummaryStatusSchema,
   CreateSubscriptionSchema,
   DEFAULT_AI_DASHBOARD_SUMMARY_PREVIEW_PROMPT,
@@ -7,7 +8,12 @@ import {
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_OVERDUE_REMINDER_RULES,
   formatAiSummaryPreviewText,
+  getDefaultAiDashboardSummaryPreviewPrompt,
+  getDefaultAiDashboardSummaryPrompt,
+  getDefaultAiSubscriptionPrompt,
   normalizeWebsiteUrlInput,
+  normalizeAppLocale,
+  resolveAppLocaleFromAcceptLanguage,
   SettingsSchema,
   SubtrackerBackupCommitSchema,
   SubtrackerBackupInspectSchema,
@@ -33,6 +39,7 @@ describe('shared schema', () => {
   it('should provide reminder-related setting defaults', () => {
     const parsed = SettingsSchema.parse({})
 
+    expect(parsed.systemDefaultLocale).toBe('zh-CN')
     expect(parsed.timezone).toBe('Asia/Shanghai')
     expect(parsed.defaultNotifyDays).toBe(3)
     expect(parsed.defaultAdvanceReminderRules).toBe(DEFAULT_ADVANCE_REMINDER_RULES)
@@ -112,6 +119,20 @@ describe('shared schema', () => {
     expect(DEFAULT_AI_DASHBOARD_SUMMARY_PREVIEW_PROMPT).toContain('摘要压缩助手')
     expect(AiDashboardSummaryStatusSchema.parse('success')).toBe('success')
     expect(() => AiDashboardSummaryStatusSchema.parse('unknown')).toThrow()
+  })
+
+  it('should normalize app locale values and accept-language headers', () => {
+    expect(AppLocaleSchema.parse('en-US')).toBe('en-US')
+    expect(normalizeAppLocale('en')).toBe('en-US')
+    expect(normalizeAppLocale('ZH-hans-CN')).toBe('zh-CN')
+    expect(resolveAppLocaleFromAcceptLanguage('en-GB,en;q=0.9,zh-CN;q=0.8')).toBe('en-US')
+    expect(resolveAppLocaleFromAcceptLanguage('', 'en-US')).toBe('en-US')
+  })
+
+  it('should provide locale-aware default ai prompts', () => {
+    expect(getDefaultAiSubscriptionPrompt('en-US')).toContain('subscription billing extractor')
+    expect(getDefaultAiDashboardSummaryPrompt('en-US')).toContain('subscription operations summary assistant')
+    expect(getDefaultAiDashboardSummaryPreviewPrompt('en-US')).toContain('summary compression assistant')
   })
 
   it('formats ai summary preview text into multiple readable lines', () => {

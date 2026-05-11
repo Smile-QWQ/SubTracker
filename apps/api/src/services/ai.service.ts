@@ -1,9 +1,9 @@
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { createWorker, type Worker } from 'tesseract.js'
-import { AiRecognizeSubscriptionSchema, DEFAULT_AI_SUBSCRIPTION_PROMPT } from '@subtracker/shared'
+import { AiRecognizeSubscriptionSchema, getDefaultAiSubscriptionPrompt, type AppLocale } from '@subtracker/shared'
 import type { AiRecognitionResultDto } from '@subtracker/shared'
-import { getAiConfig } from './settings.service'
+import { getAiConfig, getSystemDefaultLocale } from './settings.service'
 
 export type AiSettings = Awaited<ReturnType<typeof getAiConfig>>
 
@@ -115,8 +115,9 @@ async function extractTextFromImageWithOcr(imageBase64: string) {
   return (result.data.text || '').trim()
 }
 
-function buildRecognitionSystemPrompt(aiConfig: AiSettings, forceJsonPromptOnly = false) {
-  const basePrompt = aiConfig.promptTemplate?.trim() || DEFAULT_AI_SUBSCRIPTION_PROMPT
+async function buildRecognitionSystemPrompt(aiConfig: AiSettings, forceJsonPromptOnly = false, locale?: AppLocale) {
+  const resolvedLocale = locale ?? (await getSystemDefaultLocale())
+  const basePrompt = aiConfig.promptTemplate?.trim() || getDefaultAiSubscriptionPrompt(resolvedLocale)
   if (!forceJsonPromptOnly) {
     return basePrompt
   }
@@ -175,7 +176,7 @@ async function requestStructuredJsonCompletion(params: {
       messages: [
         {
           role: 'system',
-          content: buildRecognitionSystemPrompt(params.aiConfig, promptOnlyJson)
+          content: await buildRecognitionSystemPrompt(params.aiConfig, promptOnlyJson)
         },
         {
           role: 'user',

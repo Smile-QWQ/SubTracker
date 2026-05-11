@@ -13,7 +13,9 @@ export async function tagRoutes(app: FastifyInstance) {
   app.post('/tags', async (request, reply) => {
     const parsed = TagSchema.safeParse(request.body)
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid tag payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidTagPayload', parsed.error.flatten(), {
+        locale: request.locale
+      })
     }
 
     try {
@@ -27,19 +29,25 @@ export async function tagRoutes(app: FastifyInstance) {
       })
       return sendCreated(reply, created)
     } catch (error) {
-      return sendError(reply, 409, 'conflict', 'Tag name already exists', error)
+      return sendError(reply, 409, 'conflict', 'api.errors.tags.nameExists', error, {
+        locale: request.locale
+      })
     }
   })
 
   app.patch('/tags/:id', async (request, reply) => {
     const params = z.object({ id: z.string() }).safeParse(request.params)
     if (!params.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid tag id')
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidTagId', undefined, {
+        locale: request.locale
+      })
     }
 
     const parsed = TagSchema.partial().refine((value) => Object.keys(value).length > 0, 'Empty update payload').safeParse(request.body)
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid tag payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidTagPayload', parsed.error.flatten(), {
+        locale: request.locale
+      })
     }
 
     try {
@@ -54,14 +62,18 @@ export async function tagRoutes(app: FastifyInstance) {
       })
       return sendOk(reply, updated)
     } catch (error) {
-      return sendError(reply, 409, 'conflict', 'Tag update failed', error)
+      return sendError(reply, 409, 'conflict', 'api.errors.tags.updateFailed', error, {
+        locale: request.locale
+      })
     }
   })
 
   app.delete('/tags/:id', async (request, reply) => {
     const params = z.object({ id: z.string() }).safeParse(request.params)
     if (!params.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid tag id')
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidTagId', undefined, {
+        locale: request.locale
+      })
     }
 
     try {
@@ -77,7 +89,9 @@ export async function tagRoutes(app: FastifyInstance) {
 
       return sendOk(reply, { id: params.data.id, deleted: true })
     } catch (error) {
-      return sendError(reply, 404, 'not_found', 'Tag not found', error)
+      return sendError(reply, 404, 'not_found', 'api.errors.tags.notFound', error, {
+        locale: request.locale
+      })
     }
   })
 }

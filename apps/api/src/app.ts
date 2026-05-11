@@ -3,8 +3,11 @@ import cors from '@fastify/cors'
 import rateLimit from '@fastify/rate-limit'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { DEFAULT_APP_LOCALE } from '@subtracker/shared'
+import { getMessage } from '@subtracker/shared'
 import { config } from './config'
 import { sendError } from './http'
+import { detectRequestLocale } from './i18n'
 import { authRoutes } from './routes/auth'
 import { subscriptionRoutes } from './routes/subscriptions'
 import { statisticsRoutes } from './routes/statistics'
@@ -31,11 +34,11 @@ export async function buildApp() {
 
   await app.register(rateLimit, {
     global: false,
-    errorResponseBuilder: (_request, context) => ({
+    errorResponseBuilder: (request, context) => ({
       statusCode: 429,
       error: {
         code: 'too_many_attempts',
-        message: '登录失败次数过多，请稍后再试',
+        message: getMessage(request.locale ?? DEFAULT_APP_LOCALE, 'api.errors.tooManyAttempts'),
         details: {
           retryAfterSeconds: Math.max(1, Math.ceil(context.ttl / 1000))
         }
@@ -63,11 +66,14 @@ export async function buildApp() {
       reply.header('Content-Type', mimeMap[ext] ?? 'application/octet-stream')
       return reply.send(file)
     } catch {
-      return sendError(reply, 404, 'not_found', 'Logo not found')
+      return sendError(reply, 404, 'not_found', 'api.errors.logoNotFound', undefined, {
+        locale: request.locale ?? DEFAULT_APP_LOCALE
+      })
     }
   })
 
   app.addHook('onRequest', async (request, reply) => {
+    request.locale = detectRequestLocale(request)
     const url = request.url.split('?')[0]
     if (
       request.method === 'OPTIONS' ||
@@ -87,7 +93,9 @@ export async function buildApp() {
     const user = await verifyToken(token)
 
     if (!user) {
-      return sendError(reply, 401, 'unauthorized', '请先登录')
+      return sendError(reply, 401, 'unauthorized', 'api.errors.unauthorized', undefined, {
+        locale: request.locale
+      })
     }
 
     request.auth = user
@@ -112,8 +120,9 @@ export async function buildApp() {
 
   app.setErrorHandler((error, _request, reply) => {
     app.log.error(error)
-    const message = error instanceof Error ? error.message : 'Unknown server error'
-    return sendError(reply, 500, 'internal_error', message)
+    return sendError(reply, 500, 'internal_error', 'api.errors.internal', undefined, {
+      locale: _request.locale ?? DEFAULT_APP_LOCALE
+    })
   })
 
   return app

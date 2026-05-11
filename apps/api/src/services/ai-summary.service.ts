@@ -1,14 +1,14 @@
 import crypto from 'node:crypto'
 import {
-  DEFAULT_AI_DASHBOARD_SUMMARY_PREVIEW_PROMPT,
-  DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT,
   formatAiSummaryPreviewText,
+  getDefaultAiDashboardSummaryPreviewPrompt,
+  getDefaultAiDashboardSummaryPrompt,
   type AiDashboardSummaryDto,
   type DashboardOverview
 } from '@subtracker/shared'
 import { ensureAiSummaryConfig } from './ai.service'
 import { getOverviewStatistics } from './statistics.service'
-import { getAiConfig } from './settings.service'
+import { getAiConfig, getSystemDefaultLocale } from './settings.service'
 
 type CachedDashboardSummary = {
   scope: 'dashboard-overview'
@@ -59,14 +59,14 @@ function logAiSummary(stage: string, details?: Record<string, unknown>) {
   console.log(`[ai-summary] ${stage}`, details)
 }
 
-function resolveDashboardSummaryPrompt(promptTemplate?: string | null) {
+async function resolveDashboardSummaryPrompt(promptTemplate?: string | null) {
   const normalized = String(promptTemplate ?? '').trim()
-  return normalized || DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT
+  return normalized || getDefaultAiDashboardSummaryPrompt(await getSystemDefaultLocale())
 }
 
 
-function resolveDashboardSummaryPreviewPrompt() {
-  return DEFAULT_AI_DASHBOARD_SUMMARY_PREVIEW_PROMPT
+async function resolveDashboardSummaryPreviewPrompt() {
+  return getDefaultAiDashboardSummaryPreviewPrompt(await getSystemDefaultLocale())
 }
 
 function extractChatCompletionText(payload: ChatCompletionPayload) {
@@ -208,7 +208,7 @@ async function requestDashboardSummaryPreviewMarkdown(params: {
         messages: [
           {
             role: 'system',
-            content: resolveDashboardSummaryPreviewPrompt()
+            content: await resolveDashboardSummaryPreviewPrompt()
           },
           {
             role: 'user',
@@ -261,7 +261,7 @@ async function requestDashboardSummaryMarkdown(params: {
         messages: [
           {
             role: 'system',
-            content: resolveDashboardSummaryPrompt(params.promptTemplate)
+            content: await resolveDashboardSummaryPrompt(params.promptTemplate)
           },
           {
             role: 'user',

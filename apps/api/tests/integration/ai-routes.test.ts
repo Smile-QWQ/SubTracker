@@ -164,6 +164,34 @@ describe('ai routes', () => {
     expect(res.json().error.message).toContain('视觉输入能力')
   })
 
+  it('returns english ai errors when X-SubTracker-Locale is en-US', async () => {
+    summaryRouteMocks.testAiVisionConnectionMock.mockRejectedValue(new Error('AI vision test failed'))
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/ai/test-vision',
+      headers: {
+        'X-SubTracker-Locale': 'en-US'
+      },
+      payload: {
+        enabled: true,
+        providerName: 'Custom',
+        providerPreset: 'custom',
+        baseUrl: 'https://api.example.com',
+        apiKey: 'token',
+        model: 'vision-model',
+        timeoutMs: 30000,
+        capabilities: {
+          vision: false,
+          structuredOutput: true
+        }
+      }
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.json().error.message).toContain('AI vision test failed')
+  })
+
   it('returns dashboard ai summary state', async () => {
     summaryRouteMocks.getDashboardAiSummaryMock.mockResolvedValue({
       scope: 'dashboard-overview',

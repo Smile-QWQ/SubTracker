@@ -64,4 +64,40 @@ describe('forgot password service', () => {
     const { isForgotPasswordEnabled } = await import('../../src/services/forgot-password.service')
     await expect(isForgotPasswordEnabled()).resolves.toBe(true)
   })
+
+  it('passes locale to forgot-password notification dispatch', async () => {
+    const store = new Map<string, unknown>([['forgotPasswordEnabled', true]])
+    forgotPasswordState.getSettingMock.mockImplementation(async (key: string, fallback: unknown) =>
+      store.has(key) ? store.get(key) : fallback
+    )
+    forgotPasswordState.setSettingMock.mockImplementation(async (key: string, value: unknown) => {
+      store.set(key, value)
+    })
+    forgotPasswordState.getNotificationChannelSettingsMock.mockResolvedValue({
+      emailNotificationsEnabled: true,
+      pushplusNotificationsEnabled: false,
+      telegramNotificationsEnabled: false,
+      serverchanNotificationsEnabled: false,
+      gotifyNotificationsEnabled: false
+    })
+    forgotPasswordState.getStoredCredentialsMock.mockResolvedValue({
+      username: 'admin',
+      passwordHash: 'hash',
+      passwordSalt: 'salt'
+    })
+    forgotPasswordState.sendForgotPasswordVerificationCodeMock.mockResolvedValue([
+      { channel: 'email', status: 'success' }
+    ])
+
+    const { requestForgotPasswordChallenge } = await import('../../src/services/forgot-password.service')
+    const result = await requestForgotPasswordChallenge('admin', '127.0.0.1', 'en-US')
+
+    expect(result.ok).toBe(true)
+    expect(forgotPasswordState.sendForgotPasswordVerificationCodeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        username: 'admin'
+      }),
+      { locale: 'en-US' }
+    )
+  })
 })

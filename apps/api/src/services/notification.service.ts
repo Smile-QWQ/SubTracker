@@ -1,4 +1,5 @@
 import dayjs from 'dayjs'
+import { type AppLocale } from '@subtracker/shared'
 import { prisma } from '../db'
 import { toIsoDate } from '../utils/date'
 import { dispatchNotificationEvent, type NotificationChannelResult } from './channel-notification.service'
@@ -63,6 +64,7 @@ export type NotificationScanOverrides = Partial<
 > & {
   dryRun?: boolean
   includeDebugCandidates?: boolean
+  locale?: AppLocale
 }
 
 type ReminderSubscriptionLike = {
@@ -105,8 +107,6 @@ type ReminderDebugCandidate = {
     daysOverdue: number
   }>
 }
-
-type ReminderSummarySection = NotificationSummarySection & { phase: ReminderPhase }
 
 type ReminderMatch = {
   eventType: 'subscription.reminder_due' | 'subscription.overdue'
@@ -441,7 +441,7 @@ export async function scanRenewalNotifications(
               message: 'dry_run'
             }
           ]
-        : await dispatchNotificationEvent(buildDispatchParamsFromDedupEntries([entry]))
+        : await dispatchNotificationEvent(buildDispatchParamsFromDedupEntries([entry]), { locale: appSettings.locale })
 
       notifications.push({
         subscriptionId: entry.subscriptionId,
@@ -477,7 +477,7 @@ export async function scanRenewalNotifications(
           message: 'dry_run'
         }
       ]
-    : await dispatchNotificationEvent(mergedParams)
+    : await dispatchNotificationEvent(mergedParams, { locale: appSettings.locale })
 
   notifications.push({
     subscriptionId: 'merged:summary',

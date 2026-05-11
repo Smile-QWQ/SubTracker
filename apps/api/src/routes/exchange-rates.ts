@@ -14,7 +14,9 @@ export async function exchangeRateRoutes(app: FastifyInstance) {
       const latest = await ensureExchangeRates()
       return sendOk(reply, latest)
     } catch (error) {
-      return sendError(reply, 500, 'refresh_failed', 'Failed to refresh exchange rates', error)
+      return sendError(reply, 500, 'refresh_failed', 'api.errors.exchangeRates.refreshFailed', error, {
+        locale: _.locale
+      })
     }
   })
 }

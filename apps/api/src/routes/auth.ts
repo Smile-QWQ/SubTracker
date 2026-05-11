@@ -1,5 +1,11 @@
 ﻿import { FastifyInstance } from 'fastify'
-import { ChangeCredentialsSchema, ForgotPasswordRequestSchema, ForgotPasswordResetSchema, LoginSchema } from '@subtracker/shared'
+import {
+  ChangeCredentialsSchema,
+  ForgotPasswordRequestSchema,
+  ForgotPasswordResetSchema,
+  LoginSchema,
+  getMessage
+} from '@subtracker/shared'
 import { z } from 'zod'
 import { sendError, sendOk } from '../http'
 import { changeCredentials, changeDefaultPassword, loginWithCredentials } from '../services/auth.service'
@@ -15,10 +21,10 @@ function resolveLoginValidationMessage(body: unknown) {
   const username = payload.username?.trim() ?? ''
   const password = payload.password?.trim() ?? ''
 
-  if (!username && !password) return '请输入用户名和密码'
-  if (!username) return '请输入用户名'
-  if (!password) return '请输入密码'
-  return '登录信息格式不正确'
+  if (!username && !password) return 'auth.validation.usernameAndPasswordRequired'
+  if (!username) return 'auth.validation.usernameRequired'
+  if (!password) return 'auth.validation.passwordRequired'
+  return 'auth.validation.loginPayloadInvalid'
 }
 
 export async function authRoutes(app: FastifyInstance) {
@@ -42,7 +48,9 @@ export async function authRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const parsed = LoginSchema.safeParse(request.body)
       if (!parsed.success) {
-        return sendError(reply, 422, 'validation_error', resolveLoginValidationMessage(request.body), parsed.error.flatten())
+        return sendError(reply, 422, 'validation_error', resolveLoginValidationMessage(request.body), parsed.error.flatten(), {
+          locale: request.locale
+        })
       }
 
       const result = await loginWithCredentials(parsed.data.username, parsed.data.password, {
@@ -50,7 +58,9 @@ export async function authRoutes(app: FastifyInstance) {
         rememberDays: parsed.data.rememberDays
       })
       if (!result) {
-        return sendError(reply, 401, 'invalid_credentials', '用户名或密码错误')
+        return sendError(reply, 401, 'invalid_credentials', 'api.errors.auth.invalidCredentials', undefined, {
+          locale: request.locale
+        })
       }
 
       return sendOk(reply, result)
@@ -59,7 +69,9 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.get('/auth/me', async (request, reply) => {
     if (!request.auth) {
-      return sendError(reply, 401, 'unauthorized', '请先登录')
+      return sendError(reply, 401, 'unauthorized', 'api.errors.unauthorized', undefined, {
+        locale: request.locale
+      })
     }
 
     return sendOk(reply, {
@@ -70,12 +82,16 @@ export async function authRoutes(app: FastifyInstance) {
   app.post('/auth/change-credentials', async (request, reply) => {
     const parsed = ChangeCredentialsSchema.safeParse(request.body)
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid credentials payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidCredentialsPayload', parsed.error.flatten(), {
+        locale: request.locale
+      })
     }
 
     const result = await changeCredentials(parsed.data)
     if (!result) {
-      return sendError(reply, 401, 'invalid_credentials', '原用户名或原密码错误')
+      return sendError(reply, 401, 'invalid_credentials', 'api.errors.auth.currentCredentialsInvalid', undefined, {
+        locale: request.locale
+      })
     }
 
     return sendOk(reply, result)
@@ -89,12 +105,16 @@ export async function authRoutes(app: FastifyInstance) {
       .safeParse(request.body)
 
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid password payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidPasswordPayload', parsed.error.flatten(), {
+        locale: request.locale
+      })
     }
 
     const result = await changeDefaultPassword(parsed.data.newPassword)
     if (!result) {
-      return sendError(reply, 400, 'default_password_change_not_allowed', 'Default password change is not allowed')
+      return sendError(reply, 400, 'default_password_change_not_allowed', 'api.errors.auth.defaultPasswordChangeNotAllowed', undefined, {
+        locale: request.locale
+      })
     }
 
     return sendOk(reply, result)
@@ -107,11 +127,11 @@ export async function authRoutes(app: FastifyInstance) {
         rateLimit: {
           max: 3,
           timeWindow: 10 * 60 * 1000,
-          errorResponseBuilder: (_request, context) => ({
+          errorResponseBuilder: (request, context) => ({
             statusCode: 429,
             error: {
               code: 'forgot_password_request_rate_limited',
-              message: '验证码发送过于频繁，请稍后再试',
+              message: getMessage(request.locale ?? 'zh-CN', 'api.errors.auth.forgotPasswordRequestRateLimited'),
               details: {
                 retryAfterSeconds: Math.max(1, Math.ceil(context.ttl / 1000))
               }
@@ -123,14 +143,26 @@ export async function authRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const parsed = ForgotPasswordRequestSchema.safeParse(request.body)
       if (!parsed.success) {
-        return sendError(reply, 422, 'validation_error', 'Invalid forgot password request payload', parsed.error.flatten())
+        return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidForgotPasswordRequestPayload', parsed.error.flatten(), {
+          locale: request.locale
+        })
       }
 
-      const result = await requestForgotPasswordChallenge(parsed.data.username, request.ip)
+      const result = await requestForgotPasswordChallenge(parsed.data.username, request.ip, request.locale)
       if (!result.ok) {
-        return sendError(reply, result.error.status, result.error.code, result.error.message, {
-          retryAfterSeconds: result.error.retryAfterSeconds
-        })
+        return sendError(
+          reply,
+          result.error.status,
+          result.error.code,
+          result.error.message,
+          {
+            retryAfterSeconds: result.error.retryAfterSeconds
+          },
+          {
+            locale: request.locale,
+            params: result.error.messageParams
+          }
+        )
       }
 
       return sendOk(reply, { accepted: true })
@@ -144,11 +176,11 @@ export async function authRoutes(app: FastifyInstance) {
         rateLimit: {
           max: 5,
           timeWindow: 10 * 60 * 1000,
-          errorResponseBuilder: (_request, context) => ({
+          errorResponseBuilder: (request, context) => ({
             statusCode: 429,
             error: {
               code: 'forgot_password_reset_rate_limited',
-              message: '验证失败次数过多，请稍后再试',
+              message: getMessage(request.locale ?? 'zh-CN', 'api.errors.auth.forgotPasswordResetRateLimited'),
               details: {
                 retryAfterSeconds: Math.max(1, Math.ceil(context.ttl / 1000))
               }
@@ -160,7 +192,9 @@ export async function authRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const parsed = ForgotPasswordResetSchema.safeParse(request.body)
       if (!parsed.success) {
-        return sendError(reply, 422, 'validation_error', 'Invalid forgot password reset payload', parsed.error.flatten())
+        return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidForgotPasswordResetPayload', parsed.error.flatten(), {
+          locale: request.locale
+        })
       }
 
       const result = await resetPasswordWithForgotPasswordCode({
@@ -169,9 +203,19 @@ export async function authRoutes(app: FastifyInstance) {
       })
 
       if (!result.ok) {
-        return sendError(reply, result.error.status, result.error.code, result.error.message, {
-          retryAfterSeconds: result.error.retryAfterSeconds
-        })
+        return sendError(
+          reply,
+          result.error.status,
+          result.error.code,
+          result.error.message,
+          {
+            retryAfterSeconds: result.error.retryAfterSeconds
+          },
+          {
+            locale: request.locale,
+            params: result.error.messageParams
+          }
+        )
       }
 
       return sendOk(reply, result.result)

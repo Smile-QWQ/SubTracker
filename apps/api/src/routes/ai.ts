@@ -20,7 +20,9 @@ export async function aiRoutes(app: FastifyInstance) {
     try {
       return sendOk(reply, await getDashboardAiSummary())
     } catch (error) {
-      return sendError(reply, 400, 'ai_summary_fetch_failed', error instanceof Error ? error.message : 'AI summary fetch failed')
+      return sendError(reply, 400, 'ai_summary_fetch_failed', error instanceof Error ? error.message : 'api.errors.ai.summaryFetchFailed', undefined, {
+        locale: _request.locale
+      })
     }
   })
 
@@ -28,7 +30,14 @@ export async function aiRoutes(app: FastifyInstance) {
     try {
       return sendOk(reply, await generateDashboardAiSummary())
     } catch (error) {
-      return sendError(reply, 400, 'ai_summary_generate_failed', error instanceof Error ? error.message : 'AI summary generate failed')
+      return sendError(
+        reply,
+        400,
+        'ai_summary_generate_failed',
+        error instanceof Error ? error.message : 'api.errors.ai.summaryGenerateFailed',
+        undefined,
+        { locale: _request.locale }
+      )
     }
   })
 
@@ -37,7 +46,9 @@ export async function aiRoutes(app: FastifyInstance) {
       if (request.body) {
         const parsed = AiConfigSchema.partial().safeParse(request.body)
         if (!parsed.success) {
-          return sendError(reply, 422, 'validation_error', 'Invalid AI config payload', parsed.error.flatten())
+          return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidAiConfigPayload', parsed.error.flatten(), {
+            locale: request.locale
+          })
         }
         return sendOk(
           reply,
@@ -47,7 +58,9 @@ export async function aiRoutes(app: FastifyInstance) {
 
       return sendOk(reply, await testAiConnection())
     } catch (error) {
-      return sendError(reply, 400, 'ai_test_failed', error instanceof Error ? error.message : 'AI test failed')
+      return sendError(reply, 400, 'ai_test_failed', error instanceof Error ? error.message : 'api.errors.ai.connectionTestFailed', undefined, {
+        locale: request.locale
+      })
     }
   })
 
@@ -56,14 +69,23 @@ export async function aiRoutes(app: FastifyInstance) {
       if (request.body) {
         const parsed = AiConfigSchema.partial().safeParse(request.body)
         if (!parsed.success) {
-          return sendError(reply, 422, 'validation_error', 'Invalid AI config payload', parsed.error.flatten())
+          return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidAiConfigPayload', parsed.error.flatten(), {
+            locale: request.locale
+          })
         }
         return sendOk(reply, await testAiVisionConnection(normalizeAiConfigPayload(parsed.data)))
       }
 
       return sendOk(reply, await testAiVisionConnection())
     } catch (error) {
-      return sendError(reply, 400, 'ai_vision_test_failed', error instanceof Error ? error.message : 'AI vision test failed')
+      return sendError(
+        reply,
+        400,
+        'ai_vision_test_failed',
+        error instanceof Error ? error.message : 'api.errors.ai.visionTestFailed',
+        undefined,
+        { locale: request.locale }
+      )
     }
   })
 
@@ -71,7 +93,9 @@ export async function aiRoutes(app: FastifyInstance) {
     try {
       return sendOk(reply, await recognizeSubscriptionByAi(request.body))
     } catch (error) {
-      return sendError(reply, 400, 'ai_recognition_failed', error instanceof Error ? error.message : 'AI recognition failed')
+      return sendError(reply, 400, 'ai_recognition_failed', error instanceof Error ? error.message : 'api.errors.ai.recognitionFailed', undefined, {
+        locale: request.locale
+      })
     }
   })
 }

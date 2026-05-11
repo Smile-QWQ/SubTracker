@@ -1,9 +1,11 @@
 import {
   AiConfigSchema,
+  DEFAULT_APP_LOCALE,
   DEFAULT_RESEND_API_URL,
   DEFAULT_AI_CONFIG,
   DEFAULT_TIMEZONE,
   SettingsSchema,
+  type AppLocale,
   type SettingsInput
 } from '@subtracker/shared'
 import { prisma } from '../db'
@@ -82,6 +84,7 @@ export async function getAppSettings(): Promise<SettingsInput> {
   const rows = await prisma.setting.findMany()
   const settingsMap = new Map(rows.map((row) => [row.key, row.valueJson]))
 
+  const systemDefaultLocale = readSettingsValue(settingsMap, 'systemDefaultLocale', DEFAULT_APP_LOCALE)
   const baseCurrency = readSettingsValue(settingsMap, 'baseCurrency', config.baseCurrency)
   const timezoneFallback = normalizeAppTimezone(process.env.TZ ?? DEFAULT_TIMEZONE)
   const timezone = readSettingsValue(settingsMap, 'timezone', timezoneFallback)
@@ -134,6 +137,7 @@ export async function getAppSettings(): Promise<SettingsInput> {
   const aiConfig = AiConfigSchema.parse(readSettingsValue<unknown>(settingsMap, 'aiConfig', DEFAULT_AI_CONFIG))
 
   return SettingsSchema.parse({
+    systemDefaultLocale,
     baseCurrency,
     timezone,
     defaultNotifyDays: deriveNotifyDaysBeforeFromAdvanceRules(defaultAdvanceReminderRules) || defaultNotifyDays,
@@ -174,6 +178,10 @@ export async function getAppTimezone(): Promise<string> {
 
 export async function getAiConfig() {
   return AiConfigSchema.parse(await getSetting<unknown>('aiConfig', DEFAULT_AI_CONFIG))
+}
+
+export async function getSystemDefaultLocale(): Promise<AppLocale> {
+  return getSetting<AppLocale>('systemDefaultLocale', DEFAULT_APP_LOCALE)
 }
 
 export async function getDefaultAdvanceReminderRulesSetting() {

@@ -3,6 +3,9 @@ import https from 'node:https'
 import nodemailer from 'nodemailer'
 import {
   DEFAULT_RESEND_API_URL,
+  DEFAULT_APP_LOCALE,
+  getMessage,
+  type AppLocale,
   type EmailConfigInput,
   type GotifyConfigInput,
   type ResendConfigInput,
@@ -12,7 +15,7 @@ import {
   type WebhookEventType
 } from '@subtracker/shared'
 import { dispatchWebhookEvent } from './webhook.service'
-import { getAppTimezone, getNotificationChannelSettings, getSetting, setSetting } from './settings.service'
+import { getAppTimezone, getNotificationChannelSettings, getSetting, getSystemDefaultLocale, setSetting } from './settings.service'
 import { validateNotificationTargetUrl } from './notification-url.service'
 import { toIsoDate } from '../utils/date'
 import { formatDateInTimezone } from '../utils/timezone'
@@ -58,6 +61,18 @@ type ForgotPasswordNotificationPayload = {
   expiresInMinutes: number
 }
 
+type NotificationLocaleContext = {
+  locale?: AppLocale
+}
+
+type DirectChannelDispatchOptions = {
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify'
+  enabled: boolean
+  disabledMessage: string
+  alreadySentMessage: string
+  send: (message: DirectNotificationMessage) => Promise<void>
+}
+
 const NOTIFICATION_DEDUP_KEY_PREFIX = 'notification:'
 export const NOTIFICATION_DEDUP_RETENTION_DAYS = 30
 
@@ -87,19 +102,8 @@ export async function cleanupOldNotificationDedupSettings(
   return result.count
 }
 
-const CHANNEL_LABELS: Record<NotificationChannelResult['channel'], string> = {
-  webhook: 'Webhook',
-  email: '邮箱',
-  pushplus: 'PushPlus',
-  telegram: 'Telegram',
-  serverchan: 'Server 酱',
-  gotify: 'Gotify'
-}
-
-const CHANNEL_STATUS_LABELS: Record<NotificationChannelResult['status'], string> = {
-  success: '成功',
-  skipped: '跳过',
-  failed: '失败'
+async function resolveNotificationLocale(locale?: AppLocale): Promise<AppLocale> {
+  return locale ?? (await getSystemDefaultLocale().catch(() => DEFAULT_APP_LOCALE))
 }
 
 function getNotificationLogName(params: NotificationDispatchParams) {
@@ -107,17 +111,17 @@ function getNotificationLogName(params: NotificationDispatchParams) {
   return typeof name === 'string' && name.trim() ? name.trim() : params.resourceKey
 }
 
-function formatChannelResult(result: NotificationChannelResult) {
-  const label = CHANNEL_LABELS[result.channel]
-  const status = CHANNEL_STATUS_LABELS[result.status]
+function formatChannelResult(result: NotificationChannelResult, locale: AppLocale) {
+  const label = getMessage(locale, `notifications.channels.${result.channel}`)
+  const status = getMessage(locale, `notifications.status.${result.status}`)
   return result.message ? `${label}${status}（${result.message}）` : `${label}${status}`
 }
 
-function logNotificationDispatch(params: NotificationDispatchParams, results: NotificationChannelResult[]) {
+function logNotificationDispatch(params: NotificationDispatchParams, results: NotificationChannelResult[], locale: AppLocale) {
   const successCount = results.filter((result) => result.status === 'success').length
   const failed = results.filter((result) => result.status === 'failed')
   const skipped = results.filter((result) => result.status === 'skipped')
-  const details = results.map(formatChannelResult).join('；')
+  const details = results.map((result) => formatChannelResult(result, locale)).join('；')
   const baseMessage = `[notification] ${getNotificationLogName(params)}：通知渠道 ${successCount} 个成功，${failed.length} 个失败，${skipped.length} 个跳过。${details}`
 
   if (failed.length) {
@@ -200,26 +204,17 @@ function resolveDispatchParamsForChannel(
   })
 }
 
-function buildForgotPasswordTitle() {
-  return 'SubTracker 密码重置验证码'
+function buildForgotPasswordTitle(locale: AppLocale) {
+  return getMessage(locale, 'notifications.forgotPassword.title')
 }
 
-function buildForgotPasswordBody(payload: ForgotPasswordNotificationPayload) {
+function buildForgotPasswordBody(payload: ForgotPasswordNotificationPayload, locale: AppLocale) {
   return [
-    `用户名：${payload.username}`,
-    `验证码：${payload.code}`,
-    `有效期：${payload.expiresInMinutes} 分钟`,
-    '如果这不是你的操作，请忽略本次通知。'
+    getMessage(locale, 'notifications.forgotPassword.username', { username: payload.username }),
+    getMessage(locale, 'notifications.forgotPassword.code', { code: payload.code }),
+    getMessage(locale, 'notifications.forgotPassword.expiresInMinutes', { minutes: payload.expiresInMinutes }),
+    getMessage(locale, 'notifications.forgotPassword.ignoreHint')
   ].join('\n')
-}
-
-function buildForgotPasswordMessage(payload: ForgotPasswordNotificationPayload): DirectNotificationMessage {
-  const text = buildForgotPasswordBody(payload)
-  return {
-    title: buildForgotPasswordTitle(),
-    text,
-    html: `<pre>${text}</pre>`
-  }
 }
 
 async function sendSmtpEmailWithConfig(message: DirectNotificationMessage, config: EmailConfigInput) {
@@ -293,14 +288,6 @@ async function sendEmailWithProvider(
   await sendSmtpEmailWithConfig(message, smtpConfig)
 }
 
-type DirectChannelDispatchOptions = {
-  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify'
-  enabled: boolean
-  disabledMessage: string
-  alreadySentMessage: string
-  send: (message: DirectNotificationMessage) => Promise<void>
-}
-
 async function dispatchDirectChannelNotification(
   params: NotificationDispatchParams,
   options: DirectChannelDispatchOptions
@@ -332,7 +319,9 @@ async function dispatchDirectChannelNotification(
   }
 }
 
-async function sendEmailNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
+async function sendEmailNotification(
+  params: NotificationDispatchParams
+): Promise<NotificationChannelResult> {
   const settings = await getNotificationChannelSettings()
   return dispatchDirectChannelNotification(params, {
     channel: 'email',
@@ -409,7 +398,9 @@ async function sendPushplusWithConfig(
   }
 }
 
-async function sendPushplusNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
+async function sendPushplusNotification(
+  params: NotificationDispatchParams
+): Promise<NotificationChannelResult> {
   const settings = await getNotificationChannelSettings()
   return dispatchDirectChannelNotification(params, {
     channel: 'pushplus',
@@ -454,7 +445,9 @@ async function sendTelegramWithConfig(message: DirectNotificationMessage, config
   }
 }
 
-async function sendTelegramNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
+async function sendTelegramNotification(
+  params: NotificationDispatchParams
+): Promise<NotificationChannelResult> {
   const settings = await getNotificationChannelSettings()
   return dispatchDirectChannelNotification(params, {
     channel: 'telegram',
@@ -514,7 +507,9 @@ async function sendServerchanWithConfig(message: DirectNotificationMessage, conf
   }
 }
 
-async function sendServerchanNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
+async function sendServerchanNotification(
+  params: NotificationDispatchParams
+): Promise<NotificationChannelResult> {
   const settings = await getNotificationChannelSettings()
   return dispatchDirectChannelNotification(params, {
     channel: 'serverchan',
@@ -573,7 +568,9 @@ async function sendGotifyWithConfig(message: DirectNotificationMessage, config: 
   })
 }
 
-async function sendGotifyNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
+async function sendGotifyNotification(
+  params: NotificationDispatchParams
+): Promise<NotificationChannelResult> {
   const settings = await getNotificationChannelSettings()
   return dispatchDirectChannelNotification(params, {
     channel: 'gotify',
@@ -584,11 +581,15 @@ async function sendGotifyNotification(params: NotificationDispatchParams): Promi
   })
 }
 
-export async function dispatchNotificationEvent(params: NotificationDispatchParams) {
+export async function dispatchNotificationEvent(
+  params: NotificationDispatchParams,
+  context: NotificationLocaleContext = {}
+) {
   const results: NotificationChannelResult[] = []
+  const locale = await resolveNotificationLocale(context.locale)
 
   try {
-    const webhookResult = await dispatchWebhookEvent(params)
+    const webhookResult = await dispatchWebhookEvent(params, { locale })
     results.push(webhookResult)
   } catch (error) {
     results.push({
@@ -633,52 +634,66 @@ export async function dispatchNotificationEvent(params: NotificationDispatchPara
   }))) as NotificationChannelResult
   results.push(gotifyResult)
 
-  logNotificationDispatch(params, results)
+  logNotificationDispatch(params, results, locale)
 
   return results
 }
 
-function buildTestReminderPayload() {
+function buildTestReminderPayload(locale: AppLocale) {
   return {
-    name: '测试订阅',
+    name: getMessage(locale, 'notifications.tests.subscriptionName'),
     nextRenewalDate: '',
     amount: 19.9,
     currency: 'CNY',
-    tagNames: ['测试标签'],
+    tagNames: [getMessage(locale, 'notifications.tests.tagName')],
     websiteUrl: 'https://example.com',
-    notes: '这是一条测试通知',
+    notes: getMessage(locale, 'notifications.tests.note'),
     phase: 'upcoming',
     daysUntilRenewal: 3,
     daysOverdue: 0
   }
 }
 
-async function buildTestReminderMessage() {
+async function buildTestReminderMessage(locale: AppLocale) {
   const timezone = await getAppTimezone()
   return buildNotificationMessage({
     eventType: 'subscription.reminder_due',
     resourceKey: 'test:notification',
     periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
     payload: {
-      ...buildTestReminderPayload(),
+      ...buildTestReminderPayload(locale),
       nextRenewalDate: formatDateInTimezone(new Date(), timezone)
     }
   })
 }
 
-export async function sendTestEmailNotification() {
+export async function sendTestEmailNotification(context: NotificationLocaleContext = {}) {
   const settings = await getNotificationChannelSettings()
   if (!settings.emailNotificationsEnabled) {
     throw new Error('邮箱通知未启用或配置不完整')
   }
 
-  await sendEmailWithProvider(await buildTestReminderMessage(), settings.emailProvider, settings.smtpConfig, settings.resendConfig)
+  const locale = await resolveNotificationLocale(context.locale)
+  await sendEmailWithProvider(
+    await buildTestReminderMessage(locale),
+    settings.emailProvider,
+    settings.smtpConfig,
+    settings.resendConfig
+  )
 }
 
-export async function sendForgotPasswordVerificationCode(payload: ForgotPasswordNotificationPayload) {
+export async function sendForgotPasswordVerificationCode(
+  payload: ForgotPasswordNotificationPayload,
+  context: NotificationLocaleContext = {}
+) {
   const settings = await getNotificationChannelSettings()
   const results: NotificationChannelResult[] = []
-  const message = buildForgotPasswordMessage(payload)
+  const locale = await resolveNotificationLocale(context.locale)
+  const message: DirectNotificationMessage = {
+    title: buildForgotPasswordTitle(locale),
+    text: buildForgotPasswordBody(payload, locale),
+    html: `<pre>${buildForgotPasswordBody(payload, locale)}</pre>`
+  }
 
   if (settings.emailNotificationsEnabled) {
     try {
@@ -762,17 +777,24 @@ export async function sendTestEmailNotificationWithConfig(config: {
   emailProvider: 'smtp' | 'resend'
   smtpConfig: EmailConfigInput
   resendConfig: ResendConfigInput
-}) {
-  await sendEmailWithProvider(await buildTestReminderMessage(), config.emailProvider, config.smtpConfig, config.resendConfig)
+}, context: NotificationLocaleContext = {}) {
+  const locale = await resolveNotificationLocale(context.locale)
+  await sendEmailWithProvider(
+    await buildTestReminderMessage(locale),
+    config.emailProvider,
+    config.smtpConfig,
+    config.resendConfig
+  )
 }
 
-export async function sendTestPushplusNotification() {
+export async function sendTestPushplusNotification(context: NotificationLocaleContext = {}) {
   const settings = await getNotificationChannelSettings()
   if (!settings.pushplusNotificationsEnabled) {
     throw new Error('PushPlus 通知未启用或配置不完整')
   }
 
-  await sendPushplusWithConfig(await buildTestReminderMessage(), settings.pushplusConfig)
+  const locale = await resolveNotificationLocale(context.locale)
+  await sendPushplusWithConfig(await buildTestReminderMessage(locale), settings.pushplusConfig)
 
   return {
     accepted: true,
@@ -780,57 +802,76 @@ export async function sendTestPushplusNotification() {
   }
 }
 
-export async function sendTestPushplusNotificationWithConfig(config: PushPlusConfigInput) {
-  return sendPushplusWithConfig(await buildTestReminderMessage(), config)
+export async function sendTestPushplusNotificationWithConfig(
+  config: PushPlusConfigInput,
+  context: NotificationLocaleContext = {}
+) {
+  const locale = await resolveNotificationLocale(context.locale)
+  return sendPushplusWithConfig(await buildTestReminderMessage(locale), config)
 }
 
-export async function sendTestTelegramNotification() {
+export async function sendTestTelegramNotification(context: NotificationLocaleContext = {}) {
   const settings = await getNotificationChannelSettings()
   if (!settings.telegramNotificationsEnabled) {
     throw new Error('Telegram 通知未启用或配置不完整')
   }
 
-  await sendTelegramWithConfig(await buildTestReminderMessage(), settings.telegramConfig)
+  const locale = await resolveNotificationLocale(context.locale)
+  await sendTelegramWithConfig(await buildTestReminderMessage(locale), settings.telegramConfig)
 
   return { success: true }
 }
 
-export async function sendTestTelegramNotificationWithConfig(config: TelegramConfigInput) {
-  await sendTelegramWithConfig(await buildTestReminderMessage(), config)
+export async function sendTestTelegramNotificationWithConfig(
+  config: TelegramConfigInput,
+  context: NotificationLocaleContext = {}
+) {
+  const locale = await resolveNotificationLocale(context.locale)
+  await sendTelegramWithConfig(await buildTestReminderMessage(locale), config)
 
   return { success: true }
 }
 
-export async function sendTestServerchanNotification() {
+export async function sendTestServerchanNotification(context: NotificationLocaleContext = {}) {
   const settings = await getNotificationChannelSettings()
   if (!settings.serverchanNotificationsEnabled) {
     throw new Error('Server 酱通知未启用或配置不完整')
   }
 
-  await sendServerchanWithConfig(await buildTestReminderMessage(), settings.serverchanConfig)
+  const locale = await resolveNotificationLocale(context.locale)
+  await sendServerchanWithConfig(await buildTestReminderMessage(locale), settings.serverchanConfig)
 
   return { success: true }
 }
 
-export async function sendTestServerchanNotificationWithConfig(config: ServerchanConfigInput) {
-  await sendServerchanWithConfig(await buildTestReminderMessage(), config)
+export async function sendTestServerchanNotificationWithConfig(
+  config: ServerchanConfigInput,
+  context: NotificationLocaleContext = {}
+) {
+  const locale = await resolveNotificationLocale(context.locale)
+  await sendServerchanWithConfig(await buildTestReminderMessage(locale), config)
 
   return { success: true }
 }
 
-export async function sendTestGotifyNotification() {
+export async function sendTestGotifyNotification(context: NotificationLocaleContext = {}) {
   const settings = await getNotificationChannelSettings()
   if (!settings.gotifyNotificationsEnabled) {
     throw new Error('Gotify 通知未启用或配置不完整')
   }
 
-  await sendGotifyWithConfig(await buildTestReminderMessage(), settings.gotifyConfig)
+  const locale = await resolveNotificationLocale(context.locale)
+  await sendGotifyWithConfig(await buildTestReminderMessage(locale), settings.gotifyConfig)
 
   return { success: true }
 }
 
-export async function sendTestGotifyNotificationWithConfig(config: GotifyConfigInput) {
-  await sendGotifyWithConfig(await buildTestReminderMessage(), config)
+export async function sendTestGotifyNotificationWithConfig(
+  config: GotifyConfigInput,
+  context: NotificationLocaleContext = {}
+) {
+  const locale = await resolveNotificationLocale(context.locale)
+  await sendGotifyWithConfig(await buildTestReminderMessage(locale), config)
 
   return { success: true }
 }

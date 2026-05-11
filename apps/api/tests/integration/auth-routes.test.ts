@@ -80,6 +80,38 @@ describe('auth routes', () => {
     expect(res.json().error.message).toBe('请输入用户名和密码')
   })
 
+  it('returns english validation and auth errors when X-SubTracker-Locale is en-US', async () => {
+    const validationRes = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      headers: {
+        'X-SubTracker-Locale': 'en-US'
+      },
+      payload: {
+        username: '',
+        password: ''
+      }
+    })
+
+    expect(validationRes.statusCode).toBe(422)
+    expect(validationRes.json().error.message).toBe('Enter username and password')
+
+    const authRes = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      headers: {
+        'X-SubTracker-Locale': 'en-US'
+      },
+      payload: {
+        username: 'admin',
+        password: 'wrong-password'
+      }
+    })
+
+    expect(authRes.statusCode).toBe(401)
+    expect(authRes.json().error.message).toBe('Incorrect username or password')
+  })
+
   it('returns mustChangePassword in login response', async () => {
     authMocks.loginWithCredentialsMock.mockResolvedValue({
       token: 'token',

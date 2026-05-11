@@ -12,7 +12,9 @@ const notificationMocks = vi.hoisted(() => ({
   sendTestServerchanNotificationWithConfigMock: vi.fn(),
   sendTestGotifyNotificationMock: vi.fn(),
   sendTestGotifyNotificationWithConfigMock: vi.fn(),
-  scanRenewalNotificationsMock: vi.fn()
+  scanRenewalNotificationsMock: vi.fn(),
+  sendTestWebhookNotificationMock: vi.fn(),
+  sendTestWebhookNotificationWithConfigMock: vi.fn()
 }))
 
 vi.mock('../../src/services/channel-notification.service', () => ({
@@ -41,8 +43,8 @@ vi.mock('../../src/services/webhook.service', () => ({
     payloadTemplate: '{}',
     ignoreSsl: false
   })),
-  sendTestWebhookNotification: vi.fn(),
-  sendTestWebhookNotificationWithConfig: vi.fn(),
+  sendTestWebhookNotification: notificationMocks.sendTestWebhookNotificationMock,
+  sendTestWebhookNotificationWithConfig: notificationMocks.sendTestWebhookNotificationWithConfigMock,
   upsertPrimaryWebhookEndpoint: vi.fn()
 }))
 
@@ -65,6 +67,8 @@ describe('notification routes', () => {
     notificationMocks.sendTestGotifyNotificationMock.mockReset()
     notificationMocks.sendTestGotifyNotificationWithConfigMock.mockReset()
     notificationMocks.scanRenewalNotificationsMock.mockReset()
+    notificationMocks.sendTestWebhookNotificationMock.mockReset()
+    notificationMocks.sendTestWebhookNotificationWithConfigMock.mockReset()
     notificationMocks.sendTestEmailNotificationMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestEmailNotificationWithConfigMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestPushplusNotificationMock.mockResolvedValue({ accepted: true, message: 'ok' })
@@ -75,6 +79,8 @@ describe('notification routes', () => {
     notificationMocks.sendTestServerchanNotificationWithConfigMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestGotifyNotificationMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestGotifyNotificationWithConfigMock.mockResolvedValue({ success: true })
+    notificationMocks.sendTestWebhookNotificationMock.mockResolvedValue({ success: true, statusCode: 200, responseBody: '' })
+    notificationMocks.sendTestWebhookNotificationWithConfigMock.mockResolvedValue({ success: true, statusCode: 200, responseBody: '' })
     notificationMocks.scanRenewalNotificationsMock.mockResolvedValue({
       processedCount: 1,
       matchedReminderCount: 1,
@@ -128,24 +134,27 @@ describe('notification routes', () => {
     })
 
     expect(res.statusCode).toBe(200)
-    expect(notificationMocks.sendTestEmailNotificationWithConfigMock).toHaveBeenCalledWith({
-      emailProvider: 'resend',
-      smtpConfig: {
-        host: '',
-        port: 587,
-        secure: false,
-        username: '',
-        password: '',
-        from: '',
-        to: ''
+    expect(notificationMocks.sendTestEmailNotificationWithConfigMock).toHaveBeenCalledWith(
+      {
+        emailProvider: 'resend',
+        smtpConfig: {
+          host: '',
+          port: 587,
+          secure: false,
+          username: '',
+          password: '',
+          from: '',
+          to: ''
+        },
+        resendConfig: {
+          apiBaseUrl: 'https://api.resend.com/emails',
+          apiKey: 're_test',
+          from: 'SubTracker <noreply@example.com>',
+          to: 'user@example.com'
+        }
       },
-      resendConfig: {
-        apiBaseUrl: 'https://api.resend.com/emails',
-        apiKey: 're_test',
-        from: 'SubTracker <noreply@example.com>',
-        to: 'user@example.com'
-      }
-    })
+      { locale: 'zh-CN' }
+    )
   })
 
   it('tests serverchan notification with stored config', async () => {
@@ -179,15 +188,45 @@ describe('notification routes', () => {
       url: '/notifications/scan-debug',
       payload: {
         now: '2026-05-01T17:15:00.000+08:00'
+      },
+      headers: {
+        'X-SubTracker-Locale': 'en-US'
       }
     })
 
     expect(res.statusCode).toBe(200)
     expect(notificationMocks.scanRenewalNotificationsMock).toHaveBeenCalledWith(new Date('2026-05-01T17:15:00.000+08:00'), {
       dryRun: true,
-      includeDebugCandidates: true
+      includeDebugCandidates: true,
+      locale: 'en-US'
     })
     expect(res.json().data.processedCount).toBe(1)
+  })
+
+  it('passes locale to webhook test with payload', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/notifications/test/webhook',
+      headers: {
+        'X-SubTracker-Locale': 'en-US'
+      },
+      payload: {
+        enabled: true,
+        url: 'https://example.com/hook',
+        requestMethod: 'POST',
+        headers: 'Content-Type: application/json',
+        payloadTemplate: '{}',
+        ignoreSsl: false
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(notificationMocks.sendTestWebhookNotificationWithConfigMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: 'https://example.com/hook'
+      }),
+      { locale: 'en-US' }
+    )
   })
 
 })

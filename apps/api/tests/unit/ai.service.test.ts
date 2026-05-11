@@ -20,7 +20,8 @@ const recognizeMock = vi.fn(async () => ({
 }))
 
 vi.mock('../../src/services/settings.service', () => ({
-  getAiConfig: vi.fn(async () => mockedSettings.aiConfig)
+  getAiConfig: vi.fn(async () => mockedSettings.aiConfig),
+  getSystemDefaultLocale: vi.fn(async () => 'en-US')
 }))
 
 vi.mock('tesseract.js', () => ({
@@ -124,6 +125,28 @@ describe('ai service', () => {
     expect(firstBody.response_format).toEqual({ type: 'json_object' })
     expect(secondBody.response_format).toBeUndefined()
     expect(secondBody.messages[0].content).toContain('合法 JSON 对象')
+  })
+
+  it('uses english default prompt when system default locale is en-US', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        choices: [
+          {
+            message: {
+              content: '{"name":"Netflix"}'
+            }
+          }
+        ]
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await recognizeSubscriptionByAi({
+      text: 'Netflix 9.99 USD monthly'
+    })
+
+    const requestBody = JSON.parse(String((((fetchMock.mock.calls[0] as unknown) as [unknown, RequestInit])[1])?.body))
+    expect(requestBody.messages[0].content).toContain('subscription billing extractor')
   })
 
   it('uses OCR text path when vision capability is disabled', async () => {
