@@ -34,7 +34,9 @@
                 <span v-if="!(detail.tags?.length)">未打标签</span>
               </n-space>
             </n-descriptions-item>
-            <n-descriptions-item label="自动续订">{{ detail.autoRenew ? '已启用' : '未启用' }}</n-descriptions-item>
+            <n-descriptions-item label="自动续订" :label-style="middleAlignedCellStyle" :content-style="middleAlignedCellStyle">
+              {{ detail.autoRenew ? '已启用' : '未启用' }}
+            </n-descriptions-item>
             <n-descriptions-item label="订阅频率">每 {{ detail.billingIntervalCount }} {{ unitLabel(detail.billingIntervalUnit) }}</n-descriptions-item>
             <n-descriptions-item label="开始日期">{{ formatDate(detail.startDate) }}</n-descriptions-item>
             <n-descriptions-item label="下次续订">{{ formatDate(detail.nextRenewalDate) }}</n-descriptions-item>
@@ -66,7 +68,9 @@
               </n-space>
               <span v-else>{{ formatReminderRulesText(detail.overdueReminderRules, 'overdue') }}</span>
             </n-descriptions-item>
-            <n-descriptions-item label="提醒通知">{{ detail.webhookEnabled ? '已启用' : '未启用' }}</n-descriptions-item>
+            <n-descriptions-item label="提醒通知" :label-style="middleAlignedCellStyle" :content-style="middleAlignedCellStyle">
+              {{ detail.webhookEnabled ? '已启用' : '未启用' }}
+            </n-descriptions-item>
             <n-descriptions-item label="创建时间">{{ formatDateTime(detail.createdAt) }}</n-descriptions-item>
           </n-descriptions>
 

@@ -130,7 +130,7 @@
 
           <n-space wrap size="small" style="margin: 10px 0 6px">
             <n-tag
-              v-for="tag in item.tags ?? []"
+              v-for="tag in getTagDisplay(item.tags).visible"
               :key="tag.id"
               size="small"
               :bordered="false"
@@ -138,6 +138,12 @@
             >
               {{ tag.name }}
             </n-tag>
+            <n-tooltip v-if="getTagDisplay(item.tags).overflowCount > 0" trigger="hover">
+              <template #trigger>
+                <n-tag size="small" :bordered="false">+{{ getTagDisplay(item.tags).overflowCount }}</n-tag>
+              </template>
+              <span>{{ formatTagOverflowTooltip(getTagDisplay(item.tags).overflow) }}</span>
+            </n-tooltip>
             <span v-if="!(item.tags?.length)" class="muted-text">未打标签</span>
           </n-space>
 
@@ -284,6 +290,7 @@ import {
   NSelect,
   NSpace,
   NTag,
+  NTooltip,
   useMessage
 } from 'naive-ui'
 import {
@@ -306,6 +313,7 @@ import SubscriptionPaymentRecordsDrawer from '@/components/SubscriptionPaymentRe
 import type { PaymentRecord, Subscription, SubscriptionDetail, Tag } from '@/types/api'
 import { resolveLogoUrl } from '@/utils/logo'
 import { createSingleFlight } from '@/utils/single-flight'
+import { formatSubscriptionTagOverflowTooltip, splitSubscriptionTagsForDisplay } from '@/utils/subscription-tags'
 import { formatDateInTimezone } from '@/utils/timezone'
 import {
   areAllVisibleSubscriptionsSelected,
@@ -562,6 +570,14 @@ const tagListStyle = {
   gap: '6px'
 }
 
+function getTagDisplay(tags?: Tag[] | null) {
+  return splitSubscriptionTagsForDisplay(tags)
+}
+
+function formatTagOverflowTooltip(tags: Tag[]) {
+  return formatSubscriptionTagOverflowTooltip(tags)
+}
+
 const mainColumns = [
   {
     title: '名称',
@@ -597,20 +613,42 @@ const mainColumns = [
       if (row.__rowType === 'note') return null
       if (!(row.tags?.length)) return '未打标签'
 
+      const { visible, overflow, overflowCount } = splitSubscriptionTagsForDisplay(row.tags)
+
       return h(
         'div',
         { style: tagListStyle },
-        row.tags.slice(0, 3).map((tag) =>
-          h(
-            NTag,
-            {
-              size: 'small',
-              bordered: false,
-              color: { color: tag.color, textColor: '#fff' }
-            },
-            { default: () => tag.name }
-          )
-        )
+        [
+          ...visible.map((tag) =>
+            h(
+              NTag,
+              {
+                size: 'small',
+                bordered: false,
+                color: { color: tag.color, textColor: '#fff' }
+              },
+              { default: () => tag.name }
+            )
+          ),
+          overflowCount > 0
+            ? h(
+                NTooltip,
+                { trigger: 'hover' },
+                {
+                  trigger: () =>
+                    h(
+                      NTag,
+                      {
+                        size: 'small',
+                        bordered: false
+                      },
+                      { default: () => `+${overflowCount}` }
+                    ),
+                  default: () => formatSubscriptionTagOverflowTooltip(overflow)
+                }
+              )
+            : null
+        ].filter(Boolean)
       )
     }
   },
