@@ -5,6 +5,7 @@ describe('app layout sidebar behavior', () => {
   it('keeps desktop sidebar fixed and menu independently scrollable', () => {
     const source = readFileSync('src/App.vue', 'utf8')
     const globalStyle = readFileSync('src/style.css', 'utf8')
+    const html = readFileSync('index.html', 'utf8')
 
     expect(source).toContain('content-style="overflow: visible;"')
     expect(source).toContain('class="desktop-sider"')
@@ -21,5 +22,7 @@ describe('app layout sidebar behavior', () => {
     expect(globalStyle).toContain('background: #111827;')
     expect(globalStyle).toContain('#app {')
     expect(globalStyle).toContain('background: var(--app-bg);')
+    expect(html).toContain('rel="icon"')
+    expect(html).toContain('/src/assets/brand-logo.png')
   })
 })

@@ -455,9 +455,6 @@
               <n-switch v-model:value="settingsForm.aiConfig.enabled" />
               <span class="switch-label">启用 AI 能力</span>
             </n-form-item>
-            <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
-              AI 能力总开关控制识别与连接测试；AI 总结可单独开启或关闭。
-            </n-alert>
 
             <n-grid :cols="formCols" :x-gap="12" :y-gap="12">
               <n-grid-item>
@@ -559,9 +556,23 @@
               <div class="switch-group switch-group--single">
                 <div class="switch-group__item">
                   <span class="switch-inline-label">允许通过通知验证码找回密码</span>
+                  <n-tooltip v-if="!forgotPasswordToggleUnlocked" trigger="hover">
+                    <template #trigger>
+                      <div class="switch-disabled-wrapper">
+                        <n-switch
+                          v-model:value="settingsForm.forgotPasswordEnabled"
+                          :disabled="true"
+                        />
+                      </div>
+                    </template>
+                    <span>需先启用至少一个直达通知渠道</span>
+                  </n-tooltip>
                   <n-switch
+                    v-else
                     v-model:value="settingsForm.forgotPasswordEnabled"
-                    :disabled="!forgotPasswordToggleUnlocked"
+                    :loading="savingForgotPasswordToggle"
+                    :disabled="savingForgotPasswordToggle"
+                    @update:value="handleForgotPasswordToggleChange"
                   />
                 </div>
               </div>
@@ -850,6 +861,7 @@ const savingGotifySettings = ref(false)
 const savingWebhookSettings = ref(false)
 const savingAiSettings = ref(false)
 const savingCredentials = ref(false)
+const savingForgotPasswordToggle = ref(false)
 const sourceCurrency = ref('USD')
 const targetCurrency = ref('CNY')
 const converterAmount = ref(1)
@@ -1369,6 +1381,25 @@ async function submitCredentialsChange() {
   }
 }
 
+async function handleForgotPasswordToggleChange(value: boolean) {
+  if (savingForgotPasswordToggle.value) return
+  const previousValue = settingsForm.forgotPasswordEnabled
+  settingsForm.forgotPasswordEnabled = value
+  savingForgotPasswordToggle.value = true
+  try {
+    const result = await api.updateSettings({
+      forgotPasswordEnabled: value
+    })
+    applySavedSettings(result)
+    message.success(value ? '找回密码已开启' : '找回密码已关闭')
+  } catch (error) {
+    settingsForm.forgotPasswordEnabled = previousValue
+    message.error(error instanceof Error ? error.message : '找回密码设置保存失败')
+  } finally {
+    savingForgotPasswordToggle.value = false
+  }
+}
+
 async function testEmail() {
   if (!validateEmailSettings('test')) return
   try {
@@ -1628,6 +1659,10 @@ function previewSettingsReminderRules() {
   align-items: center;
   gap: 10px;
   min-height: 34px;
+}
+
+.switch-disabled-wrapper {
+  display: inline-flex;
 }
 
 .label-with-tip {
