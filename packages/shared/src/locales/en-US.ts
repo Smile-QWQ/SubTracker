@@ -23,7 +23,7 @@ export default {
       reorder: 'Reorder',
       done: 'Done',
       signOut: 'Sign out',
-      connectionTest: 'Connection test',
+      connectionTest: 'Test connection',
       visionTest: 'Vision test'
     },
     status: {
@@ -46,7 +46,7 @@ export default {
       tags: 'Tags',
       startDate: 'Start date',
       nextRenewal: 'Next renewal',
-      autoRenew: 'Auto renew',
+      autoRenew: 'Auto-renew',
       notifications: 'Notifications',
       createdAt: 'Created at',
       from: 'From',
@@ -92,26 +92,26 @@ export default {
       enUS: 'English'
     },
     units: {
-      day: 'Day',
-      week: 'Week',
-      month: 'Month',
-      quarter: 'Quarter',
-      year: 'Year',
+      day: 'day',
+      week: 'week',
+      month: 'month',
+      quarter: 'quarter',
+      year: 'year',
       minutes: 'minutes'
     }
   },
   app: {
     brand: 'SubTracker',
     shellTitle: 'Subscription Console',
-    shellSubtitle: 'Multi-currency · Reminders · Statistics · Calendar',
+    shellSubtitle: 'Multi-currency · Reminders · Analytics · Calendar',
     notSignedIn: 'Not signed in',
     changeDefaultPasswordTitle: 'Change default password first',
     changeDefaultPasswordWarning: 'You are still using the default admin password. Change it before continuing.',
     newPassword: 'New password',
     confirmNewPassword: 'Confirm new password',
     versionUpdates: 'Version updates',
-    releaseUnknown: 'Unknown publish time',
-    viewRelease: 'View Release',
+    releaseUnknown: 'Unknown release date',
+    viewRelease: 'View release',
     noNewRelease: 'No release is newer than the current version.',
     updateAvailable: 'New version available. Current: {currentVersion}, latest: {latestVersion}',
     alreadyLatest: 'You are already on the latest version ({version})',
@@ -127,7 +127,7 @@ export default {
       login: 'Login'
     },
     theme: {
-      current: 'Current theme: {current}. Click to switch to {next}',
+      current: 'Theme: {current}. Click to switch to {next}',
       light: 'Light',
       dark: 'Dark'
     }
@@ -147,7 +147,7 @@ export default {
     success: {
       login: 'Signed in successfully',
       forgotPasswordCodeSent: 'If the username is valid and notifications are enabled, the verification code has been sent.',
-      passwordResetAndLoggedIn: 'Password reset succeeded and you have been signed in automatically',
+      passwordResetAndLoggedIn: 'Password reset complete. You have been signed in automatically.',
       defaultPasswordChanged: 'Default password changed'
     },
     error: {
@@ -162,9 +162,9 @@ export default {
     rememberMe: 'Remember me',
     rememberMeDays: '({days} days)',
     forgotPassword: 'Forgot password',
-    collapseForgotPassword: 'Hide password recovery',
-    sendCode: 'Send verification code',
-    verifyAndResetPassword: 'Verify and reset password',
+    collapseForgotPassword: 'Hide password reset',
+    sendCode: 'Send code',
+    verifyAndResetPassword: 'Verify code and reset password',
     usernamePlaceholder: 'Enter username',
     passwordPlaceholder: 'Enter password',
     codePlaceholder: 'Enter the 6-digit verification code',
@@ -174,17 +174,17 @@ export default {
   settings: {
     page: {
       title: 'Settings',
-      subtitle: 'Manage base settings, budgets, exchange rates, notifications, and AI'
+      subtitle: 'Manage settings, budgets, exchange rates, notifications, and AI'
     },
     sections: {
-      basic: 'Basic settings',
+      basic: 'General settings',
       exchangeSnapshot: 'Exchange rate snapshot',
-      currentRates: 'Current rates (common currencies)',
+      currentRates: 'Current exchange rates',
       converter: 'Currency converter',
-      notifications: 'Notification settings',
+      notifications: 'Notifications',
       ai: 'AI settings',
-      credentials: 'Credentials',
-      importExport: 'Import and export',
+      credentials: 'Account',
+      importExport: 'Import & export',
       backup: 'Backup',
       migration: 'Migration',
       about: 'About',
@@ -192,29 +192,29 @@ export default {
     },
     labels: {
       baseCurrency: 'Base currency',
-      timezone: 'Business timezone',
-      rememberSessionDays: 'Remember session days',
-      timezoneSample: 'Current timezone sample',
+      timezone: 'Working time zone',
+      rememberSessionDays: 'Days to stay signed in',
+      timezoneSample: 'Current time in this time zone',
       monthlyBudget: 'Monthly budget (base currency)',
       yearlyBudget: 'Yearly budget (base currency)',
-      advanceReminderRules: 'Advance reminder rules',
+      advanceReminderRules: 'Pre-renewal reminder rules',
       overdueReminderRules: 'Overdue reminder rules',
-      mergeNotifications: 'Merge multi-subscription notifications',
-      enableTagBudgets: 'Enable tag monthly budgets',
+      mergeNotifications: 'Merge reminders for multiple subscriptions',
+      enableTagBudgets: 'Enable monthly budgets by tag',
       sourceCurrency: 'Source currency',
       targetCurrency: 'Target currency',
       providerPreset: 'Provider preset',
-      capabilitySwitches: 'Capability switches',
+      capabilitySwitches: 'Feature toggles',
       structuredOutput: 'Prefer structured JSON output',
       requestTimeout: 'Request timeout (ms)',
       customRecognitionPrompt: 'Custom recognition prompt',
       customSummaryPrompt: 'Custom summary prompt',
       enableAi: 'Enable AI',
-      aiSummary: 'AI summary',
-      aiVisionCapability: 'Vision input',
+      aiSummary: 'AI summaries',
+      aiVisionCapability: 'Image input',
       configurationDetails: 'Configuration details',
       advancedConfig: 'Advanced settings',
-      notificationProvider: 'Notification provider',
+      notificationProvider: 'Provider',
       providerName: 'Provider name',
       providerUrl: 'Endpoint',
       fetchedAt: 'Fetched at',
@@ -238,24 +238,24 @@ export default {
       oldPassword: 'Current password',
       newUsername: 'New username',
       newPassword: 'New password',
-      enableForgotPassword: 'Allow password recovery via notification code',
+      enableForgotPassword: 'Allow password reset via notification code',
       restoreSettings: 'Also overwrite current settings'
     },
     helps: {
       advanceReminderRules:
-        'Format: days&time; For example, 3&09:30; means remind 3 days in advance at 09:30, and 0&09:30; means remind on the due day. Separate multiple rules with ;',
+        'Format: days&time;. For example, 3&09:30; reminds 3 days before the due date at 09:30, and 0&09:30; reminds on the due date. Separate multiple rules with ;',
       overdueReminderRules:
-        'Format: days&time; For example, 1&09:30; means remind at 09:30 after 1 overdue day. Separate multiple rules with ;',
+        'Format: days&time;. For example, 1&09:30; reminds at 09:30 on overdue day 1. Separate multiple rules with ;',
       notificationSettings:
-        'Manage Email, PushPlus, Telegram, ServerChan, Gotify, and Webhook in one place. Each channel can be saved and tested independently.',
-      aiSettings: 'The AI master switch controls recognition and connection tests. AI summaries can be enabled or disabled separately.',
+        'Manage Email, PushPlus, Telegram, ServerChan, Gotify, and Webhook in one place. Save and test each channel independently.',
+      aiSettings: 'The main AI switch controls recognition and connection tests. AI summaries can be turned on or off separately.',
       structuredOutput:
         'When enabled, the system prefers vendor-supported structured JSON output. If unsupported, it automatically falls back to prompt-based JSON output.',
       backup: 'Backup and restore via ZIP, including subscriptions, tags, payment records, ordering, settings, and local logos.',
       migration: 'Import data from similar third-party projects'
     },
     buttons: {
-      previewReminderRules: 'Preview reminder rules',
+      previewReminderRules: 'Preview rules',
       collapseReminderPreview: 'Hide reminder preview',
       exportBackup: 'Export backup',
       restoreBackup: 'Restore backup',
@@ -281,11 +281,11 @@ export default {
       customSummaryPrompt: 'Leave empty to use the system summary prompt.'
     },
     summary: {
-      baseCurrencyTag: 'Base {currency}',
-      supportedCurrenciesTag: '{count} currencies supported',
-      selectCurrenciesToConvert: 'Select currencies to convert',
+      baseCurrencyTag: 'Base: {currency}',
+      supportedCurrenciesTag: 'Supports {count} currencies',
+      selectCurrenciesToConvert: 'Choose currencies to convert',
       emailResend: 'Resend · To: {to}',
-      emailSmtp: 'Host: {host} · To: {to}'
+      emailSmtp: 'SMTP {host} · To: {to}'
     },
     channels: {
       email: 'Email notifications',
@@ -317,10 +317,10 @@ export default {
       aiMissingFields: 'AI settings are missing required fields: {fields}'
     },
     messages: {
-      basicSaved: 'Basic settings saved',
-      basicSaveFailed: 'Failed to save basic settings',
-      emailSaved: 'Email notification settings saved',
-      emailDisabled: 'Email notifications disabled',
+      basicSaved: 'General settings saved',
+      basicSaveFailed: 'Failed to save general settings',
+      emailSaved: 'Email settings saved',
+      emailDisabled: 'Email disabled',
       pushplusSaved: 'PushPlus settings saved',
       pushplusDisabled: 'PushPlus disabled',
       telegramSaved: 'Telegram settings saved',
@@ -335,7 +335,7 @@ export default {
       aiConnectionTestFailed: 'AI connection test failed',
       aiVisionTestSuccess: 'Vision test succeeded: {provider} / {model} / {response}',
       aiVisionTestFailed: 'AI vision test failed',
-      ratesRefreshed: 'Exchange rates refreshed',
+      ratesRefreshed: 'Exchange rates updated',
       credentialsUpdated: 'Credentials updated',
       emailTestSent: 'Test email sent',
       emailTestFailed: 'Email test failed',
@@ -348,12 +348,12 @@ export default {
       serverchanTestFailed: 'ServerChan test failed',
       gotifyTestSent: 'Gotify test message sent',
       gotifyTestFailed: 'Gotify test failed',
-      zipExportStarted: 'ZIP export started',
-      zipExportFailed: 'ZIP export failed',
+      zipExportStarted: 'Backup export started',
+      zipExportFailed: 'Backup export failed',
       backupRestored: 'Backup restored',
       backupAppendedWithSettings: 'Backup appended and system settings overwritten',
       backupAppended: 'Backup appended',
-      wallosImported: 'Wallos data imported',
+      wallosImported: 'Wallos import completed',
       webhookSaved: 'Webhook settings saved',
       webhookDisabled: 'Webhook disabled',
       webhookTestSuccessWithPreview: 'Webhook test succeeded, HTTP {statusCode}: {preview}',
@@ -361,10 +361,10 @@ export default {
       webhookTestFailed: 'Webhook test failed'
     },
     about: {
-      releaseNotes: 'Release Notes',
+      releaseNotes: 'Release notes',
       license: 'License',
-      issues: 'Issues and Requests',
-      author: 'The author',
+      issues: 'Issues & requests',
+      author: 'Author',
       documentation: 'Documentation',
       readmeDeployment: 'README / DEPLOYMENT',
       credits: {
@@ -379,11 +379,11 @@ export default {
   dashboard: {
     page: {
       title: 'Dashboard',
-      subtitle: 'Overview subscription scale, budget usage, upcoming renewals, and spend distribution'
+      subtitle: 'See subscription count, budget usage, upcoming renewals, and spend breakdown'
     },
     cards: {
       activeSubscriptions: 'Active subscriptions',
-      renewalsIn7Days: 'Renewals in 7 days',
+      renewalsIn7Days: 'Renewals in the next 7 days',
       estimatedMonthlySpend: 'Estimated monthly spend',
       estimatedYearlySpend: 'Estimated yearly spend'
     },
@@ -391,17 +391,17 @@ export default {
       monthlyBudgetUsage: 'Monthly budget usage',
       yearlyBudgetUsage: 'Yearly budget usage',
       tagBudgetOverview: 'Tag budget overview',
-      tagMonthlySpend: 'Tag monthly spend',
-      monthlyTrend: 'Monthly payment trend (next 12 months)',
-      upcoming30: 'Upcoming renewals (30 days)'
+      tagMonthlySpend: 'Monthly spend by tag',
+      monthlyTrend: 'Projected monthly spend (next 12 months)',
+      upcoming30: 'Renewals in the next 30 days'
     },
     labels: {
       usedPrefix: 'Used',
       budgetPrefix: '/ Budget',
       configuredTagBudgets: 'Configured tag budgets',
-      nearingBudget: 'Near budget',
+      nearingBudget: 'Near budget limit',
       overBudget: 'Over budget',
-      topUsageRate: 'Top usage rate'
+      topUsageRate: 'Highest usage rate'
     },
     empty: {
       noMonthlyBudget: 'No monthly budget set',
@@ -419,23 +419,23 @@ export default {
   },
   budgets: {
     page: {
-      title: 'Budget statistics',
-      subtitle: 'Review overall budget usage and tag monthly budget analysis'
+      title: 'Budget analysis',
+      subtitle: 'Review overall budget usage and monthly budgets by tag'
     },
     sections: {
       monthlyBudgetUsage: 'Monthly budget usage',
       yearlyBudgetUsage: 'Yearly budget usage',
-      tagBudgetUsageRate: 'Tag budget usage rate',
-      budgetSummary: 'Budget summary',
+      tagBudgetUsageRate: 'Tag budget utilization',
+      budgetSummary: 'Budget overview',
       topUsageRate: 'Top 3 usage rates',
-      tagBudgetUsageTable: 'Tag budget usage table',
+      tagBudgetUsageTable: 'Tag budget table',
       tagBudget: 'Tag budgets'
     },
     labels: {
       usedPrefix: 'Used',
       budgetPrefix: '/ Budget',
       configuredTagBudgets: 'Configured tag budgets',
-      nearingBudget: 'Near budget',
+      nearingBudget: 'Near budget limit',
       overBudget: 'Over budget',
       tag: 'Tag',
       spent: 'Spent',
@@ -456,7 +456,7 @@ export default {
       section: 'Tag monthly budgets are independent from overall budgets and only apply to tags with configured budgets.'
     },
     buttons: {
-      setTagBudgets: 'Set tag monthly budgets'
+      setTagBudgets: 'Edit tag budgets'
     },
     status: {
       normal: 'Normal',
@@ -470,16 +470,16 @@ export default {
   calendar: {
     page: {
       title: 'Subscription calendar',
-      subtitle: 'Review subscription date distribution with month and list views'
+      subtitle: 'View subscription dates in calendar and list views'
     },
     cards: {
       currentMonth: 'Current month',
-      currentMonthSuffix: 'Currently viewed month',
+      currentMonthSuffix: 'Month currently in view',
       monthlyRenewalCount: 'Renewals this month',
-      monthlyRenewalCountSuffix: 'Subscriptions in the current month',
+      monthlyRenewalCountSuffix: 'Subscriptions in the selected month',
       monthlySpend: 'Estimated spend this month',
       convertedSuffix: 'Converted by exchange rate',
-      selectedDateRenewals: 'Renewals on selected date'
+      selectedDateRenewals: 'Renewals on the selected date'
     },
     tabs: {
       month: 'Month view',
@@ -487,7 +487,7 @@ export default {
     },
     detail: {
       dayRenewalsTitle: 'Renewals on {date}',
-      dayRenewalsSummary: '{count} items · {currency} {amount}',
+      dayRenewalsSummary: '{count} subscriptions · {currency} {amount}',
       noRenewalOnDay: 'No renewals on this day',
       converted: 'Converted',
       itemsSuffix: 'items'
@@ -502,18 +502,18 @@ export default {
   },
   statistics: {
     page: {
-      title: 'Expense statistics',
-      subtitle: 'Analyze subscription spend through trend, structure, and risk'
+      title: 'Spending analysis',
+      subtitle: 'Review subscription spending by trend, mix, and risk'
     },
     ai: {
       title: 'AI summary',
       generatedAtPrefix: 'Last generated: ',
-      collapseDetails: 'Collapse details',
-      viewDetails: 'View details',
+      collapseDetails: 'Hide details',
+      viewDetails: 'Show details',
       regenerate: 'Regenerate summary',
-      expandedHint: 'Generated from current statistics and does not modify subscription data',
-      generatingHint: 'Generating an AI summary from current statistics, please wait...',
-      unconfiguredHint: 'Enable AI and AI summaries in Settings first. The statistics page will then generate summaries automatically.',
+      expandedHint: 'Generated from current stats and does not change your subscription data',
+      generatingHint: 'Generating an AI summary from current stats. Please wait...',
+      unconfiguredHint: 'Turn on AI and AI summaries in Settings first. This page will then generate summaries automatically.',
       failedFallback: 'AI summary generation failed. Please try again later.',
       noSummary: 'No AI summary',
       previewLabel: 'Preview',
@@ -521,27 +521,27 @@ export default {
       failed: 'Failed to generate AI summary'
     },
     sections: {
-      monthlyTrend: 'Monthly payment trend (next 12 months)',
-      tagSpend: 'Tag monthly spend share',
+      monthlyTrend: 'Projected monthly spend (next 12 months)',
+      tagSpend: 'Spending share by tag',
       statusDistribution: 'Status distribution',
       autoRenewShare: 'Auto-renew share',
-      currencyDistribution: 'Subscription currency distribution',
-      upcoming30: 'Renewal distribution in the next 30 days',
-      top10: 'Top 10 monthly subscription spend'
+      currencyDistribution: 'Subscriptions by currency',
+      upcoming30: 'Renewal distribution over the next 30 days',
+      top10: 'Top 10 subscriptions by monthly spend'
     },
     empty: {
       noData: 'No data',
       noUpcoming30: 'No renewals in the next 30 days'
     },
     series: {
-      trend: 'Projected amount',
+      trend: 'Projected spend',
       renewalCount: 'Renewals',
       amount: 'Amount'
     },
     labels: {
       renewalsCountAxis: 'Renewals',
-      autoRenew: 'Auto renew',
-      manualRenew: 'Manual renew',
+      autoRenew: 'Auto-renew',
+      manualRenew: 'Manual renewal',
       renewalCountTooltip: 'Subscriptions',
       amountTooltip: 'Monthly amount'
     },
@@ -554,8 +554,8 @@ export default {
   },
   tags: {
     manage: {
-      title: 'Tag management',
-      description: 'Create, edit, and delete tags here.',
+      title: 'Tags',
+      description: 'Create, edit, and delete tags.',
       create: 'New tag',
       tag: 'Tag',
       sortOrder: 'Order',
@@ -575,7 +575,7 @@ export default {
     },
     budget: {
       title: 'Set tag monthly budgets',
-      description: 'Set monthly budgets for tags that need separate spend control. Tags without a budget are excluded from tag budget analysis.',
+      description: 'Set monthly budgets for tags that need their own spending limits. Tags without budgets are excluded from tag budget analysis.',
       searchPlaceholder: 'Search tags',
       budgetPlaceholder: 'Not set ({currency})'
     }
@@ -592,18 +592,18 @@ export default {
       listTitle: 'Subscription list',
       noSubscriptions: 'No subscriptions',
       selectedItems: '{count} selected',
-      selectCurrentPage: 'Select current page',
+      selectCurrentPage: 'Select this page',
       clearSelection: 'Clear selection',
       batchMode: 'Batch mode',
       exitBatchMode: 'Exit batch mode',
       dragHandleEnabledTitle: 'Drag to reorder',
-      dragHandleDisabledTitle: 'Drag sorting is unavailable for the current sort mode'
+      dragHandleDisabledTitle: 'Drag sorting is unavailable in the current sort mode'
     },
     sort: {
       custom: 'Custom order',
-      renewal: 'By next renewal',
-      amountDesc: 'By amount descending',
-      name: 'By name'
+      renewal: 'Next renewal',
+      amountDesc: 'Highest amount',
+      name: 'Name A-Z'
     },
     status: {
       active: 'Active',
@@ -612,17 +612,17 @@ export default {
       expired: 'Expired'
     },
     actions: {
-      tagManagement: 'Tag management',
+      tagManagement: 'Manage tags',
       create: 'New subscription',
-      batchRenew: 'Batch renew',
-      setActive: 'Set active',
-      setPaused: 'Set paused',
-      setCancelled: 'Set cancelled',
+      batchRenew: 'Renew selected',
+      setActive: 'Set to active',
+      setPaused: 'Set to paused',
+      setCancelled: 'Set to cancelled',
       batchDelete: 'Batch delete',
       reorder: 'Reorder',
       finishReorder: 'Done reordering',
       detail: 'Details',
-      records: 'Records',
+      records: 'History',
       edit: 'Edit',
       renew: 'Renew',
       pause: 'Pause',
@@ -631,13 +631,13 @@ export default {
     },
     labels: {
       nextRenewal: 'Next renewal',
-      autoRenew: 'Auto renew',
+      autoRenew: 'Auto-renew',
       note: 'Notes:',
-      currentCycle: 'Current cycle',
+      currentCycle: 'Current billing period',
       remainingValue: 'Remaining value',
       interval: 'Billing interval',
       originalAmount: 'Original amount',
-      advanceReminders: 'Advance reminders',
+      advanceReminders: 'Pre-renewal reminders',
       overdueReminders: 'Overdue reminders'
     },
     values: {
@@ -646,25 +646,25 @@ export default {
     confirm: {
       pause: 'Pause this subscription?',
       cancel: 'Cancel this subscription?',
-      resume: 'Resume this subscription to active status?',
-      delete: 'Delete "{name}" and its renewal records/history? This action cannot be undone.'
+      resume: 'Resume this subscription and set it back to active?',
+      delete: 'Delete "{name}" along with its renewal records and related history? This action cannot be undone.'
     },
     messages: {
       subscriptionUpdated: 'Subscription updated',
       subscriptionCreated: 'Subscription created',
-      subscriptionSaveFailed: 'Save failed: {message}',
+      subscriptionSaveFailed: 'Failed to save: {message}',
       tagCreated: 'Tag created',
       tagCreateFailed: 'Failed to create tag: {message}',
       tagUpdated: 'Tag updated',
       tagUpdateFailed: 'Failed to update tag: {message}',
       tagDeleted: 'Deleted tag: {name}',
       tagDeleteFailed: 'Failed to delete tag: {message}',
-      resetToCurrent: 'Reset to the current subscription content',
+      resetToCurrent: 'Reset to the current subscription values',
       resetForm: 'Form reset',
       logoSearchEmpty: 'No logos found',
       logoSearchFailed: 'Failed to search logos',
       localLogoLoadFailed: 'Failed to load local logos',
-      localLogoFirst: 'No name or website provided, showing saved local logos first.',
+      localLogoFirst: 'No name or website entered. Showing saved logos first.',
       logoSavedAndApplied: 'Saved locally and applied',
       logoImportFailed: 'Failed to import logo',
       logoReused: 'Reused from local library',
@@ -672,15 +672,15 @@ export default {
       logoDeleteFailed: 'Failed to delete logo',
       logoUploadSuccess: 'Logo uploaded successfully',
       logoUploadFailed: 'Failed to upload logo',
-      chooseRequiredDates: 'Select the start date and next renewal date',
-      dragSortEnabled: 'Drag sorting enabled. Use the handle to reorder items.',
+      chooseRequiredDates: 'Choose a start date and next renewal date',
+      dragSortEnabled: 'Drag sorting is on. Use the handle to reorder subscriptions.',
       orderUpdated: 'Order updated',
       orderUpdateFailed: 'Failed to update sort order',
-      batchActionSuccess: '{label} succeeded for {count} items',
-      batchActionPartial: '{label} finished: {success} succeeded, {failure} failed',
-      batchDeleteSuccess: 'Batch delete succeeded for {count} items',
+      batchActionSuccess: '{label} succeeded for {count} subscriptions',
+      batchActionPartial: '{label} complete: {success} succeeded, {failure} failed',
+      batchDeleteSuccess: 'Deleted {count} subscriptions',
       batchDeletePartial:
-        'Batch delete finished: deleted {success} items, skipped {skipped} active items, and failed {failure} items',
+        'Batch delete finished: deleted {success} subscriptions, skipped {skipped} active subscriptions, failed {failure}',
       renewed: 'Renewed: {name}',
       paused: 'Paused',
       resumed: 'Resumed',
@@ -689,21 +689,21 @@ export default {
     },
     batch: {
       selectFirst: 'Select subscriptions first',
-      renewSuccess: 'Batch renew succeeded for {count} items',
-      renewPartial: 'Batch renew finished: {success} succeeded, {failure} failed',
+      renewSuccess: 'Renewed {count} subscriptions',
+      renewPartial: 'Batch renew complete: {success} succeeded, {failure} failed',
       statusConfirm: 'Set the selected {count} subscriptions to {status}?',
       deleteConfirmAll: 'Delete the selected {count} subscriptions? This action cannot be undone.',
       deleteConfirmPartial:
-        'Delete subscriptions in batch? {deletable} items will be deleted and {blocked} active items will be skipped. This action cannot be undone.'
+        'Delete subscriptions in batch? {deletable} subscriptions will be deleted, and {blocked} active subscriptions will be skipped. This action cannot be undone.'
     },
     detail: {
       title: 'Subscription details',
-      remainingDays: '{days} days remaining / {ratio}'
+      remainingDays: '{days} days left / {ratio}'
     },
     form: {
       titleCreate: 'Create subscription',
-      titleEdit: 'Subscription details',
-      savingDescription: 'Saving, please wait...',
+      titleEdit: 'Edit subscription',
+      savingDescription: 'Saving... Please wait.',
       namePlaceholder: 'For example: GitHub Pro',
       descriptionPlaceholder: 'Optional, briefly describe the subscription',
       amountPlaceholder: 'Enter an amount, use 0 for free subscriptions',
@@ -711,21 +711,21 @@ export default {
       frequencyPlaceholder: 'Select frequency',
       unitPlaceholder: 'Select a unit',
       tagPlaceholder: 'Select tags',
-      websiteLabel: 'Official / platform URL',
+      websiteLabel: 'Official or platform URL',
       nextRenewalLabel: 'Next renewal',
-      recalculateNextRenewal: 'Recalculate next renewal based on start date and billing interval',
+      recalculateNextRenewal: 'Recalculate the next renewal from the start date and billing interval',
       advanceReminderRulesPlaceholder: 'Leave empty to use the system default, e.g. 3&09:30;0&09:30;',
       overdueReminderRulesPlaceholder: 'Leave empty to use the system default, e.g. 1&09:30;2&09:30;',
-      notesPlaceholder: 'Optional, record account, plan, or special notes',
-      notificationEnabledLabel: 'Enable reminder notifications',
+      notesPlaceholder: 'Optional: account, plan, or any special notes',
+      notificationEnabledLabel: 'Enable reminders',
       logo: {
         upload: 'Click to upload',
         placeholder: 'Logo',
-        panelTitle: 'Select a logo',
-        webTab: 'Web search ({count})',
-        libraryTab: 'Saved locally ({count})',
+        panelTitle: 'Choose a logo',
+        webTab: 'Web results ({count})',
+        libraryTab: 'Saved logos ({count})',
         searching: 'Searching for logos...',
-        noSearchResults: 'No web search results are available right now',
+        noSearchResults: 'No web results are available right now',
         loadingLocal: 'Loading local logos...',
         noLocalResults: 'No reusable local logos yet',
         usedCount: 'Used {count} times',
@@ -737,42 +737,42 @@ export default {
         }
       },
       actions: {
-        aiRecognize: 'AI fill',
-        previewReminderRules: 'Preview reminders',
+        aiRecognize: 'Fill with AI',
+        previewReminderRules: 'Preview rules',
         collapseReminderPreview: 'Hide reminder preview'
       }
     },
     aiModal: {
       title: 'AI subscription recognition',
       description:
-        'Enter text, upload an image, or paste a screenshot directly. If the current model does not support image recognition, the system falls back to local OCR before sending text to the model. Results only fill the form and are not saved automatically.',
-      loading: 'Recognizing, please wait...',
-      loadingHint: 'The result appears automatically when ready. No need to click again.',
+        'Enter text, upload an image, or paste a screenshot. If the current model does not support image recognition, the app uses local OCR first and then sends the extracted text to the model. Results only fill the form and are not saved automatically.',
+      loading: 'Recognizing...',
+      loadingHint: 'The result will appear automatically when it is ready. No need to click again.',
       textInput: 'Text input',
       textLabel: 'Text',
-      textPlaceholder: 'Paste subscription emails, payment records, order text, and more',
+      textPlaceholder: 'Paste subscription emails, payment records, order details, and more',
       imageInput: 'Image input',
       imageLabel: 'Image',
       uploadImage: 'Upload image',
-      clearImage: 'Clear image',
-      imageTip: 'Supports screenshot upload and direct paste',
-      pasteHint: 'You can also paste a screenshot directly here',
+      clearImage: 'Remove image',
+      imageTip: 'Upload or paste a screenshot',
+      pasteHint: 'You can also paste a screenshot here',
       imagePreviewAlt: 'Recognition image preview',
       confidence: 'Confidence',
       confidenceWithValue: 'Confidence: {value}%',
-      recognize: 'Start recognition',
+      recognize: 'Recognize',
       recognizing: 'Recognizing',
-      applyResult: 'Apply result',
+      applyResult: 'Apply',
       resultTitle: 'Recognition result',
       rawText: 'Raw extracted text',
       rawTextTitle: 'Raw extracted text',
       result: 'Recognition result',
-      noInput: 'Enter text or upload an image first',
-      pleaseProvideInput: 'Enter text or upload an image first',
-      recognitionCompleted: 'Recognition completed',
+      noInput: 'Add text or an image first',
+      pleaseProvideInput: 'Add text or an image first',
+      recognitionCompleted: 'Recognition complete',
       recognitionFailed: 'AI recognition failed',
       field: 'Field',
-      recognizedResult: 'Recognized result',
+      recognizedResult: 'Value',
       fields: {
         name: 'Name',
         description: 'Description',
@@ -782,13 +782,13 @@ export default {
         billingIntervalUnit: 'Unit',
         startDate: 'Start date',
         nextRenewalDate: 'Next renewal',
-        notifyDaysBefore: 'Reminder days',
+        notifyDaysBefore: 'Reminder lead time',
         websiteUrl: 'Website',
         notes: 'Notes'
       }
     },
     paymentRecords: {
-      title: 'Renewal records',
+      title: 'Renewal history',
       noData: 'No renewal records',
       renewedAt: 'Renewed at',
       convertedAmount: 'Converted amount',
@@ -799,7 +799,7 @@ export default {
       title: 'Restore backup',
       description:
         'This ZIP restores subscriptions, tags, payment records, ordering, settings, and local logos. It does not restore credentials, session secrets, webhook history, or exchange rate snapshots.',
-      pickZip: 'Choose ZIP file',
+      pickZip: 'Choose a ZIP file',
       noFileSelected: 'No file selected',
       previewBackup: 'Preview backup',
       subscriptions: 'Subscriptions',
@@ -808,11 +808,11 @@ export default {
       localLogos: 'Local logos',
       restoreMode: 'Restore mode',
       replaceMode: 'Clear existing data and restore',
-      appendMode: 'Keep existing data and append restore',
+      appendMode: 'Keep current data and append restored data',
       replaceWarning:
         'This deletes current subscriptions, tags, payment records, ordering, settings, and local logos before restoring from the file.',
       appendHelp:
-        'For append restore: tags with the same name are reused; subscriptions and payment records are skipped idempotently by backup CUID; settings overwrite is controlled separately.',
+        'For append restore, tags with the same name are reused; subscriptions and payment records are skipped idempotently by backup CUID; settings overwrite is controlled separately.',
       restoreSettingsLabel: 'Also overwrite current settings',
       restorePreview: 'Restore preview',
       existingSameNameTags: 'Existing tags with the same name:',
@@ -822,24 +822,24 @@ export default {
       confirmRestore: 'Confirm restore',
       invalidZip: 'The backup ZIP could not be parsed',
       previewFailed: 'Failed to preview backup',
-      previewGenerated: 'Backup preview generated',
+      previewGenerated: 'Backup preview ready',
       nothingImported: 'No new data was imported. Duplicate entries were skipped automatically.',
-      restoreCompleted: 'Restore completed: {subscriptions} subscriptions, {tags} new tags, {payments} payment records, {logos} logos',
+      restoreCompleted: 'Restore complete: {subscriptions} subscriptions, {tags} new tags, {payments} payment records, {logos} logos',
       restoreFailed: 'Restore failed'
     }
   },
   imports: {
     wallos: {
       title: 'Import Wallos data',
-      description: 'Upload Wallos JSON, SQLite database, or ZIP files. Only tags actually used by subscriptions are imported.',
-      pickFile: 'Choose file',
+      description: 'Upload a Wallos JSON file, SQLite database, or ZIP backup. Only tags actually used by imported subscriptions are kept.',
+      pickFile: 'Choose a file',
       preview: 'Generate preview',
       confirmImport: 'Confirm import',
       previewTitle: 'Import preview',
       warningTitle: 'Warnings',
-      sourceTimezoneLabel: 'Wallos source timezone (advanced)',
-      sourceTimezonePlaceholder: 'Defaults to the current business timezone',
-      sourceTimezoneHint: 'Adjust this only if the exported Wallos instance used a different TZ. Otherwise keep the default.',
+      sourceTimezoneLabel: 'Wallos source time zone (advanced)',
+      sourceTimezonePlaceholder: 'Defaults to the current working time zone',
+      sourceTimezoneHint: 'Change this only if the exported Wallos instance used a different time zone. Otherwise, keep the default.',
       importTypeLabel: 'Import type',
       importableSubscriptionsLabel: 'Importable subscriptions',
       importedTagsLabel: 'Imported tags',
@@ -848,8 +848,8 @@ export default {
       noImportableTags: 'No importable tags',
       subscriptionPreviewTitle: 'Subscription preview',
       jsonWarning:
-        'Wallos JSON import detected. Wallos DB import is recommended first because the DB includes more complete data such as start_date and full currency codes. JSON can still be imported, but some fields may degrade, such as inferred currency or fallback start dates.',
-      noWarnings: 'No extra warnings',
+        'Wallos JSON import detected. Wallos DB import is recommended first because the database includes more complete data such as start_date and full currency codes. JSON import still works, but some fields may fall back to inferred values, such as currency or start date.',
+      noWarnings: 'No additional warnings',
       warningCount: '{count} warnings',
       sourceId: 'Source ID',
       tagName: 'Tag name',
@@ -860,7 +860,7 @@ export default {
       nextRenewal: 'Next renewal',
       tags: 'Tags',
       noTags: 'No tags',
-      autoRenew: 'Auto renew',
+      autoRenew: 'Auto-renew',
       yes: 'Yes',
       no: 'No',
       status: 'Status',
@@ -868,9 +868,9 @@ export default {
       logoNone: 'None',
       logoPending: 'Pending match',
       logoReady: 'Ready from ZIP',
-      previewGenerated: 'Import preview generated',
+      previewGenerated: 'Import preview ready',
       previewFailed: 'Failed to generate preview',
-      importCompleted: 'Import completed: {subscriptions} subscriptions, {tags} tags, {logos} logos',
+      importCompleted: 'Import complete: {subscriptions} subscriptions, {tags} tags, {logos} logos',
       importFailed: 'Import failed',
       fileTypes: {
         json: 'JSON',
@@ -899,7 +899,7 @@ export default {
       dueToday: 'Due today',
       overdue: 'Overdue reminders',
       daysUntil: 'Due in {days} days',
-      overdueDay: 'Overdue day {days}'
+      overdueDay: 'Day {days} overdue'
     },
     labels: {
       reminderType: 'Reminder type: {value}',
@@ -922,11 +922,11 @@ export default {
       single: '{phase}: {name}'
     },
     forgotPassword: {
-      title: 'SubTracker password reset verification code',
+      title: 'SubTracker password reset code',
       username: 'Username: {username}',
       code: 'Verification code: {code}',
       expiresInMinutes: 'Expires in: {minutes} minutes',
-      ignoreHint: 'If this was not requested by you, you can ignore this notification.'
+      ignoreHint: 'If you did not request this, you can ignore this notification.'
     },
     tests: {
       subscriptionName: 'Test subscription',
@@ -950,16 +950,16 @@ export default {
       notesTooLong: 'Notes cannot exceed 1000 characters'
     },
     reminderRules: {
-      fallback: 'Use system default',
+      fallback: 'Use the system default',
       emptyTitle: 'Enter rules before previewing',
       resultTitle: 'Preview result',
       invalidTitle: 'Invalid rule format',
       defaultRulesLabel: 'system default rules',
-      defaultAdvanceRulesLabel: 'System default advance rules',
-      defaultOverdueRulesLabel: 'System default overdue rules',
+      defaultAdvanceRulesLabel: 'system default pre-renewal rules',
+      defaultOverdueRulesLabel: 'system default overdue rules',
       fallbackPreviewTitle: 'No value entered. Previewing with {label}',
       fallbackInvalidTitle: '{label} is invalid',
-      noAdvance: 'No advance reminder rules',
+      noAdvance: 'No pre-renewal reminder rules',
       noOverdue: 'No overdue reminder rules',
       parseFailed: 'Failed to parse rules',
       invalidSegmentFormat: 'Rule "{segment}" is invalid. Expected format: days&HH:mm',
@@ -967,20 +967,20 @@ export default {
       invalidOverdueDays: 'The days value in rule "{segment}" must be greater than or equal to 1',
       invalidAdvanceDays: 'The days value in rule "{segment}" cannot be less than 0',
       invalidTime: 'The time value in rule "{segment}" must use HH:mm',
-      inlineAdvanceSameDay: 'On the due day at {time}',
+      inlineAdvanceSameDay: 'On the due date at {time}',
       inlineAdvanceBefore: '{days} day(s) before at {time}',
-      inlineOverdue: '{days} overdue day(s) at {time}',
-      evalAdvanceSameDay: 'Remind on the due day at {time}',
+      inlineOverdue: 'On overdue day {days} at {time}',
+      evalAdvanceSameDay: 'Remind on the due date at {time}',
       evalAdvanceBefore: 'Remind {days} day(s) before at {time}',
-      evalOverdue: 'Remind {days} overdue day(s) later at {time}'
+      evalOverdue: 'Remind on overdue day {days} at {time}'
     }
   },
   ai: {
     status: {
-      textFast: 'Recognizing. This usually finishes within a few seconds. Please do not click repeatedly.',
-      textSlow: 'Still recognizing. The model may be responding slowly, please wait a little longer.',
-      imageFast: 'Recognizing image and text. This usually takes 5-10 seconds. Please do not close the window.',
-      imageSlow: 'Image recognition is still running. The external model is responding slowly, please wait a bit longer.'
+      textFast: 'Recognizing. This usually takes just a few seconds. No need to click again.',
+      textSlow: 'Still working. The model is responding slowly, so please wait a little longer.',
+      imageFast: 'Recognizing the image and text. This usually takes 5-10 seconds. Please keep this window open.',
+      imageSlow: 'Image recognition is still running. The external model is responding slowly, so please wait a little longer.'
     },
     prompts: {
       subscription: {
@@ -1060,7 +1060,7 @@ Hard requirements:
     errors: {
       unauthorized: 'Please sign in first',
       tooManyAttempts: 'Too many failed sign-in attempts. Please try again later.',
-      internal: 'Unknown server error',
+      internal: 'Unexpected server error',
       logoNotFound: 'Logo not found',
       conflict: 'Resource conflict',
       validation: {
@@ -1106,7 +1106,7 @@ Hard requirements:
         invalidCredentials: 'Incorrect username or password',
         currentCredentialsInvalid: 'Incorrect current username or password',
         defaultPasswordChangeNotAllowed: 'Default password change is not allowed right now',
-        forgotPasswordDisabled: 'Forgot password is disabled or no available notification channel is configured.',
+        forgotPasswordDisabled: 'Forgot password is unavailable because it is disabled or no notification channel is configured.',
         forgotPasswordRequestRateLimited: 'Verification codes are being requested too frequently. Please try again later.',
         forgotPasswordRequestCooldown: 'A verification code was just sent. Please try again later.',
         forgotPasswordDeliveryFailed: 'Failed to send the verification code. Check the notification configuration.',
@@ -1114,23 +1114,23 @@ Hard requirements:
         forgotPasswordChallengeNotFound: 'The verification code is invalid or has expired.',
         forgotPasswordAttemptsExhausted: 'No verification attempts remain. Request a new code.',
         forgotPasswordCodeInvalid: 'Too many incorrect verification attempts. Request a new code.',
-        forgotPasswordCodeInvalidWithAttempts: 'Incorrect verification code. {attempts} attempt(s) remaining.',
+        forgotPasswordCodeInvalidWithAttempts: 'Incorrect verification code. Attempts remaining: {attempts}.',
         forgotPasswordResetFailed: 'Failed to reset the password',
         forgotPasswordChannelRequired: 'Enable at least one direct notification channel before turning on forgot password.'
       },
       settings: {
-        emailFieldsRequired: 'To enable Email notifications, fill in: {fields}',
+        emailFieldsRequired: 'To enable email notifications, fill in: {fields}',
         pushplusTokenRequired: 'To enable PushPlus, fill in Token',
         telegramFieldsRequired: 'To enable Telegram notifications, fill in: {fields}',
         serverchanSendKeyRequired: 'To enable ServerChan, fill in SendKey',
         gotifyFieldsRequired: 'To enable Gotify, fill in: {fields}',
-        aiFieldsRequired: 'To enable AI capability, fill in: {fields}'
+        aiFieldsRequired: 'To enable AI, fill in: {fields}'
       },
       ai: {
-        disabled: 'AI capability is disabled',
+        disabled: 'AI is disabled',
         configIncomplete: 'AI configuration is incomplete',
         summaryDisabled: 'AI summary is disabled',
-        summaryConfigIncomplete: 'AI summary configuration is incomplete',
+        summaryConfigIncomplete: 'AI summary settings are incomplete',
         invalidRecognitionInput: 'Invalid AI recognition input',
         noValidContent: 'AI did not return valid content',
         noRecognizableText: 'No text content is available for recognition',
@@ -1186,7 +1186,7 @@ Hard requirements:
         batchPauseOnlyActive: 'Only active subscriptions can be paused in batch mode',
         batchCancelOnlyActive: 'Only active subscriptions can be cancelled in batch mode',
         activeDeleteBlocked: 'Active subscriptions cannot be deleted directly',
-        websiteUrlInvalid: 'websiteUrl is invalid. Enter a valid URL'
+        websiteUrlInvalid: 'Website URL is invalid. Enter a valid URL.'
       }
     }
   }

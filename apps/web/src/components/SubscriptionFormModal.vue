@@ -258,13 +258,13 @@
       </n-form-item>
 
       <div class="form-footer">
-        <n-space>
+        <n-space class="form-footer__toggles" wrap>
           <n-switch v-model:value="form.webhookEnabled" />
           <span>{{ t('subscriptions.form.notificationEnabledLabel') }}</span>
           <n-switch v-model:value="form.autoRenew" />
           <span>{{ t('common.labels.autoRenew') }}</span>
         </n-space>
-        <n-space wrap>
+        <n-space class="form-footer__actions" wrap justify="end">
           <n-button :disabled="saving" @click="showAiModal = true">{{ t('subscriptions.form.actions.aiRecognize') }}</n-button>
           <n-button
             :disabled="saving"
@@ -1080,6 +1080,17 @@ function formatLogoSource(source: string) {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.form-footer__toggles {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.form-footer__actions {
+  flex: 1 1 420px;
+  min-width: 0;
+  justify-content: flex-end;
 }
 
 .label-with-tip {

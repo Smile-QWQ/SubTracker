@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { setAppLocale } from '@/locales'
 import { getJsonImportWarningMessage, shouldRecommendDbImport } from '../../../src/utils/wallos-import'
 
 describe('wallos import ui helpers', () => {
@@ -11,7 +10,6 @@ describe('wallos import ui helpers', () => {
   })
 
   it('provides a stable warning message', () => {
-    setAppLocale('zh-CN')
     const message = getJsonImportWarningMessage()
     expect(message).toContain('推荐优先使用 Wallos DB 导入')
     expect(message).toContain('JSON')

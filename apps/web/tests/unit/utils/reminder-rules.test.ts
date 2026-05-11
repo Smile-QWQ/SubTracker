@@ -50,7 +50,7 @@ describe('reminder rules helpers', () => {
       fallbackValue: '3&09:30;0&09:30;'
     })
 
-    expect(result.title).toBe('当前未填写，以下按系统默认规则演算')
+    expect(result.title).toBe('当前未填写，以下按系统默认到期前规则演算')
     expect(result.usingFallback).toBe(true)
     expect(result.entries.map((item) => item.description)).toEqual([
       '提前 3 天 09:30 提醒',
