@@ -84,4 +84,17 @@ describe('settings service', () => {
       30
     )
   })
+
+  it('reads forgot password toggle from stored settings', async () => {
+    listSettingsLiteMock.mockResolvedValue(
+      new Map([
+        ['forgotPasswordEnabled', true]
+      ])
+    )
+
+    const { getAppSettings } = await import('../../src/services/settings.service')
+    const result = await getAppSettings()
+
+    expect(result.forgotPasswordEnabled).toBe(true)
+  })
 })

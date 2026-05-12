@@ -137,6 +137,8 @@ async function buildLegacyRequest(c: Context) {
   const auth =
     pathname === '/api/v1/auth/login' ||
     pathname === '/api/v1/auth/login-options' ||
+    pathname === '/api/v1/auth/forgot-password/request' ||
+    pathname === '/api/v1/auth/forgot-password/reset' ||
     pathname === '/health'
       ? undefined
       : await verifyToken(token)
@@ -210,6 +212,8 @@ export class LegacyFastifyApp {
         c.req.path.startsWith('/api/v1') &&
         c.req.path !== '/api/v1/auth/login' &&
         c.req.path !== '/api/v1/auth/login-options' &&
+        c.req.path !== '/api/v1/auth/forgot-password/request' &&
+        c.req.path !== '/api/v1/auth/forgot-password/reset' &&
         !(request as { auth?: unknown }).auth
       ) {
         const reply = new LegacyReply()

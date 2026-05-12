@@ -16,14 +16,18 @@ import { claimNotificationDelivery, releaseNotificationDelivery } from './worker
 import { toIsoDate } from '../utils/date'
 import { formatDateInTimezone } from '../utils/timezone'
 import { prisma } from '../db'
+import {
+  buildDispatchParamsFromDedupEntries,
+  type NotificationDedupEntry,
+  type NotificationDispatchParams
+} from './notification-merge.service'
+import {
+  buildNotificationMessage,
+  formatNotificationDate,
+  type DirectNotificationMessage
+} from './notification-presentation.service'
 
-type NotificationDispatchParams = {
-  eventType: WebhookEventType
-  resourceKey: string
-  periodKey: string
-  subscriptionId?: string
-  payload: Record<string, unknown>
-}
+export { formatNotificationDate } from './notification-presentation.service'
 
 type PushplusApiResponse = {
   code?: number
@@ -54,6 +58,12 @@ type NotificationSummarySection = {
   title: string
   eventType: WebhookEventType
   subscriptions: NotificationSubscriptionItem[]
+}
+
+type ForgotPasswordNotificationPayload = {
+  username: string
+  code: string
+  expiresInMinutes: number
 }
 
 export type PushplusSendResult = {
@@ -96,158 +106,35 @@ export async function cleanupNotificationDeliveryClaims(
   retentionDays = NOTIFICATION_DEDUP_RETENTION_DAYS
 ) {
   const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000)
-  const result = await prisma.notificationDelivery.deleteMany({
-    where: {
-      updatedAt: {
-        lt: cutoff
+  const notificationDelivery = (prisma as unknown as {
+    notificationDelivery?: {
+      deleteMany: (args: { where: { updatedAt: { lt: Date } } }) => Promise<{ count: number }>
+    }
+  }).notificationDelivery
+
+  if (notificationDelivery) {
+    const result = await notificationDelivery.deleteMany({
+      where: {
+        updatedAt: {
+          lt: cutoff
+        }
       }
-    }
-  })
-
-  return result.count
-}
-
-function getMergedSubscriptions(params: NotificationDispatchParams) {
-  const subscriptions = params.payload.subscriptions
-  return Array.isArray(subscriptions) ? (subscriptions as NotificationSubscriptionItem[]) : []
-}
-
-function getMergedSections(params: NotificationDispatchParams) {
-  const sections = params.payload.mergedSections
-  return Array.isArray(sections) ? (sections as NotificationSummarySection[]) : []
-}
-
-export function formatNotificationDate(value: string | undefined) {
-  if (!value) return ''
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return value
-  }
-  const isoDateMatch = value.match(/^(\d{4}-\d{2}-\d{2})T/)
-  if (isoDateMatch) {
-    return isoDateMatch[1]
-  }
-  const parsed = dayjs(value)
-  return parsed.isValid() ? parsed.format('YYYY-MM-DD') : value
-}
-
-function getPhaseLabel(params: NotificationDispatchParams) {
-  const phase = String(params.payload.phase ?? '')
-  const daysUntilRenewal = Number(params.payload.daysUntilRenewal ?? 0)
-  const daysOverdue = Number(params.payload.daysOverdue ?? 0)
-  const mergedSections = getMergedSections(params)
-  const mergedSubscriptions = getMergedSubscriptions(params)
-
-  if (mergedSections.length > 1) {
-    return '订阅提醒汇总'
-  }
-
-  if (params.eventType === 'subscription.reminder_due') {
-    if (mergedSubscriptions.length > 0) {
-      return phase === 'due_today' ? '今天到期' : '即将到期'
-    }
-    return phase === 'due_today' ? '今天到期' : `还有 ${daysUntilRenewal} 天到期`
-  }
-
-  return mergedSubscriptions.length > 0 ? '过期提醒' : `已过期第 ${daysOverdue} 天`
-}
-
-function buildNotificationTitle(params: NotificationDispatchParams) {
-  const mergedSubscriptions = getMergedSubscriptions(params)
-  const mergedSections = getMergedSections(params)
-
-  if (mergedSubscriptions.length > 0) {
-    const prefix = mergedSections.length > 1 ? '订阅提醒汇总' : getPhaseLabel(params)
-    return `${prefix}：共 ${mergedSubscriptions.length} 项订阅`
-  }
-
-  const name = String(params.payload.name ?? '未命名订阅')
-  return `${getPhaseLabel(params)}：${name}`
-}
-
-function buildSummarySectionBody(section: NotificationSummarySection) {
-  return [
-    `${section.title}（${section.subscriptions.length} 项）`,
-    ...section.subscriptions.map((subscription, index) => {
-      const amountText = `${subscription.amount} ${subscription.currency}`.trim()
-      const extras = [
-        subscription.daysUntilRenewal !== undefined && subscription.daysUntilRenewal > 0
-          ? `还有 ${subscription.daysUntilRenewal} 天`
-          : null,
-        subscription.daysOverdue !== undefined && subscription.daysOverdue > 0 ? `过期 ${subscription.daysOverdue} 天` : null
-      ]
-        .filter(Boolean)
-        .join(' / ')
-
-      return [
-        `${index + 1}. ${subscription.name}`,
-        `   日期：${formatNotificationDate(subscription.nextRenewalDate)}`,
-        `   金额：${amountText}`,
-        extras ? `   说明：${extras}` : null
-      ]
-        .filter(Boolean)
-        .join('\n')
     })
-  ].join('\n')
-}
 
-function buildMergedNotificationBody(params: NotificationDispatchParams) {
-  const mergedSections = getMergedSections(params)
-  const mergedSubscriptions = getMergedSubscriptions(params)
-
-  if (mergedSections.length > 0) {
-    const lines = [`提醒类型：${getPhaseLabel(params)}`, `订阅数量：${mergedSubscriptions.length} 项`, '']
-
-    for (const section of mergedSections) {
-      lines.push(buildSummarySectionBody(section), '')
-    }
-
-    return lines.join('\n').trim()
+    return result.count
   }
 
-  return [
-    `提醒类型：${getPhaseLabel(params)}`,
-    `订阅数量：${mergedSubscriptions.length} 项`,
-    '',
-    ...mergedSubscriptions.map((subscription, index) => {
-      const amountText = `${subscription.amount} ${subscription.currency}`.trim()
-      const extras = [
-        subscription.daysUntilRenewal !== undefined && subscription.daysUntilRenewal > 0
-          ? `还有 ${subscription.daysUntilRenewal} 天`
-          : null,
-        subscription.daysOverdue !== undefined && subscription.daysOverdue > 0 ? `过期 ${subscription.daysOverdue} 天` : null
-      ]
-        .filter(Boolean)
-        .join(' / ')
+  const cutoffIso = cutoff.toISOString()
 
-      return [
-        `${index + 1}. ${subscription.name}`,
-        `   日期：${formatNotificationDate(subscription.nextRenewalDate)}`,
-        `   金额：${amountText}`,
-        extras ? `   说明：${extras}` : null
-      ]
-        .filter(Boolean)
-        .join('\n')
-    })
-  ].join('\n')
-}
-
-function buildNotificationBody(params: NotificationDispatchParams) {
-  const mergedSubscriptions = getMergedSubscriptions(params)
-  if (mergedSubscriptions.length > 0) {
-    return buildMergedNotificationBody(params)
+  try {
+    const result = await prisma.$executeRawUnsafe(
+      'DELETE FROM NotificationDelivery WHERE updatedAt < ?',
+      cutoffIso
+    )
+    return Number(result ?? 0)
+  } catch {
+    return 0
   }
-
-  const lines = [
-    `提醒类型：${getPhaseLabel(params)}`,
-    `订阅名称：${String(params.payload.name ?? '')}`,
-    `下次续订：${formatNotificationDate(String(params.payload.nextRenewalDate ?? ''))}`,
-    `金额：${`${String(params.payload.amount ?? '')} ${String(params.payload.currency ?? '')}`.trim()}`,
-    `标签：${Array.isArray(params.payload.tagNames) ? params.payload.tagNames.join('、') : ''}`,
-    `网址：${String(params.payload.websiteUrl ?? '')}`,
-    `备注：${String(params.payload.notes ?? '')}`
-  ]
-
-  return lines.filter((line) => !line.endsWith('：')).join('\n')
 }
 
 async function withDeliveryClaim(
@@ -292,7 +179,29 @@ async function withDeliveryClaim(
   }
 }
 
-async function sendResendEmailWithConfig(params: NotificationDispatchParams, config: ResendConfigInput) {
+function buildForgotPasswordTitle() {
+  return 'SubTracker 密码重置验证码'
+}
+
+function buildForgotPasswordBody(payload: ForgotPasswordNotificationPayload) {
+  return [
+    `用户名：${payload.username}`,
+    `验证码：${payload.code}`,
+    `有效期：${payload.expiresInMinutes} 分钟`,
+    '如果这不是你的操作，请忽略本次通知。'
+  ].join('\n')
+}
+
+function buildForgotPasswordMessage(payload: ForgotPasswordNotificationPayload): DirectNotificationMessage {
+  const text = buildForgotPasswordBody(payload)
+  return {
+    title: buildForgotPasswordTitle(),
+    text,
+    html: `<pre>${text}</pre>`
+  }
+}
+
+async function sendResendEmailWithConfig(message: DirectNotificationMessage, config: ResendConfigInput) {
   const apiBaseUrl = config.apiBaseUrl?.trim() || DEFAULT_RESEND_API_URL
   const apiKey = config.apiKey?.trim()
   const from = config.from?.trim()
@@ -314,8 +223,8 @@ async function sendResendEmailWithConfig(params: NotificationDispatchParams, con
         .split(',')
         .map((item) => item.trim())
         .filter(Boolean),
-      subject: buildNotificationTitle(params),
-      text: buildNotificationBody(params)
+      subject: message.title,
+      text: message.text
     })
   })
 
@@ -326,7 +235,7 @@ async function sendResendEmailWithConfig(params: NotificationDispatchParams, con
 }
 
 async function sendEmailWithProvider(
-  params: NotificationDispatchParams,
+  message: DirectNotificationMessage,
   provider: 'smtp' | 'resend',
   _smtpConfig: EmailConfigInput,
   resendConfig: ResendConfigInput
@@ -335,7 +244,124 @@ async function sendEmailWithProvider(
     throw new Error('Cloudflare Worker 运行时暂不支持 SMTP，请改用 Resend')
   }
 
-  await sendResendEmailWithConfig(params, resendConfig)
+  await sendResendEmailWithConfig(message, resendConfig)
+}
+
+async function resolvePendingNotificationEntries(
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify',
+  params: NotificationDispatchParams
+) {
+  const dedupEntries = params.dedupEntries
+  if (!dedupEntries?.length) {
+    const claimed = await claimNotificationDelivery({
+      channel,
+      eventType: params.eventType,
+      resourceKey: params.resourceKey,
+      periodKey: params.periodKey
+    })
+    return claimed ? null : []
+  }
+
+  const pending: NotificationDedupEntry[] = []
+  for (const entry of dedupEntries) {
+    const claimed = await claimNotificationDelivery({
+      channel,
+      eventType: entry.eventType,
+      resourceKey: entry.resourceKey,
+      periodKey: entry.periodKey
+    })
+
+    if (claimed) {
+      pending.push(entry)
+    }
+  }
+
+  return pending
+}
+
+async function releaseNotificationEntries(
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify',
+  params: NotificationDispatchParams
+) {
+  if (params.dedupEntries?.length) {
+    for (const entry of params.dedupEntries) {
+      await releaseNotificationDelivery({
+        channel,
+        eventType: entry.eventType,
+        resourceKey: entry.resourceKey,
+        periodKey: entry.periodKey
+      })
+    }
+    return
+  }
+
+  await releaseNotificationDelivery({
+    channel,
+    eventType: params.eventType,
+    resourceKey: params.resourceKey,
+    periodKey: params.periodKey
+  })
+}
+
+function resolveDispatchParamsForChannel(
+  params: NotificationDispatchParams,
+  pendingEntries: NotificationDedupEntry[] | null
+): NotificationDispatchParams | null {
+  if (pendingEntries === null) {
+    return params
+  }
+
+  if (pendingEntries.length === 0) {
+    return null
+  }
+
+  return buildDispatchParamsFromDedupEntries(pendingEntries, {
+    resourceKey: params.resourceKey,
+    periodKey: params.periodKey
+  })
+}
+
+type DirectChannelDispatchOptions = {
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify'
+  enabled: boolean
+  disabledMessage: string
+  alreadySentMessage: string
+  send: (message: DirectNotificationMessage) => Promise<void>
+}
+
+async function dispatchDirectChannelNotification(
+  params: NotificationDispatchParams,
+  options: DirectChannelDispatchOptions
+): Promise<NotificationChannelResult> {
+  if (!options.enabled) {
+    return {
+      channel: options.channel,
+      status: 'skipped',
+      message: options.disabledMessage
+    }
+  }
+
+  const pendingEntries = await resolvePendingNotificationEntries(options.channel, params)
+  const dispatchParams = resolveDispatchParamsForChannel(params, pendingEntries)
+  if (!dispatchParams) {
+    return {
+      channel: options.channel,
+      status: 'skipped',
+      message: options.alreadySentMessage
+    }
+  }
+
+  try {
+    await options.send(buildNotificationMessage(dispatchParams))
+  } catch (error) {
+    await releaseNotificationEntries(options.channel, dispatchParams)
+    throw error
+  }
+
+  return {
+    channel: options.channel,
+    status: 'success'
+  }
 }
 
 async function sendEmailNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
@@ -348,9 +374,13 @@ async function sendEmailNotification(params: NotificationDispatchParams): Promis
     }
   }
 
-  return withDeliveryClaim('email', params, () =>
-    sendEmailWithProvider(params, settings.emailProvider, settings.smtpConfig, settings.resendConfig)
-  )
+  return dispatchDirectChannelNotification(params, {
+    channel: 'email',
+    enabled: settings.emailNotificationsEnabled,
+    disabledMessage: 'email_disabled',
+    alreadySentMessage: 'email_already_sent',
+    send: (message) => sendEmailWithProvider(message, settings.emailProvider, settings.smtpConfig, settings.resendConfig)
+  })
 }
 
 function extractPushplusShortCode(data: unknown): string | undefined {
@@ -373,7 +403,7 @@ function extractPushplusShortCode(data: unknown): string | undefined {
 }
 
 async function sendPushplusWithConfig(
-  params: NotificationDispatchParams,
+  message: DirectNotificationMessage,
   config: PushPlusConfigInput
 ): Promise<PushplusSendResult> {
   const { token, topic } = config
@@ -389,8 +419,8 @@ async function sendPushplusWithConfig(
     body: JSON.stringify({
       token,
       topic: topic || undefined,
-      title: buildNotificationTitle(params),
-      content: `<pre>${buildNotificationBody(params)}</pre>`,
+      title: message.title,
+      content: message.html || `<pre>${message.text}</pre>`,
       template: 'html'
     })
   })
@@ -421,20 +451,16 @@ async function sendPushplusWithConfig(
 
 async function sendPushplusNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
   const settings = await getNotificationChannelSettings()
-  if (!settings.pushplusNotificationsEnabled) {
-    return {
-      channel: 'pushplus',
-      status: 'skipped',
-      message: 'pushplus_disabled'
-    }
-  }
-
-  return withDeliveryClaim('pushplus', params, async () => {
-    await sendPushplusWithConfig(params, settings.pushplusConfig)
+  return dispatchDirectChannelNotification(params, {
+    channel: 'pushplus',
+    enabled: settings.pushplusNotificationsEnabled,
+    disabledMessage: 'pushplus_disabled',
+    alreadySentMessage: 'pushplus_already_sent',
+    send: (message) => sendPushplusWithConfig(message, settings.pushplusConfig).then(() => undefined)
   })
 }
 
-async function sendTelegramWithConfig(params: NotificationDispatchParams, config: TelegramConfigInput) {
+async function sendTelegramWithConfig(message: DirectNotificationMessage, config: TelegramConfigInput) {
   const { botToken, chatId } = config
   if (!botToken || !chatId) {
     throw new Error('Telegram 通知未启用或配置不完整')
@@ -447,7 +473,7 @@ async function sendTelegramWithConfig(params: NotificationDispatchParams, config
     },
     body: JSON.stringify({
       chat_id: chatId,
-      text: `${buildNotificationTitle(params)}\n\n${buildNotificationBody(params)}`
+      text: `${message.title}\n\n${message.text}`
     })
   })
 
@@ -470,16 +496,12 @@ async function sendTelegramWithConfig(params: NotificationDispatchParams, config
 
 async function sendTelegramNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
   const settings = await getNotificationChannelSettings()
-  if (!settings.telegramNotificationsEnabled) {
-    return {
-      channel: 'telegram',
-      status: 'skipped',
-      message: 'telegram_disabled'
-    }
-  }
-
-  return withDeliveryClaim('telegram', params, async () => {
-    await sendTelegramWithConfig(params, settings.telegramConfig)
+  return dispatchDirectChannelNotification(params, {
+    channel: 'telegram',
+    enabled: settings.telegramNotificationsEnabled,
+    disabledMessage: 'telegram_disabled',
+    alreadySentMessage: 'telegram_already_sent',
+    send: (message) => sendTelegramWithConfig(message, settings.telegramConfig)
   })
 }
 
@@ -500,11 +522,11 @@ function resolveServerchanUrl(sendkey: string) {
   return `https://sctapi.ftqq.com/${trimmed}.send`
 }
 
-async function sendServerchanWithConfig(params: NotificationDispatchParams, config: ServerchanConfigInput) {
+async function sendServerchanWithConfig(message: DirectNotificationMessage, config: ServerchanConfigInput) {
   const url = resolveServerchanUrl(config.sendkey)
   const body = new URLSearchParams({
-    text: buildNotificationTitle(params),
-    desp: buildNotificationBody(params)
+    text: message.title,
+    desp: message.text
   })
 
   const response = await fetch(url, {
@@ -534,20 +556,16 @@ async function sendServerchanWithConfig(params: NotificationDispatchParams, conf
 
 async function sendServerchanNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
   const settings = await getNotificationChannelSettings()
-  if (!settings.serverchanNotificationsEnabled) {
-    return {
-      channel: 'serverchan',
-      status: 'skipped',
-      message: 'serverchan_disabled'
-    }
-  }
-
-  return withDeliveryClaim('serverchan', params, async () => {
-    await sendServerchanWithConfig(params, settings.serverchanConfig)
+  return dispatchDirectChannelNotification(params, {
+    channel: 'serverchan',
+    enabled: settings.serverchanNotificationsEnabled,
+    disabledMessage: 'serverchan_disabled',
+    alreadySentMessage: 'serverchan_already_sent',
+    send: (message) => sendServerchanWithConfig(message, settings.serverchanConfig)
   })
 }
 
-async function sendGotifyWithConfig(params: NotificationDispatchParams, config: GotifyConfigInput) {
+async function sendGotifyWithConfig(message: DirectNotificationMessage, config: GotifyConfigInput) {
   const target = validateNotificationTargetUrl(config.url.trim(), 'Gotify URL')
   const token = config.token?.trim()
   if (!token) {
@@ -560,8 +578,8 @@ async function sendGotifyWithConfig(params: NotificationDispatchParams, config: 
       'Content-Type': 'application/x-www-form-urlencoded'
     },
     body: new URLSearchParams({
-      title: buildNotificationTitle(params),
-      message: buildNotificationBody(params),
+      title: message.title,
+      message: message.text,
       priority: '5'
     }).toString()
   })
@@ -574,16 +592,12 @@ async function sendGotifyWithConfig(params: NotificationDispatchParams, config: 
 
 async function sendGotifyNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
   const settings = await getNotificationChannelSettings()
-  if (!settings.gotifyNotificationsEnabled) {
-    return {
-      channel: 'gotify',
-      status: 'skipped',
-      message: 'gotify_disabled'
-    }
-  }
-
-  return withDeliveryClaim('gotify', params, async () => {
-    await sendGotifyWithConfig(params, settings.gotifyConfig)
+  return dispatchDirectChannelNotification(params, {
+    channel: 'gotify',
+    enabled: settings.gotifyNotificationsEnabled,
+    disabledMessage: 'gotify_disabled',
+    alreadySentMessage: 'gotify_already_sent',
+    send: (message) => sendGotifyWithConfig(message, settings.gotifyConfig)
   })
 }
 
@@ -636,6 +650,22 @@ export async function dispatchNotificationEvent(params: NotificationDispatchPara
   }))) as NotificationChannelResult
   results.push(gotifyResult)
 
+  const successCount = results.filter((result) => result.status === 'success').length
+  const failed = results.filter((result) => result.status === 'failed')
+  const skipped = results.filter((result) => result.status === 'skipped')
+  const details = results
+    .map((result) => `${result.channel}:${result.status}${result.message ? `(${result.message})` : ''}`)
+    .join('；')
+  const name = String(params.payload.name ?? params.resourceKey).trim() || params.resourceKey
+
+  if (failed.length > 0) {
+    console.warn(`[notification] ${name}：通知渠道 ${successCount} 个成功，${failed.length} 个失败，${skipped.length} 个跳过。${details}`)
+  } else if (successCount > 0) {
+    console.log(`[notification] ${name}：通知渠道 ${successCount} 个成功，${failed.length} 个失败，${skipped.length} 个跳过。${details}`)
+  } else {
+    console.log(`[notification] ${name}：所有通知渠道均已跳过。${details}`)
+  }
+
   return results
 }
 
@@ -654,27 +684,109 @@ function buildTestReminderPayload() {
   }
 }
 
+async function buildTestReminderMessage() {
+  const timezone = await getAppTimezone()
+  return buildNotificationMessage({
+    eventType: 'subscription.reminder_due',
+    resourceKey: 'test:notification',
+    periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
+    payload: {
+      ...buildTestReminderPayload(),
+      nextRenewalDate: formatDateInTimezone(new Date(), timezone)
+    }
+  })
+}
+
 export async function sendTestEmailNotification() {
   const settings = await getNotificationChannelSettings()
   if (!settings.emailNotificationsEnabled) {
     throw new Error('邮箱通知未启用或配置不完整')
   }
-  const timezone = await getAppTimezone()
 
-  await sendEmailWithProvider(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:email',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    settings.emailProvider,
-    settings.smtpConfig,
-    settings.resendConfig
-  )
+  await sendEmailWithProvider(await buildTestReminderMessage(), settings.emailProvider, settings.smtpConfig, settings.resendConfig)
+}
+
+export async function sendForgotPasswordVerificationCode(payload: ForgotPasswordNotificationPayload) {
+  const settings = await getNotificationChannelSettings()
+  const results: NotificationChannelResult[] = []
+  const message = buildForgotPasswordMessage(payload)
+
+  if (settings.emailNotificationsEnabled) {
+    try {
+      await sendEmailWithProvider(message, settings.emailProvider, settings.smtpConfig, settings.resendConfig)
+      results.push({ channel: 'email', status: 'success' })
+    } catch (error) {
+      results.push({
+        channel: 'email',
+        status: 'failed',
+        message: error instanceof Error ? error.message : 'email_dispatch_failed'
+      })
+    }
+  } else {
+    results.push({ channel: 'email', status: 'skipped', message: 'email_disabled' })
+  }
+
+  if (settings.pushplusNotificationsEnabled) {
+    try {
+      await sendPushplusWithConfig(message, settings.pushplusConfig)
+      results.push({ channel: 'pushplus', status: 'success' })
+    } catch (error) {
+      results.push({
+        channel: 'pushplus',
+        status: 'failed',
+        message: error instanceof Error ? error.message : 'pushplus_dispatch_failed'
+      })
+    }
+  } else {
+    results.push({ channel: 'pushplus', status: 'skipped', message: 'pushplus_disabled' })
+  }
+
+  if (settings.telegramNotificationsEnabled) {
+    try {
+      await sendTelegramWithConfig(message, settings.telegramConfig)
+      results.push({ channel: 'telegram', status: 'success' })
+    } catch (error) {
+      results.push({
+        channel: 'telegram',
+        status: 'failed',
+        message: error instanceof Error ? error.message : 'telegram_dispatch_failed'
+      })
+    }
+  } else {
+    results.push({ channel: 'telegram', status: 'skipped', message: 'telegram_disabled' })
+  }
+
+  if (settings.serverchanNotificationsEnabled) {
+    try {
+      await sendServerchanWithConfig(message, settings.serverchanConfig)
+      results.push({ channel: 'serverchan', status: 'success' })
+    } catch (error) {
+      results.push({
+        channel: 'serverchan',
+        status: 'failed',
+        message: error instanceof Error ? error.message : 'serverchan_dispatch_failed'
+      })
+    }
+  } else {
+    results.push({ channel: 'serverchan', status: 'skipped', message: 'serverchan_disabled' })
+  }
+
+  if (settings.gotifyNotificationsEnabled) {
+    try {
+      await sendGotifyWithConfig(message, settings.gotifyConfig)
+      results.push({ channel: 'gotify', status: 'success' })
+    } catch (error) {
+      results.push({
+        channel: 'gotify',
+        status: 'failed',
+        message: error instanceof Error ? error.message : 'gotify_dispatch_failed'
+      })
+    }
+  } else {
+    results.push({ channel: 'gotify', status: 'skipped', message: 'gotify_disabled' })
+  }
+
+  return results
 }
 
 export async function sendTestEmailNotificationWithConfig(config: {
@@ -682,21 +794,7 @@ export async function sendTestEmailNotificationWithConfig(config: {
   smtpConfig: EmailConfigInput
   resendConfig: ResendConfigInput
 }) {
-  const timezone = await getAppTimezone()
-  await sendEmailWithProvider(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:email',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    config.emailProvider,
-    config.smtpConfig,
-    config.resendConfig
-  )
+  await sendEmailWithProvider(await buildTestReminderMessage(), config.emailProvider, config.smtpConfig, config.resendConfig)
 }
 
 export async function sendTestPushplusNotification() {
@@ -705,19 +803,7 @@ export async function sendTestPushplusNotification() {
     throw new Error('PushPlus 通知未启用或配置不完整')
   }
 
-  const timezone = await getAppTimezone()
-  await sendPushplusWithConfig(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:pushplus',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    settings.pushplusConfig
-  )
+  await sendPushplusWithConfig(await buildTestReminderMessage(), settings.pushplusConfig)
 
   return {
     accepted: true,
@@ -726,19 +812,7 @@ export async function sendTestPushplusNotification() {
 }
 
 export async function sendTestPushplusNotificationWithConfig(config: PushPlusConfigInput) {
-  const timezone = await getAppTimezone()
-  return sendPushplusWithConfig(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:pushplus',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    config
-  )
+  return sendPushplusWithConfig(await buildTestReminderMessage(), config)
 }
 
 export async function sendTestTelegramNotification() {
@@ -747,37 +821,13 @@ export async function sendTestTelegramNotification() {
     throw new Error('Telegram 通知未启用或配置不完整')
   }
 
-  const timezone = await getAppTimezone()
-  await sendTelegramWithConfig(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:telegram',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    settings.telegramConfig
-  )
+  await sendTelegramWithConfig(await buildTestReminderMessage(), settings.telegramConfig)
 
   return { success: true }
 }
 
 export async function sendTestTelegramNotificationWithConfig(config: TelegramConfigInput) {
-  const timezone = await getAppTimezone()
-  await sendTelegramWithConfig(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:telegram',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    config
-  )
+  await sendTelegramWithConfig(await buildTestReminderMessage(), config)
 
   return { success: true }
 }
@@ -788,37 +838,13 @@ export async function sendTestServerchanNotification() {
     throw new Error('Server 酱通知未启用或配置不完整')
   }
 
-  const timezone = await getAppTimezone()
-  await sendServerchanWithConfig(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:serverchan',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    settings.serverchanConfig
-  )
+  await sendServerchanWithConfig(await buildTestReminderMessage(), settings.serverchanConfig)
 
   return { success: true }
 }
 
 export async function sendTestServerchanNotificationWithConfig(config: ServerchanConfigInput) {
-  const timezone = await getAppTimezone()
-  await sendServerchanWithConfig(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:serverchan',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    config
-  )
+  await sendServerchanWithConfig(await buildTestReminderMessage(), config)
 
   return { success: true }
 }
@@ -829,37 +855,13 @@ export async function sendTestGotifyNotification() {
     throw new Error('Gotify 通知未启用或配置不完整')
   }
 
-  const timezone = await getAppTimezone()
-  await sendGotifyWithConfig(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:gotify',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    settings.gotifyConfig
-  )
+  await sendGotifyWithConfig(await buildTestReminderMessage(), settings.gotifyConfig)
 
   return { success: true }
 }
 
 export async function sendTestGotifyNotificationWithConfig(config: GotifyConfigInput) {
-  const timezone = await getAppTimezone()
-  await sendGotifyWithConfig(
-    {
-      eventType: 'subscription.reminder_due',
-      resourceKey: 'test:gotify',
-      periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
-      payload: {
-        ...buildTestReminderPayload(),
-        nextRenewalDate: formatDateInTimezone(new Date(), timezone)
-      }
-    },
-    config
-  )
+  await sendGotifyWithConfig(await buildTestReminderMessage(), config)
 
   return { success: true }
 }

@@ -8,6 +8,11 @@ import {
 import { prisma } from '../db'
 import { getSetting, setSetting } from './settings.service'
 import { validateNotificationTargetUrl } from './notification-url.service'
+import {
+  buildDispatchParamsFromDedupEntries,
+  type NotificationDedupEntry,
+  type NotificationDispatchParams
+} from './notification-merge.service'
 
 type DeliveryPayload = Record<string, unknown>
 
@@ -173,6 +178,7 @@ export async function dispatchWebhookEvent(params: {
   periodKey: string
   subscriptionId?: string
   payload: DeliveryPayload
+  dedupEntries?: NotificationDedupEntry[]
 }) {
   const endpoint = await getPrimaryWebhookEndpoint()
   if (!endpoint.enabled || !endpoint.url.trim()) {
@@ -183,22 +189,98 @@ export async function dispatchWebhookEvent(params: {
     } as const
   }
 
-  const existing = await prisma.webhookDelivery.findUnique({
-    where: {
-      eventType_resourceKey_periodKey: {
-        eventType: params.eventType,
-        resourceKey: params.resourceKey,
-        periodKey: params.periodKey
+  async function findWebhookDeliveryByEntry(entry: Pick<NotificationDispatchParams, 'eventType' | 'resourceKey' | 'periodKey'>) {
+    return prisma.webhookDelivery.findUnique({
+      where: {
+        eventType_resourceKey_periodKey: {
+          eventType: entry.eventType,
+          resourceKey: entry.resourceKey,
+          periodKey: entry.periodKey
+        }
+      },
+      select: {
+        id: true,
+        attemptCount: true,
+        status: true
       }
-    },
-    select: {
-      id: true,
-      attemptCount: true,
-      status: true
-    }
-  })
+    })
+  }
 
-  if (existing?.status === 'success') {
+  async function ensureWebhookDeliveryRecords(
+    entries: NotificationDedupEntry[],
+    payload: DeliveryPayload,
+    config: NotificationWebhookSettingsInput
+  ) {
+    const targets: Array<{
+      id?: string
+      attemptCount: number
+      eventType: WebhookEventType
+      resourceKey: string
+      periodKey: string
+      subscriptionId?: string
+    }> = []
+
+    for (const entry of entries) {
+      const existing = await findWebhookDeliveryByEntry(entry)
+      if (existing) {
+        targets.push({
+          id: existing.id,
+          attemptCount: existing.attemptCount,
+          eventType: entry.eventType,
+          resourceKey: entry.resourceKey,
+          periodKey: entry.periodKey,
+          subscriptionId: entry.subscriptionId
+        })
+        continue
+      }
+
+      await prisma.webhookDelivery.create({
+        data: {
+          subscriptionId: entry.subscriptionId ?? null,
+          eventType: entry.eventType,
+          resourceKey: entry.resourceKey,
+          periodKey: entry.periodKey,
+          targetUrl: config.url,
+          requestMethod: config.requestMethod,
+          payloadJson: payload as Prisma.InputJsonValue,
+          status: 'pending'
+        }
+      })
+
+      const created = await findWebhookDeliveryByEntry(entry)
+      targets.push({
+        id: created?.id,
+        attemptCount: created?.attemptCount ?? 0,
+        eventType: entry.eventType,
+        resourceKey: entry.resourceKey,
+        periodKey: entry.periodKey,
+        subscriptionId: entry.subscriptionId
+      })
+    }
+
+    return targets
+  }
+
+  async function resolvePendingWebhookEntries(params: NotificationDispatchParams) {
+    const dedupEntries = params.dedupEntries
+    if (!dedupEntries?.length) {
+      const existing = await findWebhookDeliveryByEntry(params)
+      return existing?.status === 'success' ? [] : null
+    }
+
+    const pending: NotificationDedupEntry[] = []
+    for (const entry of dedupEntries) {
+      const existing = await findWebhookDeliveryByEntry(entry)
+      if (existing?.status !== 'success') {
+        pending.push(entry)
+      }
+    }
+
+    return pending
+  }
+
+  const pendingEntries = await resolvePendingWebhookEntries(params)
+  if (pendingEntries?.length === 0) {
     return {
       channel: 'webhook',
       status: 'skipped',
@@ -206,43 +288,50 @@ export async function dispatchWebhookEvent(params: {
     } as const
   }
 
+  const dispatchParams =
+    pendingEntries === null
+      ? params
+      : buildDispatchParamsFromDedupEntries(pendingEntries, {
+          resourceKey: params.resourceKey,
+          periodKey: params.periodKey
+        })
+
+  const deliveryEntries = dispatchParams.dedupEntries?.length
+    ? dispatchParams.dedupEntries
+    : [
+        {
+          eventType: dispatchParams.eventType,
+          resourceKey: dispatchParams.resourceKey,
+          periodKey: dispatchParams.periodKey,
+          subscriptionId: dispatchParams.subscriptionId,
+          phase: String(dispatchParams.payload.phase ?? ''),
+          payload: dispatchParams.payload as NotificationDedupEntry['payload']
+        }
+      ]
+
+  const targets = await ensureWebhookDeliveryRecords(deliveryEntries, dispatchParams.payload, endpoint)
+
   try {
     const result = await sendWebhookRequest(endpoint, {
-      eventType: params.eventType,
-      payload: params.payload
+      eventType: dispatchParams.eventType,
+      payload: dispatchParams.payload
     })
 
     const nextStatus = result.statusCode >= 400 ? 'failed' : 'success'
 
-    if (existing) {
+    for (const target of targets) {
+      if (!target.id) continue
       await prisma.webhookDelivery.update({
-        where: { id: existing.id },
+        where: { id: target.id },
         data: {
-          subscriptionId: params.subscriptionId ?? null,
+          subscriptionId: target.subscriptionId ?? null,
           targetUrl: endpoint.url,
           requestMethod: endpoint.requestMethod,
-          payloadJson: params.payload as Prisma.InputJsonValue,
+          payloadJson: dispatchParams.payload as Prisma.InputJsonValue,
           status: nextStatus,
           responseCode: result.statusCode,
           responseBody: result.responseBody,
-          attemptCount: existing.attemptCount + 1,
-          lastAttemptAt: new Date()
-        }
-      })
-    } else {
-      await prisma.webhookDelivery.create({
-        data: {
-          subscriptionId: params.subscriptionId ?? null,
-          eventType: params.eventType,
-          resourceKey: params.resourceKey,
-          periodKey: params.periodKey,
-          targetUrl: endpoint.url,
-          requestMethod: endpoint.requestMethod,
-          payloadJson: params.payload as Prisma.InputJsonValue,
-          status: nextStatus,
-          responseCode: result.statusCode,
-          responseBody: result.responseBody,
-          attemptCount: 1,
+          attemptCount: target.attemptCount + 1,
           lastAttemptAt: new Date()
         }
       })
@@ -261,35 +350,19 @@ export async function dispatchWebhookEvent(params: {
       throw error
     }
 
-    if (existing) {
+    for (const target of targets) {
+      if (!target.id) continue
       await prisma.webhookDelivery.update({
-        where: { id: existing.id },
+        where: { id: target.id },
         data: {
-          subscriptionId: params.subscriptionId ?? null,
+          subscriptionId: target.subscriptionId ?? null,
           targetUrl: endpoint.url,
           requestMethod: endpoint.requestMethod,
-          payloadJson: params.payload as Prisma.InputJsonValue,
+          payloadJson: dispatchParams.payload as Prisma.InputJsonValue,
           status: 'failed',
           responseCode: 0,
           responseBody: error instanceof Error ? error.message : 'webhook_dispatch_failed',
-          attemptCount: existing.attemptCount + 1,
-          lastAttemptAt: new Date()
-        }
-      })
-    } else {
-      await prisma.webhookDelivery.create({
-        data: {
-          subscriptionId: params.subscriptionId ?? null,
-          eventType: params.eventType,
-          resourceKey: params.resourceKey,
-          periodKey: params.periodKey,
-          targetUrl: endpoint.url,
-          requestMethod: endpoint.requestMethod,
-          payloadJson: params.payload as Prisma.InputJsonValue,
-          status: 'failed',
-          responseCode: 0,
-          responseBody: error instanceof Error ? error.message : 'webhook_dispatch_failed',
-          attemptCount: 1,
+          attemptCount: target.attemptCount + 1,
           lastAttemptAt: new Date()
         }
       })

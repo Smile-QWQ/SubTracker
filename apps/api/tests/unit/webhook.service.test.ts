@@ -112,7 +112,14 @@ describe('webhook service', () => {
   })
 
   it('records failed first-time webhook attempts', async () => {
-    webhookState.findUniqueMock.mockResolvedValue(null)
+    webhookState.findUniqueMock
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'delivery_1',
+        attemptCount: 0,
+        status: 'pending'
+      })
     mockFetch(500, 'server error')
 
     await expect(dispatchWebhookEvent(baseParams)).rejects.toThrow('Webhook dispatch failed: HTTP 500')
@@ -122,6 +129,12 @@ describe('webhook service', () => {
         eventType: 'subscription.reminder_due',
         resourceKey: 'subscription:1',
         periodKey: '2026-05-01:upcoming:advance-3@09:30',
+        status: 'pending'
+      })
+    })
+    expect(webhookState.updateMock).toHaveBeenCalledWith({
+      where: { id: 'delivery_1' },
+      data: expect.objectContaining({
         status: 'failed',
         responseCode: 500,
         responseBody: 'server error',
@@ -131,7 +144,14 @@ describe('webhook service', () => {
   })
 
   it('records network failures as failed webhook attempts', async () => {
-    webhookState.findUniqueMock.mockResolvedValue(null)
+    webhookState.findUniqueMock
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'delivery_1',
+        attemptCount: 0,
+        status: 'pending'
+      })
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
@@ -143,6 +163,12 @@ describe('webhook service', () => {
 
     expect(webhookState.createMock).toHaveBeenCalledWith({
       data: expect.objectContaining({
+        status: 'pending'
+      })
+    })
+    expect(webhookState.updateMock).toHaveBeenCalledWith({
+      where: { id: 'delivery_1' },
+      data: expect.objectContaining({
         status: 'failed',
         responseCode: 0,
         responseBody: 'network down',
@@ -152,7 +178,14 @@ describe('webhook service', () => {
   })
 
   it('records successful first-time webhook attempts', async () => {
-    webhookState.findUniqueMock.mockResolvedValue(null)
+    webhookState.findUniqueMock
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'delivery_1',
+        attemptCount: 0,
+        status: 'pending'
+      })
     mockFetch(200, 'ok')
 
     await expect(dispatchWebhookEvent(baseParams)).resolves.toEqual({
@@ -165,11 +198,97 @@ describe('webhook service', () => {
         eventType: 'subscription.reminder_due',
         resourceKey: 'subscription:1',
         periodKey: '2026-05-01:upcoming:advance-3@09:30',
+        status: 'pending'
+      })
+    })
+    expect(webhookState.updateMock).toHaveBeenCalledWith({
+      where: { id: 'delivery_1' },
+      data: expect.objectContaining({
         status: 'success',
         responseCode: 200,
         responseBody: 'ok',
         attemptCount: 1
       })
     })
+  })
+
+  it('skips already-succeeded dedup entries and dispatches only pending webhook entries', async () => {
+    webhookState.findUniqueMock
+      .mockResolvedValueOnce({
+        id: 'delivery_1',
+        attemptCount: 1,
+        status: 'success'
+      })
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'delivery_2',
+        attemptCount: 0,
+        status: 'pending'
+      })
+    mockFetch(200, 'ok')
+
+    await expect(
+      dispatchWebhookEvent({
+        ...baseParams,
+        resourceKey: 'subscriptions:scan-summary',
+        periodKey: 'summary:abc',
+        dedupEntries: [
+          {
+            eventType: 'subscription.reminder_due',
+            phase: 'upcoming',
+            resourceKey: 'subscription:1',
+            periodKey: 'period:1',
+            subscriptionId: 'sub_1',
+            payload: {
+              id: 'sub_1',
+              name: 'A',
+              nextRenewalDate: '2026-05-04',
+              notifyDaysBefore: 3,
+              amount: 10,
+              currency: 'USD',
+              status: 'active',
+              tagNames: [],
+              websiteUrl: '',
+              notes: '',
+              phase: 'upcoming',
+              daysUntilRenewal: 3,
+              daysOverdue: 0,
+              reminderRuleTime: '09:30',
+              reminderRuleDays: 3
+            }
+          },
+          {
+            eventType: 'subscription.reminder_due',
+            phase: 'due_today',
+            resourceKey: 'subscription:2',
+            periodKey: 'period:2',
+            subscriptionId: 'sub_2',
+            payload: {
+              id: 'sub_2',
+              name: 'B',
+              nextRenewalDate: '2026-05-01',
+              notifyDaysBefore: 0,
+              amount: 20,
+              currency: 'USD',
+              status: 'active',
+              tagNames: [],
+              websiteUrl: '',
+              notes: '',
+              phase: 'due_today',
+              daysUntilRenewal: 0,
+              daysOverdue: 0,
+              reminderRuleTime: '09:30',
+              reminderRuleDays: 0
+            }
+          }
+        ]
+      })
+    ).resolves.toEqual({
+      channel: 'webhook',
+      status: 'success'
+    })
+
+    expect(webhookState.createMock).not.toHaveBeenCalled()
+    expect(webhookState.updateMock).toHaveBeenCalled()
   })
 })

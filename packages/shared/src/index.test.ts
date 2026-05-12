@@ -6,6 +6,8 @@ import {
   DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT,
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_OVERDUE_REMINDER_RULES,
+  ForgotPasswordRequestSchema,
+  ForgotPasswordResetSchema,
   formatAiSummaryPreviewText,
   SettingsSchema,
   SubtrackerBackupCommitSchema,
@@ -34,6 +36,7 @@ describe('shared schema', () => {
     expect(parsed.defaultNotifyDays).toBe(3)
     expect(parsed.defaultAdvanceReminderRules).toBe(DEFAULT_ADVANCE_REMINDER_RULES)
     expect(parsed.notifyOnDueDay).toBe(true)
+    expect(parsed.forgotPasswordEnabled).toBe(false)
     expect(parsed.mergeMultiSubscriptionNotifications).toBe(true)
     expect(parsed.overdueReminderDays).toEqual([1, 2, 3])
     expect(parsed.defaultOverdueReminderRules).toBe(DEFAULT_OVERDUE_REMINDER_RULES)
@@ -96,5 +99,23 @@ describe('shared schema', () => {
         '## 总览\n- 当前 13 个活跃订阅\n- 月支出 1254.61 元\n\n## 近期风险\n1. 未来 30 天续订密集'
       )
     ).toBe('总览 当前 13 个活跃订阅 月支出 1254.61 元 近期风险 未来 30 天续订密集')
+  })
+
+  it('validates forgot password request and reset payloads', () => {
+    expect(ForgotPasswordRequestSchema.parse({ username: 'admin' }).username).toBe('admin')
+    expect(
+      ForgotPasswordResetSchema.parse({
+        username: 'admin',
+        code: '123456',
+        newPassword: 'new-password'
+      }).code
+    ).toBe('123456')
+    expect(() =>
+      ForgotPasswordResetSchema.parse({
+        username: 'admin',
+        code: '12345',
+        newPassword: 'new-password'
+      })
+    ).toThrow()
   })
 })

@@ -6,6 +6,7 @@ export interface WorkerBindings {
   DB: D1Database
   ASSETS?: Fetcher
   SUBTRACKER_LOGOS?: R2Bucket
+  APP_VERSION?: string
   WEB_ORIGIN?: string
   BASE_CURRENCY?: string
   DEFAULT_NOTIFY_DAYS?: string
@@ -100,17 +101,21 @@ export function isWorkerRuntime() {
 
 export function getWorkerPublicConfig() {
   let resendApiUrl = process.env.RESEND_API_URL?.trim()
+  let appVersion = process.env.APP_VERSION?.trim()
 
   try {
     const bindings = getRuntimeBindings()
     resendApiUrl = bindings.RESEND_API_URL?.trim() || resendApiUrl
+    appVersion = bindings.APP_VERSION?.trim() || appVersion
   } catch {
     // ignore runtime binding lookup outside Worker context
   }
 
   resendApiUrl ||= 'https://api.resend.com/emails'
+  appVersion ||= ''
 
   return {
+    appVersion,
     webOrigin: getBindingOrEnv('WEB_ORIGIN', 'http://localhost:5173'),
     baseCurrency: getBindingOrEnv('BASE_CURRENCY', 'CNY').toUpperCase(),
     defaultNotifyDays: Number(getBindingOrEnv('DEFAULT_NOTIFY_DAYS', '3')),

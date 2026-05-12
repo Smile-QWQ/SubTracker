@@ -9,6 +9,7 @@ export const config = new Proxy(
       const baseConfig = {
         port: Number(process.env.PORT ?? 3001),
         host: process.env.HOST ?? '0.0.0.0',
+        appVersion: runtimeConfig.appVersion,
         webOrigin: runtimeConfig.webOrigin,
         baseCurrency: runtimeConfig.baseCurrency,
         defaultNotifyDays: runtimeConfig.defaultNotifyDays,
@@ -25,6 +26,7 @@ export const config = new Proxy(
 ) as {
   port: number
   host: string
+  appVersion: string
   webOrigin: string
   baseCurrency: string
   defaultNotifyDays: number

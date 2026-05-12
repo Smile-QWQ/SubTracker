@@ -11,6 +11,8 @@ import type {
   ChangeCredentialsPayload,
   EmailProvider,
   ExchangeRateSnapshot,
+  ForgotPasswordRequestPayload,
+  ForgotPasswordResetPayload,
   GotifyConfig,
   LoginOptions,
   LoginPayload,
@@ -28,6 +30,7 @@ import type {
   SubscriptionStatus,
   Tag,
   TelegramConfig,
+  VersionUpdateSummary,
   WallosImportCommitResult,
   WallosImportPreparedPayload,
   WallosImportInspectResult
@@ -137,6 +140,14 @@ export const api = {
 
   async getLoginOptions() {
     return unwrap<LoginOptions>((await client.get('/auth/login-options')) as { data: Envelope<LoginOptions> })
+  },
+
+  async requestForgotPasswordCode(payload: ForgotPasswordRequestPayload) {
+    return postOnce<{ accepted: boolean }>('/auth/forgot-password/request', payload)
+  },
+
+  async resetForgotPassword(payload: ForgotPasswordResetPayload) {
+    return postOnce<AuthResponse>('/auth/forgot-password/reset', payload)
   },
 
   async getCurrentUser() {
@@ -356,6 +367,12 @@ export const api = {
 
   async testWebhookNotification() {
     return postOnce<{ success: boolean; statusCode: number; responseBody: string }>('/notifications/test/webhook')
+  },
+
+  async getVersionUpdates(currentVersion: string) {
+    return unwrap<VersionUpdateSummary>((await client.get('/version/updates', { params: { currentVersion } })) as {
+      data: Envelope<VersionUpdateSummary>
+    })
   },
 
   async testWebhookNotificationWithPayload(payload: NotificationWebhookSettings) {

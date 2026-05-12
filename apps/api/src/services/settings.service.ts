@@ -103,6 +103,7 @@ export async function getAppSettings(): Promise<SettingsInput> {
         readSettingsValue(settingsMap, 'notifyOnDueDay', true)
       )
       const rememberSessionDays = readSettingsValue(settingsMap, 'rememberSessionDays', 7)
+      const forgotPasswordEnabled = readSettingsValue(settingsMap, 'forgotPasswordEnabled', false)
       const notifyOnDueDay = deriveNotifyOnDueDayFromAdvanceRules(defaultAdvanceReminderRules)
       const mergeMultiSubscriptionNotifications = readSettingsValue(settingsMap, 'mergeMultiSubscriptionNotifications', true)
       const monthlyBudgetBase = readSettingsValue<number | null>(settingsMap, 'monthlyBudgetBase', null)
@@ -148,6 +149,7 @@ export async function getAppSettings(): Promise<SettingsInput> {
         defaultNotifyDays: deriveNotifyDaysBeforeFromAdvanceRules(defaultAdvanceReminderRules) || defaultNotifyDays,
         defaultAdvanceReminderRules,
         rememberSessionDays,
+        forgotPasswordEnabled,
         notifyOnDueDay,
         mergeMultiSubscriptionNotifications,
         monthlyBudgetBase,

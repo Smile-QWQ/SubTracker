@@ -17,6 +17,7 @@ vi.mock('../../src/services/settings.service', () => ({
     defaultNotifyDays: 3,
     defaultAdvanceReminderRules: '3&09:30;0&09:30;',
     rememberSessionDays: 7,
+    forgotPasswordEnabled: (store.get('forgotPasswordEnabled') as boolean) ?? false,
     notifyOnDueDay: true,
     mergeMultiSubscriptionNotifications: (store.get('mergeMultiSubscriptionNotifications') as boolean) ?? true,
     monthlyBudgetBase: null,
@@ -279,5 +280,19 @@ describe('settings routes validation', () => {
     expect(res.statusCode).toBe(200)
     expect(res.headers['content-type']).toContain('application/zip')
     expect(String(res.headers['content-disposition'])).toContain('subtracker-backup.zip')
+  })
+
+  it('persists forgot password toggle', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      payload: {
+        forgotPasswordEnabled: true
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data.forgotPasswordEnabled).toBe(true)
+    expect(store.get('forgotPasswordEnabled')).toBe(true)
   })
 })

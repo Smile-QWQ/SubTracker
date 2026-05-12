@@ -175,6 +175,7 @@ export async function settingsRoutes(app: FastifyInstance) {
       smtpConfig: parsed.data.smtpConfig ? { ...currentSettings.smtpConfig, ...parsed.data.smtpConfig } : currentSettings.smtpConfig,
       resendConfig: parsed.data.resendConfig ? { ...currentSettings.resendConfig, ...parsed.data.resendConfig } : currentSettings.resendConfig,
       pushplusConfig: parsed.data.pushplusConfig ? { ...currentSettings.pushplusConfig, ...parsed.data.pushplusConfig } : currentSettings.pushplusConfig,
+      forgotPasswordEnabled: parsed.data.forgotPasswordEnabled ?? currentSettings.forgotPasswordEnabled,
       telegramConfig: parsed.data.telegramConfig
         ? { ...currentSettings.telegramConfig, ...parsed.data.telegramConfig }
         : currentSettings.telegramConfig,

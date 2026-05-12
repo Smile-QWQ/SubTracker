@@ -11,6 +11,7 @@ import { settingsRoutes } from '../routes/settings'
 import { notificationRoutes } from '../routes/notifications'
 import { aiRoutes } from '../routes/ai'
 import { importRoutes } from '../routes/imports'
+import { versionRoutes } from '../routes/version'
 import { ensureDatabaseInitialized } from './database-init'
 import { LegacyFastifyApp, serveStaticLogo } from './legacy-fastify'
 import { runWithRuntimeContext, type WorkerBindings } from '../runtime'
@@ -44,6 +45,7 @@ async function bootstrapRoutes() {
   await notificationRoutes(legacy as never)
   await aiRoutes(legacy as never)
   await importRoutes(legacy as never)
+  await versionRoutes(legacy as never)
 }
 
 const bootstrapPromise = bootstrapRoutes()

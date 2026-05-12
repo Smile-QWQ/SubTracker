@@ -9,7 +9,7 @@ vi.mock('../../src/config', () => ({
 vi.mock('../../src/services/settings.service', () => ({
   getAppTimezone: vi.fn(async () => 'Asia/Shanghai'),
   getNotificationChannelSettings: vi.fn(async () => ({
-    emailNotificationsEnabled: false,
+    emailNotificationsEnabled: true,
     emailProvider: 'resend',
     pushplusNotificationsEnabled: false,
     telegramNotificationsEnabled: false,
@@ -26,9 +26,9 @@ vi.mock('../../src/services/settings.service', () => ({
     },
     resendConfig: {
       apiBaseUrl: 'https://api.resend.com/emails',
-      apiKey: '',
-      from: '',
-      to: ''
+      apiKey: 're_test_123',
+      from: 'SubTracker Lite <noreply@example.com>',
+      to: 'user@example.com'
     },
     pushplusConfig: {
       token: '',
@@ -57,7 +57,11 @@ vi.mock('../../src/services/worker-lite-state.service', () => ({
   deleteImportPreview: vi.fn()
 }))
 
-import { sendTestEmailNotificationWithConfig } from '../../src/services/channel-notification.service'
+import {
+  formatNotificationDate,
+  sendForgotPasswordVerificationCode,
+  sendTestEmailNotificationWithConfig
+} from '../../src/services/channel-notification.service'
 
 function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -111,5 +115,27 @@ describe('channel notification service', () => {
       subject: expect.any(String),
       text: expect.stringContaining('测试订阅')
     })
+  })
+
+  it('formats ISO date strings to date-only output', () => {
+    expect(formatNotificationDate('2026-04-24T16:00:00.000Z')).toBe('2026-04-24')
+  })
+
+  it('sends forgot password verification codes through direct channels', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ id: 'email_123' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await sendForgotPasswordVerificationCode({
+      username: 'admin',
+      code: '123456',
+      expiresInMinutes: 10
+    })
+
+    expect(result.some((item) => item.channel === 'email' && item.status === 'success')).toBe(true)
+    const [url, init] = (fetchMock.mock.calls[0] as unknown) as [string, RequestInit]
+    const payload = JSON.parse(String(init.body))
+    expect(url).toBe('https://api.resend.com/emails')
+    expect(payload.subject).toContain('密码重置验证码')
+    expect(payload.text).toContain('验证码：123456')
   })
 })

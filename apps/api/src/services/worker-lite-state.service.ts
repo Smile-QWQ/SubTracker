@@ -11,6 +11,54 @@ type ImportPreviewRow = {
   expiresAt: string
 }
 
+type NotificationDeliveryDelegate = {
+  create: (args: {
+    data: {
+      channel: string
+      eventType: string
+      resourceKey: string
+      periodKey: string
+    }
+  }) => Promise<unknown>
+  deleteMany: (args: {
+    where: {
+      channel: string
+      eventType: string
+      resourceKey: string
+      periodKey: string
+    }
+  }) => Promise<unknown>
+}
+
+type ImportPreviewDelegate = {
+  upsert: (args: {
+    where: { token: string }
+    update: {
+      previewJson: Prisma.InputJsonValue
+      expiresAt: Date
+    }
+    create: {
+      token: string
+      previewJson: Prisma.InputJsonValue
+      expiresAt: Date
+    }
+  }) => Promise<unknown>
+  findUnique: (args: { where: { token: string } }) => Promise<{
+    token: string
+    previewJson: Prisma.JsonValue
+    expiresAt: Date
+  } | null>
+  deleteMany: (args: { where: { token: string } }) => Promise<unknown>
+}
+
+function getNotificationDeliveryDelegate() {
+  return (prisma as unknown as { notificationDelivery?: NotificationDeliveryDelegate }).notificationDelivery
+}
+
+function getImportPreviewDelegate() {
+  return (prisma as unknown as { importPreview?: ImportPreviewDelegate }).importPreview
+}
+
 function getD1() {
   if (!isWorkerRuntime()) return null
   return getRuntimeD1Database()
@@ -82,8 +130,12 @@ export async function claimNotificationDelivery(params: {
   // worker-lite hot paths. It prevents duplicate sends for the same channel and
   // periodKey, but it is not a durable delivery ledger.
   if (!getD1()) {
+    const notificationDelivery = getNotificationDeliveryDelegate()
+    if (!notificationDelivery) {
+      throw new Error('NotificationDelivery delegate unavailable')
+    }
     try {
-      await prisma.notificationDelivery.create({
+      await notificationDelivery.create({
         data: {
           channel: params.channel,
           eventType: params.eventType,
@@ -122,7 +174,11 @@ export async function releaseNotificationDelivery(params: {
   periodKey: string
 }) {
   if (!getD1()) {
-    await prisma.notificationDelivery.deleteMany({
+    const notificationDelivery = getNotificationDeliveryDelegate()
+    if (!notificationDelivery) {
+      throw new Error('NotificationDelivery delegate unavailable')
+    }
+    await notificationDelivery.deleteMany({
       where: {
         channel: params.channel,
         eventType: params.eventType,
@@ -144,7 +200,11 @@ export async function storeImportPreview<T>(token: string, preview: T, ttlMs: nu
   const expiresAt = new Date(Date.now() + ttlMs)
 
   if (!getD1()) {
-    await prisma.importPreview.upsert({
+    const importPreview = getImportPreviewDelegate()
+    if (!importPreview) {
+      throw new Error('ImportPreview delegate unavailable')
+    }
+    await importPreview.upsert({
       where: { token },
       update: {
         previewJson: preview as unknown as Prisma.InputJsonValue,
@@ -174,7 +234,11 @@ export async function getImportPreview<T>(
   }
 ) {
   if (!getD1()) {
-    const row = await prisma.importPreview.findUnique({ where: { token } })
+    const importPreview = getImportPreviewDelegate()
+    if (!importPreview) {
+      throw new Error('ImportPreview delegate unavailable')
+    }
+    const row = await importPreview.findUnique({ where: { token } })
     if (!row) return null
     if (row.expiresAt.getTime() <= Date.now()) {
       const payload = row.previewJson as unknown as T
@@ -220,7 +284,11 @@ export async function deleteImportPreview<T>(
   }
 
   if (!getD1()) {
-    await prisma.importPreview.deleteMany({ where: { token } })
+    const importPreview = getImportPreviewDelegate()
+    if (!importPreview) {
+      throw new Error('ImportPreview delegate unavailable')
+    }
+    await importPreview.deleteMany({ where: { token } })
     return
   }
 
