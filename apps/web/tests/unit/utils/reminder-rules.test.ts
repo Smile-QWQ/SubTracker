@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { evaluateReminderRules, formatReminderRulesText } from '../../../src/utils/reminder-rules'
+import { evaluateReminderRules, formatReminderRulesText, listReminderRuleDescriptions } from '../../../src/utils/reminder-rules'
 
 describe('reminder rules helpers', () => {
   it('formats advance reminder rules into readable text', () => {
@@ -13,6 +13,17 @@ describe('reminder rules helpers', () => {
   it('returns fallback when reminder rules are empty or invalid', () => {
     expect(formatReminderRulesText('', 'advance')).toBe('沿用系统默认')
     expect(formatReminderRulesText('abc', 'advance')).toBe('沿用系统默认')
+  })
+
+  it('lists reminder descriptions for detail drawer tag rendering', () => {
+    expect(listReminderRuleDescriptions('0&09:30;3&09:30;3&09:30;', 'advance')).toEqual([
+      { key: '3&09:30', description: '提前 3 天 09:30' },
+      { key: '0&09:30', description: '当天 09:30' }
+    ])
+    expect(listReminderRuleDescriptions('1&09:30;3&08:00;', 'overdue')).toEqual([
+      { key: '1&09:30', description: '过期 1 天 09:30' },
+      { key: '3&08:00', description: '过期 3 天 08:00' }
+    ])
   })
 
   it('evaluates advance reminder rules into list items', () => {

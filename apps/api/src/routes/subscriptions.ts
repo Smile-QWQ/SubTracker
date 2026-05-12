@@ -10,6 +10,7 @@ import {
   UpdateSubscriptionSchema
 } from '@subtracker/shared'
 import { bumpCacheVersions } from '../services/cache-version.service'
+import { getLatestSnapshot } from '../services/exchange-rate.service'
 import {
   appendSubscriptionOrder,
   removeSubscriptionOrder,
@@ -19,6 +20,7 @@ import {
 import { invalidateWorkerLiteCache, withWorkerLiteCache } from '../services/worker-lite-cache.service'
 import { listSubscriptionsLite } from '../services/worker-lite-repository.service'
 import { renewSubscription } from '../services/subscription.service'
+import { calculateSubscriptionRemainingValue } from '../services/subscription-value.service'
 import { flattenSubscriptionTags, normalizeTagIds, replaceSubscriptionTags } from '../services/tag.service'
 import {
   deleteLocalLogoFromLibrary,
@@ -46,6 +48,29 @@ async function fetchSubscriptionWithTags(id: string) {
     where: { id },
     include: subscriptionInclude
   })
+}
+
+async function buildSubscriptionDetail(id: string) {
+  const [row, paymentRecords, timezone, exchangeRates] = await Promise.all([
+    fetchSubscriptionWithTags(id),
+    prisma.paymentRecord.findMany({
+      where: { subscriptionId: id },
+      orderBy: { paidAt: 'desc' }
+    }),
+    getAppTimezone(),
+    getLatestSnapshot().catch(() => null)
+  ])
+
+  const flatRow = flattenSubscriptionTags(row)
+
+  return {
+    ...flatRow,
+    ...calculateSubscriptionRemainingValue(flatRow, paymentRecords, new Date(), timezone, {
+      baseCurrency: exchangeRates?.baseCurrency,
+      exchangeRatesBaseCurrency: exchangeRates?.baseCurrency,
+      exchangeRates: exchangeRates?.rates
+    })
+  }
 }
 
 async function resolveSubscriptionReminderFields(payload: {
@@ -425,7 +450,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       },
       {
         validate: (rows) =>
-          rows.some((row) => row.status === 'active') ? 'Active subscriptions cannot be deleted in batch mode' : null
+          rows.some((row) => row.status === 'active') ? 'Active subscriptions cannot be deleted directly' : null
       }
     )
 
@@ -446,16 +471,11 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       return sendError(reply, 422, 'validation_error', 'Invalid subscription id')
     }
 
-    const row = await prisma.subscription.findUnique({
-      where: { id: params.data.id },
-      include: subscriptionInclude
-    })
-
-    if (!row) {
+    try {
+      return sendOk(reply, await buildSubscriptionDetail(params.data.id))
+    } catch {
       return sendError(reply, 404, 'not_found', 'Subscription not found')
     }
-
-    return sendOk(reply, flattenSubscriptionTags(row))
   })
 
   app.get('/subscriptions/:id/payment-records', async (request, reply) => {
@@ -720,6 +740,19 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     }
 
     try {
+      const existing = await prisma.subscription.findUnique({
+        where: { id: params.data.id },
+        select: { status: true }
+      })
+
+      if (!existing) {
+        return sendError(reply, 404, 'not_found', 'Subscription not found')
+      }
+
+      if (existing.status === 'active') {
+        return sendError(reply, 422, 'delete_not_allowed', 'Active subscriptions cannot be deleted directly')
+      }
+
       await prisma.subscription.delete({
         where: { id: params.data.id }
       })

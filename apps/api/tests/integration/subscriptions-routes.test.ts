@@ -6,6 +6,13 @@ const routeMocks = vi.hoisted(() => ({
   invalidateWorkerLiteCache: vi.fn(async () => undefined),
   withWorkerLiteCache: vi.fn(async (_namespace: string, _key: string, loader: () => Promise<unknown>) => loader()),
   listSubscriptionsLite: vi.fn(async () => []),
+  getLatestSnapshot: vi.fn(async () => ({
+    baseCurrency: 'CNY',
+    rates: {
+      USD: 7.2,
+      CNY: 1
+    }
+  })),
   prisma: {
     $transaction: vi.fn(async () => {
       throw new Error('interactive transaction should not be used in worker routes')
@@ -16,6 +23,9 @@ const routeMocks = vi.hoisted(() => ({
       update: vi.fn(),
       findUnique: vi.fn(),
       findUniqueOrThrow: vi.fn()
+    },
+    paymentRecord: {
+      findMany: vi.fn()
     }
   },
   appendSubscriptionOrder: vi.fn(async () => undefined),
@@ -46,6 +56,10 @@ vi.mock('../../src/db', () => ({
 
 vi.mock('../../src/services/cache-version.service', () => ({
   bumpCacheVersions: routeMocks.bumpCacheVersions
+}))
+
+vi.mock('../../src/services/exchange-rate.service', () => ({
+  getLatestSnapshot: routeMocks.getLatestSnapshot
 }))
 
 vi.mock('../../src/services/worker-lite-cache.service', () => ({
@@ -95,6 +109,7 @@ describe('subscription routes D1 compatibility', () => {
     vi.resetModules()
     vi.clearAllMocks()
     routeMocks.prisma.subscription.findUnique.mockReset()
+    routeMocks.prisma.paymentRecord.findMany.mockReset()
     routeMocks.listSubscriptionsLite.mockReset()
     routeMocks.listSubscriptionsLite.mockResolvedValue([])
   })
@@ -376,6 +391,78 @@ describe('subscription routes D1 compatibility', () => {
         data: expect.not.objectContaining({
           status: 'active'
         })
+      })
+    )
+
+    await app.close()
+  })
+
+  it('rejects direct deletion for active subscriptions', async () => {
+    const { subscriptionRoutes } = await import('../../src/routes/subscriptions')
+    const app = Fastify()
+    await subscriptionRoutes(app)
+
+    routeMocks.prisma.subscription.findUnique.mockResolvedValue({
+      status: 'active'
+    })
+
+    const response = await app.inject({
+      method: 'DELETE',
+      url: '/subscriptions/sub_1'
+    })
+
+    expect(response.statusCode).toBe(422)
+    expect(response.json().error.message).toBe('Active subscriptions cannot be deleted directly')
+
+    await app.close()
+  })
+
+  it('returns subscription detail with remaining value fields', async () => {
+    const { subscriptionRoutes } = await import('../../src/routes/subscriptions')
+    const app = Fastify()
+    await subscriptionRoutes(app)
+
+    routeMocks.prisma.subscription.findUniqueOrThrow.mockResolvedValue({
+      id: 'sub_1',
+      name: 'Netflix',
+      description: '',
+      websiteUrl: 'https://example.com',
+      logoUrl: null,
+      logoSource: null,
+      logoFetchedAt: null,
+      status: 'active',
+      amount: 10,
+      currency: 'USD',
+      billingIntervalCount: 1,
+      billingIntervalUnit: 'month',
+      autoRenew: true,
+      startDate: new Date('2026-05-01T00:00:00.000Z'),
+      nextRenewalDate: new Date('2026-06-01T00:00:00.000Z'),
+      notifyDaysBefore: 3,
+      advanceReminderRules: null,
+      overdueReminderRules: null,
+      webhookEnabled: true,
+      notes: '',
+      createdAt: new Date('2026-05-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-01T00:00:00.000Z'),
+      tags: []
+    })
+    routeMocks.prisma.paymentRecord.findMany.mockResolvedValue([])
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/subscriptions/sub_1'
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json().data).toEqual(
+      expect.objectContaining({
+        currentCycleStartDate: expect.any(String),
+        currentCycleEndDate: expect.any(String),
+        remainingDays: expect.any(Number),
+        remainingRatio: expect.any(Number),
+        remainingValue: expect.any(Number),
+        remainingValueCurrency: 'CNY'
       })
     )
 

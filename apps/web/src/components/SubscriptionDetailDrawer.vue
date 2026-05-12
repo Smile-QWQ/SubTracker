@@ -15,7 +15,7 @@
             </div>
           </n-space>
 
-          <n-descriptions label-placement="left" :column="descriptionColumns" bordered>
+          <n-descriptions class="detail-descriptions" label-placement="left" :column="descriptionColumns" bordered>
             <n-descriptions-item label="名称">{{ detail.name }}</n-descriptions-item>
             <n-descriptions-item label="状态">
               <n-tag :type="getSubscriptionStatusTagType(detail.status)">{{ getSubscriptionStatusText(detail.status) }}</n-tag>
@@ -34,18 +34,43 @@
                 <span v-if="!(detail.tags?.length)">未打标签</span>
               </n-space>
             </n-descriptions-item>
-            <n-descriptions-item label="自动续订">{{ detail.autoRenew ? '已启用' : '未启用' }}</n-descriptions-item>
+            <n-descriptions-item label="自动续订" :label-style="middleAlignedCellStyle" :content-style="middleAlignedCellStyle">
+              {{ detail.autoRenew ? '已启用' : '未启用' }}
+            </n-descriptions-item>
             <n-descriptions-item label="订阅频率">每 {{ detail.billingIntervalCount }} {{ unitLabel(detail.billingIntervalUnit) }}</n-descriptions-item>
             <n-descriptions-item label="开始日期">{{ formatDate(detail.startDate) }}</n-descriptions-item>
             <n-descriptions-item label="下次续订">{{ formatDate(detail.nextRenewalDate) }}</n-descriptions-item>
             <n-descriptions-item label="原始金额">{{ formatMoney(detail.amount, detail.currency) }}</n-descriptions-item>
+            <n-descriptions-item label="当前周期" :label-style="middleAlignedCellStyle" :content-style="middleAlignedCellStyle">
+              {{ detail.currentCycleStartDate }} ~ {{ detail.currentCycleEndDate }}
+            </n-descriptions-item>
+            <n-descriptions-item label="剩余价值">
+              <div class="detail-value-block">
+                <div class="detail-value-block__amount">
+                  {{ formatMoney(detail.remainingValue, detail.remainingValueCurrency) }}
+                </div>
+                <div class="detail-value-block__meta">剩余 {{ detail.remainingDays }} 天 / {{ formatRatio(detail.remainingRatio) }}</div>
+              </div>
+            </n-descriptions-item>
             <n-descriptions-item label="到期前提醒">
-              {{ formatReminderRulesText(detail.advanceReminderRules, 'advance') }}
+              <n-space v-if="advanceReminderRuleItems.length" vertical size="small">
+                <n-tag v-for="item in advanceReminderRuleItems" :key="item.key" size="small" type="info" :bordered="false">
+                  {{ item.description }}
+                </n-tag>
+              </n-space>
+              <span v-else>{{ formatReminderRulesText(detail.advanceReminderRules, 'advance') }}</span>
             </n-descriptions-item>
             <n-descriptions-item label="过期提醒">
-              {{ formatReminderRulesText(detail.overdueReminderRules, 'overdue') }}
+              <n-space v-if="overdueReminderRuleItems.length" vertical size="small">
+                <n-tag v-for="item in overdueReminderRuleItems" :key="item.key" size="small" type="warning" :bordered="false">
+                  {{ item.description }}
+                </n-tag>
+              </n-space>
+              <span v-else>{{ formatReminderRulesText(detail.overdueReminderRules, 'overdue') }}</span>
             </n-descriptions-item>
-            <n-descriptions-item label="提醒通知">{{ detail.webhookEnabled ? '已启用' : '未启用' }}</n-descriptions-item>
+            <n-descriptions-item label="提醒通知" :label-style="middleAlignedCellStyle" :content-style="middleAlignedCellStyle">
+              {{ detail.webhookEnabled ? '已启用' : '未启用' }}
+            </n-descriptions-item>
             <n-descriptions-item label="创建时间">{{ formatDateTime(detail.createdAt) }}</n-descriptions-item>
           </n-descriptions>
 
@@ -69,13 +94,13 @@ import { NCard, NDescriptions, NDescriptionsItem, NDrawer, NDrawerContent, NEmpt
 import { useSettingsQuery } from '@/composables/settings-query'
 import type { SubscriptionDetail } from '@/types/api'
 import { resolveLogoUrl } from '@/utils/logo'
-import { formatReminderRulesText } from '@/utils/reminder-rules'
+import { formatReminderRulesText, listReminderRuleDescriptions } from '@/utils/reminder-rules'
 import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils/subscription-status'
 import { formatDateInTimezone, formatDateTimeInTimezone } from '@/utils/timezone'
 
 const emit = defineEmits<{ close: [] }>()
 
-defineProps<{
+const props = defineProps<{
   show: boolean
   detail: SubscriptionDetail | null
 }>()
@@ -84,9 +109,22 @@ const { width } = useWindowSize()
 const { data: settings } = useSettingsQuery()
 const drawerWidth = computed(() => (width.value < 760 ? '100%' : 720))
 const descriptionColumns = computed(() => (width.value < 760 ? 1 : 2))
+const middleAlignedCellStyle = {
+  verticalAlign: 'middle'
+} as const
+const advanceReminderRuleItems = computed(() =>
+  listReminderRuleDescriptions(props.detail?.advanceReminderRules, 'advance')
+)
+const overdueReminderRuleItems = computed(() =>
+  listReminderRuleDescriptions(props.detail?.overdueReminderRules, 'overdue')
+)
 
 function formatMoney(amount: number, currency: string) {
   return `${currency} ${amount.toFixed(2)}`
+}
+
+function formatRatio(value: number) {
+  return `${(value * 100).toFixed(2)}%`
 }
 
 function formatDate(value: string) {
@@ -142,5 +180,30 @@ function handleShowUpdate(value: boolean) {
 .detail-site a {
   color: #2563eb;
   word-break: break-all;
+}
+
+.detail-value-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-value-block__amount {
+  color: var(--app-text-strong);
+}
+
+.detail-value-block__meta {
+  color: var(--app-text-secondary);
+  line-height: 1.5;
+}
+
+.detail-descriptions :deep(.n-descriptions-table-header) {
+  white-space: nowrap;
+  word-break: keep-all;
+  width: 132px;
+}
+
+.detail-descriptions :deep(.n-descriptions-table-content) {
+  vertical-align: top;
 }
 </style>

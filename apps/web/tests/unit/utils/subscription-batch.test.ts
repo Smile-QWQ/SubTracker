@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Subscription } from '@/types/api'
 import {
   areAllVisibleSubscriptionsSelected,
+  countBatchDeletableSubscriptions,
   getBatchStatusText,
   getVisiblePageSubscriptionIds,
   mergeSelectedSubscriptionIds,
@@ -70,5 +71,27 @@ describe('subscription batch utils', () => {
     expect(getBatchStatusText('active')).toBe('正常')
     expect(getBatchStatusText('paused')).toBe('暂停')
     expect(getBatchStatusText('cancelled')).toBe('停用')
+  })
+
+  it('counts deletable and blocked subscriptions for batch delete', () => {
+    expect(
+      countBatchDeletableSubscriptions([
+        createSubscription('a'),
+        { ...createSubscription('b'), status: 'paused' },
+        { ...createSubscription('c'), status: 'cancelled' }
+      ])
+    ).toEqual({
+      deletableCount: 2,
+      blockedCount: 1
+    })
+  })
+
+  it('retains richer subscription detail-compatible shape', () => {
+    const subscription = createSubscription('detail')
+    expect(subscription).toMatchObject({
+      id: 'detail',
+      notifyDaysBefore: 3,
+      webhookEnabled: true
+    })
   })
 })
