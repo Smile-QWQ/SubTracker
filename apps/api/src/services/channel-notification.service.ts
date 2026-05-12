@@ -1,4 +1,3 @@
-import dayjs from 'dayjs'
 import http from 'node:http'
 import https from 'node:https'
 import nodemailer from 'nodemailer'
@@ -18,14 +17,16 @@ import { validateNotificationTargetUrl } from './notification-url.service'
 import { toIsoDate } from '../utils/date'
 import { formatDateInTimezone } from '../utils/timezone'
 import { prisma } from '../db'
-
-type NotificationDispatchParams = {
-  eventType: WebhookEventType
-  resourceKey: string
-  periodKey: string
-  subscriptionId?: string
-  payload: Record<string, unknown>
-}
+import {
+  buildDispatchParamsFromDedupEntries,
+  type NotificationDedupEntry,
+  type NotificationDispatchParams
+} from './notification-merge.service'
+import {
+  buildNotificationMessage,
+  formatNotificationDate,
+  type DirectNotificationMessage
+} from './notification-presentation.service'
 
 type PushplusApiResponse = {
   code?: number
@@ -36,26 +37,6 @@ type PushplusApiResponse = {
 type TelegramApiResponse = {
   ok?: boolean
   description?: string
-}
-
-type NotificationSubscriptionItem = {
-  id: string
-  name: string
-  nextRenewalDate: string
-  amount: number
-  currency: string
-  tagNames?: string[]
-  websiteUrl?: string
-  notes?: string
-  daysUntilRenewal?: number
-  daysOverdue?: number
-}
-
-type NotificationSummarySection = {
-  phase: string
-  title: string
-  eventType: WebhookEventType
-  subscriptions: NotificationSubscriptionItem[]
 }
 
 export type PushplusSendResult = {
@@ -75,12 +56,6 @@ type ForgotPasswordNotificationPayload = {
   username: string
   code: string
   expiresInMinutes: number
-}
-
-type DirectNotificationMessage = {
-  title: string
-  text: string
-  html?: string
 }
 
 const NOTIFICATION_DEDUP_KEY_PREFIX = 'notification:'
@@ -172,155 +147,57 @@ async function markNotificationSent(
   await setSetting(buildNotificationKey(channel, params), true)
 }
 
-function getMergedSubscriptions(params: NotificationDispatchParams) {
-  const subscriptions = params.payload.subscriptions
-  return Array.isArray(subscriptions) ? (subscriptions as NotificationSubscriptionItem[]) : []
-}
-
-function getMergedSections(params: NotificationDispatchParams) {
-  const sections = params.payload.mergedSections
-  return Array.isArray(sections) ? (sections as NotificationSummarySection[]) : []
-}
-
-export function formatNotificationDate(value: string | undefined) {
-  if (!value) return ''
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return value
-  }
-  const isoDateMatch = value.match(/^(\d{4}-\d{2}-\d{2})T/)
-  if (isoDateMatch) {
-    return isoDateMatch[1]
-  }
-  const parsed = dayjs(value)
-  return parsed.isValid() ? parsed.format('YYYY-MM-DD') : value
-}
-
-function getPhaseLabel(params: NotificationDispatchParams) {
-  const phase = String(params.payload.phase ?? '')
-  const daysUntilRenewal = Number(params.payload.daysUntilRenewal ?? 0)
-  const daysOverdue = Number(params.payload.daysOverdue ?? 0)
-  const mergedSections = getMergedSections(params)
-  const mergedSubscriptions = getMergedSubscriptions(params)
-
-  if (mergedSections.length > 1) {
-    return '订阅提醒汇总'
+async function resolvePendingNotificationEntries(
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify',
+  params: NotificationDispatchParams
+) {
+  const dedupEntries = params.dedupEntries
+  if (!dedupEntries?.length) {
+    const alreadySent = await hasNotificationBeenSent(channel, params)
+    return alreadySent ? [] : null
   }
 
-  if (params.eventType === 'subscription.reminder_due') {
-    if (mergedSubscriptions.length > 0) {
-      return phase === 'due_today' ? '今天到期' : '即将到期'
+  const pending: NotificationDedupEntry[] = []
+  for (const entry of dedupEntries) {
+    const alreadySent = await hasNotificationBeenSent(channel, buildDispatchParamsFromDedupEntries([entry]))
+    if (!alreadySent) {
+      pending.push(entry)
     }
-    return phase === 'due_today' ? '今天到期' : `还有 ${daysUntilRenewal} 天到期`
   }
 
-  return mergedSubscriptions.length > 0 ? '过期提醒' : `已过期第 ${daysOverdue} 天`
+  return pending
 }
 
-function buildNotificationTitle(params: NotificationDispatchParams) {
-  const mergedSubscriptions = getMergedSubscriptions(params)
-  const mergedSections = getMergedSections(params)
-
-  if (mergedSubscriptions.length > 0) {
-    const prefix = mergedSections.length > 1 ? '订阅提醒汇总' : getPhaseLabel(params)
-    return `${prefix}：共 ${mergedSubscriptions.length} 项订阅`
-  }
-
-  const name = String(params.payload.name ?? '未命名订阅')
-  return `${getPhaseLabel(params)}：${name}`
-}
-
-function buildSummarySectionBody(section: NotificationSummarySection) {
-  return [
-    `${section.title}（${section.subscriptions.length} 项）`,
-    ...section.subscriptions.map((subscription, index) => {
-      const amountText = `${subscription.amount} ${subscription.currency}`.trim()
-      const extras = [
-        subscription.daysUntilRenewal !== undefined && subscription.daysUntilRenewal > 0
-          ? `还有 ${subscription.daysUntilRenewal} 天`
-          : null,
-        subscription.daysOverdue !== undefined && subscription.daysOverdue > 0
-          ? `过期 ${subscription.daysOverdue} 天`
-          : null
-      ]
-        .filter(Boolean)
-        .join(' / ')
-
-      return [
-        `${index + 1}. ${subscription.name}`,
-        `   日期：${formatNotificationDate(subscription.nextRenewalDate)}`,
-        `   金额：${amountText}`,
-        extras ? `   说明：${extras}` : null
-      ]
-        .filter(Boolean)
-        .join('\n')
-    })
-  ].join('\n')
-}
-
-function buildMergedNotificationBody(params: NotificationDispatchParams) {
-  const mergedSections = getMergedSections(params)
-  const mergedSubscriptions = getMergedSubscriptions(params)
-
-  if (mergedSections.length > 0) {
-    const lines = [
-      `提醒类型：${getPhaseLabel(params)}`,
-      `订阅数量：${mergedSubscriptions.length} 项`,
-      ''
-    ]
-
-    for (const section of mergedSections) {
-      lines.push(buildSummarySectionBody(section), '')
+async function markNotificationEntriesSent(
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify',
+  params: NotificationDispatchParams
+) {
+  if (params.dedupEntries?.length) {
+    for (const entry of params.dedupEntries) {
+      await markNotificationSent(channel, buildDispatchParamsFromDedupEntries([entry]))
     }
-
-    return lines.join('\n').trim()
+    return
   }
 
-  return [
-    `提醒类型：${getPhaseLabel(params)}`,
-    `订阅数量：${mergedSubscriptions.length} 项`,
-    '',
-    ...mergedSubscriptions.map((subscription, index) => {
-      const amountText = `${subscription.amount} ${subscription.currency}`.trim()
-      const extras = [
-        subscription.daysUntilRenewal !== undefined && subscription.daysUntilRenewal > 0
-          ? `还有 ${subscription.daysUntilRenewal} 天`
-          : null,
-        subscription.daysOverdue !== undefined && subscription.daysOverdue > 0
-          ? `过期 ${subscription.daysOverdue} 天`
-          : null
-      ]
-        .filter(Boolean)
-        .join(' / ')
-
-      return [
-        `${index + 1}. ${subscription.name}`,
-        `   日期：${formatNotificationDate(subscription.nextRenewalDate)}`,
-        `   金额：${amountText}`,
-        extras ? `   说明：${extras}` : null
-      ]
-        .filter(Boolean)
-        .join('\n')
-    })
-  ].join('\n')
+  await markNotificationSent(channel, params)
 }
 
-function buildNotificationBody(params: NotificationDispatchParams) {
-  const mergedSubscriptions = getMergedSubscriptions(params)
-  if (mergedSubscriptions.length > 0) {
-    return buildMergedNotificationBody(params)
+function resolveDispatchParamsForChannel(
+  params: NotificationDispatchParams,
+  pendingEntries: NotificationDedupEntry[] | null
+): NotificationDispatchParams | null {
+  if (pendingEntries === null) {
+    return params
   }
 
-  const lines = [
-    `提醒类型：${getPhaseLabel(params)}`,
-    `订阅名称：${String(params.payload.name ?? '')}`,
-    `下次续订：${formatNotificationDate(String(params.payload.nextRenewalDate ?? ''))}`,
-    `金额：${`${String(params.payload.amount ?? '')} ${String(params.payload.currency ?? '')}`.trim()}`,
-    `标签：${Array.isArray(params.payload.tagNames) ? params.payload.tagNames.join('、') : ''}`,
-    `网址：${String(params.payload.websiteUrl ?? '')}`,
-    `备注：${String(params.payload.notes ?? '')}`
-  ]
+  if (pendingEntries.length === 0) {
+    return null
+  }
 
-  return lines.filter((line) => !line.endsWith('：')).join('\n')
+  return buildDispatchParamsFromDedupEntries(pendingEntries, {
+    resourceKey: params.resourceKey,
+    periodKey: params.periodKey
+  })
 }
 
 function buildForgotPasswordTitle() {
@@ -334,15 +211,6 @@ function buildForgotPasswordBody(payload: ForgotPasswordNotificationPayload) {
     `有效期：${payload.expiresInMinutes} 分钟`,
     '如果这不是你的操作，请忽略本次通知。'
   ].join('\n')
-}
-
-function buildNotificationMessage(params: NotificationDispatchParams): DirectNotificationMessage {
-  const text = buildNotificationBody(params)
-  return {
-    title: buildNotificationTitle(params),
-    text,
-    html: `<pre>${text}</pre>`
-  }
 }
 
 function buildForgotPasswordMessage(payload: ForgotPasswordNotificationPayload): DirectNotificationMessage {
@@ -425,32 +293,54 @@ async function sendEmailWithProvider(
   await sendSmtpEmailWithConfig(message, smtpConfig)
 }
 
-async function sendEmailNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
-  const settings = await getNotificationChannelSettings()
-  if (!settings.emailNotificationsEnabled) {
+type DirectChannelDispatchOptions = {
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify'
+  enabled: boolean
+  disabledMessage: string
+  alreadySentMessage: string
+  send: (message: DirectNotificationMessage) => Promise<void>
+}
+
+async function dispatchDirectChannelNotification(
+  params: NotificationDispatchParams,
+  options: DirectChannelDispatchOptions
+): Promise<NotificationChannelResult> {
+  if (!options.enabled) {
     return {
-      channel: 'email',
+      channel: options.channel,
       status: 'skipped',
-      message: 'email_disabled'
+      message: options.disabledMessage
     }
   }
 
-  const alreadySent = await hasNotificationBeenSent('email', params)
-  if (alreadySent) {
+  const pendingEntries = await resolvePendingNotificationEntries(options.channel, params)
+  const dispatchParams = resolveDispatchParamsForChannel(params, pendingEntries)
+  if (!dispatchParams) {
     return {
-      channel: 'email',
+      channel: options.channel,
       status: 'skipped',
-      message: 'email_already_sent'
+      message: options.alreadySentMessage
     }
   }
 
-  await sendEmailWithProvider(buildNotificationMessage(params), settings.emailProvider, settings.smtpConfig, settings.resendConfig)
-  await markNotificationSent('email', params)
+  await options.send(buildNotificationMessage(dispatchParams))
+  await markNotificationEntriesSent(options.channel, dispatchParams)
 
   return {
-    channel: 'email',
+    channel: options.channel,
     status: 'success'
   }
+}
+
+async function sendEmailNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
+  const settings = await getNotificationChannelSettings()
+  return dispatchDirectChannelNotification(params, {
+    channel: 'email',
+    enabled: settings.emailNotificationsEnabled,
+    disabledMessage: 'email_disabled',
+    alreadySentMessage: 'email_already_sent',
+    send: (message) => sendEmailWithProvider(message, settings.emailProvider, settings.smtpConfig, settings.resendConfig)
+  })
 }
 
 function extractPushplusShortCode(data: unknown): string | undefined {
@@ -521,30 +411,13 @@ async function sendPushplusWithConfig(
 
 async function sendPushplusNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
   const settings = await getNotificationChannelSettings()
-  if (!settings.pushplusNotificationsEnabled) {
-    return {
-      channel: 'pushplus',
-      status: 'skipped',
-      message: 'pushplus_disabled'
-    }
-  }
-
-  const alreadySent = await hasNotificationBeenSent('pushplus', params)
-  if (alreadySent) {
-    return {
-      channel: 'pushplus',
-      status: 'skipped',
-      message: 'pushplus_already_sent'
-    }
-  }
-
-  await sendPushplusWithConfig(buildNotificationMessage(params), settings.pushplusConfig)
-  await markNotificationSent('pushplus', params)
-
-  return {
+  return dispatchDirectChannelNotification(params, {
     channel: 'pushplus',
-    status: 'success'
-  }
+    enabled: settings.pushplusNotificationsEnabled,
+    disabledMessage: 'pushplus_disabled',
+    alreadySentMessage: 'pushplus_already_sent',
+    send: (message) => sendPushplusWithConfig(message, settings.pushplusConfig).then(() => undefined)
+  })
 }
 
 async function sendTelegramWithConfig(message: DirectNotificationMessage, config: TelegramConfigInput) {
@@ -583,30 +456,13 @@ async function sendTelegramWithConfig(message: DirectNotificationMessage, config
 
 async function sendTelegramNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
   const settings = await getNotificationChannelSettings()
-  if (!settings.telegramNotificationsEnabled) {
-    return {
-      channel: 'telegram',
-      status: 'skipped',
-      message: 'telegram_disabled'
-    }
-  }
-
-  const alreadySent = await hasNotificationBeenSent('telegram', params)
-  if (alreadySent) {
-    return {
-      channel: 'telegram',
-      status: 'skipped',
-      message: 'telegram_already_sent'
-    }
-  }
-
-  await sendTelegramWithConfig(buildNotificationMessage(params), settings.telegramConfig)
-  await markNotificationSent('telegram', params)
-
-  return {
+  return dispatchDirectChannelNotification(params, {
     channel: 'telegram',
-    status: 'success'
-  }
+    enabled: settings.telegramNotificationsEnabled,
+    disabledMessage: 'telegram_disabled',
+    alreadySentMessage: 'telegram_already_sent',
+    send: (message) => sendTelegramWithConfig(message, settings.telegramConfig)
+  })
 }
 
 function resolveServerchanUrl(sendkey: string) {
@@ -660,30 +516,13 @@ async function sendServerchanWithConfig(message: DirectNotificationMessage, conf
 
 async function sendServerchanNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
   const settings = await getNotificationChannelSettings()
-  if (!settings.serverchanNotificationsEnabled) {
-    return {
-      channel: 'serverchan',
-      status: 'skipped',
-      message: 'serverchan_disabled'
-    }
-  }
-
-  const alreadySent = await hasNotificationBeenSent('serverchan', params)
-  if (alreadySent) {
-    return {
-      channel: 'serverchan',
-      status: 'skipped',
-      message: 'serverchan_already_sent'
-    }
-  }
-
-  await sendServerchanWithConfig(buildNotificationMessage(params), settings.serverchanConfig)
-  await markNotificationSent('serverchan', params)
-
-  return {
+  return dispatchDirectChannelNotification(params, {
     channel: 'serverchan',
-    status: 'success'
-  }
+    enabled: settings.serverchanNotificationsEnabled,
+    disabledMessage: 'serverchan_disabled',
+    alreadySentMessage: 'serverchan_already_sent',
+    send: (message) => sendServerchanWithConfig(message, settings.serverchanConfig)
+  })
 }
 
 async function sendGotifyWithConfig(message: DirectNotificationMessage, config: GotifyConfigInput) {
@@ -736,30 +575,13 @@ async function sendGotifyWithConfig(message: DirectNotificationMessage, config: 
 
 async function sendGotifyNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
   const settings = await getNotificationChannelSettings()
-  if (!settings.gotifyNotificationsEnabled) {
-    return {
-      channel: 'gotify',
-      status: 'skipped',
-      message: 'gotify_disabled'
-    }
-  }
-
-  const alreadySent = await hasNotificationBeenSent('gotify', params)
-  if (alreadySent) {
-    return {
-      channel: 'gotify',
-      status: 'skipped',
-      message: 'gotify_already_sent'
-    }
-  }
-
-  await sendGotifyWithConfig(buildNotificationMessage(params), settings.gotifyConfig)
-  await markNotificationSent('gotify', params)
-
-  return {
+  return dispatchDirectChannelNotification(params, {
     channel: 'gotify',
-    status: 'success'
-  }
+    enabled: settings.gotifyNotificationsEnabled,
+    disabledMessage: 'gotify_disabled',
+    alreadySentMessage: 'gotify_already_sent',
+    send: (message) => sendGotifyWithConfig(message, settings.gotifyConfig)
+  })
 }
 
 export async function dispatchNotificationEvent(params: NotificationDispatchParams) {

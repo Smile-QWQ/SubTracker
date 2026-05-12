@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatNotificationDate } from '../../src/services/channel-notification.service'
+import { formatNotificationDate } from '../../src/services/notification-presentation.service'
 
 describe('formatNotificationDate', () => {
   it('formats ISO date strings to date-only output', () => {

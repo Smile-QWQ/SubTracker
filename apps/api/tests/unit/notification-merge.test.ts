@@ -85,12 +85,19 @@ describe('scanRenewalNotifications merge behavior', () => {
     await scanRenewalNotifications(new Date('2026-04-23T09:30:00'))
 
     expect(notificationState.dispatchMock).toHaveBeenCalledTimes(1)
-    const payload = notificationState.dispatchMock.mock.calls[0][0].payload
+    const params = notificationState.dispatchMock.mock.calls[0][0]
+    const payload = params.payload
     expect(payload.merged).toBe(true)
     expect(payload.mergedCount).toBe(3)
     expect(payload.subscriptions).toHaveLength(3)
     expect(payload.mergedSections).toHaveLength(3)
     expect(payload.mergedSections.map((section: { title: string }) => section.title)).toEqual(['即将到期', '今天到期', '已过期第 1 天'])
+    expect(params.dedupEntries).toHaveLength(3)
+    expect(params.dedupEntries.map((entry: { resourceKey: string }) => entry.resourceKey)).toEqual([
+      'subscription:sub-1',
+      'subscription:sub-2',
+      'subscription:sub-3'
+    ])
   })
 
   it('sends notifications separately when merging is disabled', async () => {
