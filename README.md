@@ -1,20 +1,27 @@
 <p align="center">
-  <img src="./screenshot/brand.png" alt="SubTracker Lite" width="220" />
+  <img src="./apps/web/src/assets/brand-logo.png" alt="SubTracker Lite" width="112" />
+</p>
+
+<h1 align="center">SubTracker Lite</h1>
+
+<p align="center">
+  一个现代化的自托管订阅管理工具，用来统一管理多币种订阅、续订提醒、预算分析、Logo 资源，以及 Wallos 数据迁移
 </p>
 
 <p align="center">
-  <a href="https://github.com/Smile-QWQ/SubTracker/releases"><img src="https://img.shields.io/github/v/release/Smile-QWQ/SubTracker?style=flat-square" alt="GitHub release" /></a>
-  <a href="https://github.com/Smile-QWQ/SubTracker/stargazers"><img src="https://img.shields.io/github/stars/Smile-QWQ/SubTracker?style=flat-square" alt="GitHub stars" /></a>
-  <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat-square" alt="License: GPL v3" /></a>
+  <img src="https://img.shields.io/github/v/release/Smile-QWQ/SubTracker?style=flat-square" alt="GitHub release" />
+  <img src="https://img.shields.io/github/stars/Smile-QWQ/SubTracker?style=flat-square" alt="GitHub stars" />
+  <img src="https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat-square" alt="License: GPL v3" />
 </p>
 
 <p align="center">
-  现代化的自托管订阅管理工具，统一管理多币种订阅、续订提醒、预算分析、Logo 资源，以及 Wallos 数据迁移。
+  <a href="#本地开发">本地开发</a> ·
+  <a href="#部署">部署</a> ·
+  <a href="./DEPLOYMENT.md">部署文档</a> ·
+  <a href="https://github.com/Smile-QWQ/SubTracker/releases">Releases</a>
 </p>
 
-<p align="center">
-  当前分支仅保留 <strong>Cloudflare Worker</strong> 部署路线 · <a href="./DEPLOYMENT.md">查看部署文档</a>
-</p>
+> 当前 `lite` 分支仅保留 **Cloudflare Worker** 部署路线；如果你需要 **Docker / Docker Compose** 部署，请前往 [`main`](https://github.com/Smile-QWQ/SubTracker/tree/main) 分支，对应的部署说明、工作流与 Node/SQLite 适配实现都维护在该分支
 
 ## 界面预览
 

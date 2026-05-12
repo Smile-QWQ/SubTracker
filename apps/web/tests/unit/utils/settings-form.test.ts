@@ -11,6 +11,7 @@ describe('cloneSettingsForForm', () => {
       defaultNotifyDays: 3,
       defaultAdvanceReminderRules: '3&09:30;0&09:30;',
       rememberSessionDays: 7,
+      forgotPasswordEnabled: true,
       notifyOnDueDay: true,
       mergeMultiSubscriptionNotifications: true,
       monthlyBudgetBase: 100,
@@ -78,6 +79,7 @@ describe('cloneSettingsForForm', () => {
 
     expect(cloned).toEqual(original)
     expect(cloned).not.toBe(original)
+    expect(cloned.forgotPasswordEnabled).toBe(true)
     expect(cloned.smtpConfig).not.toBe(original.smtpConfig)
     expect(cloned.resendConfig).not.toBe(original.resendConfig)
     expect(cloned.pushplusConfig).not.toBe(original.pushplusConfig)

@@ -8,11 +8,8 @@
             <n-drawer-content closable body-content-style="padding: 8px 0;">
               <template #header>
                 <div class="logo__stack">
-                  <span class="logo__text">{{ appDisplayName }}</span>
-                  <span class="logo__meta">
-                    <span class="logo__version">{{ appVersion }}</span>
-                    <span class="logo__variant">{{ appVariant }}</span>
-                  </span>
+                  <span class="logo__text">SubTracker</span>
+                  <span class="logo__version">{{ appVersion }}</span>
                 </div>
               </template>
               <div class="sider-shell">
@@ -51,17 +48,18 @@
                 <div class="logo" :class="{ 'logo--collapsed': siderCollapsed }">
                   <template v-if="!siderCollapsed">
                     <div class="logo__brand">
-                      <div class="logo__icon">
-                        <n-icon :size="18">
-                          <wallet-outline />
-                        </n-icon>
-                      </div>
-                      <div class="logo__stack">
-                        <span class="logo__text">{{ appDisplayName }}</span>
-                        <span class="logo__meta">
-                          <span class="logo__version">{{ appVersion }}</span>
-                          <span class="logo__variant">{{ appVariant }}</span>
-                        </span>
+                      <div class="logo__brand-trigger" @click="openVersionUpdatePanel">
+                        <div class="logo__icon">
+                          <img :src="brandLogoUrl" alt="SubTracker logo" class="logo__image" />
+                          <span v-if="hasVersionUpdate" class="logo__update-dot" />
+                        </div>
+                        <div class="logo__stack">
+                          <span class="logo__text">SubTracker</span>
+                          <span class="logo__meta">
+                            <span class="logo__version">{{ appVersion }}</span>
+                            <span class="logo__variant">{{ appVariant }}</span>
+                          </span>
+                        </div>
                       </div>
                     </div>
                     <n-button quaternary circle class="logo__toggle" @click="siderCollapsed = !siderCollapsed">
@@ -160,6 +158,44 @@
             </n-space>
           </n-space>
         </n-modal>
+
+        <n-modal
+          :show="versionUpdateModalVisible"
+          preset="card"
+          title="版本更新"
+          style="width: min(860px, calc(100vw - 24px))"
+          @update:show="versionUpdateModalVisible = $event"
+        >
+          <n-space vertical :size="16">
+            <n-alert v-if="versionUpdateState?.hasUpdate" type="warning" :show-icon="false">
+              检测到新版本，当前版本 {{ versionUpdateState.currentVersion }}，最新版本 {{ versionUpdateState.latestVersion }}
+            </n-alert>
+            <n-alert v-else type="success" :show-icon="false">
+              当前已经是最新版本（{{ versionUpdateState?.currentVersion || appVersion }}）
+            </n-alert>
+
+            <n-space vertical v-if="versionUpdateState?.releases?.length" :size="12">
+              <n-card v-for="release in versionUpdateState.releases" :key="release.tagName" size="small" embedded>
+                <n-space vertical :size="8">
+                  <n-space justify="space-between" align="center">
+                    <div>
+                      <div class="release-item__title">{{ release.name }}</div>
+                      <div class="release-item__meta">
+                        {{ release.tagName }} · {{ release.publishedAt ? formatReleaseDate(release.publishedAt) : '发布时间未知' }}
+                      </div>
+                    </div>
+                    <n-button tag="a" :href="release.htmlUrl" target="_blank" rel="noreferrer" secondary>
+                      查看 Commit
+                    </n-button>
+                  </n-space>
+                  <div class="release-item__markdown" v-html="renderReleaseBody(release.body)" />
+                </n-space>
+              </n-card>
+            </n-space>
+
+            <div v-else class="card-muted">暂无比当前版本更新的 lite 提交。</div>
+          </n-space>
+        </n-modal>
       </template>
     </n-message-provider>
   </n-config-provider>
@@ -172,6 +208,7 @@ import { useWindowSize } from '@vueuse/core'
 import {
   NAlert,
   NButton,
+  NCard,
   NConfigProvider,
   NDrawer,
   NDrawerContent,
@@ -209,22 +246,25 @@ import {
   SunnyOutline,
   WalletOutline
 } from '@vicons/ionicons5'
+import brandLogoUrl from '@/assets/brand-logo.png'
 import { api } from '@/composables/api'
 import { useSettingsQuery } from '@/composables/settings-query'
+import { useVersionUpdateQuery } from '@/composables/version-update-query'
 import { useThemePreference, type ThemePreference } from '@/composables/theme-preference'
 import { useAuthStore } from '@/stores/auth'
 import { isRememberedSession } from '@/utils/auth-storage'
+import { renderMarkdownToHtml } from '@/utils/simple-markdown'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const { resolvedTheme, setThemePreference } = useThemePreference()
 const { message } = createDiscreteApi(['message'])
-const appDisplayName = 'SubTracker'
 const appVersion = __APP_VERSION__
 const appVariant = 'Lite'
 const mobileMenuVisible = ref(false)
 const siderCollapsed = ref(false)
+const versionUpdateModalVisible = ref(false)
 const { width } = useWindowSize()
 const changingDefaultPassword = ref(false)
 const defaultPasswordForm = reactive({
@@ -233,6 +273,7 @@ const defaultPasswordForm = reactive({
 })
 
 const { data: settings } = useSettingsQuery()
+const { data: versionUpdateState } = useVersionUpdateQuery(appVersion)
 
 function renderMenuIcon(icon: typeof GridOutline) {
   return () => h(NIcon, null, { default: () => h(icon) })
@@ -266,6 +307,7 @@ const themeToggleTooltip = computed(() => {
   const nextLabel = currentLabel === '深色' ? '浅色' : '深色'
   return `当前主题：${currentLabel}，点击切换到${nextLabel}`
 })
+const hasVersionUpdate = computed(() => Boolean(versionUpdateState.value?.hasUpdate))
 
 watchEffect(() => {
   if (typeof document === 'undefined') return
@@ -296,6 +338,10 @@ function handleMobileMenuClick(key: string) {
 function cycleThemePreference() {
   const nextTheme: ThemePreference = resolvedTheme.value === 'dark' ? 'light' : 'dark'
   setThemePreference(nextTheme)
+}
+
+function openVersionUpdatePanel() {
+  versionUpdateModalVisible.value = true
 }
 
 async function logout() {
@@ -340,6 +386,24 @@ async function submitDefaultPasswordChange() {
     message.error(error instanceof Error ? error.message : '修改默认密码失败')
   } finally {
     changingDefaultPassword.value = false
+  }
+}
+
+function renderReleaseBody(body: string) {
+  return renderMarkdownToHtml(body || '')
+}
+
+function formatReleaseDate(value: string) {
+  try {
+    return new Date(value).toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  } catch {
+    return value
   }
 }
 </script>
@@ -425,6 +489,14 @@ async function submitDefaultPasswordChange() {
   min-width: 0;
 }
 
+.logo__brand-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  cursor: pointer;
+}
+
 .logo__stack {
   display: flex;
   flex-direction: column;
@@ -440,13 +512,29 @@ async function submitDefaultPasswordChange() {
 .logo__icon {
   width: 30px;
   height: 30px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
-  color: #fff;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+.logo__image {
+  width: 30px;
+  height: 30px;
+  display: block;
+  object-fit: contain;
+}
+
+.logo__update-dot {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ef4444;
+  box-shadow: 0 0 0 2px var(--app-surface);
 }
 
 .logo__text {
@@ -497,6 +585,34 @@ async function submitDefaultPasswordChange() {
 
 .logo__toggle--collapsed {
   margin: 0 auto;
+}
+
+.release-item__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--app-text-strong);
+}
+
+.release-item__meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--app-text-secondary);
+}
+
+.release-item__markdown {
+  color: var(--app-text-secondary);
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.release-item__markdown :deep(p) {
+  margin: 0 0 8px;
+}
+
+.release-item__markdown :deep(ul),
+.release-item__markdown :deep(ol) {
+  margin: 0 0 8px;
+  padding-left: 18px;
 }
 
 .header {

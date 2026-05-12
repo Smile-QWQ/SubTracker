@@ -466,9 +466,6 @@
               <n-switch v-model:value="settingsForm.aiConfig.enabled" />
               <span class="switch-label">启用 AI 能力</span>
             </n-form-item>
-            <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
-              AI 能力总开关控制识别与连接测试；AI 总结可单独开启或关闭。
-            </n-alert>
 
             <n-grid :cols="formCols" :x-gap="12" :y-gap="12">
               <n-grid-item>
@@ -566,7 +563,36 @@
             <n-form-item label="新密码">
               <n-input v-model:value="credentialsForm.newPassword" type="password" show-password-on="click" />
             </n-form-item>
-            <n-button type="primary" :loading="savingCredentials" :disabled="savingCredentials" @click="submitCredentialsChange">修改</n-button>
+            <div class="switch-row">
+              <div class="switch-group switch-group--single">
+                <div class="switch-group__item">
+                  <span class="switch-inline-label">允许通过通知验证码找回密码</span>
+                  <n-tooltip v-if="!forgotPasswordToggleUnlocked" trigger="hover">
+                    <template #trigger>
+                      <div class="switch-disabled-wrapper">
+                        <n-switch
+                          v-model:value="settingsForm.forgotPasswordEnabled"
+                          :disabled="true"
+                        />
+                      </div>
+                    </template>
+                    <span>需先启用至少一个直达通知渠道</span>
+                  </n-tooltip>
+                  <n-switch
+                    v-else
+                    v-model:value="settingsForm.forgotPasswordEnabled"
+                    :loading="savingForgotPasswordToggle"
+                    :disabled="savingForgotPasswordToggle"
+                    @update:value="handleForgotPasswordToggleChange"
+                  />
+                </div>
+              </div>
+            </div>
+            <n-space style="margin-top: 12px">
+              <n-button type="primary" :loading="savingCredentials" :disabled="savingCredentials" @click="submitCredentialsChange">
+                修改
+              </n-button>
+            </n-space>
           </n-form>
         </n-card>
       </n-grid-item>
@@ -594,6 +620,36 @@
             </n-card>
           </n-space>
         </n-card>
+      </n-grid-item>
+
+      <n-grid-item :span="gridSpanFull">
+        <n-space vertical :size="12" style="width: 100%">
+          <n-card title="About" class="settings-card">
+            <div class="about-list">
+              <div v-for="item in aboutEntries" :key="item.title" class="about-entry">
+                <div class="about-entry__title">{{ item.title }}</div>
+                <div v-if="item.description" class="about-entry__description">{{ item.description }}</div>
+                <a class="about-entry__link" :href="item.href" target="_blank" rel="noreferrer">
+                  {{ item.linkText }}
+                  <n-icon :component="openOutline" />
+                </a>
+              </div>
+            </div>
+          </n-card>
+
+          <n-card title="Credits" class="settings-card">
+            <div class="about-list">
+              <div v-for="item in creditEntries" :key="item.title" class="about-entry">
+                <div class="about-entry__title">{{ item.title }}</div>
+                <div v-if="item.description" class="about-entry__description">{{ item.description }}</div>
+                <a class="about-entry__link" :href="item.href" target="_blank" rel="noreferrer">
+                  {{ item.linkText }}
+                  <n-icon :component="openOutline" />
+                </a>
+              </div>
+            </div>
+          </n-card>
+        </n-space>
       </n-grid-item>
     </n-grid>
 
@@ -656,6 +712,7 @@ import {
   ChevronUpOutline,
   EyeOutline,
   HelpCircleOutline,
+  OpenOutline,
   RefreshOutline,
   SaveOutline,
   SettingsOutline,
@@ -690,8 +747,10 @@ const swapHorizontalOutline = SwapHorizontalOutline
 const helpCircleOutline = HelpCircleOutline
 const settingsOutline = SettingsOutline
 const eyeOutline = EyeOutline
+const openOutline = OpenOutline
 const settingsReminderPreviewRef = ref<InstanceType<typeof ReminderRulesPreview> | null>(null)
 const settingsReminderPreviewVisible = ref(false)
+const appVersion = __APP_VERSION__
 const AI_PROVIDER_PRESETS: Record<
   Exclude<AiProviderPreset, 'custom'>,
   Pick<Settings['aiConfig'], 'providerName' | 'baseUrl' | 'model' | 'capabilities'>
@@ -731,6 +790,7 @@ const settingsForm = reactive<Settings>({
   defaultNotifyDays: 3,
   defaultAdvanceReminderRules: DEFAULT_ADVANCE_REMINDER_RULES,
   rememberSessionDays: 7,
+  forgotPasswordEnabled: false,
   notifyOnDueDay: true,
   mergeMultiSubscriptionNotifications: true,
   monthlyBudgetBase: null,
@@ -818,6 +878,7 @@ const savingGotifySettings = ref(false)
 const savingWebhookSettings = ref(false)
 const savingAiSettings = ref(false)
 const savingCredentials = ref(false)
+const savingForgotPasswordToggle = ref(false)
 const sourceCurrency = ref('USD')
 const targetCurrency = ref('CNY')
 const converterAmount = ref(1)
@@ -833,6 +894,14 @@ const notificationGridCols = computed(() => {
   return 3
 })
 const isWorkerLiteRuntime = computed(() => settingsForm.storageCapabilities?.runtime === 'worker-lite')
+const forgotPasswordToggleUnlocked = computed(
+  () =>
+    settingsForm.emailNotificationsEnabled ||
+    settingsForm.pushplusNotificationsEnabled ||
+    settingsForm.telegramNotificationsEnabled ||
+    settingsForm.serverchanNotificationsEnabled ||
+    settingsForm.gotifyNotificationsEnabled
+)
 const gridSpanFull = computed(() => (isMobile.value ? 1 : 2))
 const watchedCurrencies = ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'HKD']
 const webhookMethodOptions = [
@@ -857,6 +926,72 @@ const emailProviderOptions = computed(() =>
         { label: 'Resend', value: 'resend' }
       ] satisfies Array<{ label: string; value: 'smtp' | 'resend' }>)
 )
+
+const aboutEntries = computed(() => [
+  {
+    title: `SubTracker Lite ${appVersion}`,
+    description: '',
+    linkText: 'Lite Branch',
+    href: 'https://github.com/Smile-QWQ/SubTracker/tree/lite'
+  },
+  {
+    title: 'License',
+    description: '',
+    linkText: 'GPLv3',
+    href: 'https://www.gnu.org/licenses/gpl-3.0'
+  },
+  {
+    title: 'Issues and Requests',
+    description: '',
+    linkText: 'GitHub',
+    href: 'https://github.com/Smile-QWQ/SubTracker/issues'
+  },
+  {
+    title: 'The author',
+    description: '',
+    linkText: 'https://github.com/Smile-QWQ',
+    href: 'https://github.com/Smile-QWQ'
+  },
+  {
+    title: 'Documentation',
+    description: '',
+    linkText: 'README / DEPLOYMENT',
+    href: 'https://github.com/Smile-QWQ/SubTracker#readme'
+  }
+])
+
+const creditEntries = [
+  {
+    title: 'Wallos',
+    description: '',
+    linkText: 'https://github.com/ellite/Wallos',
+    href: 'https://github.com/ellite/Wallos'
+  },
+  {
+    title: 'Vue 3 / Vite',
+    description: '',
+    linkText: 'https://vite.dev/',
+    href: 'https://vite.dev/'
+  },
+  {
+    title: 'Naive UI',
+    description: '',
+    linkText: 'https://www.naiveui.com/',
+    href: 'https://www.naiveui.com/'
+  },
+  {
+    title: 'Fastify / Prisma',
+    description: '',
+    linkText: 'https://www.fastify.io/ / https://www.prisma.io/',
+    href: 'https://www.fastify.io/'
+  },
+  {
+    title: 'Pinia / TanStack Query / ECharts',
+    description: '',
+    linkText: 'https://pinia.vuejs.org/',
+    href: 'https://pinia.vuejs.org/'
+  }
+] as const
 
 function normalizeWorkerEmailProvider() {
   if (isWorkerLiteRuntime.value && settingsForm.emailProvider !== 'resend') {
@@ -992,6 +1127,16 @@ function validateAiSettings(action: 'save' | 'connection-test' | 'vision-test') 
 }
 
 watch(
+  forgotPasswordToggleUnlocked,
+  (unlocked) => {
+    if (!unlocked) {
+      settingsForm.forgotPasswordEnabled = false
+    }
+  },
+  { immediate: true }
+)
+
+watch(
   settingsQueryData,
   (settings) => {
     if (!settings) return
@@ -1042,6 +1187,7 @@ async function saveBasicSettings() {
       timezone: normalizeAppTimezone(settingsForm.timezone),
       defaultAdvanceReminderRules: settingsForm.defaultAdvanceReminderRules,
       rememberSessionDays: settingsForm.rememberSessionDays,
+      forgotPasswordEnabled: settingsForm.forgotPasswordEnabled,
       mergeMultiSubscriptionNotifications: settingsForm.mergeMultiSubscriptionNotifications,
       monthlyBudgetBase: settingsForm.monthlyBudgetBase,
       yearlyBudgetBase: settingsForm.yearlyBudgetBase,
@@ -1062,6 +1208,25 @@ async function saveBasicSettings() {
     message.error(error instanceof Error ? error.message : '基础设置保存失败')
   } finally {
     savingBasicSettings.value = false
+  }
+}
+
+async function handleForgotPasswordToggleChange(value: boolean) {
+  if (savingForgotPasswordToggle.value) return
+  const previousValue = settingsForm.forgotPasswordEnabled
+  settingsForm.forgotPasswordEnabled = value
+  savingForgotPasswordToggle.value = true
+  try {
+    const result = await api.updateSettings({
+      forgotPasswordEnabled: value
+    })
+    applySavedSettings(result)
+    message.success(value ? '找回密码已开启' : '找回密码已关闭')
+  } catch (error) {
+    settingsForm.forgotPasswordEnabled = previousValue
+    message.error(error instanceof Error ? error.message : '找回密码设置保存失败')
+  } finally {
+    savingForgotPasswordToggle.value = false
   }
 }
 
@@ -1636,6 +1801,42 @@ function previewSettingsReminderRules() {
 .email-summary {
   margin: 2px 0 14px;
   line-height: 1.5;
+}
+
+.about-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.about-entry {
+  min-width: 0;
+}
+
+.about-entry__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--app-text-strong);
+}
+
+.about-entry__description {
+  margin-top: 2px;
+  color: var(--app-text-secondary);
+  line-height: 1.6;
+}
+
+.about-entry__link {
+  margin-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #7c8db5;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.about-entry__link:hover {
+  color: #4f6ef7;
 }
 
 .webhook-advanced,
