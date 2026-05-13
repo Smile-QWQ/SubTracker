@@ -2,16 +2,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_RESEND_API_URL } from '@subtracker/shared'
 import { invalidateWorkerLiteCache } from '../../src/services/worker-lite-cache.service'
 
-const { findManySubscriptionsMock, findManyTagsMock, projectRenewalEventsMock } = vi.hoisted(() => ({
+const {
+  findManySubscriptionsMock,
+  countSubscriptionsMock,
+  findManyTagsMock,
+  projectRenewalEventsMock,
+  isWorkerRuntimeMock,
+  getLiteOverviewStatisticsSnapshotMock
+} = vi.hoisted(() => ({
   findManySubscriptionsMock: vi.fn(),
+  countSubscriptionsMock: vi.fn(),
   findManyTagsMock: vi.fn(),
-  projectRenewalEventsMock: vi.fn(() => [])
+  projectRenewalEventsMock: vi.fn(() => []),
+  isWorkerRuntimeMock: vi.fn(),
+  getLiteOverviewStatisticsSnapshotMock: vi.fn()
 }))
 
 vi.mock('../../src/db', () => ({
   prisma: {
     subscription: {
-      findMany: findManySubscriptionsMock
+      findMany: findManySubscriptionsMock,
+      count: countSubscriptionsMock
     },
     tag: {
       findMany: findManyTagsMock
@@ -99,12 +110,20 @@ vi.mock('../../src/services/worker-lite-repository.service', () => ({
   listTagsLite: findManyTagsMock
 }))
 
+vi.mock('../../src/services/worker-lite-statistics.repository', () => ({
+  getLiteOverviewStatisticsSnapshot: getLiteOverviewStatisticsSnapshotMock
+}))
+
 vi.mock('../../src/utils/money', () => ({
   convertAmount: vi.fn((amount: number) => amount)
 }))
 
 vi.mock('../../src/services/projected-renewal.service', () => ({
   projectRenewalEvents: projectRenewalEventsMock
+}))
+
+vi.mock('../../src/runtime', () => ({
+  isWorkerRuntime: isWorkerRuntimeMock
 }))
 
 import { getBudgetStatistics, getOverviewStatistics } from '../../src/services/statistics.service'
@@ -137,7 +156,11 @@ describe('statistics service', () => {
     await invalidateWorkerLiteCache(['statistics', 'settings', 'exchange-rates'])
     findManyTagsMock.mockReset()
     findManySubscriptionsMock.mockReset()
+    countSubscriptionsMock.mockReset()
     projectRenewalEventsMock.mockClear()
+    getLiteOverviewStatisticsSnapshotMock.mockReset()
+    isWorkerRuntimeMock.mockReset()
+    isWorkerRuntimeMock.mockReturnValue(false)
     findManyTagsMock.mockResolvedValue([])
     vi.useRealTimers()
   })
@@ -166,6 +189,75 @@ describe('statistics service', () => {
       baseCurrency: 'CNY'
     })
     expect(result.topSubscriptionsByMonthlyCost.some((item) => item.id === 'paused')).toBe(false)
+  })
+
+  it('degrades lite worker overview via lightweight snapshot without projected trend or tag loads', async () => {
+    isWorkerRuntimeMock.mockReturnValue(true)
+    getLiteOverviewStatisticsSnapshotMock.mockResolvedValue({
+      activeSubscriptions: [
+        {
+          id: 'monthly',
+          name: 'Monthly',
+          amount: 50,
+          currency: 'CNY',
+          billingIntervalCount: 1,
+          billingIntervalUnit: 'month',
+          autoRenew: true
+        }
+      ],
+      statusCounts: [
+        { status: 'active', count: 1 },
+        { status: 'paused', count: 0 },
+        { status: 'cancelled', count: 0 },
+        { status: 'expired', count: 1 }
+      ],
+      upcomingCounts: {
+        upcoming7DaysCount: 1,
+        upcoming30DaysCount: 2
+      },
+      upcomingRenewals: [
+        {
+          id: 'upcoming',
+          name: 'Upcoming',
+          amount: 12,
+          currency: 'CNY',
+          status: 'expired',
+          nextRenewalDate: new Date('2026-01-05T00:00:00.000Z')
+        }
+      ]
+    })
+
+    const result = await getOverviewStatistics()
+
+    expect(findManySubscriptionsMock).not.toHaveBeenCalled()
+    expect(projectRenewalEventsMock).not.toHaveBeenCalled()
+    expect(findManyTagsMock).not.toHaveBeenCalled()
+    expect(getLiteOverviewStatisticsSnapshotMock).toHaveBeenCalledTimes(1)
+    expect(result.monthlyTrend).toEqual([])
+    expect(result.upcomingByDay).toEqual([])
+    expect(result.tagSpend).toEqual([])
+    expect(result.tagBudgetUsage).toEqual([])
+    expect(result.statusDistribution).toEqual([
+      { status: 'active', count: 1 },
+      { status: 'paused', count: 0 },
+      { status: 'cancelled', count: 0 },
+      { status: 'expired', count: 1 }
+    ])
+    expect(result.upcomingRenewals).toEqual([
+      {
+        id: 'upcoming',
+        name: 'Upcoming',
+        nextRenewalDate: '2026-01-05',
+        amount: 12,
+        currency: 'CNY',
+        convertedAmount: 12,
+        status: 'expired'
+      }
+    ])
+    expect(result.monthlyTrendMeta).toEqual({
+      mode: 'projected',
+      months: 12
+    })
   })
 
   it('does not load tag budgets when tag budgets are disabled', async () => {

@@ -3,8 +3,10 @@ import { convertAmount } from '../utils/money'
 import { getAppSettings } from './settings.service'
 import { projectRenewalEvents } from './projected-renewal.service'
 import { withWorkerLiteCache } from './worker-lite-cache.service'
+import { getLiteOverviewStatisticsSnapshot } from './worker-lite-statistics.repository'
 import { listStatisticsSubscriptionsLite, listTagsLite } from './worker-lite-repository.service'
 import { formatDateInTimezone, startOfDayDateInTimezone, startOfMonthDateInTimezone, toTimezonedDayjs } from '../utils/timezone'
+import { isWorkerRuntime } from '../runtime'
 
 type BudgetStatus = 'normal' | 'warning' | 'over'
 
@@ -150,6 +152,24 @@ function buildTagBudgetSummary(tagBudgetUsage: TagBudgetUsageEntry[]) {
       overBudget: item.overBudget,
       status: item.status
     }))
+  }
+}
+
+function buildLiteTagBudgetSummary(appSettings: Awaited<ReturnType<typeof getAppSettings>>) {
+  return {
+    configuredCount: Object.keys(appSettings.tagBudgets).length,
+    warningCount: 0,
+    overBudgetCount: 0,
+    topTags: [] as Array<{
+      tagId: string
+      name: string
+      budget: number
+      spent: number
+      ratio: number
+      remaining: number
+      overBudget: number
+      status: BudgetStatus
+    }>
   }
 }
 
@@ -445,7 +465,134 @@ async function buildStatisticsProjectedSeries(state: StatisticsBaseState) {
   return buildProjectedStatisticsSeries(state.projectedSubscriptions, state.baseCurrency, state.rates, state.timezone)
 }
 
+async function buildWorkerLiteOverviewStatistics() {
+  const appSettings = await getAppSettings()
+  const timezone = appSettings.timezone
+  const today = toTimezonedDayjs(new Date(), timezone)
+  const queryStart = startOfDayDateInTimezone(new Date(), timezone)
+  const upcoming7End = today.add(7, 'day').toDate()
+  const upcoming30End = today.add(30, 'day').toDate()
+  const snapshot = await getLiteOverviewStatisticsSnapshot({
+    queryStart,
+    upcoming7End,
+    upcoming30End,
+    upcomingQueryEnd: upcoming30End
+  })
+  const baseCurrency = appSettings.baseCurrency
+  const rates = await ensureExchangeRates(baseCurrency)
+
+  let monthlyEstimatedBase = 0
+  let yearlyEstimatedBase = 0
+  const renewalModeMap = new Map<'auto' | 'manual', { count: number; amount: number }>([
+    ['auto', { count: 0, amount: 0 }],
+    ['manual', { count: 0, amount: 0 }]
+  ])
+  const currencyDistributionMap = new Map<string, number>()
+  const topSubscriptionsByMonthlyCost: TopSubscriptionEntry[] = []
+
+  for (const subscription of snapshot.activeSubscriptions) {
+    const baseAmount = convertAmount(
+      subscription.amount,
+      subscription.currency,
+      baseCurrency,
+      rates.baseCurrency,
+      rates.rates
+    )
+    const monthly = baseAmount * monthlyFactor(subscription.billingIntervalUnit, subscription.billingIntervalCount)
+    monthlyEstimatedBase += monthly
+    yearlyEstimatedBase += monthly * 12
+    topSubscriptionsByMonthlyCost.push({
+      id: subscription.id,
+      name: subscription.name,
+      amount: subscription.amount,
+      currency: subscription.currency,
+      monthlyAmountBase: Number(monthly.toFixed(2)),
+      baseCurrency
+    })
+
+    const modeKey = subscription.autoRenew ? 'auto' : 'manual'
+    const currentMode = renewalModeMap.get(modeKey) ?? { count: 0, amount: 0 }
+    currentMode.count += 1
+    currentMode.amount += monthly
+    renewalModeMap.set(modeKey, currentMode)
+
+    currencyDistributionMap.set(
+      subscription.currency,
+      (currencyDistributionMap.get(subscription.currency) ?? 0) + subscription.amount
+    )
+  }
+
+  const budgetSummary = {
+    monthly: buildBudgetEntry(monthlyEstimatedBase, appSettings.monthlyBudgetBase),
+    yearly: buildBudgetEntry(yearlyEstimatedBase, appSettings.yearlyBudgetBase)
+  }
+
+  return {
+    activeSubscriptions: snapshot.activeSubscriptions.length,
+    upcoming7Days: snapshot.upcomingCounts.upcoming7DaysCount,
+    upcoming30Days: snapshot.upcomingCounts.upcoming30DaysCount,
+    monthlyEstimatedBase: Number(monthlyEstimatedBase.toFixed(2)),
+    yearlyEstimatedBase: Number(yearlyEstimatedBase.toFixed(2)),
+    monthlyBudgetBase: appSettings.monthlyBudgetBase,
+    yearlyBudgetBase: appSettings.yearlyBudgetBase,
+    monthlyBudgetUsageRatio: budgetSummary.monthly.ratio,
+    yearlyBudgetUsageRatio: budgetSummary.yearly.ratio,
+    budgetSummary,
+    tagBudgetSummary: appSettings.enableTagBudgets ? buildLiteTagBudgetSummary(appSettings) : null,
+    tagSpend: [],
+    monthlyTrend: [],
+    monthlyTrendMeta: {
+      mode: 'projected' as const,
+      months: PROJECTED_MONTH_COUNT
+    },
+    statusDistribution: snapshot.statusCounts,
+    renewalModeDistribution: [
+      {
+        autoRenew: true,
+        count: renewalModeMap.get('auto')?.count ?? 0,
+        amount: Number((renewalModeMap.get('auto')?.amount ?? 0).toFixed(2))
+      },
+      {
+        autoRenew: false,
+        count: renewalModeMap.get('manual')?.count ?? 0,
+        amount: Number((renewalModeMap.get('manual')?.amount ?? 0).toFixed(2))
+      }
+    ],
+    upcomingByDay: [],
+    currencyDistribution: Array.from(currencyDistributionMap.entries()).map(([currency, amount]) => ({
+      currency,
+      amount: Number(amount.toFixed(2))
+    })),
+    topSubscriptionsByMonthlyCost: topSubscriptionsByMonthlyCost
+      .sort((a, b) => b.monthlyAmountBase - a.monthlyAmountBase || a.name.localeCompare(b.name, 'zh-CN'))
+      .slice(0, 10),
+    tagBudgetUsage: [],
+    upcomingRenewals: snapshot.upcomingRenewals.map((item) => ({
+      id: item.id,
+      name: item.name,
+      nextRenewalDate: formatDateInTimezone(item.nextRenewalDate, timezone),
+      amount: item.amount,
+      currency: item.currency,
+      convertedAmount: convertAmount(item.amount, item.currency, baseCurrency, rates.baseCurrency, rates.rates),
+      status: item.status
+    }))
+  }
+}
+
+async function getWorkerLiteOverviewStatistics(cacheVersion?: number) {
+  return withWorkerLiteCache(
+    'statistics',
+    resolveStatisticsStateKey('state:overview-lite', cacheVersion),
+    buildWorkerLiteOverviewStatistics,
+    STATISTICS_CACHE_TTL_SECONDS
+  )
+}
+
 export async function getOverviewStatistics(cacheVersion?: number) {
+  if (isWorkerRuntime()) {
+    return getWorkerLiteOverviewStatistics(cacheVersion)
+  }
+
   const state = await getStatisticsBaseState(cacheVersion)
   const projectedSeries = await withWorkerLiteCache(
     'statistics',
