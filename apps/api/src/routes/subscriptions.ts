@@ -330,7 +330,14 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       30
     )
 
-    return sendOk(reply, await sortSubscriptionsByOrder(rows.map(flattenSubscriptionTags)))
+    return sendOk(
+      reply,
+      await sortSubscriptionsByOrder(
+        (rows as Array<{ id: string; tags?: Array<{ tag: { id: string; name: string; color: string; icon: string; sortOrder: number } }> }>).map(
+          flattenSubscriptionTags
+        )
+      )
+    )
   })
 
   app.post('/subscriptions/reorder', async (request, reply) => {
