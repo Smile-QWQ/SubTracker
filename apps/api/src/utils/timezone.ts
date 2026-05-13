@@ -9,12 +9,21 @@ dayjs.extend(timezone)
 dayjs.extend(customParseFormat)
 
 export const DEFAULT_APP_TIMEZONE = DEFAULT_TIMEZONE
+const normalizedTimezoneCache = new Map<string, string>()
+const timezoneValidityCache = new Map<string, boolean>()
 
 function isValidTimeZone(value: string) {
+  const cached = timezoneValidityCache.get(value)
+  if (cached !== undefined) {
+    return cached
+  }
+
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: value }).format(new Date())
+    timezoneValidityCache.set(value, true)
     return true
   } catch {
+    timezoneValidityCache.set(value, false)
     return false
   }
 }
@@ -30,7 +39,14 @@ export function buildSupportedTimezones() {
 export function normalizeAppTimezone(timezoneValue?: string | null) {
   const candidate = String(timezoneValue ?? '').trim()
   if (!candidate) return DEFAULT_APP_TIMEZONE
-  return isValidTimeZone(candidate) ? candidate : DEFAULT_APP_TIMEZONE
+  const cached = normalizedTimezoneCache.get(candidate)
+  if (cached) {
+    return cached
+  }
+
+  const normalized = isValidTimeZone(candidate) ? candidate : DEFAULT_APP_TIMEZONE
+  normalizedTimezoneCache.set(candidate, normalized)
+  return normalized
 }
 
 export function getNowInTimezone(value: Date | string = new Date(), timezoneValue = DEFAULT_APP_TIMEZONE) {

@@ -3,6 +3,7 @@ import {
   DEFAULT_AI_CONFIG,
   DEFAULT_RESEND_API_URL,
   DEFAULT_TIMEZONE,
+  type NotificationWebhookSettingsInput,
   StorageCapabilitiesSchema,
   SettingsSchema,
   type SettingsInput
@@ -47,6 +48,16 @@ const DEFAULT_GOTIFY_CONFIG: SettingsInput['gotifyConfig'] = {
   ignoreSsl: false
 }
 
+export type NotificationChannelAvailability = {
+  hasEnabledChannel: boolean
+  primaryWebhookEnabled: boolean
+  emailNotificationsEnabled: boolean
+  pushplusNotificationsEnabled: boolean
+  telegramNotificationsEnabled: boolean
+  serverchanNotificationsEnabled: boolean
+  gotifyNotificationsEnabled: boolean
+}
+
 function resolveSettingsCacheKey(prefix: string, version: number) {
   return `${prefix}:v${version}`
 }
@@ -84,6 +95,22 @@ function readLegacyResendConfig(settingsMap: Map<string, unknown>) {
     from: String(legacy.from ?? '').trim(),
     to: String(legacy.to ?? '').trim()
   } satisfies SettingsInput['resendConfig']
+}
+
+function readPrimaryWebhookEnabled(settingsMap: Map<string, unknown>) {
+  const raw = readSettingsValue<NotificationWebhookSettingsInput | Record<string, unknown> | null>(
+    settingsMap,
+    'notificationWebhook',
+    null
+  )
+
+  if (!raw || Array.isArray(raw)) {
+    return false
+  }
+
+  const enabled = Boolean(raw.enabled)
+  const url = typeof raw.url === 'string' ? raw.url.trim() : ''
+  return enabled && Boolean(url)
 }
 
 export async function getAppSettings(): Promise<SettingsInput> {
@@ -249,6 +276,40 @@ export async function getNotificationChannelSettings() {
     serverchanConfig,
     gotifyConfig
   }
+}
+
+export async function getNotificationChannelAvailability(): Promise<NotificationChannelAvailability> {
+  const version = await getCacheVersion('settings')
+  return withWorkerLiteCache(
+    'settings',
+    resolveSettingsCacheKey('notification-channel-availability', version),
+    async () => {
+      const settingsMap = await listSettingsLite()
+      const primaryWebhookEnabled = readPrimaryWebhookEnabled(settingsMap)
+      const emailNotificationsEnabled = readSettingsValue(settingsMap, 'emailNotificationsEnabled', false)
+      const pushplusNotificationsEnabled = readSettingsValue(settingsMap, 'pushplusNotificationsEnabled', false)
+      const telegramNotificationsEnabled = readSettingsValue(settingsMap, 'telegramNotificationsEnabled', false)
+      const serverchanNotificationsEnabled = readSettingsValue(settingsMap, 'serverchanNotificationsEnabled', false)
+      const gotifyNotificationsEnabled = readSettingsValue(settingsMap, 'gotifyNotificationsEnabled', false)
+
+      return {
+        hasEnabledChannel:
+          primaryWebhookEnabled ||
+          emailNotificationsEnabled ||
+          pushplusNotificationsEnabled ||
+          telegramNotificationsEnabled ||
+          serverchanNotificationsEnabled ||
+          gotifyNotificationsEnabled,
+        primaryWebhookEnabled,
+        emailNotificationsEnabled,
+        pushplusNotificationsEnabled,
+        telegramNotificationsEnabled,
+        serverchanNotificationsEnabled,
+        gotifyNotificationsEnabled
+      }
+    },
+    30
+  )
 }
 
 export async function getNotificationScanSettings() {

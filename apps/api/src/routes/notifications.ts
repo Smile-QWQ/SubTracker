@@ -69,7 +69,9 @@ export async function notificationRoutes(app: FastifyInstance) {
     }
 
     const result = await scanRenewalNotifications(parsed.data.now ? new Date(parsed.data.now) : new Date(), {
-      dryRun: parsed.data.dryRun
+      dryRun: parsed.data.dryRun,
+      forceScanWithoutChannels: true,
+      includeDebugCandidates: true
     })
     return sendOk(reply, result)
   })

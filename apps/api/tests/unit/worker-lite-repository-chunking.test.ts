@@ -131,4 +131,42 @@ describe('listSubscriptionsLite chunking', () => {
       .toHaveLength(2)
     expect(bindingsPerQuery[0]).toEqual(['tag_a', 'tag_b'])
   })
+
+  it('supports webhookEnabled and includeTags filters in D1 subscription queries', async () => {
+    const preparedQueries: string[] = []
+    const bindingsPerQuery: unknown[][] = []
+
+    getRuntimeD1Database.mockReturnValue({
+      prepare(query: string) {
+        preparedQueries.push(query)
+        return {
+          bind(...values: unknown[]) {
+            bindingsPerQuery.push(values)
+            return this
+          },
+          async all() {
+            return { results: [] }
+          },
+          async first() {
+            return null
+          },
+          async run() {
+            return {}
+          }
+        }
+      }
+    })
+
+    const { listSubscriptionsLite } = await import('../../src/services/worker-lite-repository.service')
+
+    await listSubscriptionsLite({
+      webhookEnabled: true,
+      includeTags: false
+    })
+
+    const subscriptionQuery = preparedQueries.find((query) => query.includes('FROM Subscription s'))
+    expect(subscriptionQuery).toContain('s.webhookEnabled = ?')
+    expect(bindingsPerQuery[0]).toEqual([1])
+    expect(preparedQueries.some((query) => query.includes('FROM SubscriptionTag st'))).toBe(false)
+  })
 })

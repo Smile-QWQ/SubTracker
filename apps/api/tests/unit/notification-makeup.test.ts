@@ -2,28 +2,44 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const notificationState = vi.hoisted(() => ({
   dispatchMock: vi.fn(),
-  listSubscriptionsLiteMock: vi.fn(),
+  listReminderScanSubscriptionsDefaultWindowMock: vi.fn(),
+  listReminderScanSubscriptionsCustomWindowMock: vi.fn(),
   defaultAdvanceReminderRules: '3&09:30;0&09:30;',
   defaultOverdueReminderRules: '1&09:30;2&09:30;3&09:30;',
   mergeMultiSubscriptionNotifications: false,
   timezone: 'Asia/Shanghai'
 }))
 
-vi.mock('../../src/services/settings.service', () => ({
-  getNotificationScanSettings: vi.fn(async () => ({
+const notificationSettingsMocks = vi.hoisted(() => ({
+  getNotificationScanSettingsMock: vi.fn(async () => ({
     defaultAdvanceReminderRules: notificationState.defaultAdvanceReminderRules,
     defaultOverdueReminderRules: notificationState.defaultOverdueReminderRules,
     mergeMultiSubscriptionNotifications: notificationState.mergeMultiSubscriptionNotifications,
     timezone: notificationState.timezone
+  })),
+  getNotificationChannelAvailabilityMock: vi.fn(async () => ({
+    hasEnabledChannel: true,
+    primaryWebhookEnabled: true,
+    emailNotificationsEnabled: false,
+    pushplusNotificationsEnabled: false,
+    telegramNotificationsEnabled: false,
+    serverchanNotificationsEnabled: false,
+    gotifyNotificationsEnabled: false
   }))
+}))
+
+vi.mock('../../src/services/settings.service', () => ({
+  getNotificationScanSettings: notificationSettingsMocks.getNotificationScanSettingsMock,
+  getNotificationChannelAvailability: notificationSettingsMocks.getNotificationChannelAvailabilityMock
 }))
 
 vi.mock('../../src/services/channel-notification.service', () => ({
   dispatchNotificationEvent: notificationState.dispatchMock
 }))
 
-vi.mock('../../src/services/worker-lite-repository.service', () => ({
-  listSubscriptionsLite: notificationState.listSubscriptionsLiteMock
+vi.mock('../../src/services/worker-lite-reminder.repository', () => ({
+  listReminderScanSubscriptionsDefaultWindow: notificationState.listReminderScanSubscriptionsDefaultWindowMock,
+  listReminderScanSubscriptionsCustomWindow: notificationState.listReminderScanSubscriptionsCustomWindowMock
 }))
 
 import { scanRenewalNotifications } from '../../src/services/notification.service'
@@ -47,8 +63,21 @@ const subscription = {
 describe('scanRenewalNotifications reminder makeup window', () => {
   beforeEach(() => {
     notificationState.dispatchMock.mockReset()
-    notificationState.listSubscriptionsLiteMock.mockReset()
-    notificationState.listSubscriptionsLiteMock.mockResolvedValue([subscription])
+    notificationState.listReminderScanSubscriptionsDefaultWindowMock.mockReset()
+    notificationState.listReminderScanSubscriptionsCustomWindowMock.mockReset()
+    notificationSettingsMocks.getNotificationScanSettingsMock.mockClear()
+    notificationSettingsMocks.getNotificationChannelAvailabilityMock.mockClear()
+    notificationState.listReminderScanSubscriptionsDefaultWindowMock.mockResolvedValue([subscription])
+    notificationState.listReminderScanSubscriptionsCustomWindowMock.mockResolvedValue([])
+    notificationSettingsMocks.getNotificationChannelAvailabilityMock.mockResolvedValue({
+      hasEnabledChannel: true,
+      primaryWebhookEnabled: true,
+      emailNotificationsEnabled: false,
+      pushplusNotificationsEnabled: false,
+      telegramNotificationsEnabled: false,
+      serverchanNotificationsEnabled: false,
+      gotifyNotificationsEnabled: false
+    })
     notificationState.defaultAdvanceReminderRules = '3&09:30;0&09:30;'
     notificationState.defaultOverdueReminderRules = '1&09:30;2&09:30;3&09:30;'
     notificationState.mergeMultiSubscriptionNotifications = false
@@ -86,7 +115,7 @@ describe('scanRenewalNotifications reminder makeup window', () => {
   })
 
   it('dispatches a one-day advance reminder for a subscription expiring tomorrow', async () => {
-    notificationState.listSubscriptionsLiteMock.mockResolvedValue([
+    notificationState.listReminderScanSubscriptionsDefaultWindowMock.mockResolvedValue([
       {
         ...subscription,
         nextRenewalDate: new Date('2026-05-02T00:00:00+08:00'),
@@ -111,7 +140,7 @@ describe('scanRenewalNotifications reminder makeup window', () => {
 
   it('dispatches a tomorrow reminder when the subscription inherits a one-day default rule', async () => {
     notificationState.defaultAdvanceReminderRules = '3&09:30;1&17:14;0&09:30;'
-    notificationState.listSubscriptionsLiteMock.mockResolvedValue([
+    notificationState.listReminderScanSubscriptionsDefaultWindowMock.mockResolvedValue([
       {
         ...subscription,
         nextRenewalDate: new Date('2026-05-02T00:00:00+08:00'),
@@ -136,7 +165,8 @@ describe('scanRenewalNotifications reminder makeup window', () => {
 
   it('queries enough future subscriptions for per-subscription rules beyond the global default window', async () => {
     notificationState.defaultAdvanceReminderRules = '0&09:30;'
-    notificationState.listSubscriptionsLiteMock.mockResolvedValue([
+    notificationState.listReminderScanSubscriptionsDefaultWindowMock.mockResolvedValue([])
+    notificationState.listReminderScanSubscriptionsCustomWindowMock.mockResolvedValue([
       {
         ...subscription,
         nextRenewalDate: new Date('2026-05-02T00:00:00+08:00'),
@@ -147,13 +177,88 @@ describe('scanRenewalNotifications reminder makeup window', () => {
 
     await scanRenewalNotifications(new Date('2026-05-01T10:15:00+08:00'))
 
-    expect(notificationState.listSubscriptionsLiteMock).toHaveBeenCalledWith(
+    expect(notificationState.listReminderScanSubscriptionsDefaultWindowMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        statuses: ['active', 'expired'],
-        nextRenewalDateGte: expect.any(Date),
-        nextRenewalDateLte: expect.any(Date)
+        queryStart: expect.any(Date),
+        queryEnd: expect.any(Date)
       })
     )
+    expect(notificationState.listReminderScanSubscriptionsCustomWindowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryStart: expect.any(Date),
+        queryEnd: expect.any(Date)
+      })
+    )
+    expect(notificationState.dispatchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips scheduled scan entirely when no notification channel is enabled', async () => {
+    notificationSettingsMocks.getNotificationChannelAvailabilityMock.mockResolvedValue({
+      hasEnabledChannel: false,
+      primaryWebhookEnabled: false,
+      emailNotificationsEnabled: false,
+      pushplusNotificationsEnabled: false,
+      telegramNotificationsEnabled: false,
+      serverchanNotificationsEnabled: false,
+      gotifyNotificationsEnabled: false
+    })
+
+    const result = await scanRenewalNotifications(new Date('2026-05-01T10:15:00+08:00'))
+
+    expect(notificationSettingsMocks.getNotificationScanSettingsMock).not.toHaveBeenCalled()
+    expect(notificationState.listReminderScanSubscriptionsDefaultWindowMock).not.toHaveBeenCalled()
+    expect(notificationState.listReminderScanSubscriptionsCustomWindowMock).not.toHaveBeenCalled()
+    expect(notificationState.dispatchMock).not.toHaveBeenCalled()
+    expect(result).toMatchObject({
+      processedCount: 0,
+      matchedReminderCount: 0,
+      notificationCount: 0,
+      candidates: [],
+      notifications: []
+    })
+  })
+
+  it('still scans in debug mode even when no notification channel is enabled', async () => {
+    notificationSettingsMocks.getNotificationChannelAvailabilityMock.mockResolvedValue({
+      hasEnabledChannel: false,
+      primaryWebhookEnabled: false,
+      emailNotificationsEnabled: false,
+      pushplusNotificationsEnabled: false,
+      telegramNotificationsEnabled: false,
+      serverchanNotificationsEnabled: false,
+      gotifyNotificationsEnabled: false
+    })
+
+    await scanRenewalNotifications(new Date('2026-05-01T10:15:00+08:00'), {
+      dryRun: true,
+      forceScanWithoutChannels: true,
+      includeDebugCandidates: true
+    })
+
+    expect(notificationState.listReminderScanSubscriptionsDefaultWindowMock).toHaveBeenCalled()
+  })
+
+  it('deduplicates overlapping default-window and custom-window candidates by subscription id', async () => {
+    notificationState.defaultAdvanceReminderRules = '1&09:30;0&09:30;'
+    notificationState.listReminderScanSubscriptionsDefaultWindowMock.mockResolvedValue([
+      {
+        ...subscription,
+        id: 'sub-overlap',
+        nextRenewalDate: new Date('2026-05-02T00:00:00+08:00'),
+        advanceReminderRules: '1&09:30;'
+      }
+    ])
+    notificationState.listReminderScanSubscriptionsCustomWindowMock.mockResolvedValue([
+      {
+        ...subscription,
+        id: 'sub-overlap',
+        nextRenewalDate: new Date('2026-05-02T00:00:00+08:00'),
+        advanceReminderRules: '1&09:30;'
+      }
+    ])
+
+    await scanRenewalNotifications(new Date('2026-05-01T10:15:00+08:00'))
+
     expect(notificationState.dispatchMock).toHaveBeenCalledTimes(1)
   })
 })

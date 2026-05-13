@@ -24,7 +24,11 @@
     "reset:worker:local:kv": "node scripts/reset-cloudflare-state.mjs --local-kv",
     "reset:worker:local:rates": "node scripts/reset-cloudflare-state.mjs --local-rates",
     "deploy:worker": "node scripts/bootstrap-cloudflare.mjs",
-    "deploy:worker:r2": "node scripts/bootstrap-cloudflare.mjs --with-r2"
+    "deploy:worker:r2": "node scripts/bootstrap-cloudflare.mjs --with-r2",
+    "perf:lite:seed": "node scripts/perf-lite-seed.mjs",
+    "perf:lite:measure": "node scripts/perf-lite-measure.mjs",
+    "perf:lite:profile": "node scripts/perf-lite-measure.mjs --profile",
+    "perf:lite:worker": "node scripts/perf-lite-worker-http.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

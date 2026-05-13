@@ -63,6 +63,7 @@ type SubscriptionListFilters = {
   statuses?: string[]
   nextRenewalDateLte?: Date
   nextRenewalDateGte?: Date
+  webhookEnabled?: boolean
   includeTags?: boolean
 }
 
@@ -391,6 +392,11 @@ function buildSubscriptionWhere(filters: SubscriptionListFilters) {
     params.push(filters.nextRenewalDateLte.toISOString())
   }
 
+  if (filters.webhookEnabled !== undefined) {
+    clauses.push('s.webhookEnabled = ?')
+    params.push(filters.webhookEnabled ? 1 : 0)
+  }
+
   if (filters.tagIds?.length) {
     for (const tagId of filters.tagIds) {
       clauses.push('EXISTS (SELECT 1 FROM SubscriptionTag st WHERE st.subscriptionId = s.id AND st.tagId = ?)')
@@ -422,6 +428,9 @@ export async function listSubscriptionsLite(filters: SubscriptionListFilters = {
         ...(filters.nextRenewalDateLte ? { lte: filters.nextRenewalDateLte } : {})
       }
     }
+    if (filters.webhookEnabled !== undefined) {
+      where.webhookEnabled = filters.webhookEnabled
+    }
     if (filters.tagIds?.length) {
       where.AND = filters.tagIds.map((tagId) => ({
         tags: {
@@ -434,13 +443,18 @@ export async function listSubscriptionsLite(filters: SubscriptionListFilters = {
 
     return prisma.subscription.findMany({
       where,
-      include: {
-        tags: {
-          include: {
-            tag: true
+      ...(filters.includeTags === false
+        ? {}
+        : {
+            include: {
+              tags: {
+                include: {
+                  tag: true
+                }
+              }
+            }
           }
-        }
-      },
+      ),
       orderBy: [{ createdAt: 'asc' }]
     })
   }

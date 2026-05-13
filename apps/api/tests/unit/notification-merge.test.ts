@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const notificationState = vi.hoisted(() => ({
   mergeMultiSubscriptionNotifications: true,
   dispatchMock: vi.fn(),
-  listSubscriptionsLiteMock: vi.fn()
+  listReminderScanSubscriptionsDefaultWindowMock: vi.fn(),
+  listReminderScanSubscriptionsCustomWindowMock: vi.fn()
 }))
 
 vi.mock('../../src/services/settings.service', () => ({
@@ -12,6 +13,15 @@ vi.mock('../../src/services/settings.service', () => ({
     defaultOverdueReminderRules: '1&09:30;2&09:30;3&09:30;',
     mergeMultiSubscriptionNotifications: notificationState.mergeMultiSubscriptionNotifications,
     timezone: 'Asia/Shanghai'
+  })),
+  getNotificationChannelAvailability: vi.fn(async () => ({
+    hasEnabledChannel: true,
+    primaryWebhookEnabled: true,
+    emailNotificationsEnabled: false,
+    pushplusNotificationsEnabled: false,
+    telegramNotificationsEnabled: false,
+    serverchanNotificationsEnabled: false,
+    gotifyNotificationsEnabled: false
   }))
 }))
 
@@ -19,8 +29,9 @@ vi.mock('../../src/services/channel-notification.service', () => ({
   dispatchNotificationEvent: notificationState.dispatchMock
 }))
 
-vi.mock('../../src/services/worker-lite-repository.service', () => ({
-  listSubscriptionsLite: notificationState.listSubscriptionsLiteMock
+vi.mock('../../src/services/worker-lite-reminder.repository', () => ({
+  listReminderScanSubscriptionsDefaultWindow: notificationState.listReminderScanSubscriptionsDefaultWindowMock,
+  listReminderScanSubscriptionsCustomWindow: notificationState.listReminderScanSubscriptionsCustomWindowMock
 }))
 
 import { scanRenewalNotifications } from '../../src/services/notification.service'
@@ -28,8 +39,9 @@ import { scanRenewalNotifications } from '../../src/services/notification.servic
 describe('scanRenewalNotifications merge behavior', () => {
   beforeEach(() => {
     notificationState.dispatchMock.mockReset()
-    notificationState.listSubscriptionsLiteMock.mockReset()
-    notificationState.listSubscriptionsLiteMock.mockResolvedValue([
+    notificationState.listReminderScanSubscriptionsDefaultWindowMock.mockReset()
+    notificationState.listReminderScanSubscriptionsCustomWindowMock.mockReset()
+    notificationState.listReminderScanSubscriptionsDefaultWindowMock.mockResolvedValue([
       {
         id: 'sub-1',
         name: 'Netflix',
@@ -76,6 +88,7 @@ describe('scanRenewalNotifications merge behavior', () => {
         tags: [{ tag: { name: '办公' } }]
       }
     ])
+    notificationState.listReminderScanSubscriptionsCustomWindowMock.mockResolvedValue([])
   })
 
   it('merges all reminders from the same scan into a single summary notification by default', async () => {
@@ -118,5 +131,17 @@ describe('scanRenewalNotifications merge behavior', () => {
     await scanRenewalNotifications(new Date('2026-04-23T01:34:00.000Z'))
 
     expect(notificationState.dispatchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not fetch tags for scheduled scan candidates', async () => {
+    await scanRenewalNotifications(new Date('2026-04-23T01:30:00.000Z'))
+
+    expect(notificationState.listReminderScanSubscriptionsDefaultWindowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryStart: expect.any(Date),
+        queryEnd: expect.any(Date)
+      })
+    )
+    expect(notificationState.listReminderScanSubscriptionsCustomWindowMock).toHaveBeenCalled()
   })
 })
