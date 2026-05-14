@@ -1,14 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../src/config', () => ({
-  config: {
-    resendApiUrl: 'https://api.resend.com/emails'
-  }
-}))
-
-vi.mock('../../src/services/settings.service', () => ({
-  getAppTimezone: vi.fn(async () => 'Asia/Shanghai'),
-  getNotificationChannelSettings: vi.fn(async () => ({
+const settingsState = vi.hoisted(() => ({
+  getNotificationChannelSettingsMock: vi.fn(async () => ({
     emailNotificationsEnabled: true,
     emailProvider: 'resend',
     pushplusNotificationsEnabled: false,
@@ -37,8 +30,27 @@ vi.mock('../../src/services/settings.service', () => ({
     telegramConfig: {
       botToken: '',
       chatId: ''
+    },
+    serverchanConfig: {
+      sendkey: ''
+    },
+    gotifyConfig: {
+      url: '',
+      token: '',
+      ignoreSsl: false
     }
   }))
+}))
+
+vi.mock('../../src/config', () => ({
+  config: {
+    resendApiUrl: 'https://api.resend.com/emails'
+  }
+}))
+
+vi.mock('../../src/services/settings.service', () => ({
+  getAppTimezone: vi.fn(async () => 'Asia/Shanghai'),
+  getNotificationChannelSettings: settingsState.getNotificationChannelSettingsMock
 }))
 
 vi.mock('../../src/services/webhook.service', () => ({
@@ -75,6 +87,35 @@ function jsonResponse(payload: unknown, status = 200) {
 describe('channel notification service', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    settingsState.getNotificationChannelSettingsMock.mockClear()
+  })
+
+  it('reads notification channel settings only once per dispatch', async () => {
+    const { dispatchNotificationEvent } = await import('../../src/services/channel-notification.service')
+    const fetchMock = vi.fn(async () => jsonResponse({ id: 'email_123' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await dispatchNotificationEvent({
+      eventType: 'subscription.reminder_due',
+      resourceKey: 'subscription:single',
+      periodKey: '2026-05-14:single',
+      payload: {
+        id: 'sub_1',
+        name: '单个订阅',
+        nextRenewalDate: '2026-05-15',
+        amount: 10,
+        currency: 'USD',
+        tagNames: [],
+        websiteUrl: '',
+        notes: '',
+        phase: 'upcoming',
+        daysUntilRenewal: 1,
+        daysOverdue: 0
+      }
+    })
+
+    expect(settingsState.getNotificationChannelSettingsMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('sends Resend email requests with bearer auth and plain-text body', async () => {

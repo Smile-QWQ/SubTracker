@@ -79,6 +79,8 @@ export type NotificationChannelResult = {
   message?: string
 }
 
+type NotificationChannelSettings = Awaited<ReturnType<typeof getNotificationChannelSettings>>
+
 const NOTIFICATION_DEDUP_KEY_PREFIX = 'notification:'
 export const NOTIFICATION_DEDUP_RETENTION_DAYS = 30
 
@@ -364,8 +366,10 @@ async function dispatchDirectChannelNotification(
   }
 }
 
-async function sendEmailNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
-  const settings = await getNotificationChannelSettings()
+async function sendEmailNotification(
+  params: NotificationDispatchParams,
+  settings: NotificationChannelSettings
+): Promise<NotificationChannelResult> {
   if (!settings.emailNotificationsEnabled) {
     return {
       channel: 'email',
@@ -449,8 +453,10 @@ async function sendPushplusWithConfig(
   }
 }
 
-async function sendPushplusNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
-  const settings = await getNotificationChannelSettings()
+async function sendPushplusNotification(
+  params: NotificationDispatchParams,
+  settings: NotificationChannelSettings
+): Promise<NotificationChannelResult> {
   return dispatchDirectChannelNotification(params, {
     channel: 'pushplus',
     enabled: settings.pushplusNotificationsEnabled,
@@ -494,8 +500,10 @@ async function sendTelegramWithConfig(message: DirectNotificationMessage, config
   }
 }
 
-async function sendTelegramNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
-  const settings = await getNotificationChannelSettings()
+async function sendTelegramNotification(
+  params: NotificationDispatchParams,
+  settings: NotificationChannelSettings
+): Promise<NotificationChannelResult> {
   return dispatchDirectChannelNotification(params, {
     channel: 'telegram',
     enabled: settings.telegramNotificationsEnabled,
@@ -554,8 +562,10 @@ async function sendServerchanWithConfig(message: DirectNotificationMessage, conf
   }
 }
 
-async function sendServerchanNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
-  const settings = await getNotificationChannelSettings()
+async function sendServerchanNotification(
+  params: NotificationDispatchParams,
+  settings: NotificationChannelSettings
+): Promise<NotificationChannelResult> {
   return dispatchDirectChannelNotification(params, {
     channel: 'serverchan',
     enabled: settings.serverchanNotificationsEnabled,
@@ -590,8 +600,10 @@ async function sendGotifyWithConfig(message: DirectNotificationMessage, config: 
   }
 }
 
-async function sendGotifyNotification(params: NotificationDispatchParams): Promise<NotificationChannelResult> {
-  const settings = await getNotificationChannelSettings()
+async function sendGotifyNotification(
+  params: NotificationDispatchParams,
+  settings: NotificationChannelSettings
+): Promise<NotificationChannelResult> {
   return dispatchDirectChannelNotification(params, {
     channel: 'gotify',
     enabled: settings.gotifyNotificationsEnabled,
@@ -603,6 +615,7 @@ async function sendGotifyNotification(params: NotificationDispatchParams): Promi
 
 export async function dispatchNotificationEvent(params: NotificationDispatchParams) {
   const results: NotificationChannelResult[] = []
+  const channelSettings = await getNotificationChannelSettings()
 
   try {
     const webhookResult = await dispatchWebhookEvent(params)
@@ -615,35 +628,35 @@ export async function dispatchNotificationEvent(params: NotificationDispatchPara
     })
   }
 
-  const emailResult = (await Promise.resolve(sendEmailNotification(params)).catch((error) => ({
+  const emailResult = (await Promise.resolve(sendEmailNotification(params, channelSettings)).catch((error) => ({
     channel: 'email',
     status: 'failed',
     message: error instanceof Error ? error.message : 'email_dispatch_failed'
   }))) as NotificationChannelResult
   results.push(emailResult)
 
-  const pushplusResult = (await Promise.resolve(sendPushplusNotification(params)).catch((error) => ({
+  const pushplusResult = (await Promise.resolve(sendPushplusNotification(params, channelSettings)).catch((error) => ({
     channel: 'pushplus',
     status: 'failed',
     message: error instanceof Error ? error.message : 'pushplus_dispatch_failed'
   }))) as NotificationChannelResult
   results.push(pushplusResult)
 
-  const telegramResult = (await Promise.resolve(sendTelegramNotification(params)).catch((error) => ({
+  const telegramResult = (await Promise.resolve(sendTelegramNotification(params, channelSettings)).catch((error) => ({
     channel: 'telegram',
     status: 'failed',
     message: error instanceof Error ? error.message : 'telegram_dispatch_failed'
   }))) as NotificationChannelResult
   results.push(telegramResult)
 
-  const serverchanResult = (await Promise.resolve(sendServerchanNotification(params)).catch((error) => ({
+  const serverchanResult = (await Promise.resolve(sendServerchanNotification(params, channelSettings)).catch((error) => ({
     channel: 'serverchan',
     status: 'failed',
     message: error instanceof Error ? error.message : 'serverchan_dispatch_failed'
   }))) as NotificationChannelResult
   results.push(serverchanResult)
 
-  const gotifyResult = (await Promise.resolve(sendGotifyNotification(params)).catch((error) => ({
+  const gotifyResult = (await Promise.resolve(sendGotifyNotification(params, channelSettings)).catch((error) => ({
     channel: 'gotify',
     status: 'failed',
     message: error instanceof Error ? error.message : 'gotify_dispatch_failed'

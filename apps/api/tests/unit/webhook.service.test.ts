@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const webhookState = vi.hoisted(() => ({
   getSettingMock: vi.fn(),
   setSettingMock: vi.fn(),
-  findUniqueMock: vi.fn(),
-  createMock: vi.fn(),
+  findManyMock: vi.fn(),
+  createManyMock: vi.fn(),
   updateMock: vi.fn()
 }))
 
@@ -13,11 +13,16 @@ vi.mock('../../src/services/settings.service', () => ({
   setSetting: webhookState.setSettingMock
 }))
 
+vi.mock('../../src/runtime', () => ({
+  getRuntimeD1Database: vi.fn(() => undefined),
+  isWorkerRuntime: vi.fn(() => false)
+}))
+
 vi.mock('../../src/db', () => ({
   prisma: {
     webhookDelivery: {
-      findUnique: webhookState.findUniqueMock,
-      create: webhookState.createMock,
+      findMany: webhookState.findManyMock,
+      createMany: webhookState.createManyMock,
       update: webhookState.updateMock
     }
   }
@@ -53,8 +58,8 @@ describe('webhook service', () => {
     vi.restoreAllMocks()
     webhookState.getSettingMock.mockReset()
     webhookState.setSettingMock.mockReset()
-    webhookState.findUniqueMock.mockReset()
-    webhookState.createMock.mockReset()
+    webhookState.findManyMock.mockReset()
+    webhookState.createManyMock.mockReset()
     webhookState.updateMock.mockReset()
     webhookState.getSettingMock.mockResolvedValue({
       enabled: true,
@@ -67,11 +72,16 @@ describe('webhook service', () => {
   })
 
   it('skips webhook dispatch when the periodKey already succeeded', async () => {
-    webhookState.findUniqueMock.mockResolvedValue({
-      id: 'delivery_1',
-      attemptCount: 1,
-      status: 'success'
-    })
+    webhookState.findManyMock.mockResolvedValue([
+      {
+        id: 'delivery_1',
+        eventType: 'subscription.reminder_due',
+        resourceKey: 'subscription:1',
+        periodKey: '2026-05-01:upcoming:advance-3@09:30',
+        attemptCount: 1,
+        status: 'success'
+      }
+    ])
 
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
@@ -84,15 +94,20 @@ describe('webhook service', () => {
 
     expect(fetchMock).not.toHaveBeenCalled()
     expect(webhookState.updateMock).not.toHaveBeenCalled()
-    expect(webhookState.createMock).not.toHaveBeenCalled()
+    expect(webhookState.createManyMock).not.toHaveBeenCalled()
   })
 
   it('retries webhook dispatch when the previous attempt failed', async () => {
-    webhookState.findUniqueMock.mockResolvedValue({
-      id: 'delivery_1',
-      attemptCount: 1,
-      status: 'failed'
-    })
+    webhookState.findManyMock.mockResolvedValue([
+      {
+        id: 'delivery_1',
+        eventType: 'subscription.reminder_due',
+        resourceKey: 'subscription:1',
+        periodKey: '2026-05-01:upcoming:advance-3@09:30',
+        attemptCount: 1,
+        status: 'failed'
+      }
+    ])
     mockFetch(200, 'ok')
 
     await expect(dispatchWebhookEvent(baseParams)).resolves.toEqual({
@@ -112,28 +127,23 @@ describe('webhook service', () => {
   })
 
   it('records failed first-time webhook attempts', async () => {
-    webhookState.findUniqueMock
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        id: 'delivery_1',
-        attemptCount: 0,
-        status: 'pending'
-      })
+    webhookState.findManyMock.mockResolvedValue([])
     mockFetch(500, 'server error')
 
     await expect(dispatchWebhookEvent(baseParams)).rejects.toThrow('Webhook dispatch failed: HTTP 500')
 
-    expect(webhookState.createMock).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        eventType: 'subscription.reminder_due',
-        resourceKey: 'subscription:1',
-        periodKey: '2026-05-01:upcoming:advance-3@09:30',
-        status: 'pending'
-      })
+    expect(webhookState.createManyMock).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          eventType: 'subscription.reminder_due',
+          resourceKey: 'subscription:1',
+          periodKey: '2026-05-01:upcoming:advance-3@09:30',
+          status: 'pending'
+        })
+      ]
     })
     expect(webhookState.updateMock).toHaveBeenCalledWith({
-      where: { id: 'delivery_1' },
+      where: { id: expect.any(String) },
       data: expect.objectContaining({
         status: 'failed',
         responseCode: 500,
@@ -144,14 +154,7 @@ describe('webhook service', () => {
   })
 
   it('records network failures as failed webhook attempts', async () => {
-    webhookState.findUniqueMock
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        id: 'delivery_1',
-        attemptCount: 0,
-        status: 'pending'
-      })
+    webhookState.findManyMock.mockResolvedValue([])
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
@@ -161,13 +164,15 @@ describe('webhook service', () => {
 
     await expect(dispatchWebhookEvent(baseParams)).rejects.toThrow('network down')
 
-    expect(webhookState.createMock).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        status: 'pending'
-      })
+    expect(webhookState.createManyMock).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          status: 'pending'
+        })
+      ]
     })
     expect(webhookState.updateMock).toHaveBeenCalledWith({
-      where: { id: 'delivery_1' },
+      where: { id: expect.any(String) },
       data: expect.objectContaining({
         status: 'failed',
         responseCode: 0,
@@ -178,14 +183,7 @@ describe('webhook service', () => {
   })
 
   it('records successful first-time webhook attempts', async () => {
-    webhookState.findUniqueMock
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        id: 'delivery_1',
-        attemptCount: 0,
-        status: 'pending'
-      })
+    webhookState.findManyMock.mockResolvedValue([])
     mockFetch(200, 'ok')
 
     await expect(dispatchWebhookEvent(baseParams)).resolves.toEqual({
@@ -193,16 +191,18 @@ describe('webhook service', () => {
       status: 'success'
     })
 
-    expect(webhookState.createMock).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        eventType: 'subscription.reminder_due',
-        resourceKey: 'subscription:1',
-        periodKey: '2026-05-01:upcoming:advance-3@09:30',
-        status: 'pending'
-      })
+    expect(webhookState.createManyMock).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          eventType: 'subscription.reminder_due',
+          resourceKey: 'subscription:1',
+          periodKey: '2026-05-01:upcoming:advance-3@09:30',
+          status: 'pending'
+        })
+      ]
     })
     expect(webhookState.updateMock).toHaveBeenCalledWith({
-      where: { id: 'delivery_1' },
+      where: { id: expect.any(String) },
       data: expect.objectContaining({
         status: 'success',
         responseCode: 200,
@@ -213,18 +213,24 @@ describe('webhook service', () => {
   })
 
   it('skips already-succeeded dedup entries and dispatches only pending webhook entries', async () => {
-    webhookState.findUniqueMock
-      .mockResolvedValueOnce({
+    webhookState.findManyMock.mockResolvedValue([
+      {
         id: 'delivery_1',
+        eventType: 'subscription.reminder_due',
+        resourceKey: 'subscription:1',
+        periodKey: 'period:1',
         attemptCount: 1,
         status: 'success'
-      })
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
+      },
+      {
         id: 'delivery_2',
+        eventType: 'subscription.reminder_due',
+        resourceKey: 'subscription:2',
+        periodKey: 'period:2',
         attemptCount: 0,
         status: 'pending'
-      })
+      }
+    ])
     mockFetch(200, 'ok')
 
     await expect(
@@ -288,7 +294,7 @@ describe('webhook service', () => {
       status: 'success'
     })
 
-    expect(webhookState.createMock).not.toHaveBeenCalled()
+    expect(webhookState.createManyMock).not.toHaveBeenCalled()
     expect(webhookState.updateMock).toHaveBeenCalled()
   })
 })
