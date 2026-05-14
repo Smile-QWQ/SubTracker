@@ -95,7 +95,7 @@ import { useWindowSize } from '@vueuse/core'
 import { NAlert, NButton, NCard, NDataTable, NEmpty, NGrid, NGridItem, NModal, NSelect, NSpace, NTag, useMessage } from 'naive-ui'
 import { api } from '@/composables/api'
 import { useSettingsQuery } from '@/composables/settings-query'
-import type { WallosImportInspectResult, WallosImportSubscriptionPreview } from '@/types/api'
+import type { WallosImportInspectResult, WallosImportPreparedPayload, WallosImportSubscriptionPreview } from '@/types/api'
 import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils/subscription-status'
 import { buildPreparedWallosImportPayload } from '@/utils/wallos-import-client'
 import { JSON_IMPORT_WARNING_MESSAGE, shouldRecommendDbImport } from '@/utils/wallos-import'
@@ -120,6 +120,7 @@ const { data: settings } = useSettingsQuery()
 const selectedFile = ref<File | null>(null)
 const selectedFileName = ref('')
 const preview = ref<WallosImportInspectResult | null>(null)
+const preparedPayload = ref<WallosImportPreparedPayload | null>(null)
 const inspecting = ref(false)
 const committing = ref(false)
 const warningsExpanded = ref(false)
@@ -195,6 +196,7 @@ function handleFileChange(event: Event) {
   selectedFile.value = file ?? null
   selectedFileName.value = file?.name ?? ''
   preview.value = null
+  preparedPayload.value = null
   warningsExpanded.value = false
 }
 
@@ -208,11 +210,13 @@ async function inspectFile() {
       baseCurrency: props.baseCurrency,
       sourceTimezone: wallosSourceTimezone.value
     })
+    preparedPayload.value = prepared
     preview.value = await api.inspectWallosImport(prepared)
     warningsExpanded.value = false
     message.success('已生成导入预览')
   } catch (error) {
     preview.value = null
+    preparedPayload.value = null
     message.error(error instanceof Error ? error.message : '预览生成失败')
   } finally {
     inspecting.value = false
@@ -220,15 +224,11 @@ async function inspectFile() {
 }
 
 async function commitImport() {
-  if (!preview.value) return
+  if (!preview.value || !preparedPayload.value) return
 
   committing.value = true
   try {
-    const { importToken, ...preparedPreview } = preview.value
-    const result = await api.commitWallosImport({
-      importToken,
-      preview: preparedPreview
-    })
+    const result = await api.commitWallosImport(preparedPayload.value)
     message.success(`导入完成：${result.importedSubscriptions} 条订阅，${result.importedTags} 个标签，${result.importedLogos} 个 Logo`)
     emit('imported')
     close()
@@ -240,6 +240,7 @@ async function commitImport() {
 }
 
 function close() {
+  preparedPayload.value = null
   emit('close')
 }
 

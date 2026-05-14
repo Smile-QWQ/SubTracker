@@ -108,7 +108,7 @@ import { computed, ref } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { NAlert, NButton, NCard, NGrid, NGridItem, NModal, NRadio, NRadioGroup, NSpace, NSwitch, useMessage } from 'naive-ui'
 import { api } from '@/composables/api'
-import type { SubtrackerBackupInspectResult } from '@/types/api'
+import type { SubtrackerBackupInspectResult, SubtrackerBackupPreparedPayload } from '@/types/api'
 import { buildPreparedSubtrackerBackupPayload } from '@/utils/subtracker-backup-client'
 
 const props = defineProps<{
@@ -126,6 +126,7 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
 const selectedFileName = ref('')
 const preview = ref<SubtrackerBackupInspectResult | null>(null)
+const preparedPayload = ref<SubtrackerBackupPreparedPayload | null>(null)
 const inspecting = ref(false)
 const committing = ref(false)
 const restoreMode = ref<'replace' | 'append'>('replace')
@@ -142,6 +143,7 @@ function handleFileChange(event: Event) {
   selectedFile.value = file ?? null
   selectedFileName.value = file?.name ?? ''
   preview.value = null
+  preparedPayload.value = null
   restoreMode.value = 'replace'
   restoreSettings.value = false
 }
@@ -179,6 +181,7 @@ async function inspectFile() {
   inspecting.value = true
   try {
     const prepared = await buildPreparedSubtrackerBackupPayload(selectedFile.value)
+    preparedPayload.value = prepared
     preview.value = await api.inspectSubtrackerBackup({
       filename: selectedFile.value.name,
       manifest: prepared.manifest,
@@ -187,6 +190,7 @@ async function inspectFile() {
     message.success('已生成备份预览')
   } catch (error) {
     preview.value = null
+    preparedPayload.value = null
     message.error(normalizePreviewErrorMessage(error))
   } finally {
     inspecting.value = false
@@ -194,12 +198,13 @@ async function inspectFile() {
 }
 
 async function commitImport() {
-  if (!preview.value) return
+  if (!preview.value || !preparedPayload.value) return
 
   committing.value = true
   try {
     const result = await api.commitSubtrackerBackup({
-      importToken: preview.value.importToken,
+      manifest: preparedPayload.value.manifest,
+      logoAssets: preparedPayload.value.logoAssets,
       mode: restoreMode.value,
       restoreSettings: restoreMode.value === 'replace' ? true : restoreSettings.value
     })
@@ -217,6 +222,7 @@ async function commitImport() {
 }
 
 function close() {
+  preparedPayload.value = null
   emit('close')
 }
 

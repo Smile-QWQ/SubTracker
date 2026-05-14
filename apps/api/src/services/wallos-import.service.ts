@@ -12,11 +12,8 @@ import { prisma } from '../db'
 import { getRuntimeD1Database, getWorkerLogoBucket, isWorkerRuntime } from '../runtime'
 import { parseDateInTimezone } from '../utils/timezone'
 import { appendSubscriptionOrders } from './subscription-order.service'
-import { deleteLogoStorageObject, saveImportedLogoBufferToKey } from './logo.service'
+import { saveImportedLogoBufferToKey } from './logo.service'
 import { getAppTimezone } from './settings.service'
-import { deleteImportPreview, getImportPreview, storeImportPreview } from './worker-lite-state.service'
-
-const IMPORT_TOKEN_TTL_MS = 15 * 60 * 1000
 const IMPORT_TAG_COLORS = [
   '#3b82f6',
   '#8b5cf6',
@@ -36,11 +33,6 @@ type ZipLogoManifestEntry = {
   logoUrl: string
   contentType: string
   uploaded: boolean
-}
-
-type StoredImportPreviewState = {
-  preview?: WallosImportInspectResultDto
-  logoManifest: Record<string, ZipLogoManifestEntry>
 }
 
 function getImportedTagColor(name: string) {
@@ -76,13 +68,13 @@ function normalizeZipLogoName(filename: string) {
   return basename(filename).toLowerCase()
 }
 
-function buildTemporaryLogoKey(importToken: string, filename: string) {
+function buildTemporaryLogoKey(filename: string) {
   const ext = extname(filename) || '.png'
   const base = basename(filename).replace(/\.[^.]+$/, '').replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'logo'
-  return `logos/imports/wallos/${importToken}/${base}-${crypto.randomBytes(4).toString('hex')}${ext}`
+  return `logos/imports/wallos/${Date.now()}-${crypto.randomBytes(8).toString('hex')}-${base}${ext}`
 }
 
-function clonePreparedPreview(input: WallosImportInspectInput['preview'], fileType: WallosImportInspectInput['fileType']): Omit<WallosImportInspectResultDto, 'importToken'> {
+function clonePreparedPreview(input: WallosImportInspectInput['preview'], fileType: WallosImportInspectInput['fileType']): WallosImportInspectResultDto {
   return {
     isWallos: true,
     summary: {
@@ -101,8 +93,7 @@ function clonePreparedPreview(input: WallosImportInspectInput['preview'], fileTy
 }
 
 async function uploadPreparedLogoManifest(
-  importToken: string,
-  preview: Omit<WallosImportInspectResultDto, 'importToken'>,
+  preview: WallosImportInspectResultDto,
   logoAssets: WallosImportInspectInput['logoAssets']
 ) {
   const manifest: Record<string, ZipLogoManifestEntry> = {}
@@ -156,7 +147,7 @@ async function uploadPreparedLogoManifest(
     const buffer = Buffer.from(asset.base64, 'base64')
     if (!buffer.length) continue
 
-    const r2Key = buildTemporaryLogoKey(importToken, asset.filename)
+    const r2Key = buildTemporaryLogoKey(asset.filename)
     const stored = await saveImportedLogoBufferToKey(buffer, asset.contentType, r2Key, 'wallos-zip')
     manifest[logoRef] = {
       logoRef: asset.filename,
@@ -168,34 +159,6 @@ async function uploadPreparedLogoManifest(
   }
 
   return manifest
-}
-
-async function cleanupStoredImportAssets(state: StoredImportPreviewState | null) {
-  if (!state) return
-  const entries = Object.values(state.logoManifest ?? {})
-  if (!entries.length) return
-  await Promise.all(entries.map((item) => deleteLogoStorageObject(item.r2Key)))
-}
-
-async function cleanupStoredImportAssetsByToken(importToken: string) {
-  const bucket = getWorkerLogoBucket()
-  if (!bucket) return
-
-  const prefix = `logos/imports/wallos/${importToken}/`
-  const listed = await bucket.list()
-  const targets = listed.objects.filter((item) => item.key.startsWith(prefix))
-  if (!targets.length) return
-
-  await Promise.all(targets.map((item) => deleteLogoStorageObject(item.key)))
-}
-
-async function cleanupImportAssets(state: StoredImportPreviewState | null, importToken: string) {
-  if (state) {
-    await cleanupStoredImportAssets(state)
-    return
-  }
-
-  await cleanupStoredImportAssetsByToken(importToken)
 }
 
 function toSqlBoolean(value: boolean) {
@@ -227,39 +190,40 @@ async function runD1StatementBatch(
 }
 
 export async function inspectWallosImportFile(input: WallosImportInspectInput): Promise<WallosImportInspectResultDto> {
-  const importToken = crypto.randomBytes(24).toString('hex')
   const preview = clonePreparedPreview(input.preview, input.fileType)
-  const logoManifest = await uploadPreparedLogoManifest(importToken, preview, input.logoAssets)
-  const storedState: StoredImportPreviewState = {
-    preview: undefined,
-    logoManifest
+  if (!getWorkerLogoBucket() && preview.summary.fileType === 'zip' && preview.summary.zipLogoMatched > 0) {
+    preview.warnings = ensureUniqueWarnings([
+      ...preview.warnings,
+      `当前 Worker 未启用 R2，已忽略 ${preview.summary.zipLogoMatched} 个 ZIP Logo`
+    ])
+    preview.subscriptionsPreview = preview.subscriptionsPreview.map((item) =>
+      item.logoImportStatus === 'ready-from-zip'
+        ? {
+            ...item,
+            logoRef: null,
+            logoImportStatus: 'none'
+          }
+        : item
+    )
   }
 
-  await storeImportPreview(importToken, storedState, IMPORT_TOKEN_TTL_MS)
-  return {
-    ...preview,
-    importToken
+  if (preview.summary.fileType === 'zip' && input.logoAssets.length > 0) {
+    const availableRefs = new Set(input.logoAssets.map((item) => normalizeZipLogoName(item.logoRef)))
+    for (const item of preview.subscriptionsPreview) {
+      if (item.logoImportStatus === 'ready-from-zip' && item.logoRef && !availableRefs.has(normalizeZipLogoName(item.logoRef))) {
+        item.logoRef = null
+        item.logoImportStatus = 'none'
+        item.warnings = [...item.warnings, 'ZIP Logo 文件未随预览一起上传，已忽略']
+      }
+    }
   }
+
+  return preview
 }
 
 export async function commitWallosImport(input: WallosImportCommitInput): Promise<WallosImportCommitResultDto> {
-  const state = await getImportPreview<StoredImportPreviewState>(input.importToken, {
-    onExpired: cleanupImportAssets
-  })
-  if (!state) {
-    throw new Error('导入令牌不存在或已失效，请重新生成预览')
-  }
-
-  const preview = input.preview
-    ? {
-        ...input.preview,
-        importToken: input.importToken
-      }
-    : state.preview
-  if (!preview) {
-    throw new Error('导入预览缺失，请重新生成预览')
-  }
-  const logoManifest = state.logoManifest ?? {}
+  const preview = clonePreparedPreview(input.preview, input.fileType)
+  const logoManifest = await uploadPreparedLogoManifest(preview, input.logoAssets)
   const appTimezone = await getAppTimezone()
 
   const existingTags = await prisma.tag.findMany({
@@ -443,7 +407,6 @@ export async function commitWallosImport(input: WallosImportCommitInput): Promis
   }
 
   await appendSubscriptionOrders(createdSubscriptionIds)
-  await deleteImportPreview(input.importToken)
 
   return {
     importedTags,

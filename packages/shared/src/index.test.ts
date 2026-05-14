@@ -77,7 +77,10 @@ describe('shared schema', () => {
 
   it('should validate subtracker backup commit payload', () => {
     const parsed = SubtrackerBackupCommitSchema.parse({
-      importToken: 'x'.repeat(24),
+      manifest: {
+        app: 'SubTracker'
+      },
+      logoAssets: [],
       mode: 'append',
       restoreSettings: true
     })

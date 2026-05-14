@@ -11,6 +11,16 @@ type ImportPayload = {
   logoAssets: Array<{ path: string; filename: string; contentType: string; base64: string }>
 }
 
+type WallosImportPayload = {
+  filename: string
+  fileType: 'json' | 'db' | 'zip'
+  preview: Record<string, unknown>
+  logoAssets: Array<{ filename: string; logoRef: string; contentType: string; base64: string }>
+}
+
+type ServiceBundle = Awaited<ReturnType<typeof loadServices>>
+type CommitProtocol = 'auto' | 'direct' | 'token'
+
 function formatTable(rows: Array<{
   target: string
   cpu: { p50: number; p95: number; max: number }
@@ -68,44 +78,111 @@ async function loadServices(sourceRoot: string) {
     import(new URL('apps/api/src/services/subscription.service.ts', rootUrl).href),
     import(new URL('apps/api/src/services/subtracker-backup.service.ts', rootUrl).href)
   ])
+  const wallosModule = await import(new URL('apps/api/src/services/wallos-import.service.ts', rootUrl).href)
 
   return {
     getOverviewStatistics: statisticsModule.getOverviewStatistics as () => Promise<unknown>,
     scanRenewalNotifications: notificationModule.scanRenewalNotifications as (date?: Date, overrides?: Record<string, unknown>) => Promise<unknown>,
     autoRenewDueSubscriptions: subscriptionModule.autoRenewDueSubscriptions as (date?: Date) => Promise<unknown>,
-    inspectSubtrackerBackupFile: backupModule.inspectSubtrackerBackupFile as (payload: ImportPayload) => Promise<{ importToken: string } & Record<string, unknown>>,
-    commitSubtrackerBackup: backupModule.commitSubtrackerBackup as (payload: {
-      importToken: string
-      mode: 'append' | 'replace'
-      restoreSettings: boolean
-    }) => Promise<unknown>
+    inspectSubtrackerBackupFile: backupModule.inspectSubtrackerBackupFile as (payload: ImportPayload) => Promise<Record<string, unknown>>,
+    commitSubtrackerBackup: backupModule.commitSubtrackerBackup as (payload: Record<string, unknown>) => Promise<unknown>,
+    inspectWallosImportFile: wallosModule.inspectWallosImportFile as (payload: WallosImportPayload) => Promise<Record<string, unknown>>,
+    commitWallosImport: wallosModule.commitWallosImport as (payload: Record<string, unknown>) => Promise<unknown>
   }
 }
 
-async function measureTarget(
+function readImportToken(result: unknown) {
+  if (!result || typeof result !== 'object') {
+    return null
+  }
+
+  const token = (result as { importToken?: unknown }).importToken
+  return typeof token === 'string' && token.length > 0 ? token : null
+}
+
+async function prepareTargetInvocation(
   target: string,
-  services: Awaited<ReturnType<typeof loadServices>>,
+  services: ServiceBundle,
   importPayload: ImportPayload,
+  wallosImportPayload: WallosImportPayload,
   options: {
     cronDryRun: boolean
+    subtrackerCommitProtocol: CommitProtocol
+    wallosCommitProtocol: CommitProtocol
   }
 ) {
   switch (target) {
     case 'overview':
-      return services.getOverviewStatistics()
+      return () => services.getOverviewStatistics()
     case 'cron':
-      return services.scanRenewalNotifications(new Date('2026-05-01T10:15:00+08:00'), options.cronDryRun ? { dryRun: true } : undefined)
+      return () =>
+        services.scanRenewalNotifications(
+          new Date('2026-05-01T10:15:00+08:00'),
+          options.cronDryRun ? { dryRun: true } : undefined
+        )
     case 'auto-renew':
-      return services.autoRenewDueSubscriptions(new Date('2026-05-01T10:15:00+08:00'))
+      return () => services.autoRenewDueSubscriptions(new Date('2026-05-01T10:15:00+08:00'))
     case 'import-inspect':
-      return services.inspectSubtrackerBackupFile(importPayload)
+      return () => services.inspectSubtrackerBackupFile(importPayload)
     case 'import-commit': {
-      const preview = await services.inspectSubtrackerBackupFile(importPayload)
-      return services.commitSubtrackerBackup({
-        importToken: preview.importToken,
-        mode: 'append',
-        restoreSettings: false
-      })
+      let protocol = options.subtrackerCommitProtocol
+      if (protocol === 'auto') {
+        const preview = await services.inspectSubtrackerBackupFile(importPayload)
+        protocol = readImportToken(preview) ? 'token' : 'direct'
+      }
+
+      if (protocol === 'token') {
+        return () =>
+          services.inspectSubtrackerBackupFile(importPayload).then((preview) => {
+            const importToken = readImportToken(preview)
+            if (!importToken) {
+              throw new Error('Expected token-based SubTracker import protocol, but inspect returned no importToken')
+            }
+            return services.commitSubtrackerBackup({
+              importToken,
+              mode: 'append',
+              restoreSettings: false
+            })
+          })
+      }
+
+      return () =>
+        services.commitSubtrackerBackup({
+          manifest: importPayload.manifest,
+          logoAssets: importPayload.logoAssets,
+          mode: 'append',
+          restoreSettings: false
+        })
+    }
+    case 'wallos-import-inspect':
+      return () => services.inspectWallosImportFile(wallosImportPayload)
+    case 'wallos-import-commit': {
+      let protocol = options.wallosCommitProtocol
+      if (protocol === 'auto') {
+        const preview = await services.inspectWallosImportFile(wallosImportPayload)
+        protocol = readImportToken(preview) ? 'token' : 'direct'
+      }
+
+      if (protocol === 'token') {
+        return () =>
+          services.inspectWallosImportFile(wallosImportPayload).then((preview) => {
+            const importToken = readImportToken(preview)
+            if (!importToken) {
+              throw new Error('Expected token-based Wallos import protocol, but inspect returned no importToken')
+            }
+            return services.commitWallosImport({
+              importToken,
+              preview: wallosImportPayload.preview
+            })
+          })
+      }
+
+      return () =>
+        services.commitWallosImport({
+          fileType: wallosImportPayload.fileType,
+          preview: wallosImportPayload.preview,
+          logoAssets: wallosImportPayload.logoAssets
+        })
     }
     default:
       throw new Error(`Unsupported target: ${target}`)
@@ -127,11 +204,19 @@ async function main() {
   const profileName = String(args['profile-name'])
   const profileDir = String(args['profile-dir'])
   const cronDryRun = String(args['cron-dry-run'] ?? 'false') === 'true'
+  const subtrackerCommitProtocol = String(args['subtracker-commit-protocol'] ?? 'auto') as CommitProtocol
+  const wallosCommitProtocol = String(args['wallos-commit-protocol'] ?? 'auto') as CommitProtocol
   const services = await loadServices(sourceRoot)
   const importPayload: ImportPayload = {
     filename: `${fixtureLabel(fixture.meta)}.zip`,
     manifest: fixture.dataset.manifest,
     logoAssets: fixture.dataset.logoAssets
+  }
+  const wallosImportPayload: WallosImportPayload = {
+    filename: `${fixtureLabel(fixture.meta)}-wallos.zip`,
+    fileType: fixture.dataset.wallosPreparedPayload.fileType,
+    preview: fixture.dataset.wallosPreparedPayload.preview,
+    logoAssets: fixture.dataset.wallosPreparedPayload.logoAssets
   }
   const summaryRows = []
 
@@ -141,12 +226,15 @@ async function main() {
     const resultSizeValues: number[] = []
 
     for (let index = 0; index < warmup + repeat; index += 1) {
+      const invoke = await prepareTargetInvocation(target, services, importPayload, wallosImportPayload, {
+        cronDryRun,
+        subtrackerCommitProtocol,
+        wallosCommitProtocol
+      })
       const startCpu = process.cpuUsage()
       const startWall = performance.now()
       const result = await withCpuProfile(profileEnabled && index === warmup, `${profileName}-${target}`, profileDir, async () =>
-        measureTarget(target, services, importPayload, {
-          cronDryRun
-        })
+        invoke()
       )
       const cpuUsage = process.cpuUsage(startCpu)
       const wallMs = performance.now() - startWall

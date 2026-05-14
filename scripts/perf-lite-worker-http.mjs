@@ -52,7 +52,7 @@ async function login(baseUrl) {
   return payload.data.token
 }
 
-async function requestTarget(baseUrl, token, target, importPayload) {
+async function requestTarget(baseUrl, token, target, importPayload, wallosImportPayload, protocols) {
   const headers = {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json'
@@ -83,20 +83,26 @@ async function requestTarget(baseUrl, token, target, importPayload) {
       return response.json()
     }
     case 'import-commit': {
-      const inspectResponse = await fetch(`${baseUrl}/api/v1/import/subtracker/inspect`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(importPayload)
-      })
-      const inspectPayload = await inspectResponse.json()
       const response = await fetch(`${baseUrl}/api/v1/import/subtracker/commit`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          importToken: inspectPayload.data.importToken,
-          mode: 'append',
-          restoreSettings: false
-        })
+        body: JSON.stringify(await buildSubtrackerCommitBody(baseUrl, headers, importPayload, protocols.subtracker))
+      })
+      return response.json()
+    }
+    case 'wallos-import-inspect': {
+      const response = await fetch(`${baseUrl}/api/v1/import/wallos/inspect`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(wallosImportPayload)
+      })
+      return response.json()
+    }
+    case 'wallos-import-commit': {
+      const response = await fetch(`${baseUrl}/api/v1/import/wallos/commit`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(await buildWallosCommitBody(baseUrl, headers, wallosImportPayload, protocols.wallos))
       })
       return response.json()
     }
@@ -105,9 +111,95 @@ async function requestTarget(baseUrl, token, target, importPayload) {
   }
 }
 
+async function buildSubtrackerCommitBody(baseUrl, headers, importPayload, protocol) {
+  if (protocol === 'direct') {
+    return {
+      manifest: importPayload.manifest,
+      logoAssets: importPayload.logoAssets,
+      mode: 'append',
+      restoreSettings: false
+    }
+  }
+
+  const inspectResponse = await fetch(`${baseUrl}/api/v1/import/subtracker/inspect`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(importPayload)
+  })
+  const inspectResult = await inspectResponse.json()
+  const importToken = inspectResult?.data?.importToken
+
+  if (protocol === 'token') {
+    if (typeof importToken !== 'string') {
+      throw new Error('Expected token-based SubTracker import protocol, but inspect returned no importToken')
+    }
+    return {
+      importToken,
+      mode: 'append',
+      restoreSettings: false
+    }
+  }
+
+  return typeof importToken === 'string'
+    ? {
+        importToken,
+        mode: 'append',
+        restoreSettings: false
+      }
+    : {
+        manifest: importPayload.manifest,
+        logoAssets: importPayload.logoAssets,
+        mode: 'append',
+        restoreSettings: false
+      }
+}
+
+async function buildWallosCommitBody(baseUrl, headers, wallosImportPayload, protocol) {
+  if (protocol === 'direct') {
+    return {
+      fileType: wallosImportPayload.fileType,
+      preview: wallosImportPayload.preview,
+      logoAssets: wallosImportPayload.logoAssets
+    }
+  }
+
+  const inspectResponse = await fetch(`${baseUrl}/api/v1/import/wallos/inspect`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(wallosImportPayload)
+  })
+  const inspectResult = await inspectResponse.json()
+  const importToken = inspectResult?.data?.importToken
+
+  if (protocol === 'token') {
+    if (typeof importToken !== 'string') {
+      throw new Error('Expected token-based Wallos import protocol, but inspect returned no importToken')
+    }
+    return {
+      importToken,
+      preview: wallosImportPayload.preview
+    }
+  }
+
+  return typeof importToken === 'string'
+    ? {
+        importToken,
+        preview: wallosImportPayload.preview
+      }
+    : {
+        fileType: wallosImportPayload.fileType,
+        preview: wallosImportPayload.preview,
+        logoAssets: wallosImportPayload.logoAssets
+      }
+}
+
 async function main() {
   const args = parseArgs()
   const baseUrl = String(args['base-url'] ?? 'http://127.0.0.1:8787')
+  const protocols = {
+    subtracker: String(args['subtracker-commit-protocol'] ?? 'auto'),
+    wallos: String(args['wallos-commit-protocol'] ?? 'auto')
+  }
   const targets = String(args.target ?? 'overview,scan-debug')
     .split(',')
     .map((item) => item.trim())
@@ -127,6 +219,12 @@ async function main() {
     manifest: fixture.dataset.manifest,
     logoAssets: fixture.dataset.logoAssets
   }
+  const wallosImportPayload = {
+    filename: `${fixtureLabel(fixtureMeta)}-wallos.zip`,
+    fileType: fixture.dataset.wallosPreparedPayload.fileType,
+    preview: fixture.dataset.wallosPreparedPayload.preview,
+    logoAssets: fixture.dataset.wallosPreparedPayload.logoAssets
+  }
   const token = await login(baseUrl)
   const resultPath = `${PERF_RESULT_DIR}\\${fixtureLabel(fixtureMeta)}-worker-${nowStamp()}.jsonl`
   const summaryRows = []
@@ -137,7 +235,7 @@ async function main() {
 
     for (let index = 0; index < repeat; index += 1) {
       const startedAt = performance.now()
-      const result = await requestTarget(baseUrl, token, target, importPayload)
+      const result = await requestTarget(baseUrl, token, target, importPayload, wallosImportPayload, protocols)
       const wallMs = performance.now() - startedAt
       const resultSizeBytes = Buffer.byteLength(JSON.stringify(result))
       wallValues.push(wallMs)

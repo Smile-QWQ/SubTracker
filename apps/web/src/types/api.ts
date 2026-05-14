@@ -411,7 +411,6 @@ export interface WallosImportInspectResult {
   usedTags: WallosImportTag[]
   subscriptionsPreview: WallosImportSubscriptionPreview[]
   warnings: string[]
-  importToken: string
 }
 
 export interface WallosImportLogoAsset {
@@ -424,7 +423,7 @@ export interface WallosImportLogoAsset {
 export interface WallosImportPreparedPayload {
   filename: string
   fileType: 'json' | 'db' | 'zip'
-  preview: Omit<WallosImportInspectResult, 'importToken'>
+  preview: WallosImportInspectResult
   logoAssets: WallosImportLogoAsset[]
 }
 
@@ -437,8 +436,9 @@ export interface WallosImportCommitResult {
 }
 
 export interface WallosImportCommitPayload {
-  importToken: string
-  preview?: Omit<WallosImportInspectResult, 'importToken'>
+  fileType: 'json' | 'db' | 'zip'
+  preview: WallosImportInspectResult
+  logoAssets: WallosImportLogoAsset[]
 }
 
 export interface SubtrackerBackupAssetLogoDto {
@@ -469,9 +469,18 @@ export interface SubtrackerBackupInspectResult {
   isSubtrackerBackup: boolean
   summary: SubtrackerBackupSummary
   warnings: string[]
-  importToken: string
   availableModes: Array<'replace' | 'append'>
   conflicts: SubtrackerBackupInspectConflicts
+}
+
+export interface SubtrackerBackupPreparedPayload {
+  manifest: unknown
+  logoAssets: Array<{
+    path: string
+    filename: string
+    contentType: string
+    base64: string
+  }>
 }
 
 export interface SubtrackerBackupCommitResult {

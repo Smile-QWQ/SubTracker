@@ -23,6 +23,7 @@ import type {
   ServerchanConfig,
   Settings,
   StatisticsOverview,
+  SubtrackerBackupPreparedPayload,
   SubtrackerBackupCommitResult,
   SubtrackerBackupInspectResult,
   Subscription,
@@ -396,19 +397,15 @@ export const api = {
     return postOnce<WallosImportInspectResult>('/import/wallos/inspect', payload, { timeout: 60000 })
   },
 
-  async commitWallosImport(payload: { importToken: string; preview?: Omit<WallosImportInspectResult, 'importToken'> }) {
+  async commitWallosImport(payload: WallosImportPreparedPayload) {
     return postOnce<WallosImportCommitResult>('/import/wallos/commit', payload)
   },
 
-  async inspectSubtrackerBackup(payload: {
-    filename: string
-    manifest: unknown
-    logoAssets: Array<{ path: string; filename: string; contentType: string; base64: string }>
-  }) {
+  async inspectSubtrackerBackup(payload: { filename: string } & SubtrackerBackupPreparedPayload) {
     return postOnce<SubtrackerBackupInspectResult>('/import/subtracker/inspect', payload, { timeout: 60000 })
   },
 
-  async commitSubtrackerBackup(payload: { importToken: string; mode: 'replace' | 'append'; restoreSettings: boolean }) {
+  async commitSubtrackerBackup(payload: SubtrackerBackupPreparedPayload & { mode: 'replace' | 'append'; restoreSettings: boolean }) {
     return postOnce<SubtrackerBackupCommitResult>('/import/subtracker/commit', payload, { timeout: 60000 })
   }
 }

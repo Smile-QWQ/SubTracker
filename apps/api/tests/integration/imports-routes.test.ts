@@ -60,7 +60,6 @@ describe('import routes', () => {
         includesSettings: true
       },
       warnings: [],
-      importToken: '0123456789abcdef',
       availableModes: ['replace', 'append'],
       conflicts: {
         existingTagNameCount: 0,
@@ -107,22 +106,44 @@ describe('import routes', () => {
       warnings: []
     })
 
+    const payload = {
+      manifest: {
+        schemaVersion: 1,
+        exportedAt: '2026-05-01T00:00:00.000Z',
+        app: 'SubTracker',
+        scope: 'business-complete',
+        data: {
+          settings: {},
+          notificationWebhook: {},
+          tags: [],
+          subscriptions: [],
+          paymentRecords: [],
+          subscriptionOrder: []
+        },
+        assets: {
+          logos: []
+        }
+      },
+      logoAssets: [
+        {
+          path: 'logos/test.png',
+          filename: 'test.png',
+          contentType: 'image/png',
+          base64: 'ZmFrZQ=='
+        }
+      ],
+      mode: 'append' as const,
+      restoreSettings: true
+    }
+
     const res = await app.inject({
       method: 'POST',
       url: '/import/subtracker/commit',
-      payload: {
-        importToken: '0123456789abcdef',
-        mode: 'append',
-        restoreSettings: true
-      }
+      payload
     })
 
     expect(res.statusCode).toBe(200)
-    expect(routeMocks.commitSubtrackerBackupMock).toHaveBeenCalledWith({
-      importToken: '0123456789abcdef',
-      mode: 'append',
-      restoreSettings: true
-    })
+    expect(routeMocks.commitSubtrackerBackupMock).toHaveBeenCalledWith(payload)
   })
 
   it('rejects invalid subtracker backup commit payloads', async () => {
@@ -130,11 +151,142 @@ describe('import routes', () => {
       method: 'POST',
       url: '/import/subtracker/commit',
       payload: {
-        importToken: 'short'
+        mode: 'invalid-mode'
       }
     })
 
     expect(res.statusCode).toBe(422)
     expect(routeMocks.commitSubtrackerBackupMock).not.toHaveBeenCalled()
+  })
+
+  it('accepts wallos inspect payloads', async () => {
+    routeMocks.inspectWallosImportFileMock.mockResolvedValue({
+      isWallos: true,
+      summary: {
+        fileType: 'zip',
+        subscriptionsTotal: 1,
+        tagsTotal: 1,
+        usedTagsTotal: 1,
+        supportedSubscriptions: 1,
+        skippedSubscriptions: 0,
+        globalNotifyDays: 3,
+        zipLogoMatched: 1,
+        zipLogoMissing: 0
+      },
+      tags: [],
+      usedTags: [],
+      subscriptionsPreview: [],
+      warnings: []
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/import/wallos/inspect',
+      payload: {
+        filename: 'wallos.zip',
+        fileType: 'zip',
+        preview: {
+          isWallos: true,
+          summary: {
+            fileType: 'zip',
+            subscriptionsTotal: 1,
+            tagsTotal: 1,
+            usedTagsTotal: 1,
+            supportedSubscriptions: 1,
+            skippedSubscriptions: 0,
+            globalNotifyDays: 3,
+            zipLogoMatched: 1,
+            zipLogoMissing: 0
+          },
+          tags: [],
+          usedTags: [],
+          subscriptionsPreview: [],
+          warnings: []
+        },
+        logoAssets: []
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(routeMocks.inspectWallosImportFileMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('accepts wallos commit payloads', async () => {
+    routeMocks.commitWallosImportMock.mockResolvedValue({
+      importedTags: 1,
+      importedSubscriptions: 1,
+      skippedSubscriptions: 0,
+      importedLogos: 0,
+      warnings: []
+    })
+
+    const payload = {
+      fileType: 'zip' as const,
+      preview: {
+        isWallos: true as const,
+        summary: {
+          fileType: 'zip' as const,
+          subscriptionsTotal: 1,
+          tagsTotal: 1,
+          usedTagsTotal: 1,
+          supportedSubscriptions: 1,
+          skippedSubscriptions: 0,
+          globalNotifyDays: 3,
+          zipLogoMatched: 1,
+          zipLogoMissing: 0
+        },
+        tags: [{ sourceId: 1, name: 'Video', sortOrder: 1 }],
+        usedTags: [{ sourceId: 1, name: 'Video', sortOrder: 1 }],
+        subscriptionsPreview: [
+          {
+            sourceId: 1,
+            name: 'Netflix',
+            amount: 10,
+            currency: 'USD',
+            status: 'active',
+            autoRenew: true,
+            billingIntervalCount: 1,
+            billingIntervalUnit: 'month',
+            startDate: '2026-04-01',
+            nextRenewalDate: '2026-05-01',
+            notifyDaysBefore: 3,
+            webhookEnabled: false,
+            notes: '',
+            description: '',
+            websiteUrl: 'https://example.com',
+            tagNames: ['Video'],
+            logoRef: null,
+            logoImportStatus: 'none',
+            warnings: []
+          }
+        ],
+        warnings: []
+      },
+      logoAssets: [
+        {
+          logoRef: 'abc.png',
+          filename: 'abc.png',
+          contentType: 'image/png',
+          base64: 'ZmFrZQ=='
+        }
+      ]
+    }
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/import/wallos/commit',
+      payload: {
+        fileType: payload.fileType,
+        preview: payload.preview,
+        logoAssets: payload.logoAssets
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(routeMocks.commitWallosImportMock).toHaveBeenCalledWith({
+      fileType: 'zip',
+      preview: payload.preview,
+      logoAssets: payload.logoAssets
+    })
   })
 })

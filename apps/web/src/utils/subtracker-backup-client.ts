@@ -1,5 +1,5 @@
 import { unzipSync, strFromU8 } from 'fflate'
-import type { SubtrackerBackupAssetLogoDto, SubtrackerBackupInspectResult } from '@/types/api'
+import type { SubtrackerBackupAssetLogoDto } from '@/types/api'
 
 type PreparedLogoAsset = {
   path: string

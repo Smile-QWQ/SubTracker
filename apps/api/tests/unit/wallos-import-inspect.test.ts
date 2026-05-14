@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { storeImportPreview } = vi.hoisted(() => ({
-  storeImportPreview: vi.fn()
-}))
-
 const { saveImportedLogoBufferToKey } = vi.hoisted(() => ({
   saveImportedLogoBufferToKey: vi.fn()
 }))
@@ -11,12 +7,6 @@ const { saveImportedLogoBufferToKey } = vi.hoisted(() => ({
 const runtimeState = vi.hoisted(() => ({
   getWorkerLogoBucket: vi.fn(),
   isWorkerRuntime: vi.fn(() => true)
-}))
-
-vi.mock('../../src/services/worker-lite-state.service', () => ({
-  storeImportPreview,
-  getImportPreview: vi.fn(),
-  deleteImportPreview: vi.fn()
 }))
 
 vi.mock('../../src/services/logo.service', () => ({
@@ -108,10 +98,10 @@ describe('inspectWallosImportFile', () => {
       logoImportStatus: 'none'
     })
     expect(saveImportedLogoBufferToKey).not.toHaveBeenCalled()
-    expect(storeImportPreview).toHaveBeenCalledTimes(1)
+    expect(result).not.toHaveProperty('importToken')
   })
 
-  it('uploads prepared zip logo assets during inspect when worker R2 is enabled', async () => {
+  it('does not upload prepared zip logo assets during inspect even when worker R2 is enabled', async () => {
     runtimeState.getWorkerLogoBucket.mockReturnValue({ put: vi.fn() })
     saveImportedLogoBufferToKey.mockResolvedValue({
       logoUrl: '/static/logos/token/abc.png',
@@ -120,17 +110,10 @@ describe('inspectWallosImportFile', () => {
 
     const result = await inspectWallosImportFile(buildPreparedPayload())
 
-    expect(saveImportedLogoBufferToKey).toHaveBeenCalledTimes(1)
+    expect(saveImportedLogoBufferToKey).not.toHaveBeenCalled()
     expect(result.subscriptionsPreview[0]).toMatchObject({
       logoRef: 'abc.png',
       logoImportStatus: 'ready-from-zip'
-    })
-    const storedPayload = storeImportPreview.mock.calls[0]?.[1]
-    expect(storedPayload.logoManifest).toMatchObject({
-      'abc.png': {
-        logoUrl: '/static/logos/token/abc.png',
-        uploaded: true
-      }
     })
   })
 })

@@ -31,9 +31,6 @@ const mocks = vi.hoisted(() => ({
   setSettingMock: vi.fn(),
   saveImportedLogoBufferToKeyMock: vi.fn(),
   getLocalLogoLibraryMock: vi.fn(),
-  getImportPreviewMock: vi.fn(),
-  storeImportPreviewMock: vi.fn(),
-  deleteImportPreviewMock: vi.fn(),
   getWorkerLogoBucketMock: vi.fn(),
   getWorkerPublicConfigMock: vi.fn(),
   deleteLogoStorageObjectMock: vi.fn(),
@@ -71,13 +68,7 @@ vi.mock('../../src/runtime', () => ({
   isWorkerRuntime: vi.fn(() => true)
 }))
 
-vi.mock('../../src/services/worker-lite-state.service', () => ({
-  getImportPreview: mocks.getImportPreviewMock,
-  storeImportPreview: mocks.storeImportPreviewMock,
-  deleteImportPreview: mocks.deleteImportPreviewMock
-}))
-
-import { createSubtrackerBackupArchive, inspectSubtrackerBackupFile } from '../../src/services/subtracker-backup.service'
+import { commitSubtrackerBackup, createSubtrackerBackupArchive, inspectSubtrackerBackupFile } from '../../src/services/subtracker-backup.service'
 
 describe('subtracker backup service', () => {
   beforeEach(() => {
@@ -100,9 +91,6 @@ describe('subtracker backup service', () => {
     mocks.setSettingMock.mockReset()
     mocks.saveImportedLogoBufferToKeyMock.mockReset()
     mocks.getLocalLogoLibraryMock.mockReset()
-    mocks.getImportPreviewMock.mockReset()
-    mocks.storeImportPreviewMock.mockReset()
-    mocks.deleteImportPreviewMock.mockReset()
     mocks.getWorkerLogoBucketMock.mockReset()
     mocks.getWorkerPublicConfigMock.mockReset()
     mocks.deleteLogoStorageObjectMock.mockReset()
@@ -231,7 +219,7 @@ describe('subtracker backup service', () => {
     expect(decoded.length).toBeGreaterThan(0)
   })
 
-  it('inspects a valid backup zip and stores preview state', async () => {
+  it('inspects a valid backup zip without storing preview state', async () => {
     const manifest = {
       schemaVersion: 1,
       exportedAt: '2026-05-02T08:00:00.000Z',
@@ -352,6 +340,137 @@ describe('subtracker backup service', () => {
       existingTagNameCount: 1,
       existingSubscriptionIdCount: 1
     })
-    expect(mocks.storeImportPreviewMock).toHaveBeenCalledTimes(1)
+    expect(preview).not.toHaveProperty('importToken')
+  })
+
+  it('commits a valid backup with direct manifest payload', async () => {
+    const manifest = {
+      schemaVersion: 1,
+      exportedAt: '2026-05-02T08:00:00.000Z',
+      app: 'SubTracker',
+      scope: 'business-complete',
+      data: {
+        settings: {
+          baseCurrency: 'CNY',
+          timezone: 'Asia/Shanghai',
+          defaultNotifyDays: 3,
+          defaultAdvanceReminderRules: '3&09:30;0&09:30;',
+          rememberSessionDays: 7,
+          notifyOnDueDay: true,
+          mergeMultiSubscriptionNotifications: true,
+          monthlyBudgetBase: null,
+          yearlyBudgetBase: null,
+          enableTagBudgets: false,
+          overdueReminderDays: [1, 2, 3],
+          defaultOverdueReminderRules: '1&09:30;2&09:30;3&09:30;',
+          tagBudgets: {},
+          emailNotificationsEnabled: false,
+          emailProvider: 'resend',
+          pushplusNotificationsEnabled: false,
+          telegramNotificationsEnabled: false,
+          serverchanNotificationsEnabled: false,
+          gotifyNotificationsEnabled: false,
+          smtpConfig: { host: '', port: 587, secure: false, username: '', password: '', from: '', to: '' },
+          resendConfig: { apiBaseUrl: 'https://api.resend.com/emails', apiKey: '', from: '', to: '' },
+          pushplusConfig: { token: '', topic: '' },
+          telegramConfig: { botToken: '', chatId: '' },
+          serverchanConfig: { sendkey: '' },
+          gotifyConfig: { url: '', token: '', ignoreSsl: false },
+          aiConfig: {
+            enabled: false,
+            providerPreset: 'custom',
+            providerName: 'DeepSeek',
+            baseUrl: 'https://api.deepseek.com',
+            apiKey: '',
+            model: 'deepseek-chat',
+            timeoutMs: 30000,
+            promptTemplate: '',
+            capabilities: { vision: false, structuredOutput: true }
+          }
+        },
+        notificationWebhook: {
+          enabled: false,
+          url: '',
+          requestMethod: 'POST',
+          headers: 'Content-Type: application/json',
+          payloadTemplate: '{}',
+          ignoreSsl: false
+        },
+        tags: [{ id: 'tag_1', name: '影音', color: '#3b82f6', icon: 'apps-outline', sortOrder: 1 }],
+        subscriptions: [
+          {
+            id: 'sub_1',
+            name: 'Netflix',
+            description: '',
+            websiteUrl: 'https://netflix.com',
+            logoUrl: '/static/logos/netflix.png',
+            logoSource: 'upload',
+            logoFetchedAt: null,
+            status: 'active',
+            amount: 15,
+            currency: 'USD',
+            billingIntervalCount: 1,
+            billingIntervalUnit: 'month',
+            autoRenew: true,
+            startDate: '2026-04-01',
+            nextRenewalDate: '2026-05-01',
+            notifyDaysBefore: 3,
+            advanceReminderRules: '3&09:30;0&09:30;',
+            overdueReminderRules: '1&09:30;',
+            webhookEnabled: true,
+            notes: '',
+            tagIds: ['tag_1'],
+            createdAt: '2026-04-01T00:00:00.000Z',
+            updatedAt: '2026-04-02T00:00:00.000Z'
+          }
+        ],
+        paymentRecords: [],
+        subscriptionOrder: ['sub_1']
+      },
+      assets: {
+        logos: [
+          {
+            path: 'logos/netflix.png',
+            filename: 'netflix.png',
+            sourceLogoUrl: '/static/logos/netflix.png',
+            contentType: 'image/png',
+            referencedBySubscriptionIds: ['sub_1']
+          }
+        ]
+      }
+    }
+
+    mocks.getWorkerLogoBucketMock.mockReturnValue(null)
+    mocks.prismaMock.tag.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    mocks.prismaMock.subscription.findMany.mockResolvedValue([])
+    mocks.prismaMock.paymentRecord.findMany.mockResolvedValue([])
+    mocks.prismaMock.tag.create.mockResolvedValue({ id: 'tag_1' })
+    mocks.prismaMock.subscription.create.mockResolvedValue({ id: 'sub_1' })
+    mocks.prismaMock.subscriptionTag.createMany.mockResolvedValue({ count: 1 })
+    mocks.getSubscriptionOrderMock.mockResolvedValue([])
+    mocks.setSubscriptionOrderMock.mockResolvedValue(undefined)
+    mocks.setSettingMock.mockResolvedValue(undefined)
+
+    const result = await commitSubtrackerBackup({
+      manifest,
+      logoAssets: [
+        {
+          path: 'logos/netflix.png',
+          filename: 'netflix.png',
+          contentType: 'image/png',
+          base64: Buffer.from('fake-image').toString('base64')
+        }
+      ],
+      mode: 'append',
+      restoreSettings: false
+    })
+
+    expect(mocks.prismaMock.subscription.create).toHaveBeenCalledTimes(1)
+    expect(result).toMatchObject({
+      mode: 'append',
+      importedTags: 1,
+      importedSubscriptions: 1,
+      importedPaymentRecords: 0
+    })
   })
 })

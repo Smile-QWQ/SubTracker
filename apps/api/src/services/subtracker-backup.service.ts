@@ -22,9 +22,7 @@ import { deleteLogoStorageObject, extractLogoStorageKey, getLocalLogoLibrary, sa
 import { getAppSettings, setSetting } from './settings.service'
 import { getSubscriptionOrder, setSubscriptionOrder } from './subscription-order.service'
 import { getPrimaryWebhookEndpoint } from './webhook.service'
-import { deleteImportPreview, getImportPreview, storeImportPreview } from './worker-lite-state.service'
 
-const IMPORT_TOKEN_TTL_MS = 15 * 60 * 1000
 const BACKUP_SCHEMA_VERSION = 1
 const BACKUP_APP_NAME = 'SubTracker'
 const BACKUP_SCOPE = 'business-complete' as const
@@ -48,12 +46,6 @@ type BackupManifest = {
   assets: {
     logos: SubtrackerBackupAssetLogoDto[]
   }
-}
-
-type CachedImportEntry = {
-  manifest: BackupManifest
-  logoAssets: Record<string, { bytes: Uint8Array; contentType: string; filename: string }>
-  preview: Omit<SubtrackerBackupInspectResultDto, 'importToken'>
 }
 
 type SerializedSubscription = {
@@ -104,17 +96,9 @@ function buildBackupFileName(timezone: string, now = new Date()) {
   return `subtracker-backup-${stamp}.zip`
 }
 
-function createImportToken() {
-  return crypto.randomBytes(24).toString('hex')
-}
-
-function buildWorkerImportPrefix(token: string) {
-  return `logos/imports/subtracker/${token}/`
-}
-
-function buildWorkerImportedLogoKey(importToken: string, filename: string) {
+function buildWorkerImportedLogoKey(filename: string) {
   const safe = filename.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'logo.bin'
-  return `${buildWorkerImportPrefix(importToken)}${Date.now()}-${crypto.randomBytes(4).toString('hex')}-${safe}`
+  return `logos/imports/subtracker/${Date.now()}-${crypto.randomBytes(8).toString('hex')}-${safe}`
 }
 
 function defaultWebhookSettings(): NotificationWebhookSettingsInput {
@@ -414,22 +398,11 @@ async function buildInspectConflicts(manifest: BackupManifest): Promise<Subtrack
   }
 }
 
-async function cleanupImportedPreviewAssets(_payload: CachedImportEntry | null, token: string) {
-  const bucket = getWorkerLogoBucket()
-  if (!bucket) return
-  const prefix = buildWorkerImportPrefix(token)
-  const listed = await bucket.list()
-  const targets = listed.objects.filter((item) => item.key.startsWith(prefix))
-  if (!targets.length) return
-  await Promise.all(targets.map((item) => deleteLogoStorageObject(item.key)))
-}
-
 export async function inspectSubtrackerBackupFile(input: SubtrackerBackupInspectInput): Promise<SubtrackerBackupInspectResultDto> {
-  const { manifest, logoAssets } = await decodeBackupArchive(input)
+  const { manifest } = await decodeBackupArchive(input)
   const conflicts = await buildInspectConflicts(manifest)
   const canUseR2 = Boolean(getWorkerLogoBucket())
-  const importToken = createImportToken()
-  const previewPayload: Omit<SubtrackerBackupInspectResultDto, 'importToken'> = {
+  return {
     isSubtrackerBackup: true,
     summary: {
       scope: BACKUP_SCOPE,
@@ -442,21 +415,6 @@ export async function inspectSubtrackerBackupFile(input: SubtrackerBackupInspect
     warnings: buildBackupWarnings(manifest, canUseR2),
     availableModes: ['replace', 'append'],
     conflicts
-  }
-
-  await storeImportPreview<CachedImportEntry>(
-    importToken,
-    {
-      manifest,
-      logoAssets,
-      preview: previewPayload
-    },
-    IMPORT_TOKEN_TTL_MS
-  )
-
-  return {
-    ...previewPayload,
-    importToken
   }
 }
 
@@ -539,17 +497,16 @@ function findReferencedLogoAsset(subscriptionId: string, manifest: BackupManifes
 }
 
 async function importLogoFromAsset(
-  importToken: string,
   subscriptionId: string,
   manifest: BackupManifest,
-  logoAssets: CachedImportEntry['logoAssets']
+  logoAssets: Record<string, { bytes: Uint8Array; contentType: string; filename: string }>
 ) {
   const asset = findReferencedLogoAsset(subscriptionId, manifest)
   if (!asset) return null
   const entry = logoAssets[asset.path]
   if (!entry || !getWorkerLogoBucket()) return null
 
-  const key = buildWorkerImportedLogoKey(importToken, asset.filename)
+  const key = buildWorkerImportedLogoKey(asset.filename)
   return saveImportedLogoBufferToKey(Buffer.from(entry.bytes), entry.contentType, key, 'backup-zip')
 }
 
@@ -574,19 +531,12 @@ function buildFallbackAppSettings() {
 }
 
 export async function commitSubtrackerBackup(input: SubtrackerBackupCommitInput): Promise<SubtrackerBackupCommitResultDto> {
-  const cached = await getImportPreview<CachedImportEntry>(input.importToken, {
-    onExpired: cleanupImportedPreviewAssets
+  const { manifest, logoAssets } = await decodeBackupArchive({
+    filename: 'commit-subtracker-backup.zip',
+    manifest: input.manifest,
+    logoAssets: input.logoAssets
   })
-
-  if (!cached) {
-    throw new Error('导入令牌不存在或已失效，请重新生成预览')
-  }
-
-  const { manifest, logoAssets, preview } = cached
-  await deleteImportPreview<CachedImportEntry>(input.importToken, {
-    payload: cached,
-    onDelete: () => undefined
-  })
+  const previewWarnings = buildBackupWarnings(manifest, Boolean(getWorkerLogoBucket()))
 
   const appSettings = (() => {
     try {
@@ -645,7 +595,7 @@ export async function commitSubtrackerBackup(input: SubtrackerBackupCommitInput)
     }
 
     const importedLogo = subscription.logoUrl?.startsWith('/static/logos/')
-      ? await importLogoFromAsset(input.importToken, subscription.id, manifest, logoAssets)
+      ? await importLogoFromAsset(subscription.id, manifest, logoAssets)
       : null
 
     if (importedLogo) {
@@ -747,6 +697,6 @@ export async function commitSubtrackerBackup(input: SubtrackerBackupCommitInput)
     importedPaymentRecords,
     skippedPaymentRecords,
     importedLogos,
-    warnings: preview.warnings
+    warnings: previewWarnings
   }
 }

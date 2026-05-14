@@ -268,6 +268,59 @@ function buildFixture(meta) {
     }
   }
 
+  const wallosPreparedPayload = {
+    fileType: 'zip',
+    preview: {
+      isWallos: true,
+      summary: {
+        fileType: 'zip',
+        subscriptionsTotal: Math.min(subscriptions.length, 50),
+        tagsTotal: Math.min(tags.length, 10),
+        usedTagsTotal: Math.min(tags.length, 10),
+        supportedSubscriptions: Math.min(subscriptions.length, 50),
+        skippedSubscriptions: 0,
+        globalNotifyDays: 3,
+        zipLogoMatched: 0,
+        zipLogoMissing: 0
+      },
+      tags: tags.slice(0, 10).map((tag, index) => ({
+        sourceId: index + 1,
+        name: tag.name,
+        sortOrder: tag.sortOrder
+      })),
+      usedTags: tags.slice(0, 10).map((tag, index) => ({
+        sourceId: index + 1,
+        name: tag.name,
+        sortOrder: tag.sortOrder
+      })),
+      subscriptionsPreview: subscriptions.slice(0, 50).map((subscription, index) => ({
+        sourceId: index + 1,
+        name: subscription.name,
+        amount: subscription.amount,
+        currency: subscription.currency,
+        status: subscription.status,
+        autoRenew: subscription.autoRenew,
+        billingIntervalCount: subscription.billingIntervalCount,
+        billingIntervalUnit: subscription.billingIntervalUnit,
+        startDate: subscription.startDate,
+        nextRenewalDate: subscription.nextRenewalDate,
+        notifyDaysBefore: subscription.notifyDaysBefore,
+        webhookEnabled: subscription.webhookEnabled,
+        notes: subscription.notes,
+        description: subscription.description,
+        websiteUrl: subscription.websiteUrl,
+        tagNames: subscription.tagIds
+          .map((tagId) => tags.find((tag) => tag.id === tagId)?.name)
+          .filter(Boolean),
+        logoRef: null,
+        logoImportStatus: 'none',
+        warnings: []
+      })),
+      warnings: []
+    },
+    logoAssets: []
+  }
+
   return {
     meta,
     dataset: {
@@ -276,7 +329,8 @@ function buildFixture(meta) {
       subscriptions,
       paymentRecords,
       manifest,
-      logoAssets: []
+      logoAssets: [],
+      wallosPreparedPayload
     }
   }
 }

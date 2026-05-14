@@ -424,8 +424,9 @@ export const WallosImportInspectSchema = z.object({
 })
 
 export const WallosImportCommitSchema = z.object({
-  importToken: z.string().min(10).max(200),
-  preview: WallosImportPreparedPreviewSchema.optional()
+  fileType: z.enum(['json', 'db', 'zip']),
+  preview: WallosImportPreparedPreviewSchema,
+  logoAssets: z.array(WallosImportLogoAssetSchema).max(500).default([])
 })
 
 export const SubtrackerBackupScopeSchema = z.enum(['business-complete'])
@@ -448,7 +449,18 @@ export const SubtrackerBackupInspectSchema = z.object({
 })
 
 export const SubtrackerBackupCommitSchema = z.object({
-  importToken: z.string().min(10).max(200),
+  manifest: z.unknown(),
+  logoAssets: z
+    .array(
+      z.object({
+        path: z.string().min(1).max(500),
+        filename: z.string().min(1).max(255),
+        contentType: z.string().min(1).max(120),
+        base64: z.string().min(1)
+      })
+    )
+    .max(500)
+    .default([]),
   mode: SubtrackerBackupRestoreModeSchema,
   restoreSettings: z.boolean().default(false)
 })
@@ -712,7 +724,6 @@ export interface WallosImportInspectResultDto {
   usedTags: WallosImportTagDto[]
   subscriptionsPreview: WallosImportSubscriptionPreviewDto[]
   warnings: string[]
-  importToken: string
 }
 
 export interface WallosImportCommitResultDto {
@@ -817,7 +828,6 @@ export interface SubtrackerBackupInspectResultDto {
   isSubtrackerBackup: boolean
   summary: SubtrackerBackupSummaryDto
   warnings: string[]
-  importToken: string
   availableModes: Array<SubtrackerBackupRestoreMode>
   conflicts: SubtrackerBackupInspectConflictsDto
 }

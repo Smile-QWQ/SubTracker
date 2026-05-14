@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { WallosImportCommitInput } from '@subtracker/shared'
 
-const { prismaMock, appendSubscriptionOrders } = vi.hoisted(() => ({
+const { prismaMock, appendSubscriptionOrders, saveImportedLogoBufferToKey } = vi.hoisted(() => ({
   prismaMock: {
     tag: {
       findMany: vi.fn(),
@@ -16,7 +17,8 @@ const { prismaMock, appendSubscriptionOrders } = vi.hoisted(() => ({
       create: vi.fn()
     }
   },
-  appendSubscriptionOrders: vi.fn(async () => undefined)
+  appendSubscriptionOrders: vi.fn(async () => undefined),
+  saveImportedLogoBufferToKey: vi.fn()
 }))
 
 vi.mock('../../src/db', () => ({
@@ -33,13 +35,16 @@ vi.mock('../../src/services/subscription-order.service', () => ({
   appendSubscriptionOrders
 }))
 
-const previewState = vi.hoisted(() => ({
-  getImportPreview: vi.fn(),
-  storeImportPreview: vi.fn(),
-  deleteImportPreview: vi.fn()
+vi.mock('../../src/services/logo.service', () => ({
+  saveImportedLogoBufferToKey,
+  deleteLogoStorageObject: vi.fn()
 }))
 
-vi.mock('../../src/services/worker-lite-state.service', () => previewState)
+vi.mock('../../src/runtime', () => ({
+  getRuntimeD1Database: vi.fn(),
+  getWorkerLogoBucket: vi.fn(() => null),
+  isWorkerRuntime: vi.fn(() => false)
+}))
 
 import { commitWallosImport } from '../../src/services/wallos-import.service'
 
@@ -54,9 +59,8 @@ describe('commitWallosImport', () => {
     prismaMock.subscription.create.mockReset()
     prismaMock.subscriptionTag.createMany.mockReset()
     prismaMock.subscriptionTag.create.mockReset()
+    saveImportedLogoBufferToKey.mockReset()
     appendSubscriptionOrders.mockClear()
-    previewState.getImportPreview.mockReset()
-    previewState.deleteImportPreview.mockReset()
   })
 
   afterEach(() => {
@@ -64,12 +68,12 @@ describe('commitWallosImport', () => {
   })
 
   it('batches imported tags, subscriptions, joins, and order writes for normal imports', async () => {
-    previewState.getImportPreview.mockResolvedValue({
+    const payload: WallosImportCommitInput = {
+      fileType: 'db' as const,
       preview: {
-        importToken: 'token-1',
-        isWallos: true,
+        isWallos: true as const,
         summary: {
-          fileType: 'db',
+          fileType: 'db' as const,
           subscriptionsTotal: 2,
           tagsTotal: 2,
           usedTagsTotal: 2,
@@ -130,8 +134,8 @@ describe('commitWallosImport', () => {
         ],
         warnings: []
       },
-      logoManifest: {}
-    })
+      logoAssets: []
+    }
 
     prismaMock.tag.findMany
       .mockResolvedValueOnce([])
@@ -143,7 +147,7 @@ describe('commitWallosImport', () => {
     prismaMock.subscription.createMany.mockResolvedValue({ count: 2 })
     prismaMock.subscriptionTag.createMany.mockResolvedValue({ count: 2 })
 
-    const result = await commitWallosImport({ importToken: 'token-1' })
+    const result = await commitWallosImport(payload)
 
     expect(prismaMock.tag.findMany).toHaveBeenCalledTimes(2)
     expect(prismaMock.tag.createMany).toHaveBeenCalledWith({
@@ -169,7 +173,6 @@ describe('commitWallosImport', () => {
       ]
     })
     expect(appendSubscriptionOrders).toHaveBeenCalledWith(createdIds)
-    expect(previewState.deleteImportPreview).toHaveBeenCalledWith('token-1')
     expect(result).toMatchObject({
       importedTags: 2,
       importedSubscriptions: 2,
@@ -178,13 +181,20 @@ describe('commitWallosImport', () => {
     })
   })
 
-  it('reuses preview-stage zip logo manifest instead of re-uploading logos during commit', async () => {
-    previewState.getImportPreview.mockResolvedValue({
+  it('uploads zip logos during commit when worker R2 is enabled', async () => {
+    const runtime = await import('../../src/runtime')
+    vi.mocked(runtime.getWorkerLogoBucket).mockReturnValue({ put: vi.fn() } as never)
+    saveImportedLogoBufferToKey.mockResolvedValue({
+      logoUrl: '/static/logos/logos%2Fimports%2Fwallos%2Fabc.png',
+      logoSource: 'wallos-zip'
+    })
+
+    const payload: WallosImportCommitInput = {
+      fileType: 'zip' as const,
       preview: {
-        importToken: 'token-zip',
-        isWallos: true,
+        isWallos: true as const,
         summary: {
-          fileType: 'zip',
+          fileType: 'zip' as const,
           subscriptionsTotal: 1,
           tagsTotal: 1,
           usedTagsTotal: 1,
@@ -221,29 +231,28 @@ describe('commitWallosImport', () => {
         ],
         warnings: []
       },
-      logoManifest: {
-        'abc.png': {
+      logoAssets: [
+        {
           logoRef: 'abc.png',
-          r2Key: 'logos/imports/wallos/token-zip/abc.png',
-          logoUrl: '/static/logos/logos%2Fimports%2Fwallos%2Ftoken-zip%2Fabc.png',
+          filename: 'abc.png',
           contentType: 'image/png',
-          uploaded: true
+          base64: Buffer.from([137, 80, 78, 71]).toString('base64')
         }
-      }
-    })
+      ]
+    }
 
     prismaMock.tag.findMany.mockResolvedValue([{ id: 'tag_video', name: 'Video' }])
     prismaMock.subscription.createMany.mockResolvedValue({ count: 1 })
     prismaMock.subscriptionTag.createMany.mockResolvedValue({ count: 1 })
 
-    const result = await commitWallosImport({ importToken: 'token-zip' })
+    const result = await commitWallosImport(payload)
 
     expect(prismaMock.subscription.createMany).toHaveBeenCalledTimes(1)
     expect(prismaMock.subscription.createMany.mock.calls[0][0].data[0]).toMatchObject({
-      logoUrl: '/static/logos/logos%2Fimports%2Fwallos%2Ftoken-zip%2Fabc.png',
+      logoUrl: '/static/logos/logos%2Fimports%2Fwallos%2Fabc.png',
       logoSource: 'wallos-zip'
     })
+    expect(saveImportedLogoBufferToKey).toHaveBeenCalledTimes(1)
     expect(result.importedLogos).toBe(1)
-    expect(previewState.deleteImportPreview).toHaveBeenCalledWith('token-zip')
   })
 })

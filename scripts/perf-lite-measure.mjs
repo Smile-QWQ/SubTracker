@@ -85,6 +85,8 @@ async function main() {
   const resultPath = path.join(PERF_RESULT_DIR, `${fixtureLabel(fixtureMeta)}-${nowStamp()}.jsonl`)
   const sourceRoot = String(args['source-root'] ?? process.cwd())
   const cronDryRun = String(args['cron-dry-run'] ?? 'false') === 'true'
+  const subtrackerCommitProtocol = String(args['subtracker-commit-protocol'] ?? 'auto')
+  const wallosCommitProtocol = String(args['wallos-commit-protocol'] ?? 'auto')
 
   await ensurePerfDirs()
 
@@ -106,7 +108,11 @@ async function main() {
     '--source-root',
     sourceRoot,
     '--cron-dry-run',
-    cronDryRun ? 'true' : 'false'
+    cronDryRun ? 'true' : 'false',
+    '--subtracker-commit-protocol',
+    subtrackerCommitProtocol,
+    '--wallos-commit-protocol',
+    wallosCommitProtocol
   ]
   if (profileEnabled) {
     childArgs.push('--profile')

@@ -500,7 +500,7 @@ function buildJsonDerivedWarnings(row: WallosJsonRow) {
   }
 }
 
-function buildJsonPreview(rows: WallosJsonRow[], options: PreparedImportOptions): Omit<WallosImportInspectResult, 'importToken'> {
+function buildJsonPreview(rows: WallosJsonRow[], options: PreparedImportOptions): WallosImportInspectResult {
   const warnings: string[] = []
   const previewSubscriptions: WallosImportSubscriptionPreview[] = []
   const tags = buildTagCollection()
@@ -709,7 +709,7 @@ function buildDbPreview(
     usedTags,
     subscriptionsPreview: previewSubscriptions,
     warnings: ensureUniqueWarnings(warnings)
-  } satisfies Omit<WallosImportInspectResult, 'importToken'>
+  } satisfies WallosImportInspectResult
 }
 
 async function buildDbPreviewFromBytes(
