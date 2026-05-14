@@ -56,6 +56,20 @@ type ExchangeRateSnapshotRow = {
   isStale: number | boolean
 }
 
+type PaymentRecordRow = {
+  id: string
+  subscriptionId: string
+  amount: number
+  currency: string
+  baseCurrency: string
+  convertedAmount: number
+  exchangeRate: number
+  paidAt: string
+  periodStart: string
+  periodEnd: string
+  createdAt: string
+}
+
 type SubscriptionListFilters = {
   q?: string
   status?: string
@@ -166,6 +180,22 @@ function toSubscription(row: SubscriptionRow, tagRows: SubscriptionTagJoinRow[] 
         sortOrder: Number(tag.tagSortOrder)
       }
     }))
+  }
+}
+
+function toPaymentRecord(row: PaymentRecordRow) {
+  return {
+    id: row.id,
+    subscriptionId: row.subscriptionId,
+    amount: Number(row.amount),
+    currency: row.currency,
+    baseCurrency: row.baseCurrency,
+    convertedAmount: Number(row.convertedAmount),
+    exchangeRate: Number(row.exchangeRate),
+    paidAt: new Date(row.paidAt),
+    periodStart: new Date(row.periodStart),
+    periodEnd: new Date(row.periodEnd),
+    createdAt: new Date(row.createdAt)
   }
 }
 
@@ -508,6 +538,77 @@ export async function listSubscriptionsLite(filters: SubscriptionListFilters = {
   }
 
   return rows.map((row) => toSubscription(row, tagsBySubscription.get(row.id) ?? []))
+}
+
+export async function getSubscriptionWithTagsLite(id: string) {
+  if (!getD1()) {
+    return prisma.subscription.findUniqueOrThrow({
+      where: { id },
+      include: {
+        tags: {
+          include: {
+            tag: true
+          }
+        }
+      }
+    })
+  }
+
+  const rows = await d1All<SubscriptionRow>(
+    `SELECT
+      s.id, s.name, s.description, s.websiteUrl, s.logoUrl, s.logoSource, s.logoFetchedAt,
+      s.status, s.amount, s.currency, s.billingIntervalCount, s.billingIntervalUnit,
+      s.autoRenew, s.startDate, s.nextRenewalDate, s.notifyDaysBefore,
+      s.advanceReminderRules, s.overdueReminderRules, s.webhookEnabled, s.notes,
+      s.createdAt, s.updatedAt
+     FROM Subscription s
+     WHERE s.id = ?
+     LIMIT 1`,
+    [id]
+  )
+
+  const row = rows[0]
+  if (!row) {
+    throw new Error('Subscription not found')
+  }
+
+  const tagRows = await d1All<SubscriptionTagJoinRow>(
+    `SELECT
+      st.subscriptionId AS subscriptionId,
+      t.id AS tagId,
+      t.name AS tagName,
+      t.color AS tagColor,
+      t.icon AS tagIcon,
+      t.sortOrder AS tagSortOrder
+     FROM SubscriptionTag st
+     JOIN Tag t ON t.id = st.tagId
+     WHERE st.subscriptionId = ?
+     ORDER BY t.sortOrder ASC, t.name ASC`,
+    [id]
+  )
+
+  return toSubscription(row, tagRows)
+}
+
+export async function listSubscriptionPaymentRecordsLite(subscriptionId: string) {
+  if (!getD1()) {
+    return prisma.paymentRecord.findMany({
+      where: { subscriptionId },
+      orderBy: { paidAt: 'desc' }
+    })
+  }
+
+  const rows = await d1All<PaymentRecordRow>(
+    `SELECT
+      id, subscriptionId, amount, currency, baseCurrency, convertedAmount, exchangeRate,
+      paidAt, periodStart, periodEnd, createdAt
+     FROM PaymentRecord
+     WHERE subscriptionId = ?
+     ORDER BY paidAt DESC`,
+    [subscriptionId]
+  )
+
+  return rows.map(toPaymentRecord)
 }
 
 export async function listStatisticsSubscriptionsLite(filters: Pick<SubscriptionListFilters, 'statuses'> = {}) {

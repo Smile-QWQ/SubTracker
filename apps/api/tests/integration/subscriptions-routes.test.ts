@@ -6,6 +6,24 @@ const routeMocks = vi.hoisted(() => ({
   invalidateWorkerLiteCache: vi.fn(async () => undefined),
   withWorkerLiteCache: vi.fn(async (_namespace: string, _key: string, loader: () => Promise<unknown>) => loader()),
   listSubscriptionsLite: vi.fn(async () => []),
+  getSubscriptionWithTagsLite: vi.fn(),
+  listSubscriptionPaymentRecordsLite: vi.fn<
+    (subscriptionId: string) => Promise<
+      Array<{
+        id: string
+        subscriptionId: string
+        amount: number
+        currency: string
+        baseCurrency: string
+        convertedAmount: number
+        exchangeRate: number
+        paidAt: Date
+        periodStart: Date
+        periodEnd: Date
+        createdAt: Date
+      }>
+    >
+  >(async () => []),
   getLatestSnapshot: vi.fn(async () => ({
     baseCurrency: 'CNY',
     rates: {
@@ -68,7 +86,9 @@ vi.mock('../../src/services/worker-lite-cache.service', () => ({
 }))
 
 vi.mock('../../src/services/worker-lite-repository.service', () => ({
-  listSubscriptionsLite: routeMocks.listSubscriptionsLite
+  listSubscriptionsLite: routeMocks.listSubscriptionsLite,
+  getSubscriptionWithTagsLite: routeMocks.getSubscriptionWithTagsLite,
+  listSubscriptionPaymentRecordsLite: routeMocks.listSubscriptionPaymentRecordsLite
 }))
 
 vi.mock('../../src/services/subscription-order.service', () => ({
@@ -112,6 +132,9 @@ describe('subscription routes D1 compatibility', () => {
     routeMocks.prisma.paymentRecord.findMany.mockReset()
     routeMocks.listSubscriptionsLite.mockReset()
     routeMocks.listSubscriptionsLite.mockResolvedValue([])
+    routeMocks.getSubscriptionWithTagsLite.mockReset()
+    routeMocks.listSubscriptionPaymentRecordsLite.mockReset()
+    routeMocks.listSubscriptionPaymentRecordsLite.mockResolvedValue([])
   })
 
   it('creates subscriptions without using Prisma interactive transactions', async () => {
@@ -422,7 +445,7 @@ describe('subscription routes D1 compatibility', () => {
     const app = Fastify()
     await subscriptionRoutes(app)
 
-    routeMocks.prisma.subscription.findUniqueOrThrow.mockResolvedValue({
+    routeMocks.getSubscriptionWithTagsLite.mockResolvedValue({
       id: 'sub_1',
       name: 'Netflix',
       description: '',
@@ -447,7 +470,7 @@ describe('subscription routes D1 compatibility', () => {
       updatedAt: new Date('2026-05-01T00:00:00.000Z'),
       tags: []
     })
-    routeMocks.prisma.paymentRecord.findMany.mockResolvedValue([])
+    routeMocks.listSubscriptionPaymentRecordsLite.mockResolvedValue([])
 
     const response = await app.inject({
       method: 'GET',
@@ -463,6 +486,64 @@ describe('subscription routes D1 compatibility', () => {
         remainingRatio: expect.any(Number),
         remainingValue: expect.any(Number),
         remainingValueCurrency: 'CNY'
+      })
+    )
+    expect(routeMocks.getSubscriptionWithTagsLite).toHaveBeenCalledWith('sub_1')
+    expect(routeMocks.listSubscriptionPaymentRecordsLite).toHaveBeenCalledWith('sub_1')
+    expect(routeMocks.prisma.subscription.findUniqueOrThrow).not.toHaveBeenCalled()
+    expect(routeMocks.prisma.paymentRecord.findMany).not.toHaveBeenCalled()
+
+    await app.close()
+  })
+
+  it('returns payment records via worker-lite repository helper', async () => {
+    const { subscriptionRoutes } = await import('../../src/routes/subscriptions')
+    const app = Fastify()
+    await subscriptionRoutes(app)
+
+    routeMocks.listSubscriptionPaymentRecordsLite.mockResolvedValue([
+      {
+        id: 'payment_2',
+        subscriptionId: 'sub_1',
+        amount: 20,
+        currency: 'USD',
+        baseCurrency: 'CNY',
+        convertedAmount: 144,
+        exchangeRate: 7.2,
+        paidAt: new Date('2026-05-10T00:00:00.000Z'),
+        periodStart: new Date('2026-05-01T00:00:00.000Z'),
+        periodEnd: new Date('2026-06-01T00:00:00.000Z'),
+        createdAt: new Date('2026-05-10T00:00:00.000Z')
+      }
+    ] as Array<{
+      id: string
+      subscriptionId: string
+      amount: number
+      currency: string
+      baseCurrency: string
+      convertedAmount: number
+      exchangeRate: number
+      paidAt: Date
+      periodStart: Date
+      periodEnd: Date
+      createdAt: Date
+    }>)
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/subscriptions/sub_1/payment-records'
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(routeMocks.listSubscriptionPaymentRecordsLite).toHaveBeenCalledWith('sub_1')
+    expect(routeMocks.prisma.paymentRecord.findMany).not.toHaveBeenCalled()
+    expect(response.json().data).toHaveLength(1)
+    expect(response.json().data[0]).toEqual(
+      expect.objectContaining({
+        id: 'payment_2',
+        subscriptionId: 'sub_1',
+        amount: 20,
+        currency: 'USD'
       })
     )
 

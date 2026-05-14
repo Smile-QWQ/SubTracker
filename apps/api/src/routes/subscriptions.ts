@@ -18,7 +18,11 @@ import {
   sortSubscriptionsByOrder
 } from '../services/subscription-order.service'
 import { invalidateWorkerLiteCache, withWorkerLiteCache } from '../services/worker-lite-cache.service'
-import { listSubscriptionsLite } from '../services/worker-lite-repository.service'
+import {
+  getSubscriptionWithTagsLite,
+  listSubscriptionPaymentRecordsLite,
+  listSubscriptionsLite
+} from '../services/worker-lite-repository.service'
 import { renewSubscription } from '../services/subscription.service'
 import { calculateSubscriptionRemainingValue } from '../services/subscription-value.service'
 import { flattenSubscriptionTags, normalizeTagIds, replaceSubscriptionTags } from '../services/tag.service'
@@ -52,11 +56,8 @@ async function fetchSubscriptionWithTags(id: string) {
 
 async function buildSubscriptionDetail(id: string) {
   const [row, paymentRecords, timezone, exchangeRates] = await Promise.all([
-    fetchSubscriptionWithTags(id),
-    prisma.paymentRecord.findMany({
-      where: { subscriptionId: id },
-      orderBy: { paidAt: 'desc' }
-    }),
+    getSubscriptionWithTagsLite(id),
+    listSubscriptionPaymentRecordsLite(id),
     getAppTimezone(),
     getLatestSnapshot().catch(() => null)
   ])
@@ -491,10 +492,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       return sendError(reply, 422, 'validation_error', 'Invalid subscription id')
     }
 
-    const records = await prisma.paymentRecord.findMany({
-      where: { subscriptionId: params.data.id },
-      orderBy: { paidAt: 'desc' }
-    })
+    const records = await listSubscriptionPaymentRecordsLite(params.data.id)
 
     return sendOk(reply, records)
   })
