@@ -144,6 +144,64 @@ describe('import routes', () => {
 
     expect(res.statusCode).toBe(200)
     expect(routeMocks.commitSubtrackerBackupMock).toHaveBeenCalledWith(payload)
+    expect(routeMocks.invalidateWorkerLiteCacheMock).toHaveBeenCalledWith([
+      'subscriptions',
+      'tags',
+      'statistics',
+      'calendar',
+      'settings',
+      'exchange-rates'
+    ])
+    expect(routeMocks.bumpCacheVersionsMock).toHaveBeenCalledWith(['statistics', 'calendar', 'settings', 'exchangeRates'])
+  })
+
+  it('skips import cache side effects for append no-op commits', async () => {
+    routeMocks.commitSubtrackerBackupMock.mockResolvedValue({
+      mode: 'append',
+      clearedExistingData: false,
+      restoredSettings: false,
+      importedTags: 0,
+      reusedTags: 20,
+      importedSubscriptions: 0,
+      skippedSubscriptions: 100,
+      importedPaymentRecords: 0,
+      skippedPaymentRecords: 1000,
+      importedLogos: 0,
+      warnings: []
+    })
+
+    const payload = {
+      manifest: {
+        schemaVersion: 1,
+        exportedAt: '2026-05-01T00:00:00.000Z',
+        app: 'SubTracker',
+        scope: 'business-complete',
+        data: {
+          settings: {},
+          notificationWebhook: {},
+          tags: [],
+          subscriptions: [],
+          paymentRecords: [],
+          subscriptionOrder: []
+        },
+        assets: {
+          logos: []
+        }
+      },
+      logoAssets: [],
+      mode: 'append' as const,
+      restoreSettings: false
+    }
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/import/subtracker/commit',
+      payload
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(routeMocks.invalidateWorkerLiteCacheMock).not.toHaveBeenCalled()
+    expect(routeMocks.bumpCacheVersionsMock).not.toHaveBeenCalled()
   })
 
   it('rejects invalid subtracker backup commit payloads', async () => {

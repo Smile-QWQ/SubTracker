@@ -202,6 +202,9 @@ function buildFixture(meta) {
           ? 1 + (index % 2)
           : 1
     const tagIds = Array.from({ length: tagCount }, (_, tagIndex) => tags[(index + tagIndex) % tags.length]?.id).filter(Boolean)
+    const createdAt = new Date(Date.UTC(2025, 0, 1 + index, 8, index % 60, 0))
+    const updatedAt = new Date(createdAt)
+    updatedAt.setUTCDate(updatedAt.getUTCDate() + Math.max(dayOffset, 0))
 
     return {
       id: `perf_sub_${index + 1}`,
@@ -224,6 +227,8 @@ function buildFixture(meta) {
       overdueReminderRules: modeDefaults.overdueReminderRules ?? DEFAULT_OVERDUE_REMINDER_RULES,
       webhookEnabled: modeDefaults.webhookEnabled,
       notes: `${meta.mode}-notes-${index + 1}`,
+      createdAt: createdAt.toISOString(),
+      updatedAt: updatedAt.toISOString(),
       tagIds
     }
   })
@@ -428,7 +433,9 @@ async function applyFixtureToDb(fixture) {
         advanceReminderRules: subscription.advanceReminderRules,
         overdueReminderRules: subscription.overdueReminderRules,
         webhookEnabled: subscription.webhookEnabled,
-        notes: subscription.notes
+        notes: subscription.notes,
+        createdAt: new Date(subscription.createdAt),
+        updatedAt: new Date(subscription.updatedAt)
       }
     })
   }

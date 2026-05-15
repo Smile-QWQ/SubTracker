@@ -16,7 +16,7 @@ import type {
 import { SettingsSchema } from '@subtracker/shared'
 import { zipSync } from 'fflate'
 import { prisma } from '../db'
-import { getWorkerLogoBucket, getWorkerPublicConfig, isWorkerRuntime } from '../runtime'
+import { getRuntimeD1Database, getWorkerLogoBucket, getWorkerPublicConfig, isWorkerRuntime } from '../runtime'
 import { formatDateInTimezone, parseDateInTimezone, toTimezonedDayjs } from '../utils/timezone'
 import { deleteLogoStorageObject, extractLogoStorageKey, getLocalLogoLibrary, saveImportedLogoBufferToKey } from './logo.service'
 import { getAppSettings, setSetting } from './settings.service'
@@ -29,6 +29,7 @@ const BACKUP_SCOPE = 'business-complete' as const
 const MANIFEST_ENTRY = 'manifest.json'
 const LOGO_ENTRY_PREFIX = 'logos/'
 const EXCLUDED_SETTING_KEYS = new Set(['authCredentials', 'authSessionSecret'])
+const D1_IN_CLAUSE_BATCH_SIZE = 100
 
 type BackupManifest = {
   schemaVersion: number
@@ -72,6 +73,17 @@ type SerializedSubscription = {
   createdAt: string
   updatedAt: string
   tags: Array<{ tagId: string }>
+}
+
+type ImportCommitTraceStep = {
+  step: string
+  wallMs: number
+  count?: number
+}
+
+type ImportCommitTrace = {
+  enabled: boolean
+  steps: ImportCommitTraceStep[]
 }
 
 function fileTypeFromName(filename: string) {
@@ -418,6 +430,56 @@ export async function inspectSubtrackerBackupFile(input: SubtrackerBackupInspect
   }
 }
 
+function isImportCommitTraceEnabled() {
+  return process.env.SUBTRACKER_PERF_TRACE === '1'
+}
+
+function createImportCommitTrace(enabled = isImportCommitTraceEnabled()): ImportCommitTrace {
+  return {
+    enabled,
+    steps: []
+  }
+}
+
+async function traceImportCommitStep<T>(
+  trace: ImportCommitTrace,
+  step: string,
+  run: () => Promise<T>,
+  summarize?: (value: T) => Partial<ImportCommitTraceStep>
+) {
+  if (!trace.enabled) {
+    return run()
+  }
+
+  const startedAt = performance.now()
+  const result = await run()
+  const elapsed = Number((performance.now() - startedAt).toFixed(2))
+  trace.steps.push({
+    step,
+    wallMs: elapsed,
+    ...(summarize ? summarize(result) : {})
+  })
+  return result
+}
+
+function emitImportCommitTrace(trace: ImportCommitTrace) {
+  if (!trace.enabled || trace.steps.length === 0) {
+    return
+  }
+
+  console.info(
+    JSON.stringify({
+      target: 'subtracker-backup-commit',
+      trace: trace.steps
+    })
+  )
+}
+
+type CommitSubtrackerBackupOptions = {
+  traceEnabled?: boolean
+  onTrace?: (steps: ImportCommitTraceStep[]) => void
+}
+
 async function clearBusinessData() {
   await prisma.paymentRecord.deleteMany()
   await prisma.subscriptionTag.deleteMany()
@@ -449,15 +511,7 @@ async function restoreWebhookFromBackup(notificationWebhook: BackupManifest['dat
 
 async function buildTagRestoreMap(manifest: BackupManifest) {
   const existingByName = new Map(
-    (
-      await prisma.tag.findMany({
-        where: {
-          name: {
-            in: manifest.data.tags.map((tag) => tag.name)
-          }
-        }
-      })
-    ).map((tag) => [tag.name, tag])
+    (await findExistingTagRowsByNames(manifest.data.tags.map((tag) => tag.name))).map((tag) => [tag.name, tag])
   )
 
   const idMap = new Map<string, string>()
@@ -530,12 +584,166 @@ function buildFallbackAppSettings() {
   })
 }
 
-export async function commitSubtrackerBackup(input: SubtrackerBackupCommitInput): Promise<SubtrackerBackupCommitResultDto> {
-  const { manifest, logoAssets } = await decodeBackupArchive({
-    filename: 'commit-subtracker-backup.zip',
-    manifest: input.manifest,
-    logoAssets: input.logoAssets
-  })
+function toPaymentRecordCreateManyInput(records: PaymentRecordDto[]) {
+  return records.map((record) => ({
+    id: record.id,
+    subscriptionId: record.subscriptionId,
+    amount: record.amount,
+    currency: record.currency,
+    baseCurrency: record.baseCurrency,
+    convertedAmount: record.convertedAmount,
+    exchangeRate: record.exchangeRate,
+    paidAt: new Date(record.paidAt),
+    periodStart: new Date(record.periodStart),
+    periodEnd: new Date(record.periodEnd),
+    createdAt: new Date(record.createdAt)
+  }))
+}
+
+function isAppendImportNoop(result: Pick<
+  SubtrackerBackupCommitResultDto,
+  'mode' | 'restoredSettings' | 'importedTags' | 'importedSubscriptions' | 'importedPaymentRecords' | 'importedLogos'
+>) {
+  return result.mode === 'append' &&
+    !result.restoredSettings &&
+    result.importedTags === 0 &&
+    result.importedSubscriptions === 0 &&
+    result.importedPaymentRecords === 0 &&
+    result.importedLogos === 0
+}
+
+function chunkArray<T>(items: T[], size: number) {
+  const chunks: T[][] = []
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size))
+  }
+  return chunks
+}
+
+async function findExistingTagRowsByNames(tagNames: string[]) {
+  if (tagNames.length === 0) {
+    return [] as Array<{ id: string; name: string }>
+  }
+
+  if (!isWorkerRuntime()) {
+    return prisma.tag.findMany({
+      where: {
+        name: {
+          in: tagNames
+        }
+      },
+      select: {
+        id: true,
+        name: true
+      }
+    })
+  }
+
+  const db = getRuntimeD1Database()
+  const rows: Array<{ id: string; name: string }> = []
+  for (const batch of chunkArray(Array.from(new Set(tagNames)), D1_IN_CLAUSE_BATCH_SIZE)) {
+    const placeholders = batch.map(() => '?').join(', ')
+    const result = await db
+      .prepare(`SELECT id, name FROM Tag WHERE name IN (${placeholders})`)
+      .bind(...batch)
+      .all<{ id: string; name: string }>()
+    rows.push(...((result.results ?? []) as Array<{ id: string; name: string }>))
+  }
+  return rows
+}
+
+async function findExistingIdsByTable(
+  table: 'Subscription' | 'PaymentRecord',
+  ids: string[]
+) {
+  if (ids.length === 0) {
+    return [] as Array<{ id: string }>
+  }
+
+  if (!isWorkerRuntime()) {
+    if (table === 'Subscription') {
+      return prisma.subscription.findMany({
+        where: {
+          id: {
+            in: ids
+          }
+        },
+        select: {
+          id: true
+        }
+      })
+    }
+
+    return prisma.paymentRecord.findMany({
+      where: {
+        id: {
+          in: ids
+        }
+      },
+      select: {
+        id: true
+      }
+    })
+  }
+
+  const db = getRuntimeD1Database()
+  const rows: Array<{ id: string }> = []
+  for (const batch of chunkArray(Array.from(new Set(ids)), D1_IN_CLAUSE_BATCH_SIZE)) {
+    const placeholders = batch.map(() => '?').join(', ')
+    const result = await db
+      .prepare(`SELECT id FROM ${table} WHERE id IN (${placeholders})`)
+      .bind(...batch)
+      .all<{ id: string }>()
+    rows.push(...((result.results ?? []) as Array<{ id: string }>))
+  }
+  return rows
+}
+
+async function findExistingPaymentRecordIds(records: PaymentRecordDto[], mode: SubtrackerBackupCommitInput['mode']) {
+  if (mode === 'replace' || records.length === 0) {
+    return [] as Array<{ id: string }>
+  }
+
+  const subscriptionIds = Array.from(new Set(records.map((record) => record.subscriptionId)))
+
+  if (!isWorkerRuntime()) {
+    return prisma.paymentRecord.findMany({
+      where: {
+        subscriptionId: {
+          in: subscriptionIds
+        }
+      },
+      select: {
+        id: true
+      }
+    })
+  }
+
+  const db = getRuntimeD1Database()
+  const rows: Array<{ id: string }> = []
+  for (const batch of chunkArray(subscriptionIds, D1_IN_CLAUSE_BATCH_SIZE)) {
+    const placeholders = batch.map(() => '?').join(', ')
+    const result = await db
+      .prepare(`SELECT id FROM PaymentRecord WHERE subscriptionId IN (${placeholders})`)
+      .bind(...batch)
+      .all<{ id: string }>()
+    rows.push(...((result.results ?? []) as Array<{ id: string }>))
+  }
+  return rows
+}
+
+export async function commitSubtrackerBackup(
+  input: SubtrackerBackupCommitInput,
+  options?: CommitSubtrackerBackupOptions
+): Promise<SubtrackerBackupCommitResultDto> {
+  const trace = createImportCommitTrace(options?.traceEnabled)
+  const { manifest, logoAssets } = await traceImportCommitStep(trace, 'decode-backup-archive', () =>
+    decodeBackupArchive({
+      filename: 'commit-subtracker-backup.zip',
+      manifest: input.manifest,
+      logoAssets: input.logoAssets
+    })
+  )
   const previewWarnings = buildBackupWarnings(manifest, Boolean(getWorkerLogoBucket()))
 
   const appSettings = (() => {
@@ -547,36 +755,33 @@ export async function commitSubtrackerBackup(input: SubtrackerBackupCommitInput)
   })()
 
   if (input.mode === 'replace') {
-    await clearBusinessData()
+    await traceImportCommitStep(trace, 'clear-business-data', () => clearBusinessData())
   }
 
-  const { tagIdMap, importedTags, reusedTags } = await buildTagRestoreMap(manifest)
+  const { tagIdMap, importedTags, reusedTags } = await traceImportCommitStep(
+    trace,
+    'build-tag-restore-map',
+    () => buildTagRestoreMap(manifest),
+    (value) => ({ count: value.importedTags + value.reusedTags })
+  )
   const existingSubscriptionIds = new Set(
     (
-      await prisma.subscription.findMany({
-        where: {
-          id: {
-            in: manifest.data.subscriptions.map((item) => item.id)
-          }
-        },
-        select: {
-          id: true
-        }
-      })
+      await traceImportCommitStep(
+        trace,
+        'lookup-existing-subscriptions',
+        () => findExistingIdsByTable('Subscription', manifest.data.subscriptions.map((item) => item.id)),
+        (rows) => ({ count: rows.length })
+      )
     ).map((item) => item.id)
   )
   const existingPaymentRecordIds = new Set(
     (
-      await prisma.paymentRecord.findMany({
-        where: {
-          id: {
-            in: manifest.data.paymentRecords.map((item) => item.id)
-          }
-        },
-        select: {
-          id: true
-        }
-      })
+      await traceImportCommitStep(
+        trace,
+        'lookup-existing-payment-records',
+        () => findExistingPaymentRecordIds(manifest.data.paymentRecords, input.mode),
+        (rows) => ({ count: rows.length })
+      )
     ).map((item) => item.id)
   )
 
@@ -587,65 +792,79 @@ export async function commitSubtrackerBackup(input: SubtrackerBackupCommitInput)
   let importedLogos = 0
   const importedIds = new Set<string>()
   const subscriptionTagRows: Array<{ subscriptionId: string; tagId: string }> = []
+  const paymentRecordRows: PaymentRecordDto[] = []
 
-  for (const subscription of manifest.data.subscriptions) {
-    if (input.mode === 'append' && existingSubscriptionIds.has(subscription.id)) {
-      skippedSubscriptions += 1
-      continue
-    }
+  await traceImportCommitStep(
+    trace,
+    'write-subscriptions',
+    async () => {
+      for (const subscription of manifest.data.subscriptions) {
+        if (input.mode === 'append' && existingSubscriptionIds.has(subscription.id)) {
+          skippedSubscriptions += 1
+          continue
+        }
 
-    const importedLogo = subscription.logoUrl?.startsWith('/static/logos/')
-      ? await importLogoFromAsset(subscription.id, manifest, logoAssets)
-      : null
+        const importedLogo = subscription.logoUrl?.startsWith('/static/logos/')
+          ? await importLogoFromAsset(subscription.id, manifest, logoAssets)
+          : null
 
-    if (importedLogo) {
-      importedLogos += 1
-    }
+        if (importedLogo) {
+          importedLogos += 1
+        }
 
-    await prisma.subscription.create({
-      data: {
-        id: subscription.id,
-        name: subscription.name,
-        description: subscription.description,
-        websiteUrl: subscription.websiteUrl,
-        logoUrl: importedLogo?.logoUrl ?? (getWorkerLogoBucket() ? null : subscription.logoUrl),
-        logoSource: importedLogo?.logoSource ?? (getWorkerLogoBucket() ? null : subscription.logoSource),
-        logoFetchedAt: importedLogo ? new Date() : null,
-        status: subscription.status,
-        amount: subscription.amount,
-        currency: subscription.currency,
-        billingIntervalCount: subscription.billingIntervalCount,
-        billingIntervalUnit: subscription.billingIntervalUnit,
-        autoRenew: subscription.autoRenew,
-        startDate: parseDateInTimezone(subscription.startDate, appSettings.timezone),
-        nextRenewalDate: parseDateInTimezone(subscription.nextRenewalDate, appSettings.timezone),
-        notifyDaysBefore: subscription.notifyDaysBefore,
-        advanceReminderRules: subscription.advanceReminderRules,
-        overdueReminderRules: subscription.overdueReminderRules,
-        webhookEnabled: subscription.webhookEnabled,
-        notes: subscription.notes,
-        createdAt: new Date(subscription.createdAt),
-        updatedAt: new Date(subscription.updatedAt)
+        await prisma.subscription.create({
+          data: {
+            id: subscription.id,
+            name: subscription.name,
+            description: subscription.description,
+            websiteUrl: subscription.websiteUrl,
+            logoUrl: importedLogo?.logoUrl ?? (getWorkerLogoBucket() ? null : subscription.logoUrl),
+            logoSource: importedLogo?.logoSource ?? (getWorkerLogoBucket() ? null : subscription.logoSource),
+            logoFetchedAt: importedLogo ? new Date() : null,
+            status: subscription.status,
+            amount: subscription.amount,
+            currency: subscription.currency,
+            billingIntervalCount: subscription.billingIntervalCount,
+            billingIntervalUnit: subscription.billingIntervalUnit,
+            autoRenew: subscription.autoRenew,
+            startDate: parseDateInTimezone(subscription.startDate, appSettings.timezone),
+            nextRenewalDate: parseDateInTimezone(subscription.nextRenewalDate, appSettings.timezone),
+            notifyDaysBefore: subscription.notifyDaysBefore,
+            advanceReminderRules: subscription.advanceReminderRules,
+            overdueReminderRules: subscription.overdueReminderRules,
+            webhookEnabled: subscription.webhookEnabled,
+            notes: subscription.notes,
+            createdAt: new Date(subscription.createdAt),
+            updatedAt: new Date(subscription.updatedAt)
+          }
+        })
+
+        importedIds.add(subscription.id)
+        for (const backupTagId of subscription.tagIds) {
+          const resolvedTagId = tagIdMap.get(backupTagId)
+          if (!resolvedTagId) continue
+          subscriptionTagRows.push({
+            subscriptionId: subscription.id,
+            tagId: resolvedTagId
+          })
+        }
+
+        importedSubscriptions += 1
       }
-    })
-
-    importedIds.add(subscription.id)
-    for (const backupTagId of subscription.tagIds) {
-      const resolvedTagId = tagIdMap.get(backupTagId)
-      if (!resolvedTagId) continue
-      subscriptionTagRows.push({
-        subscriptionId: subscription.id,
-        tagId: resolvedTagId
-      })
-    }
-
-    importedSubscriptions += 1
-  }
+    },
+    () => ({ count: importedSubscriptions })
+  )
 
   if (subscriptionTagRows.length > 0) {
-    await prisma.subscriptionTag.createMany({
-      data: subscriptionTagRows
-    })
+    await traceImportCommitStep(
+      trace,
+      'write-subscription-tags',
+      () =>
+        prisma.subscriptionTag.createMany({
+          data: subscriptionTagRows
+        }),
+      () => ({ count: subscriptionTagRows.length })
+    )
   }
 
   for (const record of manifest.data.paymentRecords) {
@@ -654,39 +873,43 @@ export async function commitSubtrackerBackup(input: SubtrackerBackupCommitInput)
       continue
     }
 
-    await prisma.paymentRecord.create({
-      data: {
-        id: record.id,
-        subscriptionId: record.subscriptionId,
-        amount: record.amount,
-        currency: record.currency,
-        baseCurrency: record.baseCurrency,
-        convertedAmount: record.convertedAmount,
-        exchangeRate: record.exchangeRate,
-        paidAt: new Date(record.paidAt),
-        periodStart: new Date(record.periodStart),
-        periodEnd: new Date(record.periodEnd),
-        createdAt: new Date(record.createdAt)
-      }
-    })
+    paymentRecordRows.push(record)
     importedPaymentRecords += 1
   }
 
-  if (input.mode === 'replace') {
-    await setSubscriptionOrder(manifest.data.subscriptionOrder.filter((id) => importedIds.has(id)))
-    await restoreSettingsFromBackup(manifest.data.settings)
-    await restoreWebhookFromBackup(manifest.data.notificationWebhook)
-  } else {
-    const mergedOrder = mergeSubscriptionOrder(await getSubscriptionOrder(), manifest.data.subscriptionOrder, importedIds)
-    await setSubscriptionOrder(mergedOrder)
-
-    if (input.restoreSettings) {
-      await restoreSettingsFromBackup(manifest.data.settings)
-      await restoreWebhookFromBackup(manifest.data.notificationWebhook)
-    }
+  if (paymentRecordRows.length > 0) {
+    await traceImportCommitStep(
+      trace,
+      'write-payment-records',
+      () =>
+        prisma.paymentRecord.createMany({
+          data: toPaymentRecordCreateManyInput(paymentRecordRows)
+        }),
+      () => ({ count: paymentRecordRows.length })
+    )
   }
 
-  return {
+  if (input.mode === 'replace') {
+    await traceImportCommitStep(trace, 'restore-replace-followups', async () => {
+      await setSubscriptionOrder(manifest.data.subscriptionOrder.filter((id) => importedIds.has(id)))
+      await restoreSettingsFromBackup(manifest.data.settings)
+      await restoreWebhookFromBackup(manifest.data.notificationWebhook)
+    })
+  } else {
+    await traceImportCommitStep(trace, 'restore-append-followups', async () => {
+      if (importedIds.size > 0) {
+        const mergedOrder = mergeSubscriptionOrder(await getSubscriptionOrder(), manifest.data.subscriptionOrder, importedIds)
+        await setSubscriptionOrder(mergedOrder)
+      }
+
+      if (input.restoreSettings) {
+        await restoreSettingsFromBackup(manifest.data.settings)
+        await restoreWebhookFromBackup(manifest.data.notificationWebhook)
+      }
+    })
+  }
+
+  const result = {
     mode: input.mode,
     clearedExistingData: input.mode === 'replace',
     restoredSettings: input.mode === 'replace' || input.restoreSettings,
@@ -699,4 +922,10 @@ export async function commitSubtrackerBackup(input: SubtrackerBackupCommitInput)
     importedLogos,
     warnings: previewWarnings
   }
+
+  if (trace.enabled && trace.steps.length > 0) {
+    options?.onTrace?.(trace.steps)
+  }
+  emitImportCommitTrace(trace)
+  return result
 }

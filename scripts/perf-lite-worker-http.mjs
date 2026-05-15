@@ -57,6 +57,9 @@ async function requestTarget(baseUrl, token, target, importPayload, wallosImport
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json'
   }
+  if (process.env.SUBTRACKER_PERF_TRACE === '1') {
+    headers['x-subtracker-perf-trace'] = '1'
+  }
 
   switch (target) {
     case 'overview': {
@@ -139,11 +142,12 @@ async function loginPayload(baseUrl) {
 }
 
 async function buildSubtrackerCommitBody(baseUrl, headers, importPayload, protocol) {
+  const commitMode = String(importPayload.commitMode ?? 'append')
   if (protocol === 'direct') {
     return {
       manifest: importPayload.manifest,
       logoAssets: importPayload.logoAssets,
-      mode: 'append',
+      mode: commitMode,
       restoreSettings: false
     }
   }
@@ -162,7 +166,7 @@ async function buildSubtrackerCommitBody(baseUrl, headers, importPayload, protoc
     }
     return {
       importToken,
-      mode: 'append',
+      mode: commitMode,
       restoreSettings: false
     }
   }
@@ -170,13 +174,13 @@ async function buildSubtrackerCommitBody(baseUrl, headers, importPayload, protoc
   return typeof importToken === 'string'
     ? {
         importToken,
-        mode: 'append',
+        mode: commitMode,
         restoreSettings: false
       }
     : {
         manifest: importPayload.manifest,
         logoAssets: importPayload.logoAssets,
-        mode: 'append',
+        mode: commitMode,
         restoreSettings: false
       }
 }
@@ -227,6 +231,7 @@ async function main() {
     subtracker: String(args['subtracker-commit-protocol'] ?? 'auto'),
     wallos: String(args['wallos-commit-protocol'] ?? 'auto')
   }
+  const subtrackerCommitMode = String(args['subtracker-commit-mode'] ?? 'append')
   const targets = String(args.target ?? 'overview,scan-debug')
     .split(',')
     .map((item) => item.trim())
@@ -247,7 +252,8 @@ async function main() {
     filename: `${fixtureLabel(fixtureMeta)}.zip`,
     manifest: fixture.dataset.manifest,
     logoAssets: fixture.dataset.logoAssets,
-    subscriptionId
+    subscriptionId,
+    commitMode: subtrackerCommitMode
   }
   const wallosImportPayload = {
     filename: `${fixtureLabel(fixtureMeta)}-wallos.zip`,

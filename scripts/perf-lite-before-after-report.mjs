@@ -579,7 +579,7 @@ async function runNodeSeed(phaseRoot, env, fixtureOptions) {
   )
 }
 
-async function runNodeHarness(phaseRoot, env, fixtureOptions, targets, resultPath, profileDir, profileName, warmup, repeat) {
+async function runNodeHarness(phaseRoot, env, fixtureOptions, targets, resultPath, profileDir, profileName, warmup, repeat, subtrackerCommitMode) {
   await emptyDir(profileDir)
   const script = path.join(phaseRoot, 'scripts', 'perf-lite-measure.mjs')
   const runnerScript = path.join(phaseRoot, 'scripts', 'perf-lite-measure-runner.ts')
@@ -616,7 +616,9 @@ async function runNodeHarness(phaseRoot, env, fixtureOptions, targets, resultPat
       '--tsx-bin',
       tsxBin,
       '--cron-dry-run',
-      'true'
+      'true',
+      '--subtracker-commit-mode',
+      subtrackerCommitMode
     ],
     {
       cwd: phaseRoot,
@@ -626,7 +628,7 @@ async function runNodeHarness(phaseRoot, env, fixtureOptions, targets, resultPat
   return parseJsonLine(result.stdout)
 }
 
-async function runWorkerHarness(phaseRoot, env, fixtureOptions, targets, baseUrl, repeat, warmup, resultPath) {
+async function runWorkerHarness(phaseRoot, env, fixtureOptions, targets, baseUrl, repeat, warmup, resultPath, subtrackerCommitMode) {
   const script = path.join(phaseRoot, 'scripts', 'perf-lite-worker-http.mjs')
   const args = [
     script,
@@ -647,7 +649,9 @@ async function runWorkerHarness(phaseRoot, env, fixtureOptions, targets, baseUrl
     '--warmup',
     String(warmup),
     '--result-path',
-    resultPath
+    resultPath,
+    '--subtracker-commit-mode',
+    subtrackerCommitMode
   ]
   const result = await runCommandOrThrow(process.execPath, args, {
     cwd: phaseRoot,
@@ -907,6 +911,7 @@ async function main() {
   const args = parseArgs()
   const baselineCommit = String(args.baseline ?? DEFAULT_BASELINE_COMMIT)
   const currentCommit = String(args.current ?? DEFAULT_CURRENT_COMMIT)
+  const subtrackerCommitMode = String(args['subtracker-commit-mode'] ?? 'append')
   const targets = splitTargets(args.target ?? DEFAULT_TARGETS.join(','))
   const subscriptions = Number.parseInt(String(args.subscriptions ?? DEFAULTS.subscriptions), 10)
   const tags = Number.parseInt(String(args.tags ?? DEFAULTS.tags), 10)
@@ -1013,13 +1018,24 @@ async function main() {
         nodeProfileDir,
         `${phase.phase}-${fixtureName}`,
         warmup,
-        repeat
+        repeat,
+        subtrackerCommitMode
       )
 
       await withInspectorProfile(
         inspectorPort,
         async () => {
-          await runWorkerHarness(phase.root, wrangler.env, fixtureOptions, targets, baseUrl, repeat, warmup, workerResultPath)
+          await runWorkerHarness(
+            phase.root,
+            wrangler.env,
+            fixtureOptions,
+            targets,
+            baseUrl,
+            repeat,
+            warmup,
+            workerResultPath,
+            subtrackerCommitMode
+          )
         },
         workerProfilePath
       )

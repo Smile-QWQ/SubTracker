@@ -20,6 +20,7 @@ type WallosImportPayload = {
 
 type ServiceBundle = Awaited<ReturnType<typeof loadServices>>
 type CommitProtocol = 'auto' | 'direct' | 'token'
+type SubtrackerCommitMode = 'append' | 'replace'
 type SubscriptionDetailDependencies = {
   getSubscriptionWithTags?: (id: string) => Promise<unknown>
   listSubscriptionPaymentRecords?: (id: string) => Promise<unknown[]>
@@ -282,6 +283,7 @@ async function prepareTargetInvocation(
   options: {
     cronDryRun: boolean
     subtrackerCommitProtocol: CommitProtocol
+    subtrackerCommitMode: SubtrackerCommitMode
     wallosCommitProtocol: CommitProtocol
   }
 ) {
@@ -349,7 +351,7 @@ async function prepareTargetInvocation(
             }
             return services.commitSubtrackerBackup({
               importToken,
-              mode: 'append',
+              mode: options.subtrackerCommitMode,
               restoreSettings: false
             })
           })
@@ -359,7 +361,7 @@ async function prepareTargetInvocation(
         services.commitSubtrackerBackup({
           manifest: importPayload.manifest,
           logoAssets: importPayload.logoAssets,
-          mode: 'append',
+          mode: options.subtrackerCommitMode,
           restoreSettings: false
         })
     }
@@ -423,6 +425,7 @@ async function main() {
   const profileDir = String(args['profile-dir'])
   const cronDryRun = String(args['cron-dry-run'] ?? 'false') === 'true'
   const subtrackerCommitProtocol = String(args['subtracker-commit-protocol'] ?? 'auto') as CommitProtocol
+  const subtrackerCommitMode = String(args['subtracker-commit-mode'] ?? 'append') as SubtrackerCommitMode
   const wallosCommitProtocol = String(args['wallos-commit-protocol'] ?? 'auto') as CommitProtocol
   const services = await loadServices(sourceRoot)
   const importPayload: ImportPayload = {
@@ -447,6 +450,7 @@ async function main() {
       const invoke = await prepareTargetInvocation(target, services, importPayload, wallosImportPayload, fixture, index, {
         cronDryRun,
         subtrackerCommitProtocol,
+        subtrackerCommitMode,
         wallosCommitProtocol
       })
       const startCpu = process.cpuUsage()

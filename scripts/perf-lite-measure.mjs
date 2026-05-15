@@ -93,6 +93,7 @@ async function main() {
   const sourceRoot = String(args['source-root'] ?? process.cwd())
   const cronDryRun = String(args['cron-dry-run'] ?? 'false') === 'true'
   const subtrackerCommitProtocol = String(args['subtracker-commit-protocol'] ?? 'auto')
+  const subtrackerCommitMode = String(args['subtracker-commit-mode'] ?? 'append')
   const wallosCommitProtocol = String(args['wallos-commit-protocol'] ?? 'auto')
   const profileDir = String(args['profile-dir'] ?? PERF_PROFILE_DIR)
   const runnerScript = String(args['runner-script'] ?? path.resolve(process.cwd(), 'scripts/perf-lite-measure-runner.ts'))
@@ -130,6 +131,8 @@ async function main() {
     cronDryRun ? 'true' : 'false',
     '--subtracker-commit-protocol',
     subtrackerCommitProtocol,
+    '--subtracker-commit-mode',
+    subtrackerCommitMode,
     '--wallos-commit-protocol',
     wallosCommitProtocol
   ]
