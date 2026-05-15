@@ -15,6 +15,10 @@ import {
 } from './perf-lite-common.mjs'
 
 const RESET_TABLES = [
+  'NotificationDelivery',
+  'WebhookDelivery',
+  'ImportPreview',
+  'ComputedCache',
   'PaymentRecord',
   'SubscriptionTag',
   'Subscription',
@@ -98,6 +102,72 @@ const ENSURE_TABLE_STATEMENTS = [
   `
   CREATE INDEX IF NOT EXISTS "PaymentRecord_subscriptionId_paidAt_idx"
   ON "PaymentRecord"("subscriptionId", "paidAt");
+  `,
+  `
+  CREATE TABLE IF NOT EXISTS "WebhookDelivery" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "subscriptionId" TEXT,
+    "eventType" TEXT NOT NULL,
+    "resourceKey" TEXT NOT NULL,
+    "periodKey" TEXT NOT NULL,
+    "targetUrl" TEXT,
+    "requestMethod" TEXT,
+    "payloadJson" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'pending',
+    "responseCode" INTEGER,
+    "responseBody" TEXT,
+    "attemptCount" INTEGER NOT NULL DEFAULT 0,
+    "lastAttemptAt" DATETIME,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  `,
+  `
+  CREATE UNIQUE INDEX IF NOT EXISTS "WebhookDelivery_eventType_resourceKey_periodKey_key"
+  ON "WebhookDelivery"("eventType", "resourceKey", "periodKey");
+  `,
+  `
+  CREATE INDEX IF NOT EXISTS "WebhookDelivery_status_createdAt_idx"
+  ON "WebhookDelivery"("status", "createdAt");
+  `,
+  `
+  CREATE TABLE IF NOT EXISTS "NotificationDelivery" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "channel" TEXT NOT NULL,
+    "eventType" TEXT NOT NULL,
+    "resourceKey" TEXT NOT NULL,
+    "periodKey" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  `,
+  `
+  CREATE UNIQUE INDEX IF NOT EXISTS "NotificationDelivery_channel_eventType_resourceKey_periodKey_key"
+  ON "NotificationDelivery"("channel", "eventType", "resourceKey", "periodKey");
+  `,
+  `
+  CREATE TABLE IF NOT EXISTS "ImportPreview" (
+    "token" TEXT NOT NULL PRIMARY KEY,
+    "previewJson" TEXT NOT NULL,
+    "expiresAt" DATETIME NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  `,
+  `
+  CREATE INDEX IF NOT EXISTS "ImportPreview_expiresAt_idx" ON "ImportPreview"("expiresAt");
+  `,
+  `
+  CREATE TABLE IF NOT EXISTS "ComputedCache" (
+    "namespace" TEXT NOT NULL,
+    "cacheKey" TEXT NOT NULL,
+    "valueJson" TEXT NOT NULL,
+    "expiresAt" DATETIME NOT NULL,
+    "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY ("namespace", "cacheKey")
+  );
+  `,
+  `
+  CREATE INDEX IF NOT EXISTS "ComputedCache_namespace_expiresAt_idx"
+  ON "ComputedCache"("namespace", "expiresAt");
   `,
   `
   CREATE TABLE IF NOT EXISTS "ExchangeRateSnapshot" (
@@ -259,16 +329,21 @@ async function ensureWorkerSchema(baseUrl) {
   }
 }
 
-function runWranglerD1(sqlFilePath) {
+function runWranglerD1(sqlFilePath, persistTo) {
+  const baseArgs = ['wrangler', 'd1', 'execute', 'DB', '--local', '--file', sqlFilePath]
+  if (persistTo) {
+    baseArgs.push('--persist-to', persistTo)
+  }
+
   return new Promise((resolve, reject) => {
     const child =
       process.platform === 'win32'
-        ? spawn('cmd.exe', ['/d', '/s', '/c', 'npx', 'wrangler', 'd1', 'execute', 'DB', '--local', '--file', sqlFilePath], {
+        ? spawn('cmd.exe', ['/d', '/s', '/c', 'npx', ...baseArgs], {
             cwd: process.cwd(),
             stdio: 'inherit',
             shell: false
           })
-        : spawn('npx', ['wrangler', 'd1', 'execute', 'DB', '--local', '--file', sqlFilePath], {
+        : spawn('npx', baseArgs, {
             cwd: process.cwd(),
             stdio: 'inherit',
             shell: false
@@ -288,6 +363,7 @@ function runWranglerD1(sqlFilePath) {
 async function main() {
   const args = parseArgs()
   const baseUrl = String(args['base-url'] ?? 'http://127.0.0.1:8787')
+  const persistTo = typeof args['persist-to'] === 'string' ? String(args['persist-to']) : null
   const meta = {
     subscriptions: toInt(args.subscriptions, DEFAULTS.subscriptions),
     tags: toInt(args.tags, DEFAULTS.tags),
@@ -302,13 +378,14 @@ async function main() {
 
   const sqlPath = path.join(PERF_ROOT, `${fixtureLabel(meta)}-worker-seed-${nowStamp()}.sql`)
   await writeFile(sqlPath, `${buildSeedStatements(fixture)}\n`, 'utf8')
-  await runWranglerD1(sqlPath)
+  await runWranglerD1(sqlPath, persistTo)
 
   console.log(
     JSON.stringify({
       ok: true,
       fixture: fixtureLabel(meta),
       sqlPath,
+      persistTo,
       rows: {
         subscriptions: fixture.dataset.subscriptions.length,
         tags: fixture.dataset.tags.length,

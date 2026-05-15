@@ -15,17 +15,24 @@ import {
 
 function runTsScript(args) {
   return new Promise((resolve, reject) => {
+    const parsedArgs = parseArgs(args)
     const sourceRootArgIndex = args.indexOf('--source-root')
     const sourceRoot =
       sourceRootArgIndex >= 0 && args[sourceRootArgIndex + 1]
         ? path.resolve(args[sourceRootArgIndex + 1])
         : process.cwd()
-    const runnerPath = path.resolve(process.cwd(), 'scripts/perf-lite-measure-runner.ts')
+    const runnerPath = String(parsedArgs['runner-script'] ?? path.resolve(process.cwd(), 'scripts/perf-lite-measure-runner.ts'))
+    const tsxBin = String(
+      parsedArgs['tsx-bin'] ??
+        (process.platform === 'win32'
+          ? path.resolve(process.cwd(), 'node_modules/.bin/tsx.cmd')
+          : path.resolve(process.cwd(), 'node_modules/.bin/tsx'))
+    )
     const child =
       process.platform === 'win32'
         ? spawn(
             'cmd.exe',
-            ['/d', '/s', '/c', path.resolve(process.cwd(), 'node_modules/.bin/tsx.cmd'), runnerPath, ...args],
+            ['/d', '/s', '/c', tsxBin, runnerPath, ...args],
             {
               cwd: sourceRoot,
               stdio: ['inherit', 'pipe', 'pipe'],
@@ -35,7 +42,7 @@ function runTsScript(args) {
               }
             }
           )
-        : spawn(path.resolve(process.cwd(), 'node_modules/.bin/tsx'), [runnerPath, ...args], {
+        : spawn(tsxBin, [runnerPath, ...args], {
             cwd: sourceRoot,
             stdio: ['inherit', 'pipe', 'pipe'],
             shell: false,
@@ -82,11 +89,19 @@ async function main() {
   }
   const profileEnabled = Boolean(args.profile)
   const profileName = String(args['profile-name'] ?? `${fixtureLabel(fixtureMeta)}-${targets.join('_')}-${nowStamp()}`)
-  const resultPath = path.join(PERF_RESULT_DIR, `${fixtureLabel(fixtureMeta)}-${nowStamp()}.jsonl`)
+  const resultPath = String(args['result-path'] ?? path.join(PERF_RESULT_DIR, `${fixtureLabel(fixtureMeta)}-${nowStamp()}.jsonl`))
   const sourceRoot = String(args['source-root'] ?? process.cwd())
   const cronDryRun = String(args['cron-dry-run'] ?? 'false') === 'true'
   const subtrackerCommitProtocol = String(args['subtracker-commit-protocol'] ?? 'auto')
   const wallosCommitProtocol = String(args['wallos-commit-protocol'] ?? 'auto')
+  const profileDir = String(args['profile-dir'] ?? PERF_PROFILE_DIR)
+  const runnerScript = String(args['runner-script'] ?? path.resolve(process.cwd(), 'scripts/perf-lite-measure-runner.ts'))
+  const tsxBin = String(
+    args['tsx-bin'] ??
+      (process.platform === 'win32'
+        ? path.resolve(process.cwd(), 'node_modules/.bin/tsx.cmd')
+        : path.resolve(process.cwd(), 'node_modules/.bin/tsx'))
+  )
 
   await ensurePerfDirs()
 
@@ -104,7 +119,11 @@ async function main() {
     '--profile-name',
     profileName,
     '--profile-dir',
-    PERF_PROFILE_DIR,
+    profileDir,
+    '--runner-script',
+    runnerScript,
+    '--tsx-bin',
+    tsxBin,
     '--source-root',
     sourceRoot,
     '--cron-dry-run',

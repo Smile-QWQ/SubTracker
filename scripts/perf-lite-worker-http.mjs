@@ -106,9 +106,36 @@ async function requestTarget(baseUrl, token, target, importPayload, wallosImport
       })
       return response.json()
     }
+    case 'subscription-detail': {
+      const response = await fetch(`${baseUrl}/api/v1/subscriptions/${importPayload.subscriptionId}`, { headers })
+      return response.json()
+    }
+    case 'subscription-payment-records': {
+      const response = await fetch(`${baseUrl}/api/v1/subscriptions/${importPayload.subscriptionId}/payment-records`, {
+        headers
+      })
+      return response.json()
+    }
     default:
       throw new Error(`Unsupported worker target: ${target}`)
   }
+}
+
+async function loginPayload(baseUrl) {
+  const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      username: 'admin',
+      password: 'admin'
+    })
+  })
+  if (!response.ok) {
+    throw new Error(`Login failed with status ${response.status}`)
+  }
+  return response.json()
 }
 
 async function buildSubtrackerCommitBody(baseUrl, headers, importPayload, protocol) {
@@ -205,6 +232,7 @@ async function main() {
     .map((item) => item.trim())
     .filter(Boolean)
   const repeat = toInt(args.repeat, DEFAULTS.repeat)
+  const warmup = toInt(args.warmup, 0)
   const fixtureMeta = {
     subscriptions: toInt(args.subscriptions, DEFAULTS.subscriptions),
     tags: toInt(args.tags, DEFAULTS.tags),
@@ -214,10 +242,12 @@ async function main() {
 
   await ensurePerfDirs()
   const fixture = await readJson(fixturePath(fixtureMeta))
+  const subscriptionId = fixture.dataset.subscriptions[0]?.id ?? 'perf_sub_1'
   const importPayload = {
     filename: `${fixtureLabel(fixtureMeta)}.zip`,
     manifest: fixture.dataset.manifest,
-    logoAssets: fixture.dataset.logoAssets
+    logoAssets: fixture.dataset.logoAssets,
+    subscriptionId
   }
   const wallosImportPayload = {
     filename: `${fixtureLabel(fixtureMeta)}-wallos.zip`,
@@ -226,29 +256,31 @@ async function main() {
     logoAssets: fixture.dataset.wallosPreparedPayload.logoAssets
   }
   const token = await login(baseUrl)
-  const resultPath = `${PERF_RESULT_DIR}\\${fixtureLabel(fixtureMeta)}-worker-${nowStamp()}.jsonl`
+  const resultPath = String(args['result-path'] ?? `${PERF_RESULT_DIR}\\${fixtureLabel(fixtureMeta)}-worker-${nowStamp()}.jsonl`)
   const summaryRows = []
 
   for (const target of targets) {
     const wallValues = []
     const resultSizeValues = []
 
-    for (let index = 0; index < repeat; index += 1) {
+    for (let index = 0; index < warmup + repeat; index += 1) {
       const startedAt = performance.now()
       const result = await requestTarget(baseUrl, token, target, importPayload, wallosImportPayload, protocols)
       const wallMs = performance.now() - startedAt
       const resultSizeBytes = Buffer.byteLength(JSON.stringify(result))
-      wallValues.push(wallMs)
-      resultSizeValues.push(resultSizeBytes)
+      if (index >= warmup) {
+        wallValues.push(wallMs)
+        resultSizeValues.push(resultSizeBytes)
 
-      await appendJsonl(resultPath, {
-        target,
-        dataset: fixtureLabel(fixtureMeta),
-        iteration: index + 1,
-        wallMs: Number(wallMs.toFixed(2)),
-        resultSizeBytes,
-        status: result?.error ? 'failed' : 'ok'
-      })
+        await appendJsonl(resultPath, {
+          target,
+          dataset: fixtureLabel(fixtureMeta),
+          iteration: index - warmup + 1,
+          wallMs: Number(wallMs.toFixed(2)),
+          resultSizeBytes,
+          status: result?.error ? 'failed' : 'ok'
+        })
+      }
     }
 
     summaryRows.push({
@@ -274,3 +306,5 @@ main().catch((error) => {
   console.error(error)
   process.exit(1)
 })
+
+export { login, loginPayload, requestTarget }
