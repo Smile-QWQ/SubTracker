@@ -13,3 +13,4 @@ apps/api/prisma/test.db-journal
 apps/api/dev.db
 apps/api/dev.db-journal
 apps/api/apps/api/storage/
+docs

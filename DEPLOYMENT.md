@@ -208,15 +208,43 @@ https://api.resend.com/emails
 - Resend 邮件
 - AI 文本 / 图片识别
 - Wallos JSON / SQLite / ZIP 导入
+- SubTracker 备份 ZIP 导入
 
 ### 不支持
 
 - 本地 OCR
 - 原生 SMTP
+- 标签月预算
+- 独立预算统计页
+- 仪表盘趋势图 / 标签预算图
+- 费用统计自动续订占比图
 
 ---
 
-## 九、Worker Lite 的性能取舍
+## 九、从旧 lite 版本升级
+
+如果你的 fork 仍停留在：
+
+- `be70f8d2d9d1a7a0c9f6e814ff7f4c16e57cefd5`
+
+可以直接通过当前 GitHub Actions 部署到本版本：
+
+- **不需要手工数据库迁移**
+- **不需要重建 D1**
+
+升级后的对外变化：
+
+- 标签月预算、预算页和对应菜单入口已删除
+- 仪表盘改为轻量首页，只保留核心指标、全局预算和即将续订列表
+- 费用统计只保留费用概览、状态分布、币种分布、月订阅支出 TOP10 与 AI 总结
+- Wallos / SubTracker 备份导入仍可使用，但需要使用同版本前端完成导入流程
+- 自动续费会分批追赶历史积压，不再一次性补完整个 backlog
+
+对于普通 Web 用户，这些变化随同一版本前端一起发布；部署后刷新页面即可使用新界面。
+
+---
+
+## 十、Worker Lite 的性能取舍
 
 这个分支面向 **Cloudflare Worker Free**，因此实现上做了明确的 Lite 化裁剪，而不是完全复刻 Docker 版的运行模型。
 
@@ -233,7 +261,6 @@ https://api.resend.com/emails
 - `/settings`（5 分钟）
 - `/exchange-rates/latest`（5 分钟）
 - `/statistics/overview`（5 分钟）
-- `/statistics/budgets`（15 分钟）
 - `/calendar/events`（10 分钟）
 
 仍保留短 TTL 内存缓存的读取接口包括：
@@ -253,7 +280,7 @@ https://api.resend.com/emails
 
 - 正常写操作后，统计/日历/汇率相关接口通常会立即切到新版本缓存，而不是机械地等 TTL 过期
 - 真正可能自然短暂变旧的主要是 `/statistics/overview`，在无写操作场景下最多约 5 分钟
-- `/statistics/budgets` 与 `/calendar/events` 更依赖 version bump，正常情况下不应频繁看到明显旧值
+- `/calendar/events` 更依赖 version bump，正常情况下不应频繁看到明显旧值
 - L1 仍是 isolate 级缓存，不保证跨实例强一致
 - D1 二级缓存会跨 isolate 复用，但通过版本号失效而不是逐条删除
 
@@ -278,7 +305,7 @@ https://api.resend.com/emails
 - 读取类接口：使用 isolate 内存短缓存
 - 热点聚合接口：额外落一层 D1 `ComputedCache`
 - 通知去重：回到 D1
-- 导入预览 token：回到 D1
+- 导入预览：按 lite 版导入流程处理
 - Logo 搜索缓存：仅保留进程内短缓存
 
 另外，`ComputedCache` 过期行会通过现有的 hourly Worker cron 顺手清理，不单独增加新的调度器。
@@ -290,11 +317,12 @@ https://api.resend.com/emails
 - Wallos JSON 导入
 - Wallos SQLite 数据库导入（`.db` / `.sqlite` / `.sqlite3`）
 - Wallos ZIP 备份导入
+- SubTracker 备份 ZIP 导入
 
 其中：
 
 - JSON / SQLite / ZIP 的文件解析发生在浏览器端
-- Worker 负责接收预览结果、暂存导入令牌、处理 ZIP Logo（若启用 R2）并最终写库
+- Worker 负责处理 ZIP Logo（若启用 R2）并最终写库
 
 并且会尽量对齐 Wallos 自己的运行时语义：
 
@@ -346,8 +374,42 @@ Worker Lite 的 Logo 搜索只保留：
 - 默认每分钟触发一次提醒扫描
 - 只在规则命中的那一分钟发送提醒
 - 相比旧的 `*/5` 版本，提醒更实时，但不再做 5 分钟补偿命中
+- 没有启用任何通知渠道时，普通 scheduled scan 会直接短路；`/notifications/scan-debug` 仍可用于排障
 
-### 6. 错误提示会明确说明 Worker 限制
+自动续费也做了 lite 限额：
+
+- 历史积压会分批追赶
+- 不再保证一次 cron 就补齐所有过期周期
+
+### 6. 仪表盘 / 费用统计已按 lite 重排
+
+仪表盘只保留轻量信息：
+
+- 顶部摘要指标
+- 全局月 / 年预算使用情况
+- 即将续订列表
+
+费用统计只保留有真实数据支撑的统计视图：
+
+- 费用概览
+- 状态分布
+- 订阅币种分布
+- 月订阅支出 TOP10
+- AI 总结
+
+以下功能 / 展示已从 lite 分支移除：
+
+- 标签月预算
+- 标签月度支出
+- 未来 12 个月支付趋势
+- 未来 30 天按日续订分布
+- 自动续订占比
+
+### 7. 登录体验
+
+登录、记住我、默认密码修改提醒和登录失败限流继续保留；从旧 lite 版本升级后，原账号可以继续登录。
+
+### 8. 错误提示会明确说明 Worker 限制
 
 前端遇到：
 
@@ -361,7 +423,7 @@ Worker Lite 的 Logo 搜索只保留：
 
 ---
 
-## 十、本地手动部署（开发者可选）
+## 十一、本地手动部署（开发者可选）
 
 如果你不是普通 fork 用户，而是本地维护这个分支的开发者，也可以直接在本机执行：
 
@@ -382,7 +444,7 @@ npm run deploy:worker:r2
 
 ---
 
-## 十一、本地开发（开发者可选）
+## 十二、本地开发（开发者可选）
 
 如果你需要本地调试 Worker：
 
@@ -397,6 +459,3 @@ http://127.0.0.1:8787
 ```
 
 > 注意：本地 `wrangler dev` 不会自动触发 cron。
-
----
-
