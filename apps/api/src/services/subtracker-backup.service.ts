@@ -60,6 +60,8 @@ type CachedImportEntry = {
   preview: SubtrackerBackupInspectResultDto
 }
 
+type ExistingIdRow = { id: string }
+
 const previewCache = new Map<string, CachedImportEntry>()
 
 function cleanupExpiredImports() {
@@ -487,6 +489,22 @@ async function importLogoFromAsset(
   return saveImportedLogoBuffer(entry.buffer, entry.contentType, 'backup-zip')
 }
 
+function toPaymentRecordCreateManyInput(records: PaymentRecordDto[]) {
+  return records.map((record) => ({
+    id: record.id,
+    subscriptionId: record.subscriptionId,
+    amount: record.amount,
+    currency: record.currency,
+    baseCurrency: record.baseCurrency,
+    convertedAmount: record.convertedAmount,
+    exchangeRate: record.exchangeRate,
+    paidAt: new Date(record.paidAt),
+    periodStart: new Date(record.periodStart),
+    periodEnd: new Date(record.periodEnd),
+    createdAt: new Date(record.createdAt)
+  }))
+}
+
 export async function commitSubtrackerBackup(input: SubtrackerBackupCommitInput): Promise<SubtrackerBackupCommitResultDto> {
   cleanupExpiredImports()
 
@@ -519,27 +537,30 @@ export async function commitSubtrackerBackup(input: SubtrackerBackupCommitInput)
       })
     ).map((item) => item.id)
   )
-  const existingPaymentRecordIds = new Set(
-    (
-      await prisma.paymentRecord.findMany({
-        where: {
-          id: {
-            in: manifest.data.paymentRecords.map((item) => item.id)
+  const incomingPaymentSubscriptionIds = Array.from(new Set(manifest.data.paymentRecords.map((item) => item.subscriptionId)))
+  const existingPaymentRecordRows: ExistingIdRow[] =
+    input.mode === 'append' && incomingPaymentSubscriptionIds.length
+      ? await prisma.paymentRecord.findMany({
+          where: {
+            subscriptionId: {
+              in: incomingPaymentSubscriptionIds
+            }
+          },
+          select: {
+            id: true
           }
-        },
-        select: {
-          id: true
-        }
-      })
-    ).map((item) => item.id)
-  )
+        })
+      : []
+  const existingPaymentRecordIds = new Set(existingPaymentRecordRows.map((item) => item.id))
 
   let importedSubscriptions = 0
   let skippedSubscriptions = 0
   let importedPaymentRecords = 0
   let skippedPaymentRecords = 0
   let importedLogos = 0
+  const importedSubscriptionIds = new Set<string>()
   const subscriptionTagRows: Array<{ subscriptionId: string; tagId: string }> = []
+  const paymentRecordRows: PaymentRecordDto[] = []
 
   for (const subscription of manifest.data.subscriptions) {
     if (input.mode === 'append' && existingSubscriptionIds.has(subscription.id)) {
@@ -589,6 +610,7 @@ export async function commitSubtrackerBackup(input: SubtrackerBackupCommitInput)
       })
     }
 
+    importedSubscriptionIds.add(subscription.id)
     importedSubscriptions += 1
   }
 
@@ -604,22 +626,14 @@ export async function commitSubtrackerBackup(input: SubtrackerBackupCommitInput)
       continue
     }
 
-    await prisma.paymentRecord.create({
-      data: {
-        id: record.id,
-        subscriptionId: record.subscriptionId,
-        amount: record.amount,
-        currency: record.currency,
-        baseCurrency: record.baseCurrency,
-        convertedAmount: record.convertedAmount,
-        exchangeRate: record.exchangeRate,
-        paidAt: new Date(record.paidAt),
-        periodStart: new Date(record.periodStart),
-        periodEnd: new Date(record.periodEnd),
-        createdAt: new Date(record.createdAt)
-      }
-    })
+    paymentRecordRows.push(record)
     importedPaymentRecords += 1
+  }
+
+  if (paymentRecordRows.length > 0) {
+    await prisma.paymentRecord.createMany({
+      data: toPaymentRecordCreateManyInput(paymentRecordRows)
+    })
   }
 
   if (input.mode === 'replace') {
@@ -627,13 +641,15 @@ export async function commitSubtrackerBackup(input: SubtrackerBackupCommitInput)
     await restoreSettingsFromBackup(manifest.data.settings)
     await setSetting('notificationWebhook', manifest.data.notificationWebhook)
   } else {
-    const appendOrder = new Set(await getSubscriptionOrder())
-    for (const id of manifest.data.subscriptionOrder) {
-      if (manifest.data.subscriptions.some((item) => item.id === id) && !appendOrder.has(id)) {
-        appendOrder.add(id)
+    if (importedSubscriptionIds.size > 0) {
+      const appendOrder = new Set(await getSubscriptionOrder())
+      for (const id of manifest.data.subscriptionOrder) {
+        if (importedSubscriptionIds.has(id) && !appendOrder.has(id)) {
+          appendOrder.add(id)
+        }
       }
+      await setSubscriptionOrder(Array.from(appendOrder))
     }
-    await setSubscriptionOrder(Array.from(appendOrder))
 
     if (input.restoreSettings) {
       await restoreSettingsFromBackup(manifest.data.settings)

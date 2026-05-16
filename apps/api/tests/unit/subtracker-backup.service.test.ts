@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
     paymentRecord: {
       findMany: vi.fn(),
       create: vi.fn(),
+      createMany: vi.fn(),
       deleteMany: vi.fn()
     },
     subscriptionTag: {
@@ -68,8 +69,57 @@ vi.mock('node:fs/promises', () => ({
   rm: mocks.rmMock
 }))
 
+vi.mock('adm-zip', () => {
+  return {
+    default: class MockAdmZip {
+      private entries: Array<{ entryName: string; isDirectory: boolean; data: Buffer }> = []
+
+      constructor(buffer?: Buffer) {
+        if (!buffer?.length) {
+          return
+        }
+        const parsed = JSON.parse(buffer.toString('utf8')) as Array<{ entryName: string; isDirectory: boolean; data: string }>
+        this.entries = parsed.map((entry) => ({
+          entryName: entry.entryName,
+          isDirectory: entry.isDirectory,
+          data: Buffer.from(entry.data, 'base64')
+        }))
+      }
+
+      addFile(entryName: string, data: Buffer) {
+        this.entries.push({
+          entryName,
+          isDirectory: false,
+          data: Buffer.from(data)
+        })
+      }
+
+      getEntries() {
+        return this.entries.map((entry) => ({
+          entryName: entry.entryName,
+          isDirectory: entry.isDirectory,
+          getData: () => Buffer.from(entry.data)
+        }))
+      }
+
+      toBuffer() {
+        return Buffer.from(
+          JSON.stringify(
+            this.entries.map((entry) => ({
+              entryName: entry.entryName,
+              isDirectory: entry.isDirectory,
+              data: entry.data.toString('base64')
+            }))
+          ),
+          'utf8'
+        )
+      }
+    }
+  }
+})
+
 import AdmZip from 'adm-zip'
-import { createSubtrackerBackupArchive, inspectSubtrackerBackupFile } from '../../src/services/subtracker-backup.service'
+import { commitSubtrackerBackup, createSubtrackerBackupArchive, inspectSubtrackerBackupFile } from '../../src/services/subtracker-backup.service'
 
 describe('subtracker backup service', () => {
   beforeEach(() => {
@@ -81,6 +131,7 @@ describe('subtracker backup service', () => {
     mocks.prismaMock.tag.create.mockReset()
     mocks.prismaMock.subscription.create.mockReset()
     mocks.prismaMock.paymentRecord.create.mockReset()
+    mocks.prismaMock.paymentRecord.createMany.mockReset()
     mocks.prismaMock.paymentRecord.deleteMany.mockReset()
     mocks.prismaMock.subscriptionTag.createMany.mockReset()
     mocks.prismaMock.subscriptionTag.deleteMany.mockReset()
@@ -97,6 +148,291 @@ describe('subtracker backup service', () => {
     mocks.readdirMock.mockReset()
     mocks.mkdirMock.mockReset()
     mocks.rmMock.mockReset()
+  })
+
+  it('batch inserts payment records and skips order rewrite for append no-op', async () => {
+    const inspectZip = new AdmZip()
+    inspectZip.addFile(
+      'manifest.json',
+      Buffer.from(
+        JSON.stringify({
+          schemaVersion: 1,
+          exportedAt: '2026-05-02T08:00:00.000Z',
+          app: 'SubTracker',
+          scope: 'business-complete',
+          data: {
+            settings: {
+              baseCurrency: 'CNY',
+              timezone: 'Asia/Shanghai',
+              defaultNotifyDays: 3,
+              defaultAdvanceReminderRules: '3&09:30;0&09:30;',
+              rememberSessionDays: 7,
+              notifyOnDueDay: true,
+              mergeMultiSubscriptionNotifications: true,
+              monthlyBudgetBase: null,
+              yearlyBudgetBase: null,
+              enableTagBudgets: false,
+              overdueReminderDays: [1, 2, 3],
+              defaultOverdueReminderRules: '1&09:30;2&09:30;3&09:30;',
+              tagBudgets: {},
+              emailNotificationsEnabled: false,
+              emailProvider: 'smtp',
+              pushplusNotificationsEnabled: false,
+              telegramNotificationsEnabled: false,
+              serverchanNotificationsEnabled: false,
+              gotifyNotificationsEnabled: false,
+              smtpConfig: { host: '', port: 587, secure: false, username: '', password: '', from: '', to: '' },
+              resendConfig: { apiBaseUrl: 'https://api.resend.com/emails', apiKey: '', from: '', to: '' },
+              pushplusConfig: { token: '', topic: '' },
+              telegramConfig: { botToken: '', chatId: '' },
+              serverchanConfig: { sendkey: '' },
+              gotifyConfig: { url: '', token: '', ignoreSsl: false },
+              aiConfig: {
+                enabled: false,
+                dashboardSummaryEnabled: false,
+                providerPreset: 'custom',
+                providerName: 'DeepSeek',
+                baseUrl: 'https://api.deepseek.com',
+                apiKey: '',
+                model: 'deepseek-chat',
+                timeoutMs: 30000,
+                promptTemplate: '',
+                dashboardSummaryPromptTemplate: '',
+                capabilities: { vision: false, structuredOutput: true }
+              }
+            },
+            notificationWebhook: {
+              enabled: false,
+              url: '',
+              requestMethod: 'POST',
+              headers: 'Content-Type: application/json',
+              payloadTemplate: '{}',
+              ignoreSsl: false
+            },
+            tags: [{ id: 'tag_1', name: '影音', color: '#3b82f6', icon: 'apps-outline', sortOrder: 1 }],
+            subscriptions: [
+              {
+                id: 'sub_new',
+                name: 'Netflix',
+                description: '',
+                websiteUrl: 'https://netflix.com',
+                logoUrl: null,
+                logoSource: null,
+                logoFetchedAt: null,
+                status: 'active',
+                amount: 15,
+                currency: 'USD',
+                billingIntervalCount: 1,
+                billingIntervalUnit: 'month',
+                autoRenew: true,
+                startDate: '2026-04-01',
+                nextRenewalDate: '2026-05-01',
+                notifyDaysBefore: 3,
+                advanceReminderRules: '3&09:30;0&09:30;',
+                overdueReminderRules: '1&09:30;',
+                webhookEnabled: true,
+                notes: '',
+                tagIds: ['tag_1'],
+                createdAt: '2026-04-01T00:00:00.000Z',
+                updatedAt: '2026-04-02T00:00:00.000Z'
+              }
+            ],
+            paymentRecords: [
+              {
+                id: 'pay_new',
+                subscriptionId: 'sub_new',
+                amount: 15,
+                currency: 'USD',
+                baseCurrency: 'CNY',
+                convertedAmount: 108,
+                exchangeRate: 7.2,
+                paidAt: '2026-04-01T00:00:00.000Z',
+                periodStart: '2026-04-01T00:00:00.000Z',
+                periodEnd: '2026-04-30T00:00:00.000Z',
+                createdAt: '2026-04-01T00:00:00.000Z'
+              }
+            ],
+            subscriptionOrder: ['sub_new']
+          },
+          assets: {
+            logos: []
+          }
+        }),
+        'utf8'
+      )
+    )
+
+    mocks.prismaMock.tag.findMany.mockResolvedValue([])
+    mocks.prismaMock.subscription.findMany.mockResolvedValue([])
+    mocks.prismaMock.paymentRecord.findMany.mockResolvedValue([])
+    const preview = await inspectSubtrackerBackupFile({
+      filename: 'backup.zip',
+      contentType: 'application/zip',
+      base64: inspectZip.toBuffer().toString('base64')
+    })
+
+    mocks.prismaMock.tag.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    mocks.prismaMock.subscription.findMany.mockResolvedValue([{ id: 'sub_old' }])
+    mocks.prismaMock.paymentRecord.findMany.mockResolvedValue([{ id: 'pay_old' }])
+    mocks.prismaMock.subscription.create.mockResolvedValue(undefined)
+    mocks.prismaMock.subscriptionTag.createMany.mockResolvedValue({ count: 1 })
+    mocks.prismaMock.paymentRecord.createMany.mockResolvedValue({ count: 1 })
+    mocks.getSubscriptionOrderMock.mockResolvedValue(['sub_old'])
+
+    const result = await commitSubtrackerBackup({
+      importToken: preview.importToken,
+      mode: 'append',
+      restoreSettings: false
+    })
+
+    expect(result.importedPaymentRecords).toBe(1)
+    expect(mocks.prismaMock.paymentRecord.create).not.toHaveBeenCalled()
+    expect(mocks.prismaMock.paymentRecord.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          id: 'pay_new',
+          subscriptionId: 'sub_new'
+        })
+      ]
+    })
+    expect(mocks.setSubscriptionOrderMock).toHaveBeenCalledWith(['sub_old', 'sub_new'])
+  })
+
+  it('does not rewrite order during append no-op', async () => {
+    const inspectZip = new AdmZip()
+    inspectZip.addFile(
+      'manifest.json',
+      Buffer.from(
+        JSON.stringify({
+          schemaVersion: 1,
+          exportedAt: '2026-05-02T08:00:00.000Z',
+          app: 'SubTracker',
+          scope: 'business-complete',
+          data: {
+            settings: {
+              baseCurrency: 'CNY',
+              timezone: 'Asia/Shanghai',
+              defaultNotifyDays: 3,
+              defaultAdvanceReminderRules: '3&09:30;0&09:30;',
+              rememberSessionDays: 7,
+              notifyOnDueDay: true,
+              mergeMultiSubscriptionNotifications: true,
+              monthlyBudgetBase: null,
+              yearlyBudgetBase: null,
+              enableTagBudgets: false,
+              overdueReminderDays: [1, 2, 3],
+              defaultOverdueReminderRules: '1&09:30;2&09:30;3&09:30;',
+              tagBudgets: {},
+              emailNotificationsEnabled: false,
+              emailProvider: 'smtp',
+              pushplusNotificationsEnabled: false,
+              telegramNotificationsEnabled: false,
+              serverchanNotificationsEnabled: false,
+              gotifyNotificationsEnabled: false,
+              smtpConfig: { host: '', port: 587, secure: false, username: '', password: '', from: '', to: '' },
+              resendConfig: { apiBaseUrl: 'https://api.resend.com/emails', apiKey: '', from: '', to: '' },
+              pushplusConfig: { token: '', topic: '' },
+              telegramConfig: { botToken: '', chatId: '' },
+              serverchanConfig: { sendkey: '' },
+              gotifyConfig: { url: '', token: '', ignoreSsl: false },
+              aiConfig: {
+                enabled: false,
+                dashboardSummaryEnabled: false,
+                providerPreset: 'custom',
+                providerName: 'DeepSeek',
+                baseUrl: 'https://api.deepseek.com',
+                apiKey: '',
+                model: 'deepseek-chat',
+                timeoutMs: 30000,
+                promptTemplate: '',
+                dashboardSummaryPromptTemplate: '',
+                capabilities: { vision: false, structuredOutput: true }
+              }
+            },
+            notificationWebhook: {
+              enabled: false,
+              url: '',
+              requestMethod: 'POST',
+              headers: 'Content-Type: application/json',
+              payloadTemplate: '{}',
+              ignoreSsl: false
+            },
+            tags: [],
+            subscriptions: [
+              {
+                id: 'sub_existing',
+                name: 'Netflix',
+                description: '',
+                websiteUrl: 'https://netflix.com',
+                logoUrl: null,
+                logoSource: null,
+                logoFetchedAt: null,
+                status: 'active',
+                amount: 15,
+                currency: 'USD',
+                billingIntervalCount: 1,
+                billingIntervalUnit: 'month',
+                autoRenew: true,
+                startDate: '2026-04-01',
+                nextRenewalDate: '2026-05-01',
+                notifyDaysBefore: 3,
+                advanceReminderRules: '3&09:30;0&09:30;',
+                overdueReminderRules: '1&09:30;',
+                webhookEnabled: true,
+                notes: '',
+                tagIds: [],
+                createdAt: '2026-04-01T00:00:00.000Z',
+                updatedAt: '2026-04-02T00:00:00.000Z'
+              }
+            ],
+            paymentRecords: [
+              {
+                id: 'pay_existing',
+                subscriptionId: 'sub_existing',
+                amount: 15,
+                currency: 'USD',
+                baseCurrency: 'CNY',
+                convertedAmount: 108,
+                exchangeRate: 7.2,
+                paidAt: '2026-04-01T00:00:00.000Z',
+                periodStart: '2026-04-01T00:00:00.000Z',
+                periodEnd: '2026-04-30T00:00:00.000Z',
+                createdAt: '2026-04-01T00:00:00.000Z'
+              }
+            ],
+            subscriptionOrder: ['sub_existing']
+          },
+          assets: {
+            logos: []
+          }
+        }),
+        'utf8'
+      )
+    )
+
+    mocks.prismaMock.tag.findMany.mockResolvedValue([])
+    mocks.prismaMock.subscription.findMany.mockResolvedValue([])
+    mocks.prismaMock.paymentRecord.findMany.mockResolvedValue([])
+    const preview = await inspectSubtrackerBackupFile({
+      filename: 'backup.zip',
+      contentType: 'application/zip',
+      base64: inspectZip.toBuffer().toString('base64')
+    })
+
+    mocks.prismaMock.tag.findMany.mockResolvedValueOnce([])
+    mocks.prismaMock.subscription.findMany.mockResolvedValue([{ id: 'sub_existing' }])
+    mocks.prismaMock.paymentRecord.findMany.mockResolvedValue([{ id: 'pay_existing' }])
+
+    const result = await commitSubtrackerBackup({
+      importToken: preview.importToken,
+      mode: 'append',
+      restoreSettings: false
+    })
+
+    expect(result.importedSubscriptions).toBe(0)
+    expect(result.importedPaymentRecords).toBe(0)
+    expect(mocks.setSubscriptionOrderMock).not.toHaveBeenCalled()
+    expect(mocks.prismaMock.paymentRecord.createMany).not.toHaveBeenCalled()
   })
 
   it('exports a zip archive with manifest and referenced logos', async () => {

@@ -109,6 +109,49 @@ describe('import routes', () => {
     })
   })
 
+  it('keeps subtracker backup commit response shape stable for frontend consumers', async () => {
+    routeMocks.commitSubtrackerBackupMock.mockResolvedValue({
+      mode: 'append',
+      clearedExistingData: false,
+      restoredSettings: false,
+      importedTags: 0,
+      reusedTags: 2,
+      importedSubscriptions: 0,
+      skippedSubscriptions: 1,
+      importedPaymentRecords: 0,
+      skippedPaymentRecords: 1,
+      importedLogos: 0,
+      warnings: ['append no-op']
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/import/subtracker/commit',
+      payload: {
+        importToken: '0123456789abcdef',
+        mode: 'append',
+        restoreSettings: false
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({
+      data: {
+        mode: 'append',
+        clearedExistingData: false,
+        restoredSettings: false,
+        importedTags: 0,
+        reusedTags: 2,
+        importedSubscriptions: 0,
+        skippedSubscriptions: 1,
+        importedPaymentRecords: 0,
+        skippedPaymentRecords: 1,
+        importedLogos: 0,
+        warnings: ['append no-op']
+      }
+    })
+  })
+
   it('rejects invalid subtracker backup commit payloads', async () => {
     const res = await app.inject({
       method: 'POST',
