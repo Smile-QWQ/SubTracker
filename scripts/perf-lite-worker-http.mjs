@@ -53,6 +53,10 @@ async function login(baseUrl) {
 }
 
 async function requestTarget(baseUrl, token, target, importPayload, wallosImportPayload, protocols) {
+  if (target === 'login') {
+    return loginPayload(baseUrl)
+  }
+
   const headers = {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json'
@@ -261,7 +265,7 @@ async function main() {
     preview: fixture.dataset.wallosPreparedPayload.preview,
     logoAssets: fixture.dataset.wallosPreparedPayload.logoAssets
   }
-  const token = await login(baseUrl)
+  const token = targets.every((target) => target === 'login') ? null : await login(baseUrl)
   const resultPath = String(args['result-path'] ?? `${PERF_RESULT_DIR}\\${fixtureLabel(fixtureMeta)}-worker-${nowStamp()}.jsonl`)
   const summaryRows = []
 

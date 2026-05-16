@@ -135,13 +135,11 @@ export async function getAppSettings(): Promise<SettingsInput> {
       const mergeMultiSubscriptionNotifications = readSettingsValue(settingsMap, 'mergeMultiSubscriptionNotifications', true)
       const monthlyBudgetBase = readSettingsValue<number | null>(settingsMap, 'monthlyBudgetBase', null)
       const yearlyBudgetBase = readSettingsValue<number | null>(settingsMap, 'yearlyBudgetBase', null)
-      const enableTagBudgets = readSettingsValue(settingsMap, 'enableTagBudgets', false)
       const defaultOverdueReminderRules = resolveDefaultOverdueReminderRules(
         readSettingsValue<string | null>(settingsMap, 'defaultOverdueReminderRules', null),
         readSettingsValue<Array<1 | 2 | 3>>(settingsMap, 'overdueReminderDays', [1, 2, 3])
       )
       const overdueReminderDays = deriveOverdueReminderDaysFromRules(defaultOverdueReminderRules)
-      const tagBudgets = readSettingsValue<Record<string, number>>(settingsMap, 'tagBudgets', {})
       const emailNotificationsEnabled = readSettingsValue(settingsMap, 'emailNotificationsEnabled', false)
       const emailProvider = readSettingsValue<SettingsInput['emailProvider']>(settingsMap, 'emailProvider', 'resend')
       const pushplusNotificationsEnabled = readSettingsValue(settingsMap, 'pushplusNotificationsEnabled', false)
@@ -181,10 +179,8 @@ export async function getAppSettings(): Promise<SettingsInput> {
         mergeMultiSubscriptionNotifications,
         monthlyBudgetBase,
         yearlyBudgetBase,
-        enableTagBudgets,
         overdueReminderDays,
         defaultOverdueReminderRules,
-        tagBudgets,
         emailNotificationsEnabled,
         emailProvider,
         pushplusNotificationsEnabled,

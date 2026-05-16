@@ -211,7 +211,9 @@ function createAuthCredentials() {
   return {
     username: 'admin',
     passwordHash,
-    passwordSalt
+    passwordSalt,
+    algorithm: 'scrypt',
+    mustChangePassword: true
   }
 }
 

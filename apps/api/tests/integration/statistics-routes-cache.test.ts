@@ -3,19 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   getOverviewStatisticsMock,
-  getBudgetStatisticsMock,
   getCacheVersionMock,
   withWorkerTieredCacheMock
 } = vi.hoisted(() => ({
   getOverviewStatisticsMock: vi.fn(),
-  getBudgetStatisticsMock: vi.fn(),
   getCacheVersionMock: vi.fn(),
   withWorkerTieredCacheMock: vi.fn()
 }))
 
 vi.mock('../../src/services/statistics.service', () => ({
-  getOverviewStatistics: getOverviewStatisticsMock,
-  getBudgetStatistics: getBudgetStatisticsMock
+  getOverviewStatistics: getOverviewStatisticsMock
 }))
 
 vi.mock('../../src/services/cache-version.service', () => ({
@@ -48,25 +45,10 @@ describe('statistics routes cache', () => {
         monthly: { spent: 100, budget: null, ratio: null, overBudget: 0, status: 'normal' },
         yearly: { spent: 1200, budget: null, ratio: null, overBudget: 0, status: 'normal' }
       },
-      tagSpend: [],
-      monthlyTrend: [],
-      monthlyTrendMeta: { mode: 'projected', months: 12 },
       statusDistribution: [],
-      renewalModeDistribution: [],
-      upcomingByDay: [],
-      tagBudgetUsage: [],
       currencyDistribution: [],
       topSubscriptionsByMonthlyCost: [],
       upcomingRenewals: []
-    })
-    getBudgetStatisticsMock.mockResolvedValue({
-      enabledTagBudgets: false,
-      budgetSummary: {
-        monthly: { spent: 100, budget: null, ratio: null, overBudget: 0, status: 'normal' },
-        yearly: { spent: 1200, budget: null, ratio: null, overBudget: 0, status: 'normal' }
-      },
-      tagBudgetSummary: null,
-      tagBudgetUsage: []
     })
     withWorkerTieredCacheMock.mockImplementation(
       async (_namespace: string, _cacheKey: string, loader: () => Promise<unknown>) => loader()
@@ -94,13 +76,9 @@ describe('statistics routes cache', () => {
       expect.any(Function),
       300
     )
-    expect(res.json().data).toEqual(
-      expect.objectContaining({
-        monthlyTrend: [],
-        upcomingByDay: [],
-        tagSpend: [],
-        tagBudgetUsage: []
-      })
-    )
+    expect(res.json().data).not.toHaveProperty('monthlyTrend')
+    expect(res.json().data).not.toHaveProperty('upcomingByDay')
+    expect(res.json().data).not.toHaveProperty('tagSpend')
+    expect(res.json().data).not.toHaveProperty('tagBudgetUsage')
   })
 })

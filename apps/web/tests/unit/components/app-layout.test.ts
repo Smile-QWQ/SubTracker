@@ -26,5 +26,8 @@ describe('app layout sidebar behavior', () => {
     expect(source).toContain('openVersionUpdatePanel')
     expect(source).toContain('logo__update-dot')
     expect(source).toContain('版本更新')
+    expect(source).not.toContain('/budgets')
+    expect(source).not.toContain('预算统计')
+    expect(source).not.toContain('enableTagBudgets')
   })
 })

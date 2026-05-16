@@ -243,8 +243,7 @@ import {
   MoonOutline,
   SettingsOutline,
   SparklesOutline,
-  SunnyOutline,
-  WalletOutline
+  SunnyOutline
 } from '@vicons/ionicons5'
 import brandLogoUrl from '@/assets/brand-logo.png'
 import { api } from '@/composables/api'
@@ -286,10 +285,6 @@ const menuOptions = computed<MenuOption[]>(() => {
     { label: '订阅日历', key: '/calendar', icon: renderMenuIcon(CalendarOutline) },
     { label: '费用统计', key: '/statistics', icon: renderMenuIcon(BarChartOutline) }
   ]
-
-  if (settings.value?.enableTagBudgets) {
-    options.push({ label: '预算统计', key: '/budgets', icon: renderMenuIcon(WalletOutline) })
-  }
 
   options.push({ label: '系统设置', key: '/settings', icon: renderMenuIcon(SettingsOutline) })
   return options

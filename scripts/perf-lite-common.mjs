@@ -5,6 +5,7 @@ export const PERF_ROOT = path.resolve(process.cwd(), '.tmp', 'perf')
 export const PERF_FIXTURE_DIR = path.join(PERF_ROOT, 'fixtures')
 export const PERF_RESULT_DIR = path.join(PERF_ROOT, 'results')
 export const PERF_PROFILE_DIR = path.join(PERF_ROOT, 'profiles')
+export const PERF_REPORT_DIR = path.join(PERF_ROOT, 'reports')
 
 export const DEFAULTS = {
   subscriptions: 100,
@@ -21,7 +22,8 @@ export async function ensurePerfDirs() {
     mkdir(PERF_ROOT, { recursive: true }),
     mkdir(PERF_FIXTURE_DIR, { recursive: true }),
     mkdir(PERF_RESULT_DIR, { recursive: true }),
-    mkdir(PERF_PROFILE_DIR, { recursive: true })
+    mkdir(PERF_PROFILE_DIR, { recursive: true }),
+    mkdir(PERF_REPORT_DIR, { recursive: true })
   ])
 }
 

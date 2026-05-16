@@ -16,10 +16,8 @@ describe('cloneSettingsForForm', () => {
       mergeMultiSubscriptionNotifications: true,
       monthlyBudgetBase: 100,
       yearlyBudgetBase: 1000,
-      enableTagBudgets: true,
       overdueReminderDays: [1, 2, 3],
       defaultOverdueReminderRules: '1&09:30;2&09:30;',
-      tagBudgets: { video: 50 },
       emailNotificationsEnabled: true,
       emailProvider: 'smtp',
       pushplusNotificationsEnabled: true,
@@ -88,7 +86,6 @@ describe('cloneSettingsForForm', () => {
     expect(cloned.gotifyConfig).not.toBe(original.gotifyConfig)
     expect(cloned.aiConfig).not.toBe(original.aiConfig)
     expect(cloned.aiConfig.capabilities).not.toBe(original.aiConfig.capabilities)
-    expect(cloned.tagBudgets).not.toBe(original.tagBudgets)
     expect(cloned.overdueReminderDays).not.toBe(original.overdueReminderDays)
   })
 })

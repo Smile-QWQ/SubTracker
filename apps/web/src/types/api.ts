@@ -86,17 +86,6 @@ export interface SubscriptionDetail extends Subscription {
   remainingValueCurrency: string
 }
 
-export interface TagBudgetUsage {
-  tagId: string
-  name: string
-  budget: number
-  spent: number
-  ratio: number
-  remaining: number
-  overBudget: number
-  status: 'normal' | 'warning' | 'over'
-}
-
 export interface BudgetSummaryEntry {
   spent: number
   budget: number | null
@@ -110,20 +99,6 @@ export interface BudgetSummary {
   yearly: BudgetSummaryEntry
 }
 
-export interface TagBudgetSummary {
-  configuredCount: number
-  warningCount: number
-  overBudgetCount: number
-  topTags: TagBudgetUsage[]
-}
-
-export interface BudgetStatistics {
-  enabledTagBudgets: boolean
-  budgetSummary: BudgetSummary
-  tagBudgetSummary: TagBudgetSummary | null
-  tagBudgetUsage: TagBudgetUsage[]
-}
-
 export interface StatisticsOverview {
   activeSubscriptions: number
   upcoming7Days: number
@@ -134,18 +109,8 @@ export interface StatisticsOverview {
   yearlyBudgetBase?: number | null
   monthlyBudgetUsageRatio?: number | null
   yearlyBudgetUsageRatio?: number | null
-  tagSpend: Array<{ name: string; value: number }>
-  monthlyTrend: Array<{ month: string; amount: number }>
-  monthlyTrendMeta: {
-    mode: 'projected'
-    months: number
-  }
   budgetSummary: BudgetSummary
-  tagBudgetSummary?: TagBudgetSummary | null
   statusDistribution: Array<{ status: SubscriptionStatus; count: number }>
-  renewalModeDistribution: Array<{ autoRenew: boolean; count: number; amount: number }>
-  upcomingByDay: Array<{ date: string; count: number; amount: number }>
-  tagBudgetUsage?: TagBudgetUsage[]
   currencyDistribution: Array<{ currency: string; amount: number }>
   topSubscriptionsByMonthlyCost: Array<{
     id: string
@@ -277,10 +242,8 @@ export interface Settings {
   mergeMultiSubscriptionNotifications: boolean
   monthlyBudgetBase?: number | null
   yearlyBudgetBase?: number | null
-  enableTagBudgets: boolean
   overdueReminderDays: Array<1 | 2 | 3>
   defaultOverdueReminderRules: string
-  tagBudgets: Record<string, number>
   emailNotificationsEnabled: boolean
   emailProvider: EmailProvider
   pushplusNotificationsEnabled: boolean

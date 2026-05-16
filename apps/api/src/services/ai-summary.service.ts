@@ -232,21 +232,10 @@ function buildSummaryInput(overview: DashboardOverview) {
       yearlyBudgetUsageRatio: overview.yearlyBudgetUsageRatio ?? null
     },
     budgetSummary: overview.budgetSummary,
-    tagSpendTop: [...overview.tagSpend]
-      .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, 'zh-CN'))
-      .slice(0, 8),
     statusDistribution: overview.statusDistribution,
-    renewalModeDistribution: overview.renewalModeDistribution,
     currencyDistribution: overview.currencyDistribution,
     upcomingRenewalsTop: overview.upcomingRenewals.slice(0, 8),
-    topSubscriptionsByMonthlyCost: overview.topSubscriptionsByMonthlyCost.slice(0, 8),
-    upcomingByDayNonZero: overview.upcomingByDay.filter((item) => item.count > 0 || item.amount > 0).slice(0, 15),
-    tagBudgetSummary: overview.tagBudgetSummary ?? null,
-    tagBudgetUsageTop:
-      (overview.tagBudgetUsage ?? [])
-        .filter((item) => item.ratio > 0)
-        .sort((a, b) => b.ratio - a.ratio || b.spent - a.spent)
-        .slice(0, 8) ?? []
+    topSubscriptionsByMonthlyCost: overview.topSubscriptionsByMonthlyCost.slice(0, 8)
   }
 }
 

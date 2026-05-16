@@ -142,9 +142,88 @@ describe('subscription service D1 compatibility', () => {
           lte: new Date('2026-04-25T15:59:59.999Z')
         }
       },
-      orderBy: { nextRenewalDate: 'asc' }
+      orderBy: { nextRenewalDate: 'asc' },
+      take: 10
     })
     expect(renewedCount).toBe(1)
+    expect(serviceMocks.prisma.subscription.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('caps auto-renew to one cycle per subscription per invocation', async () => {
+    const nextRenewalDate = new Date('2026-04-20T16:00:00.000Z')
+    const updatedRenewal = new Date('2026-05-20T16:00:00.000Z')
+
+    serviceMocks.prisma.subscription.findMany.mockResolvedValue([
+      {
+        id: 'sub_1',
+        amount: 25,
+        currency: 'CNY',
+        billingIntervalCount: 1,
+        billingIntervalUnit: 'month',
+        nextRenewalDate,
+        autoRenew: true,
+        status: 'active'
+      }
+    ])
+    serviceMocks.prisma.paymentRecord.create.mockResolvedValue({ id: 'payment_1' })
+    serviceMocks.prisma.subscription.update.mockResolvedValue({
+      id: 'sub_1',
+      nextRenewalDate: updatedRenewal,
+      status: 'active'
+    })
+
+    const { autoRenewDueSubscriptions } = await import('../../src/services/subscription.service')
+    const renewedCount = await autoRenewDueSubscriptions(new Date('2026-06-25T01:00:00.000Z'))
+
+    expect(renewedCount).toBe(1)
+    expect(serviceMocks.prisma.subscription.update).toHaveBeenCalledTimes(1)
+  })
+
+  it('continues auto-renew batch when one subscription update fails', async () => {
+    const firstRenewalDate = new Date('2026-04-24T16:00:00.000Z')
+    const secondRenewalDate = new Date('2026-04-25T16:00:00.000Z')
+
+    serviceMocks.prisma.subscription.findMany.mockResolvedValue([
+      {
+        id: 'sub_fail',
+        amount: 25,
+        currency: 'CNY',
+        billingIntervalCount: 1,
+        billingIntervalUnit: 'month',
+        nextRenewalDate: firstRenewalDate,
+        autoRenew: true,
+        status: 'active'
+      },
+      {
+        id: 'sub_ok',
+        amount: 30,
+        currency: 'CNY',
+        billingIntervalCount: 1,
+        billingIntervalUnit: 'month',
+        nextRenewalDate: secondRenewalDate,
+        autoRenew: true,
+        status: 'active'
+      }
+    ])
+    serviceMocks.prisma.paymentRecord.create
+      .mockResolvedValueOnce({ id: 'payment_fail' })
+      .mockResolvedValueOnce({ id: 'payment_ok' })
+    serviceMocks.prisma.subscription.update
+      .mockRejectedValueOnce(new Error('update failed'))
+      .mockResolvedValueOnce({
+        id: 'sub_ok',
+        nextRenewalDate: new Date('2026-05-25T16:00:00.000Z'),
+        status: 'active'
+      })
+    serviceMocks.prisma.paymentRecord.delete.mockResolvedValue({ id: 'payment_fail' })
+
+    const { autoRenewDueSubscriptions } = await import('../../src/services/subscription.service')
+    const renewedCount = await autoRenewDueSubscriptions(new Date('2026-04-26T01:00:00.000Z'))
+
+    expect(renewedCount).toBe(1)
+    expect(serviceMocks.prisma.paymentRecord.delete).toHaveBeenCalledWith({
+      where: { id: 'payment_fail' }
+    })
   })
 
   it('reconciles expired subscriptions by configured timezone day boundary', async () => {

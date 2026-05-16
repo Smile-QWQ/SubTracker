@@ -6,6 +6,7 @@ import { WebSocket } from 'ws'
 import {
   DEFAULTS,
   PERF_PROFILE_DIR,
+  PERF_REPORT_DIR,
   PERF_RESULT_DIR,
   PERF_ROOT,
   ensurePerfDirs,
@@ -20,7 +21,9 @@ const REPO_ROOT = path.resolve(__dirname, '..')
 const DEFAULT_BASELINE_COMMIT = 'be70f8d'
 const DEFAULT_CURRENT_COMMIT = '8b9468b'
 const DEFAULT_TARGETS = [
+  'login',
   'overview',
+  'auto-renew',
   'scan-debug',
   'import-inspect',
   'import-commit',
@@ -209,10 +212,14 @@ async function execGit(args, cwd = REPO_ROOT) {
   return result.stdout.trim()
 }
 
-async function ensureCurrentDirtyStateIsToolOnly(expectedCommit) {
+async function ensureCurrentDirtyStateIsToolOnly(expectedCommit, allowDirtyCurrent = false) {
   const head = await execGit(['rev-parse', '--short=7', 'HEAD'])
   if (head !== expectedCommit) {
     throw new Error(`Workspace HEAD=${head}, expected current commit ${expectedCommit}`)
+  }
+
+  if (allowDirtyCurrent) {
+    return
   }
 
   const status = await execGit(['status', '--short'])
@@ -238,8 +245,8 @@ async function ensureCurrentDirtyStateIsToolOnly(expectedCommit) {
   }
 }
 
-async function prepareCurrentSnapshot(snapshotRoot, commit) {
-  await ensureCurrentDirtyStateIsToolOnly(commit)
+async function prepareCurrentSnapshot(snapshotRoot, commit, allowDirtyCurrent = false) {
+  await ensureCurrentDirtyStateIsToolOnly(commit, allowDirtyCurrent)
   return snapshotRoot
 }
 
@@ -260,6 +267,20 @@ async function copyMeasurementScripts(phaseRoot) {
     const content = await readFile(source, 'utf8')
     await writeFile(destination, content, 'utf8')
   }
+}
+
+function resolveTsxBin() {
+  return process.platform === 'win32'
+    ? path.join(REPO_ROOT, 'node_modules', '.bin', 'tsx.cmd')
+    : path.join(REPO_ROOT, 'node_modules', '.bin', 'tsx')
+}
+
+function shouldRunWorkerTarget(target) {
+  return target !== 'auto-renew'
+}
+
+function shouldRunNodeTarget(target) {
+  return target !== 'login'
 }
 
 async function ensurePhaseNodeEnv(phaseRoot) {
@@ -583,9 +604,7 @@ async function runNodeHarness(phaseRoot, env, fixtureOptions, targets, resultPat
   await emptyDir(profileDir)
   const script = path.join(phaseRoot, 'scripts', 'perf-lite-measure.mjs')
   const runnerScript = path.join(phaseRoot, 'scripts', 'perf-lite-measure-runner.ts')
-  const tsxBin = process.platform === 'win32'
-    ? path.join(REPO_ROOT, 'node_modules', '.bin', 'tsx.cmd')
-    : path.join(REPO_ROOT, 'node_modules', '.bin', 'tsx')
+  const tsxBin = resolveTsxBin()
   const result = await runCommandOrThrow(
     process.execPath,
     [
@@ -628,6 +647,53 @@ async function runNodeHarness(phaseRoot, env, fixtureOptions, targets, resultPat
   return parseJsonLine(result.stdout)
 }
 
+async function runNodeHarnessInBatches(
+  phaseRoot,
+  env,
+  fixtureOptions,
+  targets,
+  resultPath,
+  profileDir,
+  profileName,
+  warmup,
+  repeat,
+  subtrackerCommitMode
+) {
+  const mutatingTargets = targets.filter((target) => target === 'auto-renew')
+  const regularTargets = targets.filter((target) => target !== 'auto-renew')
+
+  if (regularTargets.length > 0) {
+    await runNodeHarness(
+      phaseRoot,
+      env,
+      fixtureOptions,
+      regularTargets,
+      resultPath,
+      profileDir,
+      profileName,
+      warmup,
+      repeat,
+      subtrackerCommitMode
+    )
+  }
+
+  if (mutatingTargets.length > 0) {
+    await runNodeSeed(phaseRoot, env, fixtureOptions)
+    await runNodeHarness(
+      phaseRoot,
+      env,
+      fixtureOptions,
+      mutatingTargets,
+      resultPath,
+      profileDir,
+      profileName,
+      0,
+      1,
+      subtrackerCommitMode
+    )
+  }
+}
+
 async function runWorkerHarness(phaseRoot, env, fixtureOptions, targets, baseUrl, repeat, warmup, resultPath, subtrackerCommitMode) {
   const script = path.join(phaseRoot, 'scripts', 'perf-lite-worker-http.mjs')
   const args = [
@@ -658,6 +724,49 @@ async function runWorkerHarness(phaseRoot, env, fixtureOptions, targets, baseUrl
     env
   })
   return parseJsonLine(result.stdout)
+}
+
+async function runWorkerHarnessInBatches(
+  phaseRoot,
+  env,
+  fixtureOptions,
+  targets,
+  baseUrl,
+  repeat,
+  warmup,
+  resultPath,
+  subtrackerCommitMode
+) {
+  const loginTargets = targets.filter((target) => target === 'login')
+  const regularTargets = targets.filter((target) => target !== 'login')
+
+  if (loginTargets.length > 0) {
+    await runWorkerHarness(
+      phaseRoot,
+      env,
+      fixtureOptions,
+      loginTargets,
+      baseUrl,
+      1,
+      0,
+      resultPath,
+      subtrackerCommitMode
+    )
+  }
+
+  if (regularTargets.length > 0) {
+    await runWorkerHarness(
+      phaseRoot,
+      env,
+      fixtureOptions,
+      regularTargets,
+      baseUrl,
+      repeat,
+      warmup,
+      resultPath,
+      subtrackerCommitMode
+    )
+  }
 }
 
 async function collectProfileTopFrames(profilePath, limit = 5) {
@@ -924,6 +1033,7 @@ async function main() {
   const mode = String(args.mode ?? DEFAULTS.mode)
   const port = Number.parseInt(String(args.port ?? DEFAULT_PORT), 10)
   const inspectorPort = Number.parseInt(String(args['inspector-port'] ?? DEFAULT_INSPECTOR_PORT), 10)
+  const allowDirtyCurrent = String(args['allow-dirty-current'] ?? 'false') === 'true'
 
   const fixtureOptions = {
     subscriptions,
@@ -941,16 +1051,18 @@ async function main() {
 
   const baselineRoot = path.join(PERF_ROOT, 'be70f8d-worker-baseline-wt')
   const currentRoot = REPO_ROOT
+  const reportDir = String(args['report-dir'] ?? PERF_REPORT_DIR)
 
   await ensurePerfDirs()
-  await prepareCurrentSnapshot(currentRoot, currentCommit)
+  await mkdir(reportDir, { recursive: true })
+  await prepareCurrentSnapshot(currentRoot, currentCommit, allowDirtyCurrent)
 
   for (const phaseRoot of [baselineRoot]) {
     await copyMeasurementScripts(phaseRoot)
     await ensurePhaseNodeEnv(phaseRoot)
   }
 
-  await ensureCurrentDirtyStateIsToolOnly(currentCommit)
+  await ensureCurrentDirtyStateIsToolOnly(currentCommit, allowDirtyCurrent)
 
   for (const phaseRoot of [baselineRoot, currentRoot]) {
     const wrangler = await prepareWranglerEnv(phaseRoot)
@@ -1009,38 +1121,44 @@ async function main() {
         removeIfExists(workerProfilePath)
       ])
 
-      await runNodeHarness(
-        phase.root,
-        wrangler.env,
-        fixtureOptions,
-        targets,
-        nodeResultPath,
-        nodeProfileDir,
-        `${phase.phase}-${fixtureName}`,
-        warmup,
-        repeat,
-        subtrackerCommitMode
-      )
+      const nodeTargets = targets.filter(shouldRunNodeTarget)
+      if (nodeTargets.length > 0) {
+        await runNodeHarnessInBatches(
+          phase.root,
+          wrangler.env,
+          fixtureOptions,
+          nodeTargets,
+          nodeResultPath,
+          nodeProfileDir,
+          `${phase.phase}-${fixtureName}`,
+          warmup,
+          repeat,
+          subtrackerCommitMode
+        )
+      }
 
-      await withInspectorProfile(
-        inspectorPort,
-        async () => {
-          await runWorkerHarness(
-            phase.root,
-            wrangler.env,
-            fixtureOptions,
-            targets,
-            baseUrl,
-            repeat,
-            warmup,
-            workerResultPath,
-            subtrackerCommitMode
-          )
-        },
-        workerProfilePath
-      )
-      await verifyCpuprofile(workerProfilePath)
-      if (targets.includes('overview')) {
+      const workerTargets = targets.filter(shouldRunWorkerTarget)
+      if (workerTargets.length > 0) {
+        await withInspectorProfile(
+          inspectorPort,
+          async () => {
+            await runWorkerHarnessInBatches(
+              phase.root,
+              wrangler.env,
+              fixtureOptions,
+              workerTargets,
+              baseUrl,
+              repeat,
+              warmup,
+              workerResultPath,
+              subtrackerCommitMode
+            )
+          },
+          workerProfilePath
+        )
+        await verifyCpuprofile(workerProfilePath)
+      }
+      if (workerTargets.includes('overview')) {
         const overviewPayload = await fetchOverviewPayload(baseUrl)
         await writeFile(overviewProbePath, `${JSON.stringify(overviewPayload, null, 2)}\n`, 'utf8')
       }
@@ -1065,8 +1183,8 @@ async function main() {
 
   const allEntries = []
   for (const artifact of artifacts) {
-    const nodeRows = await readJsonl(artifact.nodeResultPath)
-    const workerRows = await readJsonl(artifact.workerResultPath)
+    const nodeRows = await pathExists(artifact.nodeResultPath) ? await readJsonl(artifact.nodeResultPath) : []
+    const workerRows = await pathExists(artifact.workerResultPath) ? await readJsonl(artifact.workerResultPath) : []
 
     for (const target of targets) {
       const nodeTargetRows = nodeRows.filter((row) => row.target === target)
@@ -1115,7 +1233,7 @@ async function main() {
     allEntries.filter((entry) => entry.phase === 'baseline').map((entry) => [`${entry.harness}:${entry.target}`, entry])
   )
   const csvRows = await buildCsvRows(allEntries, baselineMap)
-  await writeCsv(path.join(REPO_ROOT, 'docs', 'report.csv'), csvRows)
+  await writeCsv(path.join(reportDir, 'report.csv'), csvRows)
 
   const summaryPairs = targets.flatMap((target) => {
     return [NODE_HARNESS, WORKER_HARNESS]
@@ -1128,14 +1246,22 @@ async function main() {
       .filter(Boolean)
   })
 
-  const hotspots = {
-    baseline: await collectProfileTopFrames(path.join(PERF_PROFILE_DIR, 'baseline-worker.cpuprofile')),
-    current: await collectProfileTopFrames(path.join(PERF_PROFILE_DIR, 'current-worker.cpuprofile'))
-  }
+  const baselineWorkerProfilePath = path.join(PERF_PROFILE_DIR, 'baseline-worker.cpuprofile')
+  const currentWorkerProfilePath = path.join(PERF_PROFILE_DIR, 'current-worker.cpuprofile')
+  const workerProfileAvailable = targets.some(shouldRunWorkerTarget)
+  const hotspots = workerProfileAvailable
+    ? {
+        baseline: await collectProfileTopFrames(baselineWorkerProfilePath),
+        current: await collectProfileTopFrames(currentWorkerProfilePath)
+      }
+    : {
+        baseline: [],
+        current: []
+      }
   const hotspotDiff = computeHotspotDiff(hotspots.baseline, hotspots.current)
   const keyConclusions = buildConclusions(summaryPairs)
 
-  await writeMarkdownReport(path.join(REPO_ROOT, 'docs', 'report.md'), {
+  await writeMarkdownReport(path.join(reportDir, 'report.md'), {
     baselineCommit,
     currentCommit,
     fixtureName,
@@ -1150,8 +1276,8 @@ async function main() {
     hotspotDiff,
     keyConclusions,
     notificationNote: '未纳入主 workload；本轮只执行 overview / scan-debug / import / subscription detail/payment-records 固定口径。',
-    baselineProfile: path.join(PERF_PROFILE_DIR, 'baseline-worker.cpuprofile'),
-    currentProfile: path.join(PERF_PROFILE_DIR, 'current-worker.cpuprofile')
+    baselineProfile: baselineWorkerProfilePath,
+    currentProfile: currentWorkerProfilePath
   })
 
   await cleanupWorkerd()

@@ -59,18 +59,6 @@ function buildOverview(overrides: Partial<DashboardOverview> = {}): DashboardOve
     yearlyBudgetBase: 3600,
     monthlyBudgetUsageRatio: 0.6287,
     yearlyBudgetUsageRatio: 0.6287,
-    tagSpend: [
-      { name: '办公', value: 88.6 },
-      { name: '娱乐', value: 100 }
-    ],
-    monthlyTrend: [
-      { month: '2026-05', amount: 188.6 },
-      { month: '2026-06', amount: 188.6 }
-    ],
-    monthlyTrendMeta: {
-      mode: 'projected',
-      months: 12
-    },
     budgetSummary: {
       monthly: {
         spent: 188.6,
@@ -87,22 +75,12 @@ function buildOverview(overrides: Partial<DashboardOverview> = {}): DashboardOve
         status: 'normal'
       }
     },
-    tagBudgetSummary: null,
     statusDistribution: [
       { status: 'active', count: 6 },
       { status: 'paused', count: 1 },
       { status: 'cancelled', count: 0 },
       { status: 'expired', count: 1 }
     ],
-    renewalModeDistribution: [
-      { autoRenew: true, count: 4, amount: 120 },
-      { autoRenew: false, count: 2, amount: 68.6 }
-    ],
-    upcomingByDay: [
-      { date: '2026-05-03', count: 0, amount: 0 },
-      { date: '2026-05-04', count: 1, amount: 20 }
-    ],
-    tagBudgetUsage: [],
     currencyDistribution: [
       { currency: 'CNY', amount: 88.6 },
       { currency: 'USD', amount: 14 }

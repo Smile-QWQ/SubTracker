@@ -16,6 +16,8 @@ type StoredCredentials = {
   username: string
   passwordHash: string
   passwordSalt: string
+  algorithm: 'scrypt' | 'worker-lite-sha256'
+  mustChangePassword: boolean
 }
 
 type SessionPayload = {
@@ -33,12 +35,27 @@ function hashPassword(password: string, salt: string) {
   return scryptSync(password, salt, 64).toString('hex')
 }
 
+function hashPasswordLite(password: string, salt: string) {
+  return createHmac('sha256', salt).update(password).digest('hex')
+}
+
 function createPasswordRecord(password: string) {
   const passwordSalt = randomBytes(16).toString('hex')
   const passwordHash = hashPassword(password, passwordSalt)
   return {
     passwordSalt,
-    passwordHash
+    passwordHash,
+    algorithm: 'scrypt' as const
+  }
+}
+
+function createLitePasswordRecord(password: string) {
+  const passwordSalt = randomBytes(16).toString('hex')
+  const passwordHash = hashPasswordLite(password, passwordSalt)
+  return {
+    passwordSalt,
+    passwordHash,
+    algorithm: 'worker-lite-sha256' as const
   }
 }
 
@@ -69,8 +86,7 @@ async function getSessionSecret() {
 
 function updateCredentialsCache(credentials: StoredCredentials) {
   cachedCredentials = credentials
-  cachedMustChangePassword =
-    credentials.username === DEFAULT_USERNAME && verifyPassword(DEFAULT_PASSWORD, credentials)
+  cachedMustChangePassword = credentials.mustChangePassword
 }
 
 async function saveCredentials(credentials: StoredCredentials) {
@@ -83,15 +99,17 @@ export async function getStoredCredentials() {
     return cachedCredentials
   }
 
-  const existing = await getSetting<StoredCredentials | null>(CREDENTIALS_KEY, null)
+  const existing = await getSetting<StoredCredentials | LegacyStoredCredentials | null>(CREDENTIALS_KEY, null)
   if (existing) {
-    updateCredentialsCache(existing)
-    return existing
+    const normalized = await normalizeStoredCredentials(existing)
+    updateCredentialsCache(normalized)
+    return normalized
   }
 
-  const defaultRecord = createPasswordRecord(DEFAULT_PASSWORD)
+  const defaultRecord = createLitePasswordRecord(DEFAULT_PASSWORD)
   const created: StoredCredentials = {
     username: DEFAULT_USERNAME,
+    mustChangePassword: true,
     ...defaultRecord
   }
 
@@ -100,8 +118,19 @@ export async function getStoredCredentials() {
   return created
 }
 
-function verifyPassword(password: string, record: StoredCredentials) {
-  const actual = Buffer.from(hashPassword(password, record.passwordSalt), 'hex')
+type LegacyStoredCredentials = {
+  username: string
+  passwordHash: string
+  passwordSalt: string
+}
+
+function verifyPassword(password: string, record: StoredCredentials | LegacyStoredCredentials) {
+  const algorithm = 'algorithm' in record ? record.algorithm : 'scrypt'
+  const digest =
+    algorithm === 'worker-lite-sha256'
+      ? hashPasswordLite(password, record.passwordSalt)
+      : hashPassword(password, record.passwordSalt)
+  const actual = Buffer.from(digest, 'hex')
   const expected = Buffer.from(record.passwordHash, 'hex')
 
   if (actual.length !== expected.length) {
@@ -109,6 +138,22 @@ function verifyPassword(password: string, record: StoredCredentials) {
   }
 
   return timingSafeEqual(actual, expected)
+}
+
+async function normalizeStoredCredentials(record: StoredCredentials | LegacyStoredCredentials) {
+  if ('algorithm' in record) {
+    return record
+  }
+
+  const mustChangePassword =
+    record.username === DEFAULT_USERNAME && verifyPassword(DEFAULT_PASSWORD, record)
+  const normalized: StoredCredentials = {
+    ...record,
+    algorithm: 'scrypt',
+    mustChangePassword
+  }
+  await setSetting(CREDENTIALS_KEY, normalized)
+  return normalized
 }
 
 async function isUsingDefaultCredentials() {
@@ -185,6 +230,15 @@ export async function loginWithCredentials(
     return null
   }
 
+  if (credentials.algorithm === 'scrypt') {
+    const nextCredentials: StoredCredentials = {
+      username: credentials.username,
+      mustChangePassword: credentials.mustChangePassword,
+      ...createLitePasswordRecord(password)
+    }
+    await saveCredentials(nextCredentials)
+  }
+
   const rememberDays = Math.max(1, options?.rememberDays ?? 7)
   const ttlMs = options?.rememberMe ? rememberDays * 24 * 60 * 60 * 1000 : TOKEN_TTL_MS
 
@@ -208,6 +262,7 @@ export async function changeCredentials(input: {
   const nextPassword = createPasswordRecord(input.newPassword)
   const nextCredentials: StoredCredentials = {
     username: input.newUsername,
+    mustChangePassword: false,
     ...nextPassword
   }
 
@@ -220,17 +275,14 @@ export async function changeCredentials(input: {
 }
 
 export async function changeDefaultPassword(newPassword: string) {
-  const credentials = await getStoredCredentials()
-  const usingDefaultCredentials =
-    credentials.username === DEFAULT_USERNAME && verifyPassword(DEFAULT_PASSWORD, credentials)
-
-  if (!usingDefaultCredentials) {
+  if (!(await isUsingDefaultCredentials())) {
     return null
   }
 
   const nextPassword = createPasswordRecord(newPassword)
   const nextCredentials: StoredCredentials = {
     username: DEFAULT_USERNAME,
+    mustChangePassword: false,
     ...nextPassword
   }
 
@@ -251,6 +303,7 @@ export async function resetPasswordForStoredUsername(username: string, newPasswo
   const nextPassword = createPasswordRecord(newPassword)
   const nextCredentials: StoredCredentials = {
     username,
+    mustChangePassword: false,
     ...nextPassword
   }
 

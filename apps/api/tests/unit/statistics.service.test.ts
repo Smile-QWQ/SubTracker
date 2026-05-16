@@ -5,15 +5,11 @@ import { invalidateWorkerLiteCache } from '../../src/services/worker-lite-cache.
 const {
   findManySubscriptionsMock,
   countSubscriptionsMock,
-  findManyTagsMock,
-  projectRenewalEventsMock,
   isWorkerRuntimeMock,
   getLiteOverviewStatisticsSnapshotMock
 } = vi.hoisted(() => ({
   findManySubscriptionsMock: vi.fn(),
   countSubscriptionsMock: vi.fn(),
-  findManyTagsMock: vi.fn(),
-  projectRenewalEventsMock: vi.fn(() => []),
   isWorkerRuntimeMock: vi.fn(),
   getLiteOverviewStatisticsSnapshotMock: vi.fn()
 }))
@@ -23,9 +19,6 @@ vi.mock('../../src/db', () => ({
     subscription: {
       findMany: findManySubscriptionsMock,
       count: countSubscriptionsMock
-    },
-    tag: {
-      findMany: findManyTagsMock
     }
   }
 }))
@@ -46,9 +39,7 @@ vi.mock('../../src/services/settings.service', () => ({
     notifyOnDueDay: true,
     monthlyBudgetBase: null,
     yearlyBudgetBase: null,
-    enableTagBudgets: false,
     overdueReminderDays: [1, 2, 3],
-    tagBudgets: {},
     emailNotificationsEnabled: false,
     emailProvider: 'smtp',
     pushplusNotificationsEnabled: false,
@@ -106,8 +97,7 @@ vi.mock('../../src/services/settings.service', () => ({
 }))
 
 vi.mock('../../src/services/worker-lite-repository.service', () => ({
-  listStatisticsSubscriptionsLite: findManySubscriptionsMock,
-  listTagsLite: findManyTagsMock
+  listStatisticsSubscriptionsLite: findManySubscriptionsMock
 }))
 
 vi.mock('../../src/services/worker-lite-statistics.repository', () => ({
@@ -118,15 +108,11 @@ vi.mock('../../src/utils/money', () => ({
   convertAmount: vi.fn((amount: number) => amount)
 }))
 
-vi.mock('../../src/services/projected-renewal.service', () => ({
-  projectRenewalEvents: projectRenewalEventsMock
-}))
-
 vi.mock('../../src/runtime', () => ({
   isWorkerRuntime: isWorkerRuntimeMock
 }))
 
-import { getBudgetStatistics, getOverviewStatistics } from '../../src/services/statistics.service'
+import { getOverviewStatistics } from '../../src/services/statistics.service'
 
 function createSubscription(id: string, overrides: Record<string, unknown> = {}) {
   return {
@@ -154,14 +140,11 @@ function createSubscription(id: string, overrides: Record<string, unknown> = {})
 describe('statistics service', () => {
   beforeEach(async () => {
     await invalidateWorkerLiteCache(['statistics', 'settings', 'exchange-rates'])
-    findManyTagsMock.mockReset()
     findManySubscriptionsMock.mockReset()
     countSubscriptionsMock.mockReset()
-    projectRenewalEventsMock.mockClear()
     getLiteOverviewStatisticsSnapshotMock.mockReset()
     isWorkerRuntimeMock.mockReset()
     isWorkerRuntimeMock.mockReturnValue(false)
-    findManyTagsMock.mockResolvedValue([])
     vi.useRealTimers()
   })
 
@@ -230,13 +213,11 @@ describe('statistics service', () => {
     const result = await getOverviewStatistics()
 
     expect(findManySubscriptionsMock).not.toHaveBeenCalled()
-    expect(projectRenewalEventsMock).not.toHaveBeenCalled()
-    expect(findManyTagsMock).not.toHaveBeenCalled()
     expect(getLiteOverviewStatisticsSnapshotMock).toHaveBeenCalledTimes(1)
-    expect(result.monthlyTrend).toEqual([])
-    expect(result.upcomingByDay).toEqual([])
-    expect(result.tagSpend).toEqual([])
-    expect(result.tagBudgetUsage).toEqual([])
+    expect(result).not.toHaveProperty('monthlyTrend')
+    expect(result).not.toHaveProperty('upcomingByDay')
+    expect(result).not.toHaveProperty('tagSpend')
+    expect(result).not.toHaveProperty('tagBudgetUsage')
     expect(result.statusDistribution).toEqual([
       { status: 'active', count: 1 },
       { status: 'paused', count: 0 },
@@ -254,18 +235,6 @@ describe('statistics service', () => {
         status: 'expired'
       }
     ])
-    expect(result.monthlyTrendMeta).toEqual({
-      mode: 'projected',
-      months: 12
-    })
-  })
-
-  it('does not load tag budgets when tag budgets are disabled', async () => {
-    findManySubscriptionsMock.mockResolvedValue([createSubscription('monthly')])
-
-    await getOverviewStatistics()
-
-    expect(findManyTagsMock).not.toHaveBeenCalled()
   })
 
   it('formats upcoming renewal dates in configured timezone', async () => {
@@ -283,26 +252,4 @@ describe('statistics service', () => {
     })
   })
 
-  it('does not build projected trend series for budget-only responses', async () => {
-    findManySubscriptionsMock.mockImplementation(async (filters?: { statuses?: string[] }) => {
-      const rows = [
-        createSubscription('monthly'),
-        createSubscription('paused-budget', { amount: 999, status: 'paused' })
-      ]
-      return filters?.statuses?.length ? rows.filter((item) => filters.statuses?.includes(String(item.status))) : rows
-    })
-
-    const result = await getBudgetStatistics()
-
-    expect(projectRenewalEventsMock).not.toHaveBeenCalled()
-    expect(findManySubscriptionsMock).toHaveBeenCalledWith({ statuses: ['active'] })
-    expect(result).toMatchObject({
-      enabledTagBudgets: false,
-      budgetSummary: {
-        monthly: {
-          spent: 10
-        }
-      }
-    })
-  })
 })

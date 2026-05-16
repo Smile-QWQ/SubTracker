@@ -30,10 +30,8 @@ function buildSettings() {
     mergeMultiSubscriptionNotifications: true,
     monthlyBudgetBase: null,
     yearlyBudgetBase: null,
-    enableTagBudgets: false,
     overdueReminderDays: [1, 2, 3],
     defaultOverdueReminderRules: DEFAULT_OVERDUE_REMINDER_RULES,
-    tagBudgets: {},
     emailNotificationsEnabled: false,
     emailProvider: 'resend',
     pushplusNotificationsEnabled: false,
@@ -122,27 +120,23 @@ function pickModeDefaults(mode) {
   switch (mode) {
     case 'dashboard-heavy':
       return {
-        enableTagBudgets: true,
         webhookEnabled: false,
         advanceReminderRules: DEFAULT_ADVANCE_REMINDER_RULES
       }
     case 'cron-heavy':
       return {
-        enableTagBudgets: false,
         webhookEnabled: true,
         advanceReminderRules: '14&09:30;7&09:30;3&09:30;1&09:30;0&09:30;',
         overdueReminderRules: '1&09:30;2&09:30;3&09:30;7&09:30;'
       }
     case 'import-heavy':
       return {
-        enableTagBudgets: false,
         webhookEnabled: false,
         advanceReminderRules: DEFAULT_ADVANCE_REMINDER_RULES
       }
     case 'mixed':
     default:
       return {
-        enableTagBudgets: false,
         webhookEnabled: false,
         advanceReminderRules: DEFAULT_ADVANCE_REMINDER_RULES
       }
@@ -153,7 +147,6 @@ function buildFixture(meta) {
   const currencies = ['CNY', 'USD', 'EUR', 'JPY']
   const modeDefaults = pickModeDefaults(meta.mode)
   const settings = buildSettings()
-  settings.enableTagBudgets = modeDefaults.enableTagBudgets
   if (meta.channelMode === 'email') {
     settings.emailNotificationsEnabled = true
     settings.resendConfig = {
@@ -171,10 +164,6 @@ function buildFixture(meta) {
     icon: 'apps-outline',
     sortOrder: index + 1
   }))
-
-  if (settings.enableTagBudgets) {
-    settings.tagBudgets = Object.fromEntries(tags.slice(0, Math.min(tags.length, 10)).map((tag, index) => [tag.id, 80 + index * 15]))
-  }
 
   const subscriptions = Array.from({ length: meta.subscriptions }, (_, index) => {
     const cycle = index % 4
@@ -365,7 +354,9 @@ async function applyFixtureToDb(fixture) {
       valueJson: {
         username: 'admin',
         passwordHash,
-        passwordSalt
+        passwordSalt,
+        algorithm: 'scrypt',
+        mustChangePassword: true
       }
     },
     create: {
@@ -373,7 +364,9 @@ async function applyFixtureToDb(fixture) {
       valueJson: {
         username: 'admin',
         passwordHash,
-        passwordSalt
+        passwordSalt,
+        algorithm: 'scrypt',
+        mustChangePassword: true
       }
     }
   })

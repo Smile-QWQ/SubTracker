@@ -1,11 +1,6 @@
 <template>
   <div>
-    <page-header
-      title="费用统计"
-      subtitle="从趋势、结构和风险三个维度分析订阅支出"
-      :icon="barChartOutline"
-      icon-background="linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%)"
-    />
+    <page-header title="费用统计" subtitle="用轻量概览、分布和排行快速查看订阅支出" :icon="barChartOutline" icon-background="linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%)" />
 
     <n-grid v-if="showAiSummaryCard" :cols="1" :x-gap="12" :y-gap="12">
       <n-grid-item>
@@ -83,17 +78,39 @@
       </n-grid-item>
     </n-grid>
 
-    <n-grid :cols="gridCols" :x-gap="12" :y-gap="12" style="margin-top: 12px">
+    <n-grid :cols="1" :x-gap="12" :y-gap="12" style="margin-top: 12px">
       <n-grid-item>
-        <n-card title="月支付趋势（未来12个月）">
-          <chart-view v-if="trendOption" :option="trendOption" />
-          <n-empty v-else description="暂无数据" />
-        </n-card>
-      </n-grid-item>
-      <n-grid-item>
-        <n-card title="标签月度支出占比">
-          <chart-view v-if="tagSpendOption" :option="tagSpendOption" />
-          <n-empty v-else description="暂无数据" />
+        <n-card title="费用概览">
+          <div class="summary-grid">
+            <div class="summary-item">
+              <span class="summary-item__label">活跃订阅</span>
+              <strong>{{ overview?.activeSubscriptions ?? 0 }}</strong>
+            </div>
+            <div class="summary-item">
+              <span class="summary-item__label">7 天内续订</span>
+              <strong>{{ overview?.upcoming7Days ?? 0 }}</strong>
+            </div>
+            <div class="summary-item">
+              <span class="summary-item__label">30 天内续订</span>
+              <strong>{{ overview?.upcoming30Days ?? 0 }}</strong>
+            </div>
+            <div class="summary-item">
+              <span class="summary-item__label">本月预计支出</span>
+              <strong>{{ overview ? formatMoney(overview.monthlyEstimatedBase, baseCurrency) : '--' }}</strong>
+            </div>
+            <div class="summary-item">
+              <span class="summary-item__label">年度预计支出</span>
+              <strong>{{ overview ? formatMoney(overview.yearlyEstimatedBase, baseCurrency) : '--' }}</strong>
+            </div>
+            <div class="summary-item">
+              <span class="summary-item__label">月预算使用率</span>
+              <strong>{{ formatBudgetRatio(overview?.budgetSummary.monthly.ratio) }}</strong>
+            </div>
+            <div class="summary-item">
+              <span class="summary-item__label">年预算使用率</span>
+              <strong>{{ formatBudgetRatio(overview?.budgetSummary.yearly.ratio) }}</strong>
+            </div>
+          </div>
         </n-card>
       </n-grid-item>
     </n-grid>
@@ -106,24 +123,9 @@
         </n-card>
       </n-grid-item>
       <n-grid-item>
-        <n-card title="自动续订占比">
-          <chart-view v-if="renewalModeOption" :option="renewalModeOption" />
-          <n-empty v-else description="暂无数据" />
-        </n-card>
-      </n-grid-item>
-    </n-grid>
-
-    <n-grid :cols="gridCols" :x-gap="12" :y-gap="12" style="margin-top: 12px">
-      <n-grid-item>
         <n-card title="订阅币种分布">
           <chart-view v-if="currencyOption" :option="currencyOption" />
           <n-empty v-else description="暂无数据" />
-        </n-card>
-      </n-grid-item>
-      <n-grid-item>
-        <n-card title="未来30天续订分布">
-          <chart-view v-if="upcoming30Option" :option="upcoming30Option" />
-          <n-empty v-else description="未来30天暂无续订" />
         </n-card>
       </n-grid-item>
     </n-grid>
@@ -160,9 +162,9 @@ import { buildTopSubscriptionsOption } from '@/utils/statistics-top-subscription
 
 const { width } = useWindowSize()
 const barChartOutline = BarChartOutline
-const themeVars = useThemeVars()
 const queryClient = useQueryClient()
 const message = useMessage()
+const themeVars = useThemeVars()
 
 const { data: overview } = useStatisticsOverviewQuery()
 const { data: settings } = useSettingsQuery()
@@ -205,62 +207,6 @@ const statusColorMap: Record<SubscriptionStatus, string> = {
   expired: '#ef4444'
 }
 
-const trendOption = computed(() => {
-  if (!overview.value?.monthlyTrend.length) return null
-
-  return {
-    tooltip: {
-      trigger: 'axis',
-      backgroundColor: themeVars.value.cardColor,
-      borderColor: themeVars.value.borderColor,
-      textStyle: { color: themeVars.value.textColor2 }
-    },
-    legend: { data: ['预测金额'], textStyle: { color: themeVars.value.textColor2 } },
-    xAxis: {
-      type: 'category',
-      data: overview.value.monthlyTrend.map((item) => item.month),
-      axisLabel: { color: themeVars.value.textColor3 },
-      axisLine: { lineStyle: { color: themeVars.value.borderColor } }
-    },
-    yAxis: {
-      type: 'value',
-      axisLabel: { color: themeVars.value.textColor3 },
-      splitLine: { lineStyle: { color: themeVars.value.dividerColor } }
-    },
-    series: [
-      {
-        name: '预测金额',
-        type: 'line',
-        smooth: true,
-        areaStyle: {},
-        itemStyle: { color: '#2563eb' },
-        lineStyle: { color: '#2563eb' },
-        data: overview.value.monthlyTrend.map((item) => item.amount)
-      }
-    ]
-  }
-})
-
-const tagSpendOption = computed(() => {
-  if (!overview.value?.tagSpend.length) return null
-  return {
-    tooltip: {
-      trigger: 'item',
-      backgroundColor: themeVars.value.cardColor,
-      borderColor: themeVars.value.borderColor,
-      textStyle: { color: themeVars.value.textColor2 }
-    },
-    legend: { bottom: 0, textStyle: { color: themeVars.value.textColor2 } },
-    series: [
-      {
-        type: 'pie',
-        radius: ['38%', '68%'],
-        data: overview.value.tagSpend
-      }
-    ]
-  }
-})
-
 const statusOption = computed(() => {
   const data = overview.value?.statusDistribution.filter((item) => item.count > 0) ?? []
   if (!data.length) return null
@@ -292,35 +238,6 @@ const statusOption = computed(() => {
           itemStyle: { color: statusColorMap[item.status] }
         })),
         barMaxWidth: 32
-      }
-    ]
-  }
-})
-
-const renewalModeOption = computed(() => {
-  const data = overview.value?.renewalModeDistribution.filter((item) => item.count > 0) ?? []
-  if (!data.length) return null
-
-  return {
-    tooltip: {
-      trigger: 'item',
-      formatter: (params: { data: { count: number; amount: number; name: string } }) =>
-        `${params.data.name}<br/>订阅数：${params.data.count}<br/>月度金额：${formatMoney(params.data.amount, baseCurrency.value)}`
-    },
-    legend: { bottom: 0, textStyle: { color: themeVars.value.textColor2 } },
-    series: [
-      {
-        type: 'pie',
-        radius: ['42%', '68%'],
-        data: data.map((item) => ({
-          name: item.autoRenew ? '自动续订' : '手动续订',
-          value: item.count,
-          count: item.count,
-          amount: item.amount,
-          itemStyle: {
-            color: item.autoRenew ? '#3b82f6' : '#f59e0b'
-          }
-        }))
       }
     ]
   }
@@ -361,60 +278,6 @@ const currencyOption = computed(() => {
   }
 })
 
-const upcoming30Option = computed(() => {
-  const source = overview.value?.upcomingByDay.slice(0, 30).filter((item) => item.count > 0 || item.amount > 0) ?? []
-  if (!source.length) return null
-
-  return {
-    tooltip: {
-      trigger: 'axis',
-      backgroundColor: themeVars.value.cardColor,
-      borderColor: themeVars.value.borderColor,
-      textStyle: { color: themeVars.value.textColor2 }
-    },
-    legend: { data: ['续订数', '金额'], textStyle: { color: themeVars.value.textColor2 } },
-    xAxis: {
-      type: 'category',
-      data: source.map((item) => formatDateInTimezone(item.date, settings.value?.timezone).slice(5)),
-      axisLabel: { color: themeVars.value.textColor3 },
-      axisLine: { lineStyle: { color: themeVars.value.borderColor } }
-    },
-    yAxis: [
-      {
-        type: 'value',
-        name: '续订数',
-        nameTextStyle: { color: themeVars.value.textColor3 },
-        axisLabel: { color: themeVars.value.textColor3 },
-        splitLine: { lineStyle: { color: themeVars.value.dividerColor } }
-      },
-      {
-        type: 'value',
-        name: `金额(${baseCurrency.value})`,
-        nameTextStyle: { color: themeVars.value.textColor3 },
-        axisLabel: { color: themeVars.value.textColor3 }
-      }
-    ],
-    series: [
-      {
-        name: '续订数',
-        type: 'bar',
-        data: source.map((item) => item.count),
-        itemStyle: { color: '#8b5cf6' },
-        barMaxWidth: 18
-      },
-      {
-        name: '金额',
-        type: 'line',
-        smooth: true,
-        yAxisIndex: 1,
-        data: source.map((item) => item.amount),
-        itemStyle: { color: '#ef4444' },
-        lineStyle: { color: '#ef4444' }
-      }
-    ]
-  }
-})
-
 const topSubscriptionsOption = computed(() =>
   buildTopSubscriptionsOption(overview.value?.topSubscriptionsByMonthlyCost, baseCurrency.value, {
     textColor: themeVars.value.textColor2,
@@ -427,6 +290,14 @@ const topSubscriptionsOption = computed(() =>
 
 function formatMoney(amount: number, currency: string) {
   return `${currency} ${amount.toFixed(2)}`
+}
+
+function formatBudgetRatio(ratio?: number | null) {
+  if (ratio === null || ratio === undefined) {
+    return '未设置预算'
+  }
+
+  return `${(ratio * 100).toFixed(2)}%`
 }
 
 async function regenerateSummary() {
@@ -537,5 +408,25 @@ watch(
 
 .ai-summary-markdown :deep(li) {
   margin-bottom: 6px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.summary-item {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--app-surface-alt);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.summary-item__label {
+  color: var(--app-text-secondary);
+  font-size: 13px;
 }
 </style>

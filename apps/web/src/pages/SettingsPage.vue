@@ -117,16 +117,6 @@
                   </div>
                 </div>
               </n-grid-item>
-              <n-grid-item>
-                <div class="switch-row">
-                  <div class="switch-group switch-group--single">
-                    <div class="switch-group__item">
-                      <span class="switch-label">启用标签月预算</span>
-                      <n-switch v-model:value="settingsForm.enableTagBudgets" />
-                    </div>
-                  </div>
-                </div>
-              </n-grid-item>
             </n-grid>
 
             <n-space style="margin-top: 12px">
@@ -795,10 +785,8 @@ const settingsForm = reactive<Settings>({
   mergeMultiSubscriptionNotifications: true,
   monthlyBudgetBase: null,
   yearlyBudgetBase: null,
-  enableTagBudgets: false,
   overdueReminderDays: [1, 2, 3],
   defaultOverdueReminderRules: DEFAULT_OVERDUE_REMINDER_RULES,
-  tagBudgets: {},
   emailNotificationsEnabled: false,
   emailProvider: 'smtp',
   pushplusNotificationsEnabled: false,
@@ -975,22 +963,22 @@ const creditEntries = [
   },
   {
     title: 'Naive UI',
-    description: '',
-    linkText: 'https://www.naiveui.com/',
-    href: 'https://www.naiveui.com/'
-  },
-  {
-    title: 'Fastify / Prisma',
-    description: '',
-    linkText: 'https://www.fastify.io/ / https://www.prisma.io/',
-    href: 'https://www.fastify.io/'
-  },
-  {
-    title: 'Pinia / TanStack Query / ECharts',
-    description: '',
-    linkText: 'https://pinia.vuejs.org/',
-    href: 'https://pinia.vuejs.org/'
-  }
+              description: '',
+              linkText: 'https://www.naiveui.com/',
+              href: 'https://www.naiveui.com/'
+            },
+            {
+              title: 'Fastify / Prisma',
+              description: '',
+              linkText: 'https://www.fastify.io/ / https://www.prisma.io/',
+              href: 'https://www.fastify.io/'
+            },
+            {
+              title: 'Pinia / TanStack Query',
+              description: '',
+              linkText: 'https://pinia.vuejs.org/',
+              href: 'https://pinia.vuejs.org/'
+            }
 ] as const
 
 function normalizeWorkerEmailProvider() {
@@ -1191,9 +1179,7 @@ async function saveBasicSettings() {
       mergeMultiSubscriptionNotifications: settingsForm.mergeMultiSubscriptionNotifications,
       monthlyBudgetBase: settingsForm.monthlyBudgetBase,
       yearlyBudgetBase: settingsForm.yearlyBudgetBase,
-      enableTagBudgets: settingsForm.enableTagBudgets,
-      defaultOverdueReminderRules: settingsForm.defaultOverdueReminderRules,
-      tagBudgets: settingsForm.tagBudgets
+      defaultOverdueReminderRules: settingsForm.defaultOverdueReminderRules
     })
     applySavedSettings(result)
     message.success('基础设置已保存')
@@ -1201,7 +1187,7 @@ async function saveBasicSettings() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: ['statistics-overview'] }),
-      queryClient.invalidateQueries({ queryKey: ['statistics-budgets'] })
+      queryClient.invalidateQueries({ queryKey: ['calendar-events'] })
     ])
     await queryClient.invalidateQueries({ queryKey: EXCHANGE_RATE_SNAPSHOT_QUERY_KEY })
   } catch (error) {
@@ -1510,7 +1496,6 @@ function refreshAppQueries() {
   queryClient.removeQueries({ queryKey: ['subscriptions'] })
   queryClient.removeQueries({ queryKey: ['tags'] })
   queryClient.removeQueries({ queryKey: ['statistics-overview'] })
-  queryClient.removeQueries({ queryKey: ['statistics-budgets'] })
   queryClient.removeQueries({ queryKey: ['calendar-events'] })
   queryClient.removeQueries({ queryKey: SETTINGS_QUERY_KEY })
   queryClient.removeQueries({ queryKey: EXCHANGE_RATE_SNAPSHOT_QUERY_KEY })

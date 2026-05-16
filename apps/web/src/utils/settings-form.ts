@@ -4,7 +4,6 @@ export function cloneSettingsForForm(settings: Settings): Settings {
   return {
     ...settings,
     overdueReminderDays: [...settings.overdueReminderDays],
-    tagBudgets: { ...settings.tagBudgets },
     smtpConfig: { ...settings.smtpConfig },
     resendConfig: { ...settings.resendConfig },
     pushplusConfig: { ...settings.pushplusConfig },

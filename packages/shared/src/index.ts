@@ -284,10 +284,8 @@ export const SettingsSchema = z.object({
   mergeMultiSubscriptionNotifications: z.boolean().default(true),
   monthlyBudgetBase: OptionalMoneySchema,
   yearlyBudgetBase: OptionalMoneySchema,
-  enableTagBudgets: z.boolean().default(false),
   overdueReminderDays: z.array(z.union([z.literal(1), z.literal(2), z.literal(3)])).default([1, 2, 3]),
   defaultOverdueReminderRules: z.string().max(500).default(DEFAULT_OVERDUE_REMINDER_RULES),
-  tagBudgets: z.record(z.string(), z.number().nonnegative()).default({}),
   emailNotificationsEnabled: z.boolean().default(false),
   emailProvider: EmailProviderSchema.default('smtp'),
   pushplusNotificationsEnabled: z.boolean().default(false),
@@ -588,12 +586,6 @@ export interface DashboardOverview {
   yearlyBudgetBase?: number | null
   monthlyBudgetUsageRatio?: number | null
   yearlyBudgetUsageRatio?: number | null
-  tagSpend: Array<{ name: string; value: number }>
-  monthlyTrend: Array<{ month: string; amount: number }>
-  monthlyTrendMeta: {
-    mode: 'projected'
-    months: number
-  }
   budgetSummary: {
     monthly: {
       spent: number
@@ -610,34 +602,7 @@ export interface DashboardOverview {
       status: 'normal' | 'warning' | 'over'
     }
   }
-  tagBudgetSummary?: {
-    configuredCount: number
-    warningCount: number
-    overBudgetCount: number
-    topTags: Array<{
-      tagId: string
-      name: string
-      budget: number
-      spent: number
-      ratio: number
-      remaining: number
-      overBudget: number
-      status: 'normal' | 'warning' | 'over'
-    }>
-  } | null
   statusDistribution: Array<{ status: SubscriptionStatus; count: number }>
-  renewalModeDistribution: Array<{ autoRenew: boolean; count: number; amount: number }>
-  upcomingByDay: Array<{ date: string; count: number; amount: number }>
-  tagBudgetUsage?: Array<{
-    tagId: string
-    name: string
-    budget: number
-    spent: number
-    ratio: number
-    remaining: number
-    overBudget: number
-    status: 'normal' | 'warning' | 'over'
-  }>
   currencyDistribution: Array<{ currency: string; amount: number }>
   topSubscriptionsByMonthlyCost: Array<{
     id: string
@@ -653,16 +618,9 @@ export interface DashboardOverview {
     nextRenewalDate: string
     amount: number
     currency: string
-    convertedAmount: number
-    status: SubscriptionStatus
-  }>
-}
-
-export interface BudgetStatisticsDto {
-  enabledTagBudgets: boolean
-  budgetSummary: DashboardOverview['budgetSummary']
-  tagBudgetSummary: DashboardOverview['tagBudgetSummary']
-  tagBudgetUsage: NonNullable<DashboardOverview['tagBudgetUsage']>
+      convertedAmount: number
+      status: SubscriptionStatus
+    }>
 }
 
 export interface CalendarEventDto {
