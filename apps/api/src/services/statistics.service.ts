@@ -103,7 +103,7 @@ function buildBudgetEntry(spent: number, budget: number | null | undefined): Bud
   }
 }
 
-function buildProjectedMonthlyTrend(
+function buildProjectedSeries(
   subscriptions: StatisticsSubscription[],
   baseCurrency: string,
   rates: Awaited<ReturnType<typeof ensureExchangeRates>>,
@@ -111,15 +111,22 @@ function buildProjectedMonthlyTrend(
 ) {
   const startMonth = toTimezonedDayjs(startOfMonthDateInTimezone(new Date(), timezone), timezone)
   const endMonth = startMonth.add(11, 'month').endOf('month')
+  const startDay = toTimezonedDayjs(startOfDayDateInTimezone(new Date(), timezone), timezone)
+  const endDay = startDay.add(89, 'day').endOf('day')
   const monthlyTrendMap = new Map<string, number>()
+  const upcomingMap = new Map<string, { count: number; amount: number }>()
 
   for (let index = 0; index < 12; index += 1) {
     monthlyTrendMap.set(startMonth.add(index, 'month').format('YYYY-MM'), 0)
   }
 
+  for (let index = 0; index < 90; index += 1) {
+    upcomingMap.set(startDay.add(index, 'day').format('YYYY-MM-DD'), { count: 0, amount: 0 })
+  }
+
   const projectedEvents = projectRenewalEvents(subscriptions, {
     start: startMonth.toDate(),
-    end: endMonth.toDate(),
+    end: endDay.isAfter(endMonth) ? endDay.toDate() : endMonth.toDate(),
     statuses: ['active', 'expired'],
     timezone
   })
@@ -128,49 +135,27 @@ function buildProjectedMonthlyTrend(
     const convertedAmount = convertAmount(event.amount, event.currency, baseCurrency, rates.baseCurrency, rates.rates)
     const key = monthKeyInTimezone(event.date, timezone)
     monthlyTrendMap.set(key, (monthlyTrendMap.get(key) ?? 0) + convertedAmount)
+
+    if (!startDay.isAfter(event.date) && !toTimezonedDayjs(event.date, timezone).isAfter(endDay)) {
+      const dayKey = formatDateInTimezone(event.date, timezone)
+      const current = upcomingMap.get(dayKey) ?? { count: 0, amount: 0 }
+      current.count += 1
+      current.amount += convertedAmount
+      upcomingMap.set(dayKey, current)
+    }
   }
 
-  return Array.from(monthlyTrendMap.entries()).map(([month, amount]) => ({
-    month,
-    amount: Number(amount.toFixed(2))
-  }))
-}
-
-function buildUpcomingByDay(
-  subscriptions: StatisticsSubscription[],
-  baseCurrency: string,
-  rates: Awaited<ReturnType<typeof ensureExchangeRates>>,
-  timezone: string
-) {
-  const startDay = toTimezonedDayjs(startOfDayDateInTimezone(new Date(), timezone), timezone)
-  const endDay = startDay.add(89, 'day').endOf('day')
-  const upcomingMap = new Map<string, { count: number; amount: number }>()
-
-  for (let index = 0; index < 90; index += 1) {
-    upcomingMap.set(startDay.add(index, 'day').format('YYYY-MM-DD'), { count: 0, amount: 0 })
+  return {
+    monthlyTrend: Array.from(monthlyTrendMap.entries()).map(([month, amount]) => ({
+      month,
+      amount: Number(amount.toFixed(2))
+    })),
+    upcomingByDay: Array.from(upcomingMap.entries()).map(([date, value]) => ({
+      date,
+      count: value.count,
+      amount: Number(value.amount.toFixed(2))
+    }))
   }
-
-  const projectedEvents = projectRenewalEvents(subscriptions, {
-    start: startDay.toDate(),
-    end: endDay.toDate(),
-    statuses: ['active', 'expired'],
-    timezone
-  })
-
-  for (const event of projectedEvents) {
-    const convertedAmount = convertAmount(event.amount, event.currency, baseCurrency, rates.baseCurrency, rates.rates)
-    const key = formatDateInTimezone(event.date, timezone)
-    const current = upcomingMap.get(key) ?? { count: 0, amount: 0 }
-    current.count += 1
-    current.amount += convertedAmount
-    upcomingMap.set(key, current)
-  }
-
-  return Array.from(upcomingMap.entries()).map(([date, value]) => ({
-    date,
-    count: value.count,
-    amount: Number(value.amount.toFixed(2))
-  }))
 }
 
 async function buildStatisticsState() {
@@ -265,8 +250,7 @@ async function buildStatisticsState() {
     }
   }
 
-  const monthlyTrend = buildProjectedMonthlyTrend(projectedSubscriptions, baseCurrency, rates, timezone)
-  const upcomingByDay = buildUpcomingByDay(projectedSubscriptions, baseCurrency, rates, timezone)
+  const { monthlyTrend, upcomingByDay } = buildProjectedSeries(projectedSubscriptions, baseCurrency, rates, timezone)
 
   const upcomingRenewals = projectedSubscriptions
     .filter((subscription) => {
@@ -284,13 +268,11 @@ async function buildStatisticsState() {
       status: item.status
     }))
 
-  const tagLookup = new Map(tags.map((tag) => [tag.id, tag.name]))
-
   const tagBudgetUsage = appSettings.enableTagBudgets
     ? Object.entries(appSettings.tagBudgets)
         .flatMap<TagBudgetUsageEntry>(([tagId, budget]) => {
           const item = tagBudgetMap.get(tagId)
-          const name = item?.name ?? tagLookup.get(tagId)
+          const name = item?.name ?? tags.find((tag) => tag.id === tagId)?.name
           if (!name) return []
 
           const spent = Number((item?.spent ?? 0).toFixed(2))
@@ -319,21 +301,23 @@ async function buildStatisticsState() {
     yearly: buildBudgetEntry(yearlyEstimatedBase, appSettings.yearlyBudgetBase)
   }
 
-  const tagBudgetSummary = {
-    configuredCount: tagBudgetUsage.length,
-    warningCount: tagBudgetUsage.filter((item) => item.status === 'warning').length,
-    overBudgetCount: tagBudgetUsage.filter((item) => item.status === 'over').length,
-    topTags: tagBudgetUsage.slice(0, 3).map((item) => ({
-      tagId: item.tagId,
-      name: item.name,
-      budget: item.budget,
-      spent: item.spent,
-      ratio: item.ratio,
-      remaining: item.remaining,
-      overBudget: item.overBudget,
-      status: item.status
-    }))
-  }
+  const tagBudgetSummary = appSettings.enableTagBudgets
+    ? {
+        configuredCount: tagBudgetUsage.length,
+        warningCount: tagBudgetUsage.filter((item) => item.status === 'warning').length,
+        overBudgetCount: tagBudgetUsage.filter((item) => item.status === 'over').length,
+        topTags: tagBudgetUsage.slice(0, 3).map((item) => ({
+          tagId: item.tagId,
+          name: item.name,
+          budget: item.budget,
+          spent: item.spent,
+          ratio: item.ratio,
+          remaining: item.remaining,
+          overBudget: item.overBudget,
+          status: item.status
+        }))
+      }
+    : null
 
   return {
     appSettings,

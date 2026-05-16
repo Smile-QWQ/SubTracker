@@ -358,4 +358,74 @@ describe('ai summary service', () => {
     expect(requestBody.messages[0].content).toContain('专门输出统计摘要的助手')
     expect(requestBody.messages[0].content).not.toContain('只返回 JSON')
   })
+
+  it('shrinks large summary arrays before sending them to AI', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        choices: [
+          {
+            message: {
+              content: '## 总览\n- 已缩减输入体积'
+            }
+          }
+        ]
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    aiSummaryMocks.getOverviewStatisticsMock.mockResolvedValue(
+      buildOverview({
+        tagSpend: Array.from({ length: 10 }, (_, index) => ({ name: `tag-${index}`, value: 10 - index })),
+        renewalModeDistribution: [
+          { autoRenew: true, count: 4, amount: 120 },
+          { autoRenew: false, count: 0, amount: 0 }
+        ],
+        currencyDistribution: Array.from({ length: 10 }, (_, index) => ({ currency: `C${index}`, amount: 20 - index })),
+        topSubscriptionsByMonthlyCost: Array.from({ length: 10 }, (_, index) => ({
+          id: `top-${index}`,
+          name: `Top ${index}`,
+          amount: index + 1,
+          currency: 'CNY',
+          monthlyAmountBase: index + 1,
+          baseCurrency: 'CNY'
+        })),
+        upcomingRenewals: Array.from({ length: 10 }, (_, index) => ({
+          id: `up-${index}`,
+          name: `Upcoming ${index}`,
+          nextRenewalDate: '2026-05-04',
+          amount: index + 1,
+          currency: 'CNY',
+          convertedAmount: index + 1,
+          status: 'active'
+        })),
+        upcomingByDay: [
+          { date: '2026-05-03', count: 0, amount: 0 },
+          ...Array.from({ length: 12 }, (_, index) => ({ date: `2026-05-${String(index + 4).padStart(2, '0')}`, count: 1, amount: index + 1 }))
+        ],
+        tagBudgetUsage: Array.from({ length: 10 }, (_, index) => ({
+          tagId: `tb-${index}`,
+          name: `tag-budget-${index}`,
+          budget: 100,
+          spent: 90 - index,
+          ratio: 0.9 - index * 0.01,
+          remaining: 10 + index,
+          overBudget: 0,
+          status: 'warning' as const
+        }))
+      })
+    )
+
+    await generateDashboardAiSummary()
+
+    const requestBody = JSON.parse(String((((fetchMock.mock.calls[0] as unknown) as [unknown, RequestInit])[1])?.body))
+    const content = String(requestBody.messages[1].content)
+    const payload = JSON.parse(content.slice(content.indexOf('{')))
+
+    expect(payload.tagSpendTop).toHaveLength(6)
+    expect(payload.renewalModeDistribution).toHaveLength(1)
+    expect(payload.currencyDistribution).toHaveLength(8)
+    expect(payload.upcomingRenewalsTop).toHaveLength(6)
+    expect(payload.topSubscriptionsByMonthlyCost).toHaveLength(6)
+    expect(payload.upcomingByDayNonZero).toHaveLength(10)
+    expect(payload.tagBudgetUsageTop).toHaveLength(6)
+  })
 })

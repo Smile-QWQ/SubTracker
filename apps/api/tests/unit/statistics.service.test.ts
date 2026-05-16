@@ -200,4 +200,48 @@ describe('statistics service', () => {
       })
     ])
   })
+
+  it('keeps overview dto fields for dashboard and statistics pages', async () => {
+    statisticsSettings.enableTagBudgets = true
+    statisticsSettings.tagBudgets = { tag_video: 100 }
+    findManyTagsMock.mockResolvedValue([{ id: 'tag_video', name: 'Video' }])
+    findManySubscriptionsMock.mockResolvedValue([
+      createSubscription('active-video', {
+        amount: 40,
+        tags: [{ tag: { id: 'tag_video', name: 'Video', color: '#3b82f6', icon: 'apps-outline', sortOrder: 0 } }]
+      })
+    ])
+
+    const result = await getOverviewStatistics()
+
+    expect(result).toMatchObject({
+      activeSubscriptions: expect.any(Number),
+      upcoming7Days: expect.any(Number),
+      upcoming30Days: expect.any(Number),
+      monthlyEstimatedBase: expect.any(Number),
+      yearlyEstimatedBase: expect.any(Number),
+      budgetSummary: {
+        monthly: expect.any(Object),
+        yearly: expect.any(Object)
+      },
+      statusDistribution: expect.any(Array),
+      renewalModeDistribution: expect.any(Array),
+      currencyDistribution: expect.any(Array),
+      topSubscriptionsByMonthlyCost: expect.any(Array),
+      upcomingRenewals: expect.any(Array)
+    })
+    expect(Array.isArray(result.monthlyTrend)).toBe(true)
+    expect(Array.isArray(result.upcomingByDay)).toBe(true)
+    expect(result.monthlyTrendMeta).toEqual({
+      mode: 'projected',
+      months: 12
+    })
+    expect(result.tagBudgetSummary).not.toBeNull()
+    expect(result.tagBudgetUsage).toEqual([
+      expect.objectContaining({
+        tagId: 'tag_video',
+        budget: 100
+      })
+    ])
+  })
 })

@@ -92,6 +92,25 @@ function extractChatCompletionText(payload: ChatCompletionPayload) {
 }
 
 function buildSummaryInput(overview: DashboardOverview) {
+  const tagSpendTop = [...overview.tagSpend]
+    .filter((item) => item.value > 0)
+    .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, 'zh-CN'))
+    .slice(0, 6)
+  const renewalModeDistribution = overview.renewalModeDistribution.filter((item) => item.count > 0 || item.amount > 0)
+  const currencyDistribution = overview.currencyDistribution
+    .filter((item) => item.amount > 0)
+    .sort((a, b) => b.amount - a.amount || a.currency.localeCompare(b.currency, 'en'))
+    .slice(0, 8)
+  const upcomingRenewalsTop = overview.upcomingRenewals.slice(0, 6)
+  const topSubscriptionsByMonthlyCost = overview.topSubscriptionsByMonthlyCost.slice(0, 6)
+  const upcomingByDayNonZero = overview.upcomingByDay
+    .filter((item) => item.count > 0 || item.amount > 0)
+    .slice(0, 10)
+  const tagBudgetUsageTop = (overview.tagBudgetUsage ?? [])
+    .filter((item) => item.ratio > 0 || item.spent > 0)
+    .sort((a, b) => b.ratio - a.ratio || b.spent - a.spent)
+    .slice(0, 6)
+
   return {
     summary: {
       activeSubscriptions: overview.activeSubscriptions,
@@ -105,21 +124,15 @@ function buildSummaryInput(overview: DashboardOverview) {
       yearlyBudgetUsageRatio: overview.yearlyBudgetUsageRatio ?? null
     },
     budgetSummary: overview.budgetSummary,
-    tagSpendTop: [...overview.tagSpend]
-      .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, 'zh-CN'))
-      .slice(0, 8),
+    tagSpendTop,
     statusDistribution: overview.statusDistribution,
-    renewalModeDistribution: overview.renewalModeDistribution,
-    currencyDistribution: overview.currencyDistribution,
-    upcomingRenewalsTop: overview.upcomingRenewals.slice(0, 8),
-    topSubscriptionsByMonthlyCost: overview.topSubscriptionsByMonthlyCost.slice(0, 8),
-    upcomingByDayNonZero: overview.upcomingByDay.filter((item) => item.count > 0 || item.amount > 0).slice(0, 15),
+    renewalModeDistribution,
+    currencyDistribution,
+    upcomingRenewalsTop,
+    topSubscriptionsByMonthlyCost,
+    upcomingByDayNonZero,
     tagBudgetSummary: overview.tagBudgetSummary ?? null,
-    tagBudgetUsageTop:
-      (overview.tagBudgetUsage ?? [])
-        .filter((item) => item.ratio > 0)
-        .sort((a, b) => b.ratio - a.ratio || b.spent - a.spent)
-        .slice(0, 8) ?? []
+    tagBudgetUsageTop
   }
 }
 
