@@ -5,24 +5,27 @@ import { convertAmount } from '../utils/money'
 import { getAppTimezone } from './settings.service'
 import { endOfDayDateInTimezone, startOfDayDateInTimezone, toTimezonedDayjs } from '../utils/timezone'
 
-export async function renewSubscription(
-  subscriptionId: string,
+const AUTO_RENEW_BATCH_LIMIT = 100
+const AUTO_RENEW_MAX_CYCLES_PER_SUBSCRIPTION = 24
+
+type RenewableSubscription = Awaited<ReturnType<typeof prisma.subscription.findUnique>>
+
+type RenewExecutionContext = {
+  timezone: string
+  baseCurrency: string
+  rates: Awaited<ReturnType<typeof ensureExchangeRates>>
+}
+
+async function renewSubscriptionFromSnapshot(
+  subscription: NonNullable<RenewableSubscription>,
+  context: RenewExecutionContext,
   paidAt?: Date,
   paidAmount?: number,
-  paidCurrency?: string,
-  timezone?: string
+  paidCurrency?: string
 ) {
-  const subscription = await prisma.subscription.findUnique({ where: { id: subscriptionId } })
-  if (!subscription) {
-    throw new Error('Subscription not found')
-  }
-
-  const appTimezone = timezone ?? (await getAppTimezone())
   const amount = paidAmount ?? subscription.amount
   const currency = (paidCurrency ?? subscription.currency).toUpperCase()
-  const baseCurrency = await getBaseCurrency()
-  const rates = await ensureExchangeRates(baseCurrency)
-  const convertedAmount = convertAmount(amount, currency, baseCurrency, rates.baseCurrency, rates.rates)
+  const convertedAmount = convertAmount(amount, currency, context.baseCurrency, context.rates.baseCurrency, context.rates.rates)
   const exchangeRate = amount === 0 ? 0 : Number((convertedAmount / amount).toFixed(8))
 
   const periodStart = subscription.nextRenewalDate
@@ -30,7 +33,7 @@ export async function renewSubscription(
     subscription.nextRenewalDate,
     subscription.billingIntervalCount,
     subscription.billingIntervalUnit,
-    appTimezone
+    context.timezone
   )
 
   return prisma.$transaction(async (tx) => {
@@ -39,7 +42,7 @@ export async function renewSubscription(
         subscriptionId: subscription.id,
         amount,
         currency,
-        baseCurrency,
+        baseCurrency: context.baseCurrency,
         convertedAmount,
         exchangeRate,
         paidAt: paidAt ?? new Date(),
@@ -63,6 +66,28 @@ export async function renewSubscription(
   })
 }
 
+export async function renewSubscription(
+  subscriptionId: string,
+  paidAt?: Date,
+  paidAmount?: number,
+  paidCurrency?: string,
+  timezone?: string
+) {
+  const subscription = await prisma.subscription.findUnique({ where: { id: subscriptionId } })
+  if (!subscription) {
+    throw new Error('Subscription not found')
+  }
+
+  const baseCurrency = await getBaseCurrency()
+  const context: RenewExecutionContext = {
+    timezone: timezone ?? (await getAppTimezone()),
+    baseCurrency,
+    rates: await ensureExchangeRates(baseCurrency)
+  }
+
+  return renewSubscriptionFromSnapshot(subscription, context, paidAt, paidAmount, paidCurrency)
+}
+
 export async function autoRenewDueSubscriptions(today = new Date()) {
   const timezone = await getAppTimezone()
   const dueSubscriptions = await prisma.subscription.findMany({
@@ -73,21 +98,34 @@ export async function autoRenewDueSubscriptions(today = new Date()) {
         lte: endOfDayDateInTimezone(today, timezone)
       }
     },
-    orderBy: { nextRenewalDate: 'asc' }
+    orderBy: { nextRenewalDate: 'asc' },
+    take: AUTO_RENEW_BATCH_LIMIT
   })
+  const baseCurrency = await getBaseCurrency()
+  const context: RenewExecutionContext = {
+    timezone,
+    baseCurrency,
+    rates: await ensureExchangeRates(baseCurrency)
+  }
 
   let renewedCount = 0
+  const todayEnd = toTimezonedDayjs(today, timezone).endOf('day')
 
   for (const subscription of dueSubscriptions) {
-    let currentNextRenewalDate = subscription.nextRenewalDate
+    let currentSubscription = subscription
     let guard = 0
 
-    const todayEnd = toTimezonedDayjs(today, timezone).endOf('day')
-
-    while (!toTimezonedDayjs(currentNextRenewalDate, timezone).isAfter(todayEnd) && guard < 24) {
-      const result = await renewSubscription(subscription.id, undefined, undefined, undefined, timezone)
+    while (
+      !toTimezonedDayjs(currentSubscription.nextRenewalDate, timezone).isAfter(todayEnd) &&
+      guard < AUTO_RENEW_MAX_CYCLES_PER_SUBSCRIPTION
+    ) {
+      const result = await renewSubscriptionFromSnapshot(currentSubscription, context)
       renewedCount += 1
-      currentNextRenewalDate = result.subscription.nextRenewalDate
+      currentSubscription = {
+        ...currentSubscription,
+        nextRenewalDate: result.subscription.nextRenewalDate,
+        status: result.subscription.status
+      }
       guard += 1
     }
   }

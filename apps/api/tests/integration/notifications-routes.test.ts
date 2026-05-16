@@ -184,7 +184,8 @@ describe('notification routes', () => {
 
     expect(res.statusCode).toBe(200)
     expect(notificationMocks.scanRenewalNotificationsMock).toHaveBeenCalledWith(new Date('2026-05-01T17:15:00.000+08:00'), {
-      dryRun: true
+      dryRun: true,
+      includeDebugCandidates: true
     })
     expect(res.json().data.processedCount).toBe(1)
   })

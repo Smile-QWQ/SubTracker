@@ -62,6 +62,7 @@ export type NotificationScanOverrides = Partial<
   Awaited<ReturnType<typeof getNotificationScanSettings>>
 > & {
   dryRun?: boolean
+  includeDebugCandidates?: boolean
 }
 
 type ReminderSubscriptionLike = {
@@ -351,6 +352,7 @@ export async function scanRenewalNotifications(
     ...overrides
   }
   const dryRun = overrides.dryRun ?? false
+  const includeDebugCandidates = overrides.includeDebugCandidates ?? false
   const now = getNowInTimezone(today, appSettings.timezone).second(0).millisecond(0)
   const currentDay = now.startOf('day')
   const maxAdvanceDays = getMaxAdvanceReminderDays(appSettings.defaultAdvanceReminderRules)
@@ -421,7 +423,9 @@ export async function scanRenewalNotifications(
 
   for (const sub of subscriptions) {
     const matches = resolveReminderMatches(now, sub, appSettings)
-    candidates.push(buildDebugCandidate(sub, matches, appSettings))
+    if (includeDebugCandidates) {
+      candidates.push(buildDebugCandidate(sub, matches, appSettings))
+    }
     for (const match of matches) {
       dispatchEntries.push(buildDispatchEntry(sub, match, appSettings.timezone))
     }
