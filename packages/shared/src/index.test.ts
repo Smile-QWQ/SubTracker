@@ -11,6 +11,7 @@ import {
   getDefaultAiDashboardSummaryPreviewPrompt,
   getDefaultAiDashboardSummaryPrompt,
   getDefaultAiSubscriptionPrompt,
+  getMessage,
   normalizeWebsiteUrlInput,
   normalizeAppLocale,
   resolveAppLocaleFromAcceptLanguage,
@@ -75,10 +76,14 @@ describe('shared schema', () => {
       value: null,
       error: '请输入合法网址，例如 https://example.com'
     })
+    expect(normalizeWebsiteUrlInput('not a url', 'en-US')).toEqual({
+      value: null,
+      error: 'Enter a valid URL, for example https://example.com'
+    })
   })
 
   it('should validate timezone values', () => {
-    expect(() => SettingsSchema.parse({ timezone: 'Mars/Olympus' })).toThrow()
+    expect(() => SettingsSchema.parse({ timezone: 'Mars/Olympus' })).toThrow('validation.timezoneInvalid')
     expect(SettingsSchema.parse({ timezone: 'America/Los_Angeles' }).timezone).toBe('America/Los_Angeles')
   })
 
@@ -132,6 +137,30 @@ describe('shared schema', () => {
     expect(getDefaultAiSubscriptionPrompt('en-US')).toContain('subscription billing extractor')
     expect(getDefaultAiDashboardSummaryPrompt('en-US')).toContain('subscription operations summary assistant')
     expect(getDefaultAiDashboardSummaryPreviewPrompt('en-US')).toContain('summary compression assistant')
+  })
+
+  it('provides locale-aware shared messages with fallback and interpolation', () => {
+    expect(getMessage('en-US', 'validation.reminderRules.fallback')).toBe('Use the system default')
+    expect(getMessage('en-US', 'api.errors.ai.disabled')).toBe('AI is disabled')
+    expect(getMessage('en-US', 'notifications.forgotPassword.expiresInMinutes', { minutes: 15 })).toBe(
+      'Expires in: 15 minutes'
+    )
+    expect(getMessage('en-US', 'common.separators.fieldList')).toBe(', ')
+    expect(getMessage('en-US', 'common.separators.notificationDetail')).toBe('; ')
+    expect(getMessage('en-US', 'notifications.wrappers.detailStart')).toBe(' (')
+    expect(getMessage('en-US', 'notifications.wrappers.detailEnd')).toBe(')')
+    expect(getMessage('en-US', 'formatting.monthLabel.long')).toBe('MMMM YYYY')
+    expect(getMessage('en-US', 'validation.notificationTargetUrl.invalidFormat', { label: 'Webhook URL' })).toBe(
+      'Webhook URL is invalid'
+    )
+    expect(
+      getMessage('en-US', 'statistics.labels.amountAxis', { currency: 'CNY' })
+    ).toBe('Amount (CNY)')
+    expect(getMessage('en-US', 'api.errors.exchangeRates.payloadEmpty')).toBe('The exchange-rate payload is empty')
+    expect(getMessage('en-US', 'api.errors.notifications.emptyDedupEntries')).toBe(
+      'Cannot build notification dispatch params from empty dedup entries'
+    )
+    expect(getMessage('en-US', 'nonexistent.message.key')).toBe('nonexistent.message.key')
   })
 
   it('formats ai summary preview text into multiple readable lines', () => {

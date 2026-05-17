@@ -70,7 +70,9 @@ export default {
       sendKey: 'SendKey',
       apiBaseUrl: 'API Base URL',
       apiKey: 'API Key',
-      topic: 'Topic'
+      topic: 'Topic',
+      gotifyTargetUrl: 'Gotify URL',
+      webhookTargetUrl: 'Webhook URL'
     },
     empty: {
       noData: 'No data',
@@ -85,7 +87,9 @@ export default {
       noFileSelected: 'No file selected'
     },
     separators: {
-      list: ', '
+      list: ', ',
+      fieldList: ', ',
+      notificationDetail: '; '
     },
     locales: {
       zhCN: '简体中文',
@@ -234,6 +238,8 @@ export default {
       topic: 'Topic',
       apiBaseUrl: 'API Base URL',
       apiKey: 'API Key',
+      gotifyTargetUrl: 'Gotify URL',
+      webhookTargetUrl: 'Webhook URL',
       oldUsername: 'Current username',
       oldPassword: 'Current password',
       newUsername: 'New username',
@@ -249,6 +255,7 @@ export default {
       notificationSettings:
         'Manage Email, PushPlus, Telegram, ServerChan, Gotify, and Webhook in one place. Save and test each channel independently.',
       aiSettings: 'The main AI switch controls recognition and connection tests. AI summaries can be turned on or off separately.',
+      forgotPasswordChannelRequired: 'Enable at least one direct notification channel first',
       structuredOutput:
         'When enabled, the system prefers vendor-supported structured JSON output. If unsupported, it automatically falls back to prompt-based JSON output.',
       backup: 'Backup and restore via ZIP, including subscriptions, tags, payment records, ordering, settings, and local logos.',
@@ -337,6 +344,9 @@ export default {
       aiVisionTestFailed: 'AI vision test failed',
       ratesRefreshed: 'Exchange rates updated',
       credentialsUpdated: 'Credentials updated',
+      forgotPasswordEnabled: 'Password reset via notifications enabled',
+      forgotPasswordDisabled: 'Password reset via notifications disabled',
+      forgotPasswordSaveFailed: 'Failed to save forgot password settings',
       emailTestSent: 'Test email sent',
       emailTestFailed: 'Email test failed',
       pushplusTestSubmittedWithCode: 'PushPlus test request submitted. Ticket: {code}',
@@ -543,7 +553,8 @@ export default {
       autoRenew: 'Auto-renew',
       manualRenew: 'Manual renewal',
       renewalCountTooltip: 'Subscriptions',
-      amountTooltip: 'Monthly amount'
+      amountTooltip: 'Monthly amount',
+      amountAxis: 'Amount ({currency})'
     },
     status: {
       active: 'Active',
@@ -932,9 +943,51 @@ export default {
       subscriptionName: 'Test subscription',
       tagName: 'Test tag',
       note: 'This is a test notification.'
+    },
+    merge: {
+      phaseUpcoming: 'Upcoming renewals',
+      phaseDueToday: 'Due today',
+      phaseOverdueDay: 'Day {days} overdue',
+      summaryName: '{count} subscriptions total'
+    },
+    presentation: {
+      unnamedSubscription: 'Unnamed subscription',
+      mergedTitle: '{prefix}: {count} subscriptions',
+      sectionTitle: '{title} ({count})',
+      reminderType: 'Reminder type: {value}',
+      subscriptionCount: 'Subscriptions: {count}',
+      subscriptionName: 'Subscription: {name}',
+      nextRenewal: 'Next renewal: {value}',
+      amount: 'Amount: {value}',
+      tags: 'Tags: {value}',
+      website: 'Website: {value}',
+      notes: 'Notes: {value}',
+      details: 'Details: {value}',
+      daysUntil: '{days} days left',
+      overdueDays: '{days} days overdue'
+    },
+    logs: {
+      dispatchSummary:
+        '[notification] {name}: {successCount} channels succeeded, {failedCount} failed, and {skippedCount} were skipped. {details}',
+      allSkipped: '[notification] {name}: all notification channels were skipped. {details}'
+    },
+    wrappers: {
+      detailStart: ' (',
+      detailEnd: ')'
+    }
+  },
+  formatting: {
+    monthLabel: {
+      long: 'MMMM YYYY'
     }
   },
   validation: {
+    timezoneInvalid: 'Invalid timezone',
+    notificationTargetUrl: {
+      invalidFormat: '{label} is invalid',
+      unsupportedProtocol: '{label} must use http or https',
+      privateHostBlocked: '{label} cannot point to local or private network addresses'
+    },
     websiteUrlInvalid: 'Enter a valid URL, for example https://example.com',
     subscriptionForm: {
       nameRequired: 'Enter a name',
@@ -983,6 +1036,14 @@ export default {
       imageSlow: 'Image recognition is still running. The external model is responding slowly, so please wait a little longer.'
     },
     prompts: {
+      common: {
+        jsonOnlySuffix: 'Return a valid JSON object only. Do not return Markdown, code fences, or any extra explanation.',
+        originalTextLabel: 'Original text',
+        ocrExtractedTextLabel: 'OCR extracted text',
+        returnOkOnly: 'Return OK only',
+        visionConfirmSystem: 'Respond to the image from the user and return one short confirmation sentence only.',
+        visionConfirmUser: 'Please confirm that you have received this test image successfully.'
+      },
       subscription: {
         default: `You are a subscription billing extractor. Extract subscription details from the input text or screenshot and return JSON only.
 Output fields:
@@ -1056,7 +1117,42 @@ Hard requirements:
       }
     }
   },
+  scheduler: {
+    channelSummary: {
+      item: '{channel}: success {success}/failed {failed}/skipped {skipped}'
+    },
+    logs: {
+      reminderScan:
+        '[cron] subscription reminders scanned: candidates {processedCount}, matched {matchedReminderCount}, notified {notificationCount}{channelSummary}',
+      notificationDedupCleanup: '[cron] notification dedup cleanup: deleted {deleted} old records',
+      exchangeRatesRefreshed: '[cron] exchange rates refreshed',
+      exchangeRateRefreshFailed: '[cron] exchange rate refresh failed',
+      reminderScanFailed: '[cron] reminder scan failed'
+    }
+  },
+  logos: {
+    search: {
+      manifestIcon: 'Manifest icon{sizeLabel}',
+      appleTouchIcon: 'Apple Touch Icon',
+      maskIcon: 'Mask Icon',
+      siteIcon: 'Site icon',
+      siteShareImage: 'Site share image',
+      duckduckgoCandidate: 'DuckDuckGo candidate {index}',
+      braveCandidate: 'Brave candidate {index}',
+      siteFavicon: 'Site favicon',
+      googleFavicon: 'Google Favicon',
+      iconHorse: 'Icon Horse',
+      clearbitLogo: 'Clearbit Logo'
+    },
+    library: {
+      unusedLogo: 'Unused logo'
+    }
+  },
   api: {
+    runtime: {
+      initialExchangeRateRefreshFailed: '[api] Initial exchange rate refresh failed. Falling back to the existing snapshot.',
+      started: '[api] Started: http://{host}:{port}'
+    },
     errors: {
       unauthorized: 'Please sign in first',
       tooManyAttempts: 'Too many failed sign-in attempts. Please try again later.',
@@ -1135,6 +1231,7 @@ Hard requirements:
         noValidContent: 'AI did not return valid content',
         noRecognizableText: 'No text content is available for recognition',
         ocrNoValidText: 'OCR did not extract valid text from the image. Enter the text manually instead.',
+        visionCapabilityDisabled: 'The current provider does not support image input.',
         connectionTestFailed: 'AI connection test failed',
         visionTestFailed: 'AI vision test failed',
         recognitionFailed: 'AI recognition failed',
@@ -1151,6 +1248,19 @@ Hard requirements:
         telegramDisabledOrIncomplete: 'Telegram notifications are disabled or incomplete',
         serverchanDisabledOrIncomplete: 'ServerChan notifications are disabled or incomplete',
         gotifyDisabledOrIncomplete: 'Gotify notifications are disabled or incomplete',
+        emptyDedupEntries: 'Cannot build notification dispatch params from empty dedup entries',
+        resendRequestFailed: 'Resend request failed',
+        pushplusRequestFailed: 'PushPlus request failed',
+        pushplusInvalidResponse: 'PushPlus returned an invalid response',
+        pushplusRejected: 'PushPlus request was rejected',
+        pushplusSubmitted: 'Request submitted',
+        telegramRequestFailed: 'Telegram request failed',
+        telegramInvalidResponse: 'Telegram returned an invalid response',
+        telegramRejected: 'Telegram request was rejected',
+        serverchanRequestFailed: 'ServerChan request failed',
+        serverchanInvalidResponse: 'ServerChan returned an invalid response',
+        serverchanRejected: 'ServerChan request was rejected',
+        gotifyRequestFailed: 'Gotify request failed',
         webhookConfigIncomplete: 'Webhook configuration is incomplete',
         webhookTestFailed: 'Webhook test failed',
         emailTestFailed: 'Email test failed',
@@ -1163,8 +1273,48 @@ Hard requirements:
         wallosInspectFailed: 'Wallos inspect failed',
         wallosCommitFailed: 'Wallos import failed',
         subtrackerBackupInspectFailed: 'SubTracker backup inspect failed',
-        subtrackerBackupCommitFailed: 'SubTracker backup restore failed'
+        subtrackerBackupCommitFailed: 'SubTracker backup restore failed',
+        subtrackerBackupManifestInvalid: 'The backup manifest is invalid',
+        subtrackerBackupInvalidFile: 'This is not a valid SubTracker backup file',
+        subtrackerBackupUnsupportedVersion: 'Unsupported backup version: {version}',
+        subtrackerBackupUnsupportedScope: 'Unsupported backup scope: {scope}',
+        subtrackerBackupManifestMissingData: 'The backup manifest is missing required data',
+        subtrackerBackupFileEmpty: 'The backup file is empty',
+        subtrackerBackupMissingManifest: 'The backup ZIP is missing manifest.json',
+        subtrackerBackupMissingLogo: 'The backup ZIP is missing logo file: {path}',
+        importTokenInvalid: 'The import token is missing or expired. Generate a new preview first.',
+        wallosDatabaseEmpty: 'The database file is empty'
       },
+      wallosWarnings: {
+        cycleMissingFallback: 'cycle is missing. Falling back to every 1 month.',
+        cycleDaysFallback: 'cycle.days={days} cannot be mapped directly. Falling back to every {mappedDays} days.',
+        priceEmptyFallback: 'The price is empty. Falling back to 0 CNY.',
+        priceParseFallback: 'The price "{text}" could not be fully parsed. Falling back to 0 {currency}.',
+        priceCurrencyAmbiguousUsd: 'The currency symbol in "{text}" is ambiguous. Importing as USD by default.',
+        priceCurrencyAmbiguousCny: 'The currency symbol in "{text}" is ambiguous. Importing as CNY by default.',
+        priceCurrencyMissing: 'The price "{text}" does not specify a currency. Importing as CNY by default.',
+        websiteMissingProtocol: 'The URL "{raw}" is missing a protocol. Auto-completed to {withHttps}.',
+        websiteInvalidIgnored: 'The URL "{raw}" is not recognized as a valid link and has been ignored.',
+        paymentCycleFallback: 'Payment Cycle "{text}" could not be fully parsed. Falling back to every 1 month.',
+        jsonStartDateFallback: 'Wallos JSON does not include start_date. Next Payment is used as the start date.',
+        jsonMissingRequiredSkipped: 'json#{index} is missing the name or next payment date and has been skipped.',
+        subscriptionMissingRequiredSkipped: 'subscription#{id} is missing required fields and has been skipped.',
+        subscriptionPrefix: 'subscription#{id}',
+        subscriptionPrefixed: 'subscription#{id} {warning}',
+        subscriptionLogoMissing: 'subscription#{id} references a logo file, but no matching image was found in the package.',
+        logoNeedsManualFill: 'The logo file must be restored later from a directory or ZIP package.'
+      },
+      subtrackerBackupWarnings: {
+        noLocalLogos: 'This backup does not include local logo files.',
+        noPaymentRecords: 'This backup does not include payment records.',
+        excludedSecretsAndHistory: 'Login credentials, session secrets, webhook history, and exchange-rate snapshots will not be restored.',
+        appendModeDedup:
+          'In append mode, subscriptions and payment records are skipped idempotently by their backup CUIDs, and tags with the same name are reused.'
+      },
+      wallosZipMissingDatabase: 'The ZIP package does not contain db/wallos.db',
+      wallosMissingTables: 'Missing required Wallos tables: {tables}',
+      wallosJsonParseFailed: 'Failed to parse JSON',
+      wallosJsonMustBeArray: 'The exported Wallos JSON content must be an array',
       tags: {
         nameExists: 'Tag name already exists',
         updateFailed: 'Failed to update tag',
@@ -1174,13 +1324,21 @@ Hard requirements:
         updateFetchFailed: 'Failed to fetch version updates'
       },
       exchangeRates: {
-        refreshFailed: 'Failed to refresh exchange rates'
+        refreshFailed: 'Failed to refresh exchange rates',
+        payloadEmpty: 'The exchange-rate payload is empty'
       },
       subscriptions: {
         notFound: 'Subscription not found',
         logoDeleteFailed: 'Failed to delete logo',
         logoUploadFailed: 'Failed to upload logo',
         logoImportFailed: 'Failed to import logo',
+        logoUnsupportedImageType: 'Unsupported logo image type',
+        logoBufferEmpty: 'The logo image content is empty',
+        logoUploadTypeUnsupported: 'Only PNG, JPG, WEBP, and SVG images are supported',
+        imageBufferEmpty: 'The image content is empty',
+        logoRemoteUnavailable: 'Failed to download the remote logo or the image is unavailable',
+        logoFilenameInvalid: 'Invalid logo filename',
+        logoInUseCannotDelete: 'This logo is currently used by subscriptions and cannot be deleted',
         renewFailed: 'Renew failed',
         activeDeleteNotAllowed: 'Active subscriptions cannot be deleted directly. Pause or cancel them first.',
         batchPauseOnlyActive: 'Only active subscriptions can be paused in batch mode',

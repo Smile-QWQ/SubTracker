@@ -70,7 +70,9 @@ export default {
       sendKey: 'SendKey',
       apiBaseUrl: 'API Base URL',
       apiKey: 'API Key',
-      topic: 'Topic'
+      topic: 'Topic',
+      gotifyTargetUrl: 'Gotify URL',
+      webhookTargetUrl: 'Webhook URL'
     },
     empty: {
       noData: '暂无数据',
@@ -85,7 +87,9 @@ export default {
       noFileSelected: '未选择文件'
     },
     separators: {
-      list: '、'
+      list: '、',
+      fieldList: '、',
+      notificationDetail: '；'
     },
     locales: {
       zhCN: '简体中文',
@@ -234,6 +238,8 @@ export default {
       topic: 'Topic',
       apiBaseUrl: 'API Base URL',
       apiKey: 'API Key',
+      gotifyTargetUrl: 'Gotify URL',
+      webhookTargetUrl: 'Webhook URL',
       oldUsername: '原用户名',
       oldPassword: '原密码',
       newUsername: '新用户名',
@@ -249,6 +255,7 @@ export default {
       notificationSettings:
         '统一管理邮箱、PushPlus、Telegram、Server 酱、Gotify 与 Webhook。每个渠道都可以单独保存并单独测试。',
       aiSettings: 'AI 能力总开关控制识别与连接测试；AI 总结可单独开启或关闭。',
+      forgotPasswordChannelRequired: '需先启用至少一个直达通知渠道',
       structuredOutput:
         '开启后会优先使用厂商支持的结构化 JSON 输出；若不支持，系统会自动降级为普通 JSON 提示词模式。',
       backup:
@@ -338,6 +345,9 @@ export default {
       aiVisionTestFailed: 'AI 视觉测试失败',
       ratesRefreshed: '汇率已刷新',
       credentialsUpdated: '登录凭据已更新',
+      forgotPasswordEnabled: '找回密码已开启',
+      forgotPasswordDisabled: '找回密码已关闭',
+      forgotPasswordSaveFailed: '找回密码设置保存失败',
       emailTestSent: '测试邮件已发送',
       emailTestFailed: '邮箱测试失败',
       pushplusTestSubmittedWithCode: 'PushPlus 测试请求已提交，流水号：{code}',
@@ -544,7 +554,8 @@ export default {
       autoRenew: '自动续订',
       manualRenew: '手动续订',
       renewalCountTooltip: '订阅数',
-      amountTooltip: '月度金额'
+      amountTooltip: '月度金额',
+      amountAxis: '金额（{currency}）'
     },
     status: {
       active: '正常',
@@ -931,9 +942,50 @@ export default {
       subscriptionName: '测试订阅',
       tagName: '测试标签',
       note: '这是一条测试通知'
+    },
+    merge: {
+      phaseUpcoming: '即将到期',
+      phaseDueToday: '今天到期',
+      phaseOverdueDay: '已过期第 {days} 天',
+      summaryName: '共 {count} 项订阅'
+    },
+    presentation: {
+      unnamedSubscription: '未命名订阅',
+      mergedTitle: '{prefix}：共 {count} 项订阅',
+      sectionTitle: '{title}（{count} 项）',
+      reminderType: '提醒类型：{value}',
+      subscriptionCount: '订阅数量：{count} 项',
+      subscriptionName: '订阅名称：{name}',
+      nextRenewal: '下次续订：{value}',
+      amount: '金额：{value}',
+      tags: '标签：{value}',
+      website: '网址：{value}',
+      notes: '备注：{value}',
+      details: '说明：{value}',
+      daysUntil: '还有 {days} 天',
+      overdueDays: '过期 {days} 天'
+    },
+    logs: {
+      dispatchSummary: '[notification] {name}：通知渠道 {successCount} 个成功，{failedCount} 个失败，{skippedCount} 个跳过。{details}',
+      allSkipped: '[notification] {name}：所有通知渠道均已跳过。{details}'
+    },
+    wrappers: {
+      detailStart: '（',
+      detailEnd: '）'
+    }
+  },
+  formatting: {
+    monthLabel: {
+      long: 'YYYY 年 M 月'
     }
   },
   validation: {
+    timezoneInvalid: '时区不合法',
+    notificationTargetUrl: {
+      invalidFormat: '{label} 格式无效',
+      unsupportedProtocol: '{label} 仅支持 http 或 https',
+      privateHostBlocked: '{label} 不允许指向本地或内网地址'
+    },
     websiteUrlInvalid: '请输入合法网址，例如 https://example.com',
     subscriptionForm: {
       nameRequired: '请填写名称',
@@ -982,6 +1034,14 @@ export default {
       imageSlow: '图片识别仍在进行中，外部模型响应较慢，请再稍候片刻。'
     },
     prompts: {
+      common: {
+        jsonOnlySuffix: '必须只返回合法 JSON 对象，不要返回 Markdown、代码块或额外解释。',
+        originalTextLabel: '原始文本',
+        ocrExtractedTextLabel: 'OCR 提取文本',
+        returnOkOnly: '请只返回 OK',
+        visionConfirmSystem: '请根据用户发送的图片进行响应，只返回一句简短确认。',
+        visionConfirmUser: '请确认你已成功接收到这张测试图片。'
+      },
       subscription: {
         default: `你是订阅账单信息提取助手。请从输入的文本或截图中提取订阅信息，并且只返回 JSON。
 输出字段：
@@ -1055,7 +1115,42 @@ export default {
       }
     }
   },
+  scheduler: {
+    channelSummary: {
+      item: '{channel}:成功{success}/失败{failed}/跳过{skipped}'
+    },
+    logs: {
+      reminderScan:
+        '[cron] subscription reminders scanned：候选 {processedCount}，命中 {matchedReminderCount}，通知 {notificationCount}{channelSummary}',
+      notificationDedupCleanup: '[cron] notification dedup cleanup：清理 {deleted} 条旧记录',
+      exchangeRatesRefreshed: '[cron] exchange rates refreshed',
+      exchangeRateRefreshFailed: '[cron] exchange rate refresh failed',
+      reminderScanFailed: '[cron] reminder scan failed'
+    }
+  },
+  logos: {
+    search: {
+      manifestIcon: 'Manifest 图标{sizeLabel}',
+      appleTouchIcon: 'Apple Touch Icon',
+      maskIcon: 'Mask Icon',
+      siteIcon: '站点图标',
+      siteShareImage: '站点分享图',
+      duckduckgoCandidate: 'DuckDuckGo 候选 {index}',
+      braveCandidate: 'Brave 候选 {index}',
+      siteFavicon: '站点 favicon',
+      googleFavicon: 'Google Favicon',
+      iconHorse: 'Icon Horse',
+      clearbitLogo: 'Clearbit Logo'
+    },
+    library: {
+      unusedLogo: '未使用 Logo'
+    }
+  },
   api: {
+    runtime: {
+      initialExchangeRateRefreshFailed: '[api] 初始汇率刷新失败，将回退到已有快照。',
+      started: '[api] 已启动: http://{host}:{port}'
+    },
     errors: {
       unauthorized: '请先登录',
       tooManyAttempts: '登录失败次数过多，请稍后再试',
@@ -1134,6 +1229,7 @@ export default {
         noValidContent: 'AI 未返回有效内容',
         noRecognizableText: '未获取到可用于识别的文本内容',
         ocrNoValidText: '图片 OCR 未识别出有效文本，请改为手动输入文本内容',
+        visionCapabilityDisabled: '当前 Provider 未启用视觉输入能力',
         connectionTestFailed: 'AI 连接测试失败',
         visionTestFailed: 'AI 视觉测试失败',
         recognitionFailed: 'AI 识别失败',
@@ -1150,6 +1246,19 @@ export default {
         telegramDisabledOrIncomplete: 'Telegram 通知未启用或配置不完整',
         serverchanDisabledOrIncomplete: 'Server 酱通知未启用或配置不完整',
         gotifyDisabledOrIncomplete: 'Gotify 通知未启用或配置不完整',
+        emptyDedupEntries: '无法从空的去重记录构建通知分发参数',
+        resendRequestFailed: 'Resend 请求失败',
+        pushplusRequestFailed: 'PushPlus 请求失败',
+        pushplusInvalidResponse: 'PushPlus 返回了无法解析的响应',
+        pushplusRejected: 'PushPlus 请求被拒绝',
+        pushplusSubmitted: '请求已提交',
+        telegramRequestFailed: 'Telegram 请求失败',
+        telegramInvalidResponse: 'Telegram 返回了无法解析的响应',
+        telegramRejected: 'Telegram 请求被拒绝',
+        serverchanRequestFailed: 'Server 酱请求失败',
+        serverchanInvalidResponse: 'Server 酱返回了无法解析的响应',
+        serverchanRejected: 'Server 酱请求被拒绝',
+        gotifyRequestFailed: 'Gotify 请求失败',
         webhookConfigIncomplete: 'Webhook 配置不完整',
         webhookTestFailed: 'Webhook 测试失败',
         emailTestFailed: '邮箱测试失败',
@@ -1162,8 +1271,47 @@ export default {
         wallosInspectFailed: 'Wallos 预览失败',
         wallosCommitFailed: 'Wallos 导入失败',
         subtrackerBackupInspectFailed: 'SubTracker 备份预览失败',
-        subtrackerBackupCommitFailed: 'SubTracker 备份恢复失败'
+        subtrackerBackupCommitFailed: 'SubTracker 备份恢复失败',
+        subtrackerBackupManifestInvalid: '备份 manifest 格式无效',
+        subtrackerBackupInvalidFile: '不是合法的 SubTracker 备份文件',
+        subtrackerBackupUnsupportedVersion: '不支持的备份版本：{version}',
+        subtrackerBackupUnsupportedScope: '不支持的备份范围：{scope}',
+        subtrackerBackupManifestMissingData: '备份 manifest 缺少关键数据',
+        subtrackerBackupFileEmpty: '备份文件内容为空',
+        subtrackerBackupMissingManifest: '备份 ZIP 缺少 manifest.json',
+        subtrackerBackupMissingLogo: '备份 ZIP 缺少 Logo 文件：{path}',
+        importTokenInvalid: '导入令牌不存在或已失效，请重新生成预览',
+        wallosDatabaseEmpty: '数据库文件内容为空'
       },
+      wallosWarnings: {
+        cycleMissingFallback: 'cycle 缺失，已回退为每 1 月',
+        cycleDaysFallback: 'cycle.days={days} 无法直接映射，已转为每 {mappedDays} 天',
+        priceEmptyFallback: '价格为空，已回退为 0 CNY',
+        priceParseFallback: '价格 "{text}" 无法完整解析，已回退为 0 {currency}',
+        priceCurrencyAmbiguousUsd: '价格 "{text}" 的币种符号存在歧义，已默认按 USD 导入',
+        priceCurrencyAmbiguousCny: '价格 "{text}" 的币种符号存在歧义，已默认按 CNY 导入',
+        priceCurrencyMissing: '价格 "{text}" 未包含明确币种，已默认按 CNY 导入',
+        websiteMissingProtocol: '网址 "{raw}" 缺少协议，已自动补全为 {withHttps}',
+        websiteInvalidIgnored: '网址 "{raw}" 无法识别为合法链接，已忽略',
+        paymentCycleFallback: 'Payment Cycle "{text}" 无法完整解析，已回退为每 1 月',
+        jsonStartDateFallback: 'Wallos JSON 不包含 start_date，已使用 Next Payment 代填开始日期',
+        jsonMissingRequiredSkipped: 'json#{index} 缺少名称或下次支付时间，已跳过',
+        subscriptionMissingRequiredSkipped: 'subscription#{id} 缺少关键字段，已跳过',
+        subscriptionPrefix: 'subscription#{id}',
+        subscriptionPrefixed: 'subscription#{id} {warning}',
+        subscriptionLogoMissing: 'subscription#{id} 存在 Logo 文件引用，当前包内未匹配到图片',
+        logoNeedsManualFill: 'Logo 文件需后续通过目录或 zip 包补齐'
+      },
+      subtrackerBackupWarnings: {
+        noLocalLogos: '该备份不包含本地 Logo 文件',
+        noPaymentRecords: '该备份不包含支付记录',
+        excludedSecretsAndHistory: '不会恢复登录凭据、会话密钥、Webhook 历史和汇率快照',
+        appendModeDedup: '追加导入时，订阅与支付记录按备份中的唯一标识（CUID）幂等跳过；同名标签会复用现有标签'
+      },
+      wallosZipMissingDatabase: 'ZIP 中未找到 db/wallos.db',
+      wallosMissingTables: '缺少 Wallos 关键表：{tables}',
+      wallosJsonParseFailed: 'JSON 解析失败',
+      wallosJsonMustBeArray: 'Wallos JSON 导出内容必须是数组',
       tags: {
         nameExists: '标签名称已存在',
         updateFailed: '标签更新失败',
@@ -1173,13 +1321,21 @@ export default {
         updateFetchFailed: '获取版本更新失败'
       },
       exchangeRates: {
-        refreshFailed: '刷新汇率失败'
+        refreshFailed: '刷新汇率失败',
+        payloadEmpty: '汇率数据内容为空'
       },
       subscriptions: {
         notFound: '订阅不存在',
         logoDeleteFailed: 'Logo 删除失败',
         logoUploadFailed: 'Logo 上传失败',
         logoImportFailed: 'Logo 导入失败',
+        logoUnsupportedImageType: '不支持的 Logo 图片类型',
+        logoBufferEmpty: 'Logo 图片内容为空',
+        logoUploadTypeUnsupported: '仅支持 PNG、JPG、WEBP、SVG 图片',
+        imageBufferEmpty: '图片内容为空',
+        logoRemoteUnavailable: '远程 Logo 下载失败或图片不可用',
+        logoFilenameInvalid: '无效的 Logo 文件名',
+        logoInUseCannotDelete: '该 Logo 已被订阅使用，不能删除',
         renewFailed: '续订失败',
         activeDeleteNotAllowed: '正常中的订阅不能直接删除，请先暂停或停用',
         batchPauseOnlyActive: '批量暂停仅支持正常状态的订阅',
