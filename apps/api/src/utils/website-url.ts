@@ -1,4 +1,5 @@
-const WEBSITE_URL_ERROR_MESSAGE = '请输入合法网址，例如 https://example.com'
+import { DEFAULT_APP_LOCALE, getMessage, type AppLocale } from '@subtracker/shared'
+
 const FQDN_LABEL_RE = /^[a-z_\u00a1-\uffff0-9-]+$/i
 const FQDN_TLD_RE = /^([a-z\u00A1-\u00A8\u00AA-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF]{2,}|xn[a-z0-9-]{2,})$/i
 const FULL_WIDTH_RE = /[\uff01-\uff5e]/
@@ -18,7 +19,7 @@ const IPV6_RE = new RegExp(
     ')(%[0-9a-zA-Z.]{1,})?$'
 )
 
-export function normalizeWebsiteUrlInput(input: string | null | undefined): {
+export function normalizeWebsiteUrlInput(input: string | null | undefined, locale: AppLocale = DEFAULT_APP_LOCALE): {
   value: string | null
   error: string | null
 } {
@@ -33,7 +34,7 @@ export function normalizeWebsiteUrlInput(input: string | null | undefined): {
 
   const normalized = normalizeWebsiteUrlString(trimmed)
   if (!normalized) {
-    return { value: null, error: WEBSITE_URL_ERROR_MESSAGE }
+    return { value: null, error: getMessage(locale, 'validation.websiteUrlInvalid') }
   }
 
   return { value: normalized, error: null }

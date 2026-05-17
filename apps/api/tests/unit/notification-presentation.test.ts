@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { getMessage } from '@subtracker/shared'
 import {
   buildNotificationMessage,
   resolveNotificationPresentation
@@ -55,12 +56,15 @@ describe('notification presentation', () => {
 
     expect(resolveNotificationPresentation(params)).toMatchObject({
       mode: 'single',
-      phaseLabel: '今天到期'
+      phaseLabel: getMessage('zh-CN', 'notifications.phases.dueToday')
     })
     expect(buildNotificationMessage(params)).toMatchObject({
-      title: '今天到期：Netflix'
+      title: getMessage('zh-CN', 'notifications.titles.single', {
+        phase: getMessage('zh-CN', 'notifications.phases.dueToday'),
+        name: 'Netflix'
+      })
     })
-    expect(buildNotificationMessage(params).text).toContain('订阅名称：Netflix')
+    expect(buildNotificationMessage(params).text).toContain(getMessage('zh-CN', 'notifications.presentation.subscriptionName', { name: 'Netflix' }))
   })
 
   it('keeps merged reminder title and body stable', () => {
@@ -76,18 +80,18 @@ describe('notification presentation', () => {
         mergedSections: [
           {
             phase: 'due_today',
-            title: '今天到期',
+            title: getMessage('zh-CN', 'notifications.merge.phaseDueToday'),
             eventType: 'subscription.reminder_due',
             subscriptions: [netflixPayload]
           },
           {
             phase: 'overdue_day_1',
-            title: '已过期第 1 天',
+            title: getMessage('zh-CN', 'notifications.merge.phaseOverdueDay', { days: 1 }),
             eventType: 'subscription.overdue',
             subscriptions: [spotifyPayload]
           }
         ],
-        name: '共 2 项订阅',
+        name: getMessage('zh-CN', 'notifications.merge.summaryName', { count: 2 }),
         nextRenewalDate: '2026-05-01',
         notifyDaysBefore: 0,
         amount: 30,
@@ -107,10 +111,25 @@ describe('notification presentation', () => {
     const message = buildNotificationMessage(params)
     expect(resolveNotificationPresentation(params)).toMatchObject({
       mode: 'merged',
-      phaseLabel: '订阅提醒汇总'
+      phaseLabel: getMessage('zh-CN', 'notifications.phases.summary')
     })
-    expect(message.title).toBe('订阅提醒汇总：共 2 项订阅')
-    expect(message.text).toContain('今天到期（1 项）')
-    expect(message.text).toContain('已过期第 1 天（1 项）')
+    expect(message.title).toBe(
+      getMessage('zh-CN', 'notifications.presentation.mergedTitle', {
+        prefix: getMessage('zh-CN', 'notifications.phases.summary'),
+        count: 2
+      })
+    )
+    expect(message.text).toContain(
+      getMessage('zh-CN', 'notifications.presentation.sectionTitle', {
+        title: getMessage('zh-CN', 'notifications.merge.phaseDueToday'),
+        count: 1
+      })
+    )
+    expect(message.text).toContain(
+      getMessage('zh-CN', 'notifications.presentation.sectionTitle', {
+        title: getMessage('zh-CN', 'notifications.merge.phaseOverdueDay', { days: 1 }),
+        count: 1
+      })
+    )
   })
 })

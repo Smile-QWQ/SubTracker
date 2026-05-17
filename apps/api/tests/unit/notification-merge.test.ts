@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { getMessage } from '@subtracker/shared'
+import { buildDispatchParamsFromDedupEntries } from '../../src/services/notification-merge.service'
 
 const notificationState = vi.hoisted(() => ({
   mergeMultiSubscriptionNotifications: true,
@@ -92,7 +94,11 @@ describe('scanRenewalNotifications merge behavior', () => {
     expect(payload.mergedCount).toBe(3)
     expect(payload.subscriptions).toHaveLength(3)
     expect(payload.mergedSections).toHaveLength(3)
-    expect(payload.mergedSections.map((section: { title: string }) => section.title)).toEqual(['即将到期', '今天到期', '已过期第 1 天'])
+    expect(payload.mergedSections.map((section: { title: string }) => section.title)).toEqual([
+      getMessage('zh-CN', 'notifications.merge.phaseUpcoming'),
+      getMessage('zh-CN', 'notifications.merge.phaseDueToday'),
+      getMessage('zh-CN', 'notifications.merge.phaseOverdueDay', { days: 1 })
+    ])
     expect(params.dedupEntries).toHaveLength(3)
     expect(params.dedupEntries.map((entry: { resourceKey: string }) => entry.resourceKey)).toEqual([
       'subscription:sub-1',
@@ -110,5 +116,11 @@ describe('scanRenewalNotifications merge behavior', () => {
     for (const call of notificationState.dispatchMock.mock.calls) {
       expect(call[0].payload.merged).not.toBe(true)
     }
+  })
+
+  it('throws a locale-aware error when dedup entries are empty', () => {
+    expect(() => buildDispatchParamsFromDedupEntries([], { locale: 'en-US' })).toThrow(
+      'Cannot build notification dispatch params from empty dedup entries'
+    )
   })
 })

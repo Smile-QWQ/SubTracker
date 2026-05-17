@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { getMessage } from '@subtracker/shared'
 import { type NotificationDedupEntry, type NotificationDispatchParams } from '../../src/services/notification-merge.service'
 
 const channelState = vi.hoisted(() => {
@@ -120,6 +121,7 @@ vi.mock('nodemailer', () => ({
 
 vi.mock('../../src/services/settings.service', () => ({
   getAppTimezone: channelState.getAppTimezoneMock,
+  getResolvedAppLocale: vi.fn(async () => 'zh-CN'),
   getNotificationChannelSettings: channelState.getNotificationChannelSettingsMock,
   getSetting: channelState.getSettingMock,
   setSetting: channelState.setSettingMock
@@ -152,18 +154,18 @@ const baseMergedParams: NotificationDispatchParams = {
     mergedSections: [
       {
         phase: 'due_today',
-        title: '今天到期',
+        title: getMessage('zh-CN', 'notifications.merge.phaseDueToday'),
         eventType: 'subscription.reminder_due' as const,
         subscriptions: [channelState.dedupEntries[0].payload]
       },
       {
         phase: 'overdue_day_1',
-        title: '已过期第 1 天',
+        title: getMessage('zh-CN', 'notifications.merge.phaseOverdueDay', { days: 1 }),
         eventType: 'subscription.overdue' as const,
         subscriptions: [channelState.dedupEntries[1].payload]
       }
     ],
-    name: '共 2 项订阅',
+    name: getMessage('zh-CN', 'notifications.merge.summaryName', { count: 2 }),
     nextRenewalDate: '2026-05-01',
     notifyDaysBefore: 0,
     amount: 30,
@@ -221,10 +223,15 @@ describe('channel notification dedup for merged reminders', () => {
 
     expect(channelState.sendMailMock).toHaveBeenCalledTimes(1)
     expect(channelState.sendMailMock.mock.calls[0][0]).toMatchObject({
-      subject: '今天到期：Netflix'
+      subject: getMessage('zh-CN', 'notifications.titles.single', {
+        phase: getMessage('zh-CN', 'notifications.phases.dueToday'),
+        name: 'Netflix'
+      })
     })
-    expect(channelState.sendMailMock.mock.calls[0][0].text).toContain('订阅名称：Netflix')
-    expect(channelState.sendMailMock.mock.calls[0][0].text).not.toContain('订阅数量：')
+    expect(channelState.sendMailMock.mock.calls[0][0].text).toContain(
+      getMessage('zh-CN', 'notifications.presentation.subscriptionName', { name: 'Netflix' })
+    )
+    expect(channelState.sendMailMock.mock.calls[0][0].text).not.toContain(getMessage('zh-CN', 'notifications.labels.subscriptionCount', { count: 1 }))
     expect(results.find((result) => result.channel === 'email')).toMatchObject({
       status: 'success'
     })
@@ -244,8 +251,18 @@ describe('channel notification dedup for merged reminders', () => {
 
     expect(channelState.sendMailMock).toHaveBeenCalledTimes(1)
     const message = channelState.sendMailMock.mock.calls[0][0]
-    expect(message.subject).toBe('已过期第 1 天：Spotify')
-    expect(message.text).toContain('订阅名称：Spotify')
-    expect(message.text).not.toContain('今天到期（1 项）')
+    expect(message.subject).toBe(
+      getMessage('zh-CN', 'notifications.titles.single', {
+        phase: getMessage('zh-CN', 'notifications.phases.overdueDay', { days: 1 }),
+        name: 'Spotify'
+      })
+    )
+    expect(message.text).toContain(getMessage('zh-CN', 'notifications.presentation.subscriptionName', { name: 'Spotify' }))
+    expect(message.text).not.toContain(
+      getMessage('zh-CN', 'notifications.presentation.sectionTitle', {
+        title: getMessage('zh-CN', 'notifications.merge.phaseDueToday'),
+        count: 1
+      })
+    )
   })
 })

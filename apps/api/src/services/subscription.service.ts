@@ -4,6 +4,7 @@ import { ensureExchangeRates, getBaseCurrency } from './exchange-rate.service'
 import { convertAmount } from '../utils/money'
 import { getAppTimezone } from './settings.service'
 import { endOfDayDateInTimezone, startOfDayDateInTimezone, toTimezonedDayjs } from '../utils/timezone'
+import { DEFAULT_APP_LOCALE, getMessage, type AppLocale } from '@subtracker/shared'
 
 const AUTO_RENEW_BATCH_LIMIT = 100
 const AUTO_RENEW_MAX_CYCLES_PER_SUBSCRIPTION = 24
@@ -36,7 +37,7 @@ async function renewSubscriptionFromSnapshot(
     context.timezone
   )
 
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx: any) => {
     const payment = await tx.paymentRecord.create({
       data: {
         subscriptionId: subscription.id,
@@ -71,11 +72,12 @@ export async function renewSubscription(
   paidAt?: Date,
   paidAmount?: number,
   paidCurrency?: string,
-  timezone?: string
+  timezone?: string,
+  locale: AppLocale = DEFAULT_APP_LOCALE
 ) {
   const subscription = await prisma.subscription.findUnique({ where: { id: subscriptionId } })
   if (!subscription) {
-    throw new Error('Subscription not found')
+    throw new Error(getMessage(locale, 'api.errors.subscriptions.notFound'))
   }
 
   const baseCurrency = await getBaseCurrency()

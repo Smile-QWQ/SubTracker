@@ -114,15 +114,23 @@ function getNotificationLogName(params: NotificationDispatchParams) {
 function formatChannelResult(result: NotificationChannelResult, locale: AppLocale) {
   const label = getMessage(locale, `notifications.channels.${result.channel}`)
   const status = getMessage(locale, `notifications.status.${result.status}`)
-  return result.message ? `${label}${status}（${result.message}）` : `${label}${status}`
+  const detailWrapperStart = getMessage(locale, 'notifications.wrappers.detailStart')
+  const detailWrapperEnd = getMessage(locale, 'notifications.wrappers.detailEnd')
+  return result.message ? `${label}${status}${detailWrapperStart}${result.message}${detailWrapperEnd}` : `${label}${status}`
 }
 
 function logNotificationDispatch(params: NotificationDispatchParams, results: NotificationChannelResult[], locale: AppLocale) {
   const successCount = results.filter((result) => result.status === 'success').length
   const failed = results.filter((result) => result.status === 'failed')
   const skipped = results.filter((result) => result.status === 'skipped')
-  const details = results.map((result) => formatChannelResult(result, locale)).join('；')
-  const baseMessage = `[notification] ${getNotificationLogName(params)}：通知渠道 ${successCount} 个成功，${failed.length} 个失败，${skipped.length} 个跳过。${details}`
+  const details = results.map((result) => formatChannelResult(result, locale)).join(getMessage(locale, 'common.separators.notificationDetail'))
+  const baseMessage = getMessage(locale, 'notifications.logs.dispatchSummary', {
+    name: getNotificationLogName(params),
+    successCount,
+    failedCount: failed.length,
+    skippedCount: skipped.length,
+    details
+  })
 
   if (failed.length) {
     console.warn(baseMessage)
@@ -134,7 +142,12 @@ function logNotificationDispatch(params: NotificationDispatchParams, results: No
     return
   }
 
-  console.log(`[notification] ${getNotificationLogName(params)}：所有通知渠道均已跳过。${details}`)
+  console.log(
+    getMessage(locale, 'notifications.logs.allSkipped', {
+      name: getNotificationLogName(params),
+      details
+    })
+  )
 }
 
 async function hasNotificationBeenSent(
@@ -220,7 +233,7 @@ function buildForgotPasswordBody(payload: ForgotPasswordNotificationPayload, loc
 async function sendSmtpEmailWithConfig(message: DirectNotificationMessage, config: EmailConfigInput) {
   const { host, port, secure, username, password, from, to } = config
   if (!host || !port || !username || !password || !from || !to) {
-    throw new Error('邮箱通知未启用或配置不完整')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.emailDisabledOrIncomplete'))
   }
 
   const transporter = nodemailer.createTransport({
@@ -248,7 +261,7 @@ async function sendResendEmailWithConfig(message: DirectNotificationMessage, con
   const to = config.to?.trim()
 
   if (!apiBaseUrl || !apiKey || !from || !to) {
-    throw new Error('邮箱通知未启用或配置不完整')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.emailDisabledOrIncomplete'))
   }
 
   const response = await fetch(apiBaseUrl, {
@@ -270,7 +283,9 @@ async function sendResendEmailWithConfig(message: DirectNotificationMessage, con
 
   const rawText = await response.text()
   if (!response.ok) {
-    throw new Error(`Resend 请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.resendRequestFailed')}: HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim()
+    )
   }
 }
 
@@ -290,7 +305,8 @@ async function sendEmailWithProvider(
 
 async function dispatchDirectChannelNotification(
   params: NotificationDispatchParams,
-  options: DirectChannelDispatchOptions
+  options: DirectChannelDispatchOptions,
+  locale: AppLocale
 ): Promise<NotificationChannelResult> {
   if (!options.enabled) {
     return {
@@ -310,7 +326,7 @@ async function dispatchDirectChannelNotification(
     }
   }
 
-  await options.send(buildNotificationMessage(dispatchParams))
+  await options.send(buildNotificationMessage(dispatchParams, locale))
   await markNotificationEntriesSent(options.channel, dispatchParams)
 
   return {
@@ -320,7 +336,8 @@ async function dispatchDirectChannelNotification(
 }
 
 async function sendEmailNotification(
-  params: NotificationDispatchParams
+  params: NotificationDispatchParams,
+  locale: AppLocale
 ): Promise<NotificationChannelResult> {
   const settings = await getNotificationChannelSettings()
   return dispatchDirectChannelNotification(params, {
@@ -329,7 +346,7 @@ async function sendEmailNotification(
     disabledMessage: 'email_disabled',
     alreadySentMessage: 'email_already_sent',
     send: (message) => sendEmailWithProvider(message, settings.emailProvider, settings.smtpConfig, settings.resendConfig)
-  })
+  }, locale)
 }
 
 function extractPushplusShortCode(data: unknown): string | undefined {
@@ -357,7 +374,7 @@ async function sendPushplusWithConfig(
 ): Promise<PushplusSendResult> {
   const { token, topic } = config
   if (!token) {
-    throw new Error('PushPlus 通知未启用或配置不完整')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.pushplusDisabledOrIncomplete'))
   }
 
   const response = await fetch('https://www.pushplus.plus/send', {
@@ -376,30 +393,33 @@ async function sendPushplusWithConfig(
 
   const rawText = await response.text()
   if (!response.ok) {
-    throw new Error(`PushPlus 请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.pushplusRequestFailed')}: HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim()
+    )
   }
 
   let parsed: PushplusApiResponse | null = null
   try {
     parsed = rawText ? (JSON.parse(rawText) as PushplusApiResponse) : null
   } catch {
-    throw new Error(`PushPlus 返回了无法解析的响应：${rawText || 'empty response'}`)
+    throw new Error(`${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.pushplusInvalidResponse')}: ${rawText || 'empty response'}`)
   }
 
   if (!parsed || parsed.code !== 200) {
-    throw new Error(`PushPlus 请求被拒绝：${parsed?.msg || rawText || 'unknown error'}`)
+    throw new Error(`${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.pushplusRejected')}: ${parsed?.msg || rawText || 'unknown error'}`)
   }
 
   return {
     accepted: true,
     code: parsed.code,
-    message: parsed.msg || '请求已提交',
+    message: parsed.msg || getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.pushplusSubmitted'),
     shortCode: extractPushplusShortCode(parsed.data)
   }
 }
 
 async function sendPushplusNotification(
-  params: NotificationDispatchParams
+  params: NotificationDispatchParams,
+  locale: AppLocale
 ): Promise<NotificationChannelResult> {
   const settings = await getNotificationChannelSettings()
   return dispatchDirectChannelNotification(params, {
@@ -408,13 +428,13 @@ async function sendPushplusNotification(
     disabledMessage: 'pushplus_disabled',
     alreadySentMessage: 'pushplus_already_sent',
     send: (message) => sendPushplusWithConfig(message, settings.pushplusConfig).then(() => undefined)
-  })
+  }, locale)
 }
 
 async function sendTelegramWithConfig(message: DirectNotificationMessage, config: TelegramConfigInput) {
   const { botToken, chatId } = config
   if (!botToken || !chatId) {
-    throw new Error('Telegram 通知未启用或配置不完整')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.telegramDisabledOrIncomplete'))
   }
 
   const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
@@ -430,23 +450,26 @@ async function sendTelegramWithConfig(message: DirectNotificationMessage, config
 
   const rawText = await response.text()
   if (!response.ok) {
-    throw new Error(`Telegram 请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.telegramRequestFailed')}: HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim()
+    )
   }
 
   let parsed: TelegramApiResponse | null = null
   try {
     parsed = rawText ? (JSON.parse(rawText) as TelegramApiResponse) : null
   } catch {
-    throw new Error(`Telegram 返回了无法解析的响应：${rawText || 'empty response'}`)
+    throw new Error(`${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.telegramInvalidResponse')}: ${rawText || 'empty response'}`)
   }
 
   if (!parsed?.ok) {
-    throw new Error(`Telegram 请求被拒绝：${parsed?.description || rawText || 'unknown error'}`)
+    throw new Error(`${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.telegramRejected')}: ${parsed?.description || rawText || 'unknown error'}`)
   }
 }
 
 async function sendTelegramNotification(
-  params: NotificationDispatchParams
+  params: NotificationDispatchParams,
+  locale: AppLocale
 ): Promise<NotificationChannelResult> {
   const settings = await getNotificationChannelSettings()
   return dispatchDirectChannelNotification(params, {
@@ -455,13 +478,13 @@ async function sendTelegramNotification(
     disabledMessage: 'telegram_disabled',
     alreadySentMessage: 'telegram_already_sent',
     send: (message) => sendTelegramWithConfig(message, settings.telegramConfig)
-  })
+  }, locale)
 }
 
 function resolveServerchanUrl(sendkey: string) {
   const trimmed = sendkey.trim()
   if (!trimmed) {
-    throw new Error('Server 酱通知未启用或配置不完整')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.serverchanDisabledOrIncomplete'))
   }
 
   if (trimmed.startsWith('sctp')) {
@@ -492,23 +515,26 @@ async function sendServerchanWithConfig(message: DirectNotificationMessage, conf
 
   const rawText = await response.text()
   if (!response.ok) {
-    throw new Error(`Server 酱请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.serverchanRequestFailed')}: HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim()
+    )
   }
 
   let parsed: { code?: number; message?: string } | null = null
   try {
     parsed = rawText ? (JSON.parse(rawText) as { code?: number; message?: string }) : null
   } catch {
-    throw new Error(`Server 酱返回了无法解析的响应：${rawText || 'empty response'}`)
+    throw new Error(`${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.serverchanInvalidResponse')}: ${rawText || 'empty response'}`)
   }
 
   if (!parsed || parsed.code !== 0) {
-    throw new Error(`Server 酱请求被拒绝：${parsed?.message || rawText || 'unknown error'}`)
+    throw new Error(`${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.serverchanRejected')}: ${parsed?.message || rawText || 'unknown error'}`)
   }
 }
 
 async function sendServerchanNotification(
-  params: NotificationDispatchParams
+  params: NotificationDispatchParams,
+  locale: AppLocale
 ): Promise<NotificationChannelResult> {
   const settings = await getNotificationChannelSettings()
   return dispatchDirectChannelNotification(params, {
@@ -517,14 +543,17 @@ async function sendServerchanNotification(
     disabledMessage: 'serverchan_disabled',
     alreadySentMessage: 'serverchan_already_sent',
     send: (message) => sendServerchanWithConfig(message, settings.serverchanConfig)
-  })
+  }, locale)
 }
 
-async function sendGotifyWithConfig(message: DirectNotificationMessage, config: GotifyConfigInput) {
-  const target = validateNotificationTargetUrl(config.url.trim(), 'Gotify URL')
+async function sendGotifyWithConfig(message: DirectNotificationMessage, config: GotifyConfigInput, locale: AppLocale = DEFAULT_APP_LOCALE) {
+  const target = validateNotificationTargetUrl(config.url.trim(), {
+    label: getMessage(locale, 'settings.labels.gotifyTargetUrl'),
+    locale
+  })
   const token = config.token?.trim()
   if (!token) {
-    throw new Error('Gotify 通知未启用或配置不完整')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.gotifyDisabledOrIncomplete'))
   }
 
   const isHttps = target.protocol === 'https:'
@@ -554,7 +583,11 @@ async function sendGotifyWithConfig(message: DirectNotificationMessage, config: 
           const rawText = Buffer.concat(chunks).toString('utf8')
           const statusCode = res.statusCode ?? 0
           if (statusCode < 200 || statusCode >= 300) {
-            reject(new Error(`Gotify 请求失败：HTTP ${statusCode}${rawText ? ` ${rawText}` : ''}`.trim()))
+            reject(
+              new Error(
+                `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.gotifyRequestFailed')}: HTTP ${statusCode}${rawText ? ` ${rawText}` : ''}`.trim()
+              )
+            )
             return
           }
           resolve()
@@ -569,7 +602,8 @@ async function sendGotifyWithConfig(message: DirectNotificationMessage, config: 
 }
 
 async function sendGotifyNotification(
-  params: NotificationDispatchParams
+  params: NotificationDispatchParams,
+  locale: AppLocale
 ): Promise<NotificationChannelResult> {
   const settings = await getNotificationChannelSettings()
   return dispatchDirectChannelNotification(params, {
@@ -577,8 +611,8 @@ async function sendGotifyNotification(
     enabled: settings.gotifyNotificationsEnabled,
     disabledMessage: 'gotify_disabled',
     alreadySentMessage: 'gotify_already_sent',
-    send: (message) => sendGotifyWithConfig(message, settings.gotifyConfig)
-  })
+    send: (message) => sendGotifyWithConfig(message, settings.gotifyConfig, locale)
+  }, locale)
 }
 
 export async function dispatchNotificationEvent(
@@ -599,35 +633,35 @@ export async function dispatchNotificationEvent(
     })
   }
 
-  const emailResult = (await Promise.resolve(sendEmailNotification(params)).catch((error) => ({
+  const emailResult = (await Promise.resolve(sendEmailNotification(params, locale)).catch((error) => ({
     channel: 'email',
     status: 'failed',
     message: error instanceof Error ? error.message : 'email_dispatch_failed'
   }))) as NotificationChannelResult
   results.push(emailResult)
 
-  const pushplusResult = (await Promise.resolve(sendPushplusNotification(params)).catch((error) => ({
+  const pushplusResult = (await Promise.resolve(sendPushplusNotification(params, locale)).catch((error) => ({
     channel: 'pushplus',
     status: 'failed',
     message: error instanceof Error ? error.message : 'pushplus_dispatch_failed'
   }))) as NotificationChannelResult
   results.push(pushplusResult)
 
-  const telegramResult = (await Promise.resolve(sendTelegramNotification(params)).catch((error) => ({
+  const telegramResult = (await Promise.resolve(sendTelegramNotification(params, locale)).catch((error) => ({
     channel: 'telegram',
     status: 'failed',
     message: error instanceof Error ? error.message : 'telegram_dispatch_failed'
   }))) as NotificationChannelResult
   results.push(telegramResult)
 
-  const serverchanResult = (await Promise.resolve(sendServerchanNotification(params)).catch((error) => ({
+  const serverchanResult = (await Promise.resolve(sendServerchanNotification(params, locale)).catch((error) => ({
     channel: 'serverchan',
     status: 'failed',
     message: error instanceof Error ? error.message : 'serverchan_dispatch_failed'
   }))) as NotificationChannelResult
   results.push(serverchanResult)
 
-  const gotifyResult = (await Promise.resolve(sendGotifyNotification(params)).catch((error) => ({
+  const gotifyResult = (await Promise.resolve(sendGotifyNotification(params, locale)).catch((error) => ({
     channel: 'gotify',
     status: 'failed',
     message: error instanceof Error ? error.message : 'gotify_dispatch_failed'
@@ -670,7 +704,7 @@ async function buildTestReminderMessage(locale: AppLocale) {
 export async function sendTestEmailNotification(context: NotificationLocaleContext = {}) {
   const settings = await getNotificationChannelSettings()
   if (!settings.emailNotificationsEnabled) {
-    throw new Error('邮箱通知未启用或配置不完整')
+    throw new Error(getMessage(await resolveNotificationLocale(context.locale), 'api.errors.notifications.emailDisabledOrIncomplete'))
   }
 
   const locale = await resolveNotificationLocale(context.locale)
@@ -790,7 +824,7 @@ export async function sendTestEmailNotificationWithConfig(config: {
 export async function sendTestPushplusNotification(context: NotificationLocaleContext = {}) {
   const settings = await getNotificationChannelSettings()
   if (!settings.pushplusNotificationsEnabled) {
-    throw new Error('PushPlus 通知未启用或配置不完整')
+    throw new Error(getMessage(await resolveNotificationLocale(context.locale), 'api.errors.notifications.pushplusDisabledOrIncomplete'))
   }
 
   const locale = await resolveNotificationLocale(context.locale)
@@ -798,7 +832,7 @@ export async function sendTestPushplusNotification(context: NotificationLocaleCo
 
   return {
     accepted: true,
-    message: 'PushPlus 已使用保存的配置发送测试请求'
+    message: getMessage(locale, 'settings.messages.pushplusTestSubmitted')
   }
 }
 
@@ -813,7 +847,7 @@ export async function sendTestPushplusNotificationWithConfig(
 export async function sendTestTelegramNotification(context: NotificationLocaleContext = {}) {
   const settings = await getNotificationChannelSettings()
   if (!settings.telegramNotificationsEnabled) {
-    throw new Error('Telegram 通知未启用或配置不完整')
+    throw new Error(getMessage(await resolveNotificationLocale(context.locale), 'api.errors.notifications.telegramDisabledOrIncomplete'))
   }
 
   const locale = await resolveNotificationLocale(context.locale)
@@ -835,7 +869,7 @@ export async function sendTestTelegramNotificationWithConfig(
 export async function sendTestServerchanNotification(context: NotificationLocaleContext = {}) {
   const settings = await getNotificationChannelSettings()
   if (!settings.serverchanNotificationsEnabled) {
-    throw new Error('Server 酱通知未启用或配置不完整')
+    throw new Error(getMessage(await resolveNotificationLocale(context.locale), 'api.errors.notifications.serverchanDisabledOrIncomplete'))
   }
 
   const locale = await resolveNotificationLocale(context.locale)
@@ -857,11 +891,11 @@ export async function sendTestServerchanNotificationWithConfig(
 export async function sendTestGotifyNotification(context: NotificationLocaleContext = {}) {
   const settings = await getNotificationChannelSettings()
   if (!settings.gotifyNotificationsEnabled) {
-    throw new Error('Gotify 通知未启用或配置不完整')
+    throw new Error(getMessage(await resolveNotificationLocale(context.locale), 'api.errors.notifications.gotifyDisabledOrIncomplete'))
   }
 
   const locale = await resolveNotificationLocale(context.locale)
-  await sendGotifyWithConfig(await buildTestReminderMessage(locale), settings.gotifyConfig)
+  await sendGotifyWithConfig(await buildTestReminderMessage(locale), settings.gotifyConfig, locale)
 
   return { success: true }
 }
@@ -871,7 +905,7 @@ export async function sendTestGotifyNotificationWithConfig(
   context: NotificationLocaleContext = {}
 ) {
   const locale = await resolveNotificationLocale(context.locale)
-  await sendGotifyWithConfig(await buildTestReminderMessage(locale), config)
+  await sendGotifyWithConfig(await buildTestReminderMessage(locale), config, locale)
 
   return { success: true }
 }

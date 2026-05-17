@@ -11,6 +11,15 @@ vi.mock('../../src/services/auth.service', () => ({
   verifyToken: appRouteMocks.verifyTokenMock
 }))
 
+vi.mock('../../src/db', () => ({
+  prisma: {
+    settings: {
+      findMany: vi.fn(),
+      upsert: vi.fn()
+    }
+  }
+}))
+
 vi.mock('../../src/services/settings.service', async () => {
   const actual = await vi.importActual<typeof import('../../src/services/settings.service')>('../../src/services/settings.service')
   return {

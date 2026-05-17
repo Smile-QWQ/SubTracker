@@ -1,5 +1,5 @@
 import dayjs from 'dayjs'
-import { type AppLocale } from '@subtracker/shared'
+import { getMessage, type AppLocale } from '@subtracker/shared'
 import { prisma } from '../db'
 import { toIsoDate } from '../utils/date'
 import { dispatchNotificationEvent, type NotificationChannelResult } from './channel-notification.service'
@@ -126,10 +126,10 @@ function getOverduePhase(daysOverdue: number): ReminderPhase {
 
 function buildReminderTitle(eventType: 'subscription.reminder_due' | 'subscription.overdue', days: number) {
   if (eventType === 'subscription.reminder_due') {
-    return days === 0 ? '今天到期' : `还有 ${days} 天到期`
+    return days === 0 ? 'due_today' : `days_until:${days}`
   }
 
-  return `已过期第 ${days} 天`
+  return `overdue_day:${days}`
 }
 
 function resolveAdvanceRules(sub: ReminderSubscriptionLike, defaultAdvanceReminderRules: string) {
@@ -464,7 +464,7 @@ export async function scanRenewalNotifications(
     }
   }
 
-  const mergedPayload = buildMergedPayload(dispatchEntries)
+  const mergedPayload = buildMergedPayload(dispatchEntries, appSettings.locale)
   const mergedParams: NotificationDispatchParams = buildDispatchParamsFromDedupEntries(dispatchEntries, {
     resourceKey: 'subscriptions:scan-summary',
     periodKey: `${toIsoDate(now.toDate(), appSettings.timezone)}:summary:${buildMergedPeriodKey(dispatchEntries)}`
@@ -481,7 +481,7 @@ export async function scanRenewalNotifications(
 
   notifications.push({
     subscriptionId: 'merged:summary',
-    subscriptionName: `共 ${dispatchEntries.length} 项订阅`,
+    subscriptionName: getMessage(appSettings.locale, 'notifications.merge.summaryName', { count: dispatchEntries.length }),
     phase: dispatchEntries[0].phase,
     eventType: mergedParams.eventType,
     daysUntilRenewal: Math.min(...dispatchEntries.map((entry) => entry.payload.daysUntilRenewal)),

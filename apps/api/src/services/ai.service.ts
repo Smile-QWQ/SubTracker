@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { createWorker, type Worker } from 'tesseract.js'
-import { AiRecognizeSubscriptionSchema, getDefaultAiSubscriptionPrompt, type AppLocale } from '@subtracker/shared'
+import { AiRecognizeSubscriptionSchema, getDefaultAiSubscriptionPrompt, getMessage, type AppLocale } from '@subtracker/shared'
 import type { AiRecognitionResultDto } from '@subtracker/shared'
 import { getAiConfig, getResolvedAppLocale } from './settings.service'
 
@@ -23,25 +23,38 @@ type ChatCompletionPayload = {
 const ocrCachePath = path.resolve(process.cwd(), 'apps/api/storage/tesseract-cache')
 const visionTestImageBase64 =
   'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAKUlEQVR4nO3OIQEAAAACIP+f1hkWWEB6FgEBAQEBAQEBAQEBAQEBgXdgl/rw4unIZ5cAAAAASUVORK5CYII='
-const jsonOnlySuffix = '必须只返回合法 JSON 对象，不要返回 Markdown、代码块或额外解释。'
 let ocrWorkerPromise: Promise<Worker> | null = null
 
-export function ensureAiConfig(aiConfig: AiSettings, options?: { requireEnabled?: boolean; featureLabel?: string }) {
+function getAiFeatureLabel(locale: AppLocale, featureKey: 'general' | 'summary') {
+  return featureKey === 'summary' ? getMessage(locale, 'settings.labels.aiSummary') : getMessage(locale, 'settings.sections.ai')
+}
+
+function getJsonOnlySuffix(locale: AppLocale) {
+  return getMessage(locale, 'ai.prompts.common.jsonOnlySuffix')
+}
+
+export function ensureAiConfig(
+  aiConfig: AiSettings,
+  options?: { requireEnabled?: boolean; featureKey?: 'general' | 'summary'; locale?: AppLocale }
+) {
+  const locale = options?.locale ?? 'zh-CN'
+  const featureLabel = getAiFeatureLabel(locale, options?.featureKey ?? 'general')
+
   if (options?.requireEnabled !== false && !aiConfig.enabled) {
-    throw new Error(`${options?.featureLabel ?? 'AI 功能'}未启用`)
+    throw new Error(getMessage(locale, 'api.errors.ai.disabled').replace(/^AI/, featureLabel))
   }
 
   if (!aiConfig.baseUrl || !aiConfig.apiKey || !aiConfig.model) {
-    throw new Error(`${options?.featureLabel ?? 'AI'}配置不完整`)
+    throw new Error(getMessage(locale, 'api.errors.ai.configIncomplete').replace(/^AI/, featureLabel))
   }
 }
 
-export function ensureAiSummaryConfig(aiConfig: AiSettings) {
+export function ensureAiSummaryConfig(aiConfig: AiSettings, locale: AppLocale = 'zh-CN') {
   if (!aiConfig.dashboardSummaryEnabled) {
-    throw new Error('AI 总结未启用')
+    throw new Error(getMessage(locale, 'api.errors.ai.summaryDisabled'))
   }
 
-  ensureAiConfig(aiConfig, { requireEnabled: false, featureLabel: 'AI 总结' })
+  ensureAiConfig(aiConfig, { requireEnabled: false, featureKey: 'summary', locale })
 }
 
 export function looksLikeImageFormatUnsupported(errorText: string) {
@@ -68,7 +81,7 @@ export function looksLikeStructuredOutputUnsupported(errorText: string) {
   )
 }
 
-export function extractChatCompletionText(payload: ChatCompletionPayload) {
+export function extractChatCompletionText(payload: ChatCompletionPayload, locale: AppLocale = 'zh-CN') {
   const content = payload.choices?.[0]?.message?.content
 
   if (typeof content === 'string') {
@@ -91,7 +104,7 @@ export function extractChatCompletionText(payload: ChatCompletionPayload) {
     }
   }
 
-  throw new Error('AI 未返回有效内容')
+  throw new Error(getMessage(locale, 'api.errors.ai.noValidContent'))
 }
 
 async function getOcrWorker() {
@@ -122,7 +135,7 @@ async function buildRecognitionSystemPrompt(aiConfig: AiSettings, forceJsonPromp
     return basePrompt
   }
 
-  return `${basePrompt}\n\n${jsonOnlySuffix}`
+  return `${basePrompt}\n\n${getJsonOnlySuffix(resolvedLocale)}`
 }
 
 async function requestAiChatCompletion(params: {
@@ -130,9 +143,11 @@ async function requestAiChatCompletion(params: {
   messages: ChatMessage[]
   responseFormat?: { type: 'json_object' }
   requireEnabled?: boolean
+  locale?: AppLocale
 }) {
   const { aiConfig } = params
-  ensureAiConfig(aiConfig, { requireEnabled: params.requireEnabled })
+  const locale = params.locale ?? 'zh-CN'
+  ensureAiConfig(aiConfig, { requireEnabled: params.requireEnabled, locale })
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), aiConfig.timeoutMs)
@@ -155,11 +170,11 @@ async function requestAiChatCompletion(params: {
 
     if (!response.ok) {
       const errorText = await response.text()
-      throw new Error(`AI 接口请求失败：${response.status}${errorText ? ` - ${errorText}` : ''}`)
+      throw new Error(`${getMessage(locale, 'api.errors.ai.summaryRequestFailed')}: ${response.status}${errorText ? ` - ${errorText}` : ''}`)
     }
 
     const payload = (await response.json()) as ChatCompletionPayload
-    return extractChatCompletionText(payload)
+    return extractChatCompletionText(payload, locale)
   } finally {
     clearTimeout(timeout)
   }
@@ -168,15 +183,17 @@ async function requestAiChatCompletion(params: {
 async function requestStructuredJsonCompletion(params: {
   aiConfig: AiSettings
   userContent: string | Array<Record<string, unknown>>
+  locale: AppLocale
 }) {
   const attempt = async (promptOnlyJson: boolean) => {
     return requestAiChatCompletion({
       aiConfig: params.aiConfig,
+      locale: params.locale,
       responseFormat: promptOnlyJson ? undefined : { type: 'json_object' },
       messages: [
         {
           role: 'system',
-          content: await buildRecognitionSystemPrompt(params.aiConfig, promptOnlyJson)
+          content: await buildRecognitionSystemPrompt(params.aiConfig, promptOnlyJson, params.locale)
         },
         {
           role: 'user',
@@ -201,10 +218,10 @@ async function requestStructuredJsonCompletion(params: {
   }
 }
 
-function buildTextOnlyUserContent(input: { text?: string; ocrText?: string }) {
+function buildTextOnlyUserContent(input: { text?: string; ocrText?: string }, locale: AppLocale) {
   const parts = [
-    input.text?.trim() ? `原始文本：\n${input.text.trim()}` : '',
-    input.ocrText?.trim() ? `OCR 提取文本：\n${input.ocrText.trim()}` : ''
+    input.text?.trim() ? `${getMessage(locale, 'ai.prompts.common.originalTextLabel')}:\n${input.text.trim()}` : '',
+    input.ocrText?.trim() ? `${getMessage(locale, 'ai.prompts.common.ocrExtractedTextLabel')}:\n${input.ocrText.trim()}` : ''
   ].filter(Boolean)
 
   return parts.join('\n\n').trim()
@@ -214,19 +231,21 @@ async function recognizeByTextOnly(params: {
   aiConfig: AiSettings
   text?: string
   ocrText?: string
+  locale: AppLocale
 }) {
   const userText = buildTextOnlyUserContent({
     text: params.text,
     ocrText: params.ocrText
-  })
+  }, params.locale)
 
   if (!userText) {
-    throw new Error('未获取到可用于识别的文本内容')
+    throw new Error(getMessage(params.locale, 'api.errors.ai.noRecognizableText'))
   }
 
   const raw = await requestStructuredJsonCompletion({
     aiConfig: params.aiConfig,
-    userContent: userText
+    userContent: userText,
+    locale: params.locale
   })
 
   return JSON.parse(raw) as AiRecognitionResultDto
@@ -237,6 +256,7 @@ async function recognizeByVision(params: {
   text?: string
   imageBase64: string
   mimeType?: string
+  locale: AppLocale
 }) {
   const content: Array<Record<string, unknown>> = []
 
@@ -256,19 +276,21 @@ async function recognizeByVision(params: {
 
   const raw = await requestStructuredJsonCompletion({
     aiConfig: params.aiConfig,
-    userContent: content
+    userContent: content,
+    locale: params.locale
   })
 
   return JSON.parse(raw) as AiRecognitionResultDto
 }
 
-export async function recognizeSubscriptionByAi(input: unknown): Promise<AiRecognitionResultDto> {
+export async function recognizeSubscriptionByAi(input: unknown, locale?: AppLocale): Promise<AiRecognitionResultDto> {
   const parsed = AiRecognizeSubscriptionSchema.safeParse(input)
   if (!parsed.success) {
-    throw new Error('AI 识别输入不合法')
+    throw new Error(getMessage(locale ?? 'zh-CN', 'api.errors.ai.invalidRecognitionInput'))
   }
 
   const aiConfig = await getAiConfig()
+  const resolvedLocale = locale ?? (await getResolvedAppLocale())
 
   const text = parsed.data.text?.trim()
   const imageBase64 = parsed.data.imageBase64
@@ -276,7 +298,8 @@ export async function recognizeSubscriptionByAi(input: unknown): Promise<AiRecog
   if (!imageBase64) {
     return recognizeByTextOnly({
       aiConfig,
-      text
+      text,
+      locale: resolvedLocale
     })
   }
 
@@ -286,7 +309,8 @@ export async function recognizeSubscriptionByAi(input: unknown): Promise<AiRecog
         aiConfig,
         text,
         imageBase64,
-        mimeType: parsed.data.mimeType
+        mimeType: parsed.data.mimeType,
+        locale: resolvedLocale
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -298,26 +322,29 @@ export async function recognizeSubscriptionByAi(input: unknown): Promise<AiRecog
 
   const ocrText = await extractTextFromImageWithOcr(imageBase64)
   if (!ocrText) {
-    throw new Error('图片 OCR 未识别出有效文本，请改为手动输入文本内容')
+    throw new Error(getMessage(resolvedLocale, 'api.errors.ai.ocrNoValidText'))
   }
 
   return recognizeByTextOnly({
     aiConfig,
     text,
-    ocrText
+    ocrText,
+    locale: resolvedLocale
   })
 }
 
-export async function testAiConnection(overrideConfig?: AiSettings) {
+export async function testAiConnection(overrideConfig?: AiSettings, locale?: AppLocale) {
   const aiConfig = overrideConfig ?? (await getAiConfig())
+  const resolvedLocale = locale ?? (await getResolvedAppLocale())
 
   const raw = await requestAiChatCompletion({
     aiConfig,
+    locale: resolvedLocale,
     requireEnabled: false,
     messages: [
       {
         role: 'system',
-        content: '请只返回 OK'
+        content: getMessage(resolvedLocale, 'ai.prompts.common.returnOkOnly')
       },
       {
         role: 'user',
@@ -334,26 +361,28 @@ export async function testAiConnection(overrideConfig?: AiSettings) {
   }
 }
 
-export async function testAiVisionConnection(overrideConfig?: AiSettings) {
+export async function testAiVisionConnection(overrideConfig?: AiSettings, locale?: AppLocale) {
   const aiConfig = overrideConfig ?? (await getAiConfig())
+  const resolvedLocale = locale ?? (await getResolvedAppLocale())
   if (!aiConfig.capabilities.vision) {
-    throw new Error('当前 Provider 未启用视觉输入能力')
+    throw new Error(getMessage(resolvedLocale, 'api.errors.ai.visionCapabilityDisabled'))
   }
 
   const raw = await requestAiChatCompletion({
     aiConfig,
+    locale: resolvedLocale,
     requireEnabled: false,
     messages: [
       {
         role: 'system',
-        content: '请根据用户发送的图片进行响应，只返回一句简短确认。'
+        content: getMessage(resolvedLocale, 'ai.prompts.common.visionConfirmSystem')
       },
       {
         role: 'user',
         content: [
           {
             type: 'text',
-            text: '请确认你已成功接收到这张测试图片。'
+            text: getMessage(resolvedLocale, 'ai.prompts.common.visionConfirmUser')
           },
           {
             type: 'image_url',

@@ -1,4 +1,5 @@
 import cron from 'node-cron'
+import { DEFAULT_APP_LOCALE, getMessage } from '@subtracker/shared'
 import { config } from '../config'
 import { refreshExchangeRates } from './exchange-rate.service'
 import { scanRenewalNotifications } from './notification.service'
@@ -22,32 +23,35 @@ function summarizeChannelResults(result: NotificationScan) {
   return summary
 }
 
-const CHANNEL_LABELS: Record<string, string> = {
-  webhook: 'Webhook',
-  email: '邮箱',
-  pushplus: 'PushPlus',
-  telegram: 'Telegram',
-  serverchan: 'Server 酱',
-  gotify: 'Gotify'
-}
-
 function formatChannelSummary(result: NotificationScan) {
   const summary = summarizeChannelResults(result)
+  const locale = DEFAULT_APP_LOCALE
   const parts = Object.entries(summary)
     .map(([channel, counts]) => {
       const success = counts.success ?? 0
       const failed = counts.failed ?? 0
       const skipped = counts.skipped ?? 0
-      return `${CHANNEL_LABELS[channel] ?? channel}:成功${success}/失败${failed}/跳过${skipped}`
+      return getMessage(locale, 'scheduler.channelSummary.item', {
+        channel: getMessage(locale, `notifications.channels.${channel}`),
+        success,
+        failed,
+        skipped
+      })
     })
-    .join('；')
+    .join(getMessage(locale, 'common.separators.notificationDetail'))
 
-  return parts ? `；${parts}` : ''
+  return parts ? `${getMessage(locale, 'common.separators.notificationDetail')}${parts}` : ''
 }
 
 function logReminderScan(result: NotificationScan) {
+  const locale = DEFAULT_APP_LOCALE
   console.log(
-    `[cron] subscription reminders scanned：候选 ${result.processedCount}，命中 ${result.matchedReminderCount}，通知 ${result.notificationCount}${formatChannelSummary(result)}`
+    getMessage(locale, 'scheduler.logs.reminderScan', {
+      processedCount: result.processedCount,
+      matchedReminderCount: result.matchedReminderCount,
+      notificationCount: result.notificationCount,
+      channelSummary: formatChannelSummary(result)
+    })
   )
 }
 
@@ -55,7 +59,7 @@ export async function cleanupNotificationDedupSettingsOncePerDay(now = new Date(
   return runDailyTaskAtLocalHour('cleanupNotificationDedupSettings', await getAppTimezone(), 3, now, async () => {
     const deleted = await cleanupOldNotificationDedupSettings(now)
     if (deleted > 0) {
-      console.log(`[cron] notification dedup cleanup：清理 ${deleted} 条旧记录`)
+      console.log(getMessage(DEFAULT_APP_LOCALE, 'scheduler.logs.notificationDedupCleanup', { deleted }))
     }
   })
 }
@@ -75,15 +79,15 @@ export function startSchedulers() {
           }
         )
         if (executed) {
-          console.log('[cron] exchange rates refreshed')
+          console.log(getMessage(DEFAULT_APP_LOCALE, 'scheduler.logs.exchangeRatesRefreshed'))
         }
         return
       }
 
       await refreshExchangeRates()
-      console.log('[cron] exchange rates refreshed')
+      console.log(getMessage(DEFAULT_APP_LOCALE, 'scheduler.logs.exchangeRatesRefreshed'))
     } catch (e) {
-      console.error('[cron] exchange rate refresh failed', e)
+      console.error(getMessage(DEFAULT_APP_LOCALE, 'scheduler.logs.exchangeRateRefreshFailed'), e)
     }
   })
 
@@ -95,7 +99,7 @@ export function startSchedulers() {
       const result = await scanRenewalNotifications()
       logReminderScan(result)
     } catch (e) {
-      console.error('[cron] reminder scan failed', e)
+      console.error(getMessage(DEFAULT_APP_LOCALE, 'scheduler.logs.reminderScanFailed'), e)
     }
   })
 }

@@ -3,7 +3,7 @@ import { prisma } from '../db'
 import { config } from '../config'
 import { convertAmount } from '../utils/money'
 import { getSetting } from './settings.service'
-import type { ExchangeRateSnapshotDto } from '@subtracker/shared'
+import { getMessage, DEFAULT_APP_LOCALE, type AppLocale, type ExchangeRateSnapshotDto } from '@subtracker/shared'
 
 type ProviderResponse = {
   result?: string
@@ -36,7 +36,7 @@ export async function getLatestSnapshot(baseCurrency?: string): Promise<Exchange
   }
 }
 
-export async function refreshExchangeRates(baseCurrency?: string) {
+export async function refreshExchangeRates(baseCurrency?: string, locale: AppLocale = DEFAULT_APP_LOCALE) {
   const base = (baseCurrency ?? (await getBaseCurrency())).toUpperCase()
 
   try {
@@ -49,7 +49,7 @@ export async function refreshExchangeRates(baseCurrency?: string) {
     const rates = payload.rates ?? {}
 
     if (!Object.keys(rates).length) {
-      throw new Error('Rate payload is empty')
+      throw new Error(getMessage(locale, 'api.errors.exchangeRates.payloadEmpty'))
     }
 
     return await prisma.exchangeRateSnapshot.upsert({

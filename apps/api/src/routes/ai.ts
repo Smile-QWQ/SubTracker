@@ -52,11 +52,11 @@ export async function aiRoutes(app: FastifyInstance) {
         }
         return sendOk(
           reply,
-          await testAiConnection(normalizeAiConfigPayload(parsed.data))
+          await testAiConnection(normalizeAiConfigPayload(parsed.data), request.locale)
         )
       }
 
-      return sendOk(reply, await testAiConnection())
+      return sendOk(reply, await testAiConnection(undefined, request.locale))
     } catch (error) {
       return sendError(reply, 400, 'ai_test_failed', error instanceof Error ? error.message : 'api.errors.ai.connectionTestFailed', undefined, {
         locale: request.locale
@@ -73,10 +73,10 @@ export async function aiRoutes(app: FastifyInstance) {
             locale: request.locale
           })
         }
-        return sendOk(reply, await testAiVisionConnection(normalizeAiConfigPayload(parsed.data)))
+        return sendOk(reply, await testAiVisionConnection(normalizeAiConfigPayload(parsed.data), request.locale))
       }
 
-      return sendOk(reply, await testAiVisionConnection())
+      return sendOk(reply, await testAiVisionConnection(undefined, request.locale))
     } catch (error) {
       return sendError(
         reply,
@@ -91,7 +91,7 @@ export async function aiRoutes(app: FastifyInstance) {
 
   app.post('/ai/recognize-subscription', async (request, reply) => {
     try {
-      return sendOk(reply, await recognizeSubscriptionByAi(request.body))
+      return sendOk(reply, await recognizeSubscriptionByAi(request.body, request.locale))
     } catch (error) {
       return sendError(reply, 400, 'ai_recognition_failed', error instanceof Error ? error.message : 'api.errors.ai.recognitionFailed', undefined, {
         locale: request.locale

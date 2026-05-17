@@ -1,13 +1,15 @@
+import { getMessage } from '@subtracker/shared'
 import { prisma } from '../db'
 import { ensureExchangeRates } from './exchange-rate.service'
 import { convertAmount } from '../utils/money'
-import { getAppSettings } from './settings.service'
+import { getAppSettings, getResolvedAppLocale } from './settings.service'
 import { projectRenewalEvents } from './projected-renewal.service'
 import { formatDateInTimezone, monthKeyInTimezone, startOfDayDateInTimezone, startOfMonthDateInTimezone, toTimezonedDayjs } from '../utils/timezone'
 
 type BudgetStatus = 'normal' | 'warning' | 'over'
 
 type StatisticsSubscription = Awaited<ReturnType<typeof fetchStatisticsSubscriptions>>[number]
+type StatisticsTag = NonNullable<StatisticsSubscription['tags'][number]['tag']>
 
 interface BudgetEntry {
   spent: number
@@ -159,9 +161,10 @@ function buildProjectedSeries(
 }
 
 async function buildStatisticsState() {
-  const [subscriptions, appSettings] = await Promise.all([
+  const [subscriptions, appSettings, locale] = await Promise.all([
     fetchStatisticsSubscriptions(),
-    getAppSettings()
+    getAppSettings(),
+    getResolvedAppLocale()
   ])
   const tags = appSettings.enableTagBudgets ? await prisma.tag.findMany() : []
 
@@ -190,8 +193,8 @@ async function buildStatisticsState() {
     statusDistributionMap.set(subscription.status, (statusDistributionMap.get(subscription.status) ?? 0) + 1)
   }
 
-  const activeSubscriptions = subscriptions.filter((item) => item.status === 'active')
-  const projectedSubscriptions = subscriptions.filter((item) => ['active', 'expired'].includes(item.status))
+  const activeSubscriptions = subscriptions.filter((item: StatisticsSubscription) => item.status === 'active')
+  const projectedSubscriptions = subscriptions.filter((item: StatisticsSubscription) => ['active', 'expired'].includes(item.status))
 
   for (const subscription of activeSubscriptions) {
     const baseAmount = convertAmount(
@@ -226,12 +229,13 @@ async function buildStatisticsState() {
 
     const tags =
       subscription.tags
-        .map((item) => item.tag)
-        .filter((item): item is NonNullable<typeof item> => Boolean(item))
-        .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'zh-CN')) ?? []
+        .map((item: StatisticsSubscription['tags'][number]) => item.tag)
+        .filter((item: StatisticsSubscription['tags'][number]['tag']): item is StatisticsTag => Boolean(item))
+        .sort((a: StatisticsTag, b: StatisticsTag) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'zh-CN')) ?? []
 
     if (!tags.length) {
-      tagSpendMap.set('未打标签', (tagSpendMap.get('未打标签') ?? 0) + monthly)
+      const untaggedLabel = getMessage(locale, 'common.empty.noTags')
+      tagSpendMap.set(untaggedLabel, (tagSpendMap.get(untaggedLabel) ?? 0) + monthly)
       continue
     }
 
@@ -253,12 +257,12 @@ async function buildStatisticsState() {
   const { monthlyTrend, upcomingByDay } = buildProjectedSeries(projectedSubscriptions, baseCurrency, rates, timezone)
 
   const upcomingRenewals = projectedSubscriptions
-    .filter((subscription) => {
+    .filter((subscription: StatisticsSubscription) => {
       const renewalDate = toTimezonedDayjs(subscription.nextRenewalDate, timezone)
       return (renewalDate.isAfter(today) || renewalDate.isSame(today, 'day')) && renewalDate.isBefore(next30)
     })
-    .sort((a, b) => a.nextRenewalDate.getTime() - b.nextRenewalDate.getTime())
-    .map((item) => ({
+    .sort((a: StatisticsSubscription, b: StatisticsSubscription) => a.nextRenewalDate.getTime() - b.nextRenewalDate.getTime())
+    .map((item: StatisticsSubscription) => ({
       id: item.id,
       name: item.name,
       nextRenewalDate: formatDateInTimezone(item.nextRenewalDate, timezone),
@@ -272,7 +276,7 @@ async function buildStatisticsState() {
     ? Object.entries(appSettings.tagBudgets)
         .flatMap<TagBudgetUsageEntry>(([tagId, budget]) => {
           const item = tagBudgetMap.get(tagId)
-          const name = item?.name ?? tags.find((tag) => tag.id === tagId)?.name
+          const name = item?.name ?? tags.find((tag: { id: string; name: string }) => tag.id === tagId)?.name
           if (!name) return []
 
           const spent = Number((item?.spent ?? 0).toFixed(2))
@@ -358,7 +362,7 @@ async function buildStatisticsState() {
       .sort((a, b) => b.monthlyAmountBase - a.monthlyAmountBase || a.name.localeCompare(b.name, 'zh-CN'))
       .slice(0, 10),
     activeSubscriptionCount: activeSubscriptions.length,
-    upcoming7DaysCount: projectedSubscriptions.filter((item) => {
+    upcoming7DaysCount: projectedSubscriptions.filter((item: StatisticsSubscription) => {
       const renewalDate = toTimezonedDayjs(item.nextRenewalDate, timezone)
       return (renewalDate.isAfter(today) || renewalDate.isSame(today, 'day')) && renewalDate.isBefore(next7)
     }).length,

@@ -19,7 +19,7 @@ export async function importRoutes(app: FastifyInstance) {
     }
 
     try {
-      return sendOk(reply, await inspectWallosImportFile(parsed.data))
+      return sendOk(reply, await inspectWallosImportFile(parsed.data, request.locale))
     } catch (error) {
       return sendError(reply, 400, 'wallos_inspect_failed', error instanceof Error ? error.message : 'api.errors.imports.wallosInspectFailed', undefined, {
         locale: request.locale
@@ -36,7 +36,7 @@ export async function importRoutes(app: FastifyInstance) {
     }
 
     try {
-      return sendOk(reply, await commitWallosImport(parsed.data))
+      return sendOk(reply, await commitWallosImport(parsed.data, request.locale))
     } catch (error) {
       return sendError(reply, 400, 'wallos_commit_failed', error instanceof Error ? error.message : 'api.errors.imports.wallosCommitFailed', undefined, {
         locale: request.locale
@@ -53,7 +53,7 @@ export async function importRoutes(app: FastifyInstance) {
     }
 
     try {
-      return sendOk(reply, await inspectSubtrackerBackupFile(parsed.data))
+      return sendOk(reply, await inspectSubtrackerBackupFile(parsed.data, request.locale))
     } catch (error) {
       return sendError(
         reply,
@@ -75,7 +75,7 @@ export async function importRoutes(app: FastifyInstance) {
     }
 
     try {
-      return sendOk(reply, await commitSubtrackerBackup(parsed.data))
+      return sendOk(reply, await commitSubtrackerBackup(parsed.data, request.locale))
     } catch (error) {
       return sendError(
         reply,

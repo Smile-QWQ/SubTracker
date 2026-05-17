@@ -6,6 +6,7 @@ import initSqlJs from 'sql.js'
 import type { Database as SqlJsDatabase, SqlJsStatic } from 'sql.js'
 import { DEFAULT_TIMEZONE } from '@subtracker/shared'
 import type {
+  AppLocale,
   BillingIntervalUnit,
   SubscriptionStatus,
   WallosImportCommitInput,
@@ -15,6 +16,7 @@ import type {
   WallosImportSubscriptionPreviewDto,
   WallosImportTagDto
 } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE, getMessage } from '@subtracker/shared'
 import { prisma } from '../db'
 import { addInterval } from '../utils/date'
 import { formatDateInTimezone, normalizeAppTimezone, parseDateInTimezone } from '../utils/timezone'
@@ -77,6 +79,7 @@ type ImportCacheEntry = {
   preview: WallosImportInspectResultDto
   zipLogos: Map<string, ZipLogoAsset>
 }
+type ImportedTagRow = { id: string; name: string; sortOrder: number }
 
 const previewCache = new Map<string, ImportCacheEntry>()
 const sqlJsPromise = initSqlJs({
@@ -185,22 +188,26 @@ function detectImportFileType(input: WallosImportInspectInput, buffer: Buffer): 
   return 'db'
 }
 
-function decodeDatabase(input: WallosImportInspectInput) {
+function decodeDatabase(input: WallosImportInspectInput, locale: AppLocale = DEFAULT_APP_LOCALE) {
   const buffer = Buffer.from(input.base64, 'base64')
   if (!buffer.length) {
-    throw new Error('数据库文件内容为空')
+    throw new Error(getMessage(locale, 'api.errors.imports.wallosDatabaseEmpty'))
   }
   return buffer
 }
 
-export function mapWallosBillingInterval(days: number | null | undefined, frequency: number | null | undefined) {
+export function mapWallosBillingInterval(
+  days: number | null | undefined,
+  frequency: number | null | undefined,
+  locale: AppLocale = DEFAULT_APP_LOCALE
+) {
   const freq = Math.max(Number(frequency || 1), 1)
 
   if (!days) {
     return {
       billingIntervalCount: 1,
       billingIntervalUnit: 'month' as BillingIntervalUnit,
-      warning: 'cycle 缺失，已回退为每 1 月'
+      warning: getMessage(locale, 'api.errors.wallosWarnings.cycleMissingFallback')
     }
   }
 
@@ -223,7 +230,7 @@ export function mapWallosBillingInterval(days: number | null | undefined, freque
   return {
     billingIntervalCount: days * freq,
     billingIntervalUnit: 'day' as BillingIntervalUnit,
-    warning: `cycle.days=${days} 无法直接映射，已转为每 ${days * freq} 天`
+    warning: getMessage(locale, 'api.errors.wallosWarnings.cycleDaysFallback', { days, mappedDays: days * freq })
   }
 }
 
@@ -357,7 +364,7 @@ function scoreZipDatabasePath(entryName: string) {
   return score
 }
 
-function extractZipImport(buffer: Buffer) {
+function extractZipImport(buffer: Buffer, locale: AppLocale = DEFAULT_APP_LOCALE) {
   const zip = new AdmZip(buffer)
   const entries = zip.getEntries()
   const dbEntry = entries
@@ -366,7 +373,7 @@ function extractZipImport(buffer: Buffer) {
     .sort((a, b) => scoreZipDatabasePath(b.entryName) - scoreZipDatabasePath(a.entryName))[0]
 
   if (!dbEntry) {
-    throw new Error('ZIP 中未找到 db/wallos.db')
+    throw new Error(getMessage(locale, 'api.errors.imports.wallosZipMissingDatabase'))
   }
 
   const zipLogos = new Map<string, ZipLogoAsset>()
@@ -391,10 +398,10 @@ function extractZipImport(buffer: Buffer) {
   }
 }
 
-function parsePriceString(input: unknown) {
+function parsePriceString(input: unknown, locale: AppLocale = DEFAULT_APP_LOCALE) {
   const text = String(input ?? '').trim()
   if (!text) {
-    return { amount: 0, currency: 'CNY', warning: '价格为空，已回退为 0 CNY' }
+    return { amount: 0, currency: 'CNY', warning: getMessage(locale, 'api.errors.wallosWarnings.priceEmptyFallback') }
   }
 
   const normalized = text.replace(/,/g, '')
@@ -410,13 +417,13 @@ function parsePriceString(input: unknown) {
 
   let warning: string | null = null
   if (!amountMatch) {
-    warning = `价格 "${text}" 无法完整解析，已回退为 0 ${currency}`
+    warning = getMessage(locale, 'api.errors.wallosWarnings.priceParseFallback', { text, currency })
   } else if (/\$/.test(normalized) && !/usd|dollar/i.test(normalized)) {
-    warning = `价格 "${text}" 的币种符号存在歧义，已默认按 USD 导入`
+    warning = getMessage(locale, 'api.errors.wallosWarnings.priceCurrencyAmbiguousUsd', { text })
   } else if (/¥/.test(normalized) && !/yuan|cny|rmb/i.test(normalized)) {
-    warning = `价格 "${text}" 的币种符号存在歧义，已默认按 CNY 导入`
+    warning = getMessage(locale, 'api.errors.wallosWarnings.priceCurrencyAmbiguousCny', { text })
   } else if (!/[a-z￥¥€£$]/i.test(normalized)) {
-    warning = `价格 "${text}" 未包含明确币种，已默认按 CNY 导入`
+    warning = getMessage(locale, 'api.errors.wallosWarnings.priceCurrencyMissing', { text })
   }
 
   return {
@@ -426,7 +433,7 @@ function parsePriceString(input: unknown) {
   }
 }
 
-function normalizeWallosWebsiteUrl(input: unknown) {
+function normalizeWallosWebsiteUrl(input: unknown, locale: AppLocale = DEFAULT_APP_LOCALE) {
   const raw = String(input ?? '')
     .replace(/&amp;/g, '&')
     .trim()
@@ -455,18 +462,18 @@ function normalizeWallosWebsiteUrl(input: unknown) {
     if (withHttps) {
       return {
         websiteUrl: withHttps,
-        warning: `网址 "${raw}" 缺少协议，已自动补全为 ${withHttps}`
+        warning: getMessage(locale, 'api.errors.wallosWarnings.websiteMissingProtocol', { raw, withHttps })
       }
     }
   }
 
   return {
     websiteUrl: null,
-    warning: `网址 "${raw}" 无法识别为合法链接，已忽略`
+    warning: getMessage(locale, 'api.errors.wallosWarnings.websiteInvalidIgnored', { raw })
   }
 }
 
-function parsePaymentCycle(input: unknown) {
+function parsePaymentCycle(input: unknown, locale: AppLocale = DEFAULT_APP_LOCALE) {
   const text = String(input ?? '').trim()
   const normalized = text.toLowerCase()
 
@@ -514,7 +521,7 @@ function parsePaymentCycle(input: unknown) {
   return {
     billingIntervalCount: 1,
     billingIntervalUnit: 'month' as BillingIntervalUnit,
-    warning: `Payment Cycle "${text}" 无法完整解析，已回退为每 1 月`
+    warning: getMessage(locale, 'api.errors.wallosWarnings.paymentCycleFallback', { text })
   }
 }
 
@@ -592,18 +599,18 @@ function pushRowWarning(warnings: string[], rowWarnings: string[], prefix: strin
   rowWarnings.push(warning)
 }
 
-function buildJsonStartDateWarning() {
-  return 'Wallos JSON 不包含 start_date，已使用 Next Payment 代填开始日期'
+function buildJsonStartDateWarning(locale: AppLocale = DEFAULT_APP_LOCALE) {
+  return getMessage(locale, 'api.errors.wallosWarnings.jsonStartDateFallback')
 }
 
-function buildJsonDerivedWarnings(row: WallosJsonRow) {
+function buildJsonDerivedWarnings(row: WallosJsonRow, locale: AppLocale = DEFAULT_APP_LOCALE) {
   const warnings: string[] = []
-  const price = parsePriceString(row.Price)
+  const price = parsePriceString(row.Price, locale)
   if (price.warning) warnings.push(price.warning)
-  const cycle = parsePaymentCycle(row['Payment Cycle'])
+  const cycle = parsePaymentCycle(row['Payment Cycle'], locale)
   if (cycle.warning) warnings.push(cycle.warning)
-  warnings.push(buildJsonStartDateWarning())
-  const normalizedUrl = normalizeWallosWebsiteUrl(row.URL)
+  warnings.push(buildJsonStartDateWarning(locale))
+  const normalizedUrl = normalizeWallosWebsiteUrl(row.URL, locale)
   if (normalizedUrl.warning) warnings.push(normalizedUrl.warning)
   return {
     price,
@@ -616,7 +623,8 @@ function buildJsonDerivedWarnings(row: WallosJsonRow) {
 function buildJsonPreview(
   rows: WallosJsonRow[],
   settings: { defaultNotifyDays: number; baseCurrency: string; timezone: string },
-  sourceTimezone: string
+  sourceTimezone: string,
+  locale: AppLocale = DEFAULT_APP_LOCALE
 ): Omit<WallosImportInspectResultDto, 'importToken'> {
   const warnings: string[] = []
   const previewSubscriptions: WallosImportSubscriptionPreviewDto[] = []
@@ -628,13 +636,13 @@ function buildJsonPreview(
     const nextPayment = parseDate(row['Next Payment'])
     if (!name || !nextPayment) {
       skippedSubscriptions += 1
-      warnings.push(`json#${index + 1} 缺少名称或下次支付时间，已跳过`)
+      warnings.push(getMessage(locale, 'api.errors.wallosWarnings.jsonMissingRequiredSkipped', { index: index + 1 }))
       return
     }
 
     const tagName = normalizeWallosTagName(String(row.Category ?? ''))
     const rowWarnings: string[] = []
-    const derived = buildJsonDerivedWarnings(row)
+    const derived = buildJsonDerivedWarnings(row, locale)
 
     derived.warnings.forEach((warning) => {
       pushRowWarning(warnings, rowWarnings, `json#${index + 1}`, warning)
@@ -703,7 +711,8 @@ function buildDbPreview(
   globalNotifyDays: number,
   fileType: ImportFileType,
   zipLogos = new Map<string, ZipLogoAsset>(),
-  sourceTimezone = settings.timezone
+  sourceTimezone = settings.timezone,
+  locale: AppLocale = DEFAULT_APP_LOCALE
 ): Omit<WallosImportInspectResultDto, 'importToken'> {
   const warnings: string[] = []
   const fallbackToday = formatDateInTimezone(new Date(), sourceTimezone)
@@ -716,11 +725,11 @@ function buildDbPreview(
   for (const row of rows) {
     if (!row.name || row.price === null || row.price === undefined || !row.next_payment) {
       skippedSubscriptions += 1
-      warnings.push(`subscription#${row.id} 缺少关键字段，已跳过`)
+      warnings.push(getMessage(locale, 'api.errors.wallosWarnings.subscriptionMissingRequiredSkipped', { id: row.id }))
       continue
     }
 
-    const mappedInterval = mapWallosBillingInterval(row.cycle_days, row.frequency_name)
+    const mappedInterval = mapWallosBillingInterval(row.cycle_days, row.frequency_name, locale)
     const effectiveNextRenewalDate = resolveDbEffectiveNextPayment(row, mappedInterval, undefined, sourceTimezone)
     const mappedStatus = mapWallosSubscriptionStatus({
       inactive: row.inactive,
@@ -738,13 +747,13 @@ function buildDbPreview(
     })
     const normalizedTag = normalizeWallosTagName(row.category_name)
     const rowWarnings: string[] = []
-    const normalizedUrl = normalizeWallosWebsiteUrl(row.url)
+    const normalizedUrl = normalizeWallosWebsiteUrl(row.url, locale)
 
     if (mappedInterval.warning) {
-      warnings.push(`subscription#${row.id} ${mappedInterval.warning}`)
+      warnings.push(getMessage(locale, 'api.errors.wallosWarnings.subscriptionPrefixed', { id: row.id, warning: mappedInterval.warning }))
       rowWarnings.push(mappedInterval.warning)
     }
-    pushRowWarning(warnings, rowWarnings, `subscription#${row.id}`, normalizedUrl.warning)
+    pushRowWarning(warnings, rowWarnings, getMessage(locale, 'api.errors.wallosWarnings.subscriptionPrefix', { id: row.id }), normalizedUrl.warning)
 
     if (normalizedTag) {
       tags.add(normalizedTag, row.category_id, row.category_sort_order)
@@ -761,8 +770,8 @@ function buildDbPreview(
       } else {
         logoImportStatus = 'pending-file-match'
         zipLogoMissing += 1
-        warnings.push(`subscription#${row.id} 存在 Logo 文件引用，当前包内未匹配到图片`)
-        rowWarnings.push('Logo 文件需后续通过目录或 zip 包补齐')
+        warnings.push(getMessage(locale, 'api.errors.wallosWarnings.subscriptionLogoMissing', { id: row.id }))
+        rowWarnings.push(getMessage(locale, 'api.errors.wallosWarnings.logoNeedsManualFill'))
       }
     }
 
@@ -819,6 +828,7 @@ async function buildDbPreviewFromBuffer(
     defaultNotifyDays?: number
     baseCurrency?: string
     sourceTimezone?: string
+    locale?: AppLocale
   }
 ) {
   const settings: WallosPreviewSettings =
@@ -836,7 +846,11 @@ async function buildDbPreviewFromBuffer(
     const tables = new Set(extractTableNames(db))
     const missingTables = REQUIRED_TABLES.filter((table) => !tables.has(table))
     if (missingTables.length > 0) {
-      throw new Error(`缺少 Wallos 关键表：${missingTables.join(', ')}`)
+      throw new Error(
+        getMessage(options?.locale ?? DEFAULT_APP_LOCALE, 'api.errors.imports.wallosMissingTables', {
+          tables: missingTables.join(', ')
+        })
+      )
     }
 
     const globalNotifyRow = queryRows<{ days: number | null }>(db, 'SELECT days FROM notification_settings LIMIT 1')[0]
@@ -880,14 +894,14 @@ async function buildDbPreviewFromBuffer(
     )
 
     const sourceTimezone = normalizeAppTimezone(options?.sourceTimezone ?? settings.timezone)
-    return buildDbPreview(rows, settings, globalNotifyDays, fileType, zipLogos, sourceTimezone)
+    return buildDbPreview(rows, settings, globalNotifyDays, fileType, zipLogos, sourceTimezone, options?.locale)
   } finally {
     db.close()
   }
 }
 
-async function inspectZipImport(buffer: Buffer, options?: { defaultNotifyDays?: number; baseCurrency?: string; sourceTimezone?: string }) {
-  const extracted = extractZipImport(buffer)
+async function inspectZipImport(buffer: Buffer, options?: { defaultNotifyDays?: number; baseCurrency?: string; sourceTimezone?: string; locale?: AppLocale }) {
+  const extracted = extractZipImport(buffer, options?.locale)
   const preview = await buildDbPreviewFromBuffer(extracted.dbBuffer, 'zip', extracted.zipLogos, options)
   return {
     preview,
@@ -895,16 +909,16 @@ async function inspectZipImport(buffer: Buffer, options?: { defaultNotifyDays?: 
   }
 }
 
-async function inspectJsonImport(buffer: Buffer, options?: { defaultNotifyDays?: number; baseCurrency?: string; sourceTimezone?: string }) {
+async function inspectJsonImport(buffer: Buffer, options?: { defaultNotifyDays?: number; baseCurrency?: string; sourceTimezone?: string; locale?: AppLocale }) {
   let parsed: unknown
   try {
     parsed = JSON.parse(buffer.toString('utf8'))
   } catch {
-    throw new Error('JSON 解析失败')
+    throw new Error(getMessage(options?.locale ?? DEFAULT_APP_LOCALE, 'api.errors.imports.wallosJsonParseFailed'))
   }
 
   if (!Array.isArray(parsed)) {
-    throw new Error('Wallos JSON 导出内容必须是数组')
+    throw new Error(getMessage(options?.locale ?? DEFAULT_APP_LOCALE, 'api.errors.imports.wallosJsonMustBeArray'))
   }
 
   const settings: WallosPreviewSettings =
@@ -917,12 +931,12 @@ async function inspectJsonImport(buffer: Buffer, options?: { defaultNotifyDays?:
       : await getAppSettings()
   const sourceTimezone = normalizeAppTimezone(options?.sourceTimezone ?? settings.timezone)
   return {
-    preview: buildJsonPreview(parsed as WallosJsonRow[], settings, sourceTimezone),
+    preview: buildJsonPreview(parsed as WallosJsonRow[], settings, sourceTimezone, options?.locale),
     zipLogos: new Map<string, ZipLogoAsset>()
   }
 }
 
-async function inspectDbImport(buffer: Buffer, options?: { defaultNotifyDays?: number; baseCurrency?: string; sourceTimezone?: string }) {
+async function inspectDbImport(buffer: Buffer, options?: { defaultNotifyDays?: number; baseCurrency?: string; sourceTimezone?: string; locale?: AppLocale }) {
   const preview = await buildDbPreviewFromBuffer(buffer, 'db', new Map<string, ZipLogoAsset>(), options)
   return {
     preview,
@@ -930,8 +944,11 @@ async function inspectDbImport(buffer: Buffer, options?: { defaultNotifyDays?: n
   }
 }
 
-async function inspectImportBuffer(input: WallosImportInspectInput, options?: { defaultNotifyDays?: number; baseCurrency?: string; sourceTimezone?: string }) {
-  const buffer = decodeDatabase(input)
+async function inspectImportBuffer(
+  input: WallosImportInspectInput,
+  options?: { defaultNotifyDays?: number; baseCurrency?: string; sourceTimezone?: string; locale?: AppLocale }
+) {
+  const buffer = decodeDatabase(input, options?.locale)
   const fileType = detectImportFileType(input, buffer)
 
   switch (fileType) {
@@ -945,10 +962,13 @@ async function inspectImportBuffer(input: WallosImportInspectInput, options?: { 
   }
 }
 
-export async function inspectWallosImportFile(input: WallosImportInspectInput): Promise<WallosImportInspectResultDto> {
+export async function inspectWallosImportFile(
+  input: WallosImportInspectInput,
+  locale: AppLocale = DEFAULT_APP_LOCALE
+): Promise<WallosImportInspectResultDto> {
   cleanupExpiredImports()
 
-  const { preview, zipLogos } = await inspectImportBuffer(input)
+  const { preview, zipLogos } = await inspectImportBuffer(input, { locale })
   const importToken = crypto.randomBytes(24).toString('hex')
   const cachedPreview: WallosImportInspectResultDto = {
     ...preview,
@@ -964,13 +984,16 @@ export async function inspectWallosImportFile(input: WallosImportInspectInput): 
   return cachedPreview
 }
 
-export async function commitWallosImport(input: WallosImportCommitInput): Promise<WallosImportCommitResultDto> {
+export async function commitWallosImport(
+  input: WallosImportCommitInput,
+  locale: AppLocale = DEFAULT_APP_LOCALE
+): Promise<WallosImportCommitResultDto> {
   cleanupExpiredImports()
 
   const entry = previewCache.get(input.importToken)
   if (!entry || entry.expiresAt <= Date.now()) {
     previewCache.delete(input.importToken)
-    throw new Error('导入令牌不存在或已失效，请重新生成预览')
+    throw new Error(getMessage(locale, 'api.errors.imports.importTokenInvalid'))
   }
 
   const preview = entry.preview
@@ -986,7 +1009,7 @@ export async function commitWallosImport(input: WallosImportCommitInput): Promis
     }
   })
 
-  const tagIdByName = new Map(existingTags.map((item) => [item.name, item.id]))
+  const tagIdByName = new Map<string, string>(existingTags.map((item: ImportedTagRow) => [item.name, item.id]))
   let importedTags = 0
   let importedSubscriptions = 0
   let importedLogos = 0
@@ -1005,12 +1028,12 @@ export async function commitWallosImport(input: WallosImportCommitInput): Promis
     const refreshedTags = await prisma.tag.findMany({
       where: {
         name: {
-          in: preview.usedTags.map((item) => item.name)
+          in: preview.usedTags.map((item: WallosImportTagDto) => item.name)
         }
       }
     })
     tagIdByName.clear()
-    refreshedTags.forEach((tag) => {
+    refreshedTags.forEach((tag: ImportedTagRow) => {
       tagIdByName.set(tag.name, tag.id)
     })
   }
@@ -1050,7 +1073,7 @@ export async function commitWallosImport(input: WallosImportCommitInput): Promis
     if (item.logoRef) {
       const asset = zipLogos.get(normalizeZipLogoName(item.logoRef))
       if (asset) {
-        const imported = await saveImportedLogoBuffer(asset.buffer, asset.contentType, 'wallos-zip')
+        const imported = await saveImportedLogoBuffer(asset.buffer, asset.contentType, 'wallos-zip', locale)
         logoUrl = imported.logoUrl
         logoSource = imported.logoSource
         logoFetchedAt = new Date()
@@ -1123,6 +1146,7 @@ export async function previewWallosImportFromBase64ForTest(
     defaultNotifyDays?: number
     baseCurrency?: string
     sourceTimezone?: string
+    locale?: AppLocale
   }
 ) {
   const result = await inspectImportBuffer(input, options)

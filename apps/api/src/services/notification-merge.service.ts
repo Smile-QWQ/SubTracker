@@ -1,4 +1,4 @@
-import { type WebhookEventType } from '@subtracker/shared'
+import { getMessage, type AppLocale, type WebhookEventType } from '@subtracker/shared'
 
 export type NotificationEntryPayload = {
   id: string
@@ -64,19 +64,19 @@ type NotificationMergedPayload = {
   subscriptions: NotificationEntryPayload[]
 }
 
-function getSummaryPhaseTitle(phase: string) {
-  if (phase === 'upcoming') return '即将到期'
-  if (phase === 'due_today') return '今天到期'
+function getSummaryPhaseTitle(phase: string, locale: AppLocale = 'zh-CN') {
+  if (phase === 'upcoming') return getMessage(locale, 'notifications.merge.phaseUpcoming')
+  if (phase === 'due_today') return getMessage(locale, 'notifications.merge.phaseDueToday')
 
   const overdueMatch = phase.match(/^overdue_day_(\d+)$/)
   if (overdueMatch) {
-    return `已过期第 ${overdueMatch[1]} 天`
+    return getMessage(locale, 'notifications.merge.phaseOverdueDay', { days: overdueMatch[1] })
   }
 
   return phase
 }
 
-export function buildMergedSummarySections(entries: NotificationDedupEntry[]): NotificationSummarySection[] {
+export function buildMergedSummarySections(entries: NotificationDedupEntry[], locale: AppLocale = 'zh-CN'): NotificationSummarySection[] {
   const groups = new Map<string, NotificationSummarySection>()
 
   for (const entry of entries) {
@@ -88,7 +88,7 @@ export function buildMergedSummarySections(entries: NotificationDedupEntry[]): N
 
     groups.set(entry.phase, {
       phase: entry.phase,
-      title: getSummaryPhaseTitle(entry.phase),
+      title: getSummaryPhaseTitle(entry.phase, locale),
       eventType: entry.eventType,
       subscriptions: [entry.payload]
     })
@@ -107,8 +107,8 @@ export function buildMergedSummarySections(entries: NotificationDedupEntry[]): N
   })
 }
 
-export function buildMergedPayload(entries: NotificationDedupEntry[]): NotificationMergedPayload {
-  const sections = buildMergedSummarySections(entries)
+export function buildMergedPayload(entries: NotificationDedupEntry[], locale: AppLocale = 'zh-CN'): NotificationMergedPayload {
+  const sections = buildMergedSummarySections(entries, locale)
   const flattenedSubscriptions = sections.flatMap((section) => section.subscriptions)
   const hasOverdue = sections.some((section) => section.eventType === 'subscription.overdue')
 
@@ -116,7 +116,7 @@ export function buildMergedPayload(entries: NotificationDedupEntry[]): Notificat
     merged: true,
     mergedCount: flattenedSubscriptions.length,
     mergedSections: sections,
-    name: `共 ${flattenedSubscriptions.length} 项订阅`,
+    name: getMessage(locale, 'notifications.merge.summaryName', { count: flattenedSubscriptions.length }),
     nextRenewalDate: flattenedSubscriptions[0]?.nextRenewalDate ?? '',
     notifyDaysBefore: 0,
     amount: flattenedSubscriptions.reduce((sum, item) => sum + item.amount, 0),
@@ -140,10 +140,12 @@ export function buildMergedPeriodKey(entries: Array<Pick<NotificationDedupEntry,
 
 export function buildDispatchParamsFromDedupEntries(
   entries: NotificationDedupEntry[],
-  fallback?: Partial<Pick<NotificationDispatchParams, 'resourceKey' | 'periodKey'>>
+  fallback?: Partial<Pick<NotificationDispatchParams, 'resourceKey' | 'periodKey'>> & { locale?: AppLocale }
 ): NotificationDispatchParams {
   if (entries.length === 0) {
-    throw new Error('Cannot build notification dispatch params from empty dedup entries')
+    throw new Error(
+      getMessage(fallback?.locale ?? 'zh-CN', 'api.errors.notifications.emptyDedupEntries')
+    )
   }
 
   if (entries.length === 1) {

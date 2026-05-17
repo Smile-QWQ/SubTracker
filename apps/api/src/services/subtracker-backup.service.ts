@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, rm } from 'node:fs/promises'
 import path from 'node:path'
 import AdmZip from 'adm-zip'
 import type {
+  AppLocale,
   NotificationWebhookSettingsInput,
   PaymentRecordDto,
   SettingsInput,
@@ -15,7 +16,7 @@ import type {
   SubtrackerBackupSubscriptionDto,
   SubtrackerBackupTagDto
 } from '@subtracker/shared'
-import { SettingsSchema } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE, SettingsSchema, getMessage } from '@subtracker/shared'
 import { prisma } from '../db'
 import { formatDateInTimezone, parseDateInTimezone, toTimezonedDayjs } from '../utils/timezone'
 import { getLocalLogoLibrary, getLogoStorageDir, saveImportedLogoBuffer } from './logo.service'
@@ -61,6 +62,46 @@ type CachedImportEntry = {
 }
 
 type ExistingIdRow = { id: string }
+type BackupTagRow = { id: string; name: string; color: string; icon: string; sortOrder: number }
+type BackupSubscriptionTagRow = { tagId: string }
+type BackupSubscriptionRow = {
+  id: string
+  name: string
+  description: string
+  websiteUrl: string | null
+  logoUrl: string | null
+  logoSource: string | null
+  logoFetchedAt: Date | null
+  status: SubtrackerBackupSubscriptionDto['status']
+  amount: number
+  currency: string
+  billingIntervalCount: number
+  billingIntervalUnit: SubtrackerBackupSubscriptionDto['billingIntervalUnit']
+  autoRenew: boolean
+  startDate: Date
+  nextRenewalDate: Date
+  notifyDaysBefore: number
+  advanceReminderRules: string | null
+  overdueReminderRules: string | null
+  webhookEnabled: boolean
+  notes: string
+  createdAt: Date
+  updatedAt: Date
+  tags: BackupSubscriptionTagRow[]
+}
+type BackupPaymentRecordRow = {
+  id: string
+  subscriptionId: string
+  amount: number
+  currency: string
+  baseCurrency: string
+  convertedAmount: number
+  exchangeRate: number
+  paidAt: Date
+  periodStart: Date
+  periodEnd: Date
+  createdAt: Date
+}
 
 const previewCache = new Map<string, CachedImportEntry>()
 
@@ -154,7 +195,7 @@ async function buildBackupManifest(): Promise<{ manifest: BackupManifest; logoBu
     getSubscriptionOrder()
   ])
 
-  const serializedSubscriptions: SubtrackerBackupSubscriptionDto[] = subscriptions.map((subscription) => ({
+  const serializedSubscriptions: SubtrackerBackupSubscriptionDto[] = subscriptions.map((subscription: BackupSubscriptionRow) => ({
     id: subscription.id,
     name: subscription.name,
     description: subscription.description,
@@ -175,12 +216,12 @@ async function buildBackupManifest(): Promise<{ manifest: BackupManifest; logoBu
     overdueReminderRules: subscription.overdueReminderRules ?? null,
     webhookEnabled: subscription.webhookEnabled,
     notes: subscription.notes,
-    tagIds: subscription.tags.map((item) => item.tagId),
+    tagIds: subscription.tags.map((item: BackupSubscriptionTagRow) => item.tagId),
     createdAt: subscription.createdAt.toISOString(),
     updatedAt: subscription.updatedAt.toISOString()
   }))
 
-  const serializedTags: SubtrackerBackupTagDto[] = tags.map((tag) => ({
+  const serializedTags: SubtrackerBackupTagDto[] = tags.map((tag: BackupTagRow) => ({
     id: tag.id,
     name: tag.name,
     color: tag.color,
@@ -188,7 +229,7 @@ async function buildBackupManifest(): Promise<{ manifest: BackupManifest; logoBu
     sortOrder: tag.sortOrder
   }))
 
-  const serializedPaymentRecords: PaymentRecordDto[] = paymentRecords.map((record) => ({
+  const serializedPaymentRecords: PaymentRecordDto[] = paymentRecords.map((record: BackupPaymentRecordRow) => ({
     id: record.id,
     subscriptionId: record.subscriptionId,
     amount: record.amount,
@@ -252,49 +293,49 @@ export async function createSubtrackerBackupArchive() {
   }
 }
 
-function parseBackupManifest(raw: unknown): BackupManifest {
+function parseBackupManifest(raw: unknown, locale: AppLocale = DEFAULT_APP_LOCALE): BackupManifest {
   if (!raw || typeof raw !== 'object') {
-    throw new Error('备份 manifest 格式无效')
+    throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupManifestInvalid'))
   }
 
   const manifest = raw as BackupManifest
   if (manifest.app !== BACKUP_APP_NAME) {
-    throw new Error('不是合法的 SubTracker 备份文件')
+    throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupInvalidFile'))
   }
   if (manifest.schemaVersion !== BACKUP_SCHEMA_VERSION) {
-    throw new Error(`不支持的备份版本：${manifest.schemaVersion}`)
+    throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupUnsupportedVersion', { version: manifest.schemaVersion }))
   }
   if (manifest.scope !== BACKUP_SCOPE) {
-    throw new Error(`不支持的备份范围：${manifest.scope}`)
+    throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupUnsupportedScope', { scope: manifest.scope }))
   }
   if (!manifest.data || !manifest.assets) {
-    throw new Error('备份 manifest 缺少关键数据')
+    throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupManifestMissingData'))
   }
 
   return manifest
 }
 
-async function decodeBackupArchive(input: SubtrackerBackupInspectInput) {
+async function decodeBackupArchive(input: SubtrackerBackupInspectInput, locale: AppLocale = DEFAULT_APP_LOCALE) {
   const buffer = Buffer.from(input.base64, 'base64')
   if (!buffer.length) {
-    throw new Error('备份文件内容为空')
+    throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupFileEmpty'))
   }
 
   const zip = new AdmZip(buffer)
   const entries = zip.getEntries()
   const manifestEntry = entries.find((entry) => !entry.isDirectory && normalizeZipLogoPath(entry.entryName) === MANIFEST_ENTRY)
   if (!manifestEntry) {
-    throw new Error('备份 ZIP 缺少 manifest.json')
+    throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupMissingManifest'))
   }
 
-  const manifest = parseBackupManifest(JSON.parse(manifestEntry.getData().toString('utf8')))
+  const manifest = parseBackupManifest(JSON.parse(manifestEntry.getData().toString('utf8')), locale)
   const logoAssets = new Map<string, { buffer: Buffer; contentType: string }>()
 
   for (const asset of manifest.assets.logos) {
     const normalizedPath = normalizeZipLogoPath(asset.path)
     const entry = entries.find((item) => !item.isDirectory && normalizeZipLogoPath(item.entryName) === normalizedPath)
     if (!entry) {
-      throw new Error(`备份 ZIP 缺少 Logo 文件：${asset.path}`)
+      throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupMissingLogo', { path: asset.path }))
     }
 
     logoAssets.set(normalizedPath, {
@@ -357,27 +398,30 @@ async function buildInspectConflicts(manifest: BackupManifest): Promise<Subtrack
   }
 }
 
-function buildBackupWarnings(manifest: BackupManifest) {
+function buildBackupWarnings(manifest: BackupManifest, locale: AppLocale = DEFAULT_APP_LOCALE) {
   const warnings: string[] = []
 
   if (manifest.assets.logos.length === 0) {
-    warnings.push('该备份不包含本地 Logo 文件')
+    warnings.push(getMessage(locale, 'api.errors.imports.subtrackerBackupWarnings.noLocalLogos'))
   }
 
   if (manifest.data.paymentRecords.length === 0) {
-    warnings.push('该备份不包含支付记录')
+    warnings.push(getMessage(locale, 'api.errors.imports.subtrackerBackupWarnings.noPaymentRecords'))
   }
 
-  warnings.push('不会恢复登录凭据、会话密钥、Webhook 历史和汇率快照')
-  warnings.push('追加导入时，订阅与支付记录按备份中的唯一标识（CUID）幂等跳过；同名标签会复用现有标签')
+  warnings.push(getMessage(locale, 'api.errors.imports.subtrackerBackupWarnings.excludedSecretsAndHistory'))
+  warnings.push(getMessage(locale, 'api.errors.imports.subtrackerBackupWarnings.appendModeDedup'))
 
   return warnings
 }
 
-export async function inspectSubtrackerBackupFile(input: SubtrackerBackupInspectInput): Promise<SubtrackerBackupInspectResultDto> {
+export async function inspectSubtrackerBackupFile(
+  input: SubtrackerBackupInspectInput,
+  locale: AppLocale = DEFAULT_APP_LOCALE
+): Promise<SubtrackerBackupInspectResultDto> {
   cleanupExpiredImports()
 
-  const { manifest, logoAssets } = await decodeBackupArchive(input)
+  const { manifest, logoAssets } = await decodeBackupArchive(input, locale)
   const conflicts = await buildInspectConflicts(manifest)
   const preview: SubtrackerBackupInspectResultDto = {
     isSubtrackerBackup: true,
@@ -389,7 +433,7 @@ export async function inspectSubtrackerBackupFile(input: SubtrackerBackupInspect
       logosTotal: manifest.assets.logos.length,
       includesSettings: true
     },
-    warnings: buildBackupWarnings(manifest),
+    warnings: buildBackupWarnings(manifest, locale),
     importToken: createImportToken(),
     availableModes: ['replace', 'append'],
     conflicts
@@ -431,7 +475,7 @@ async function restoreSettingsFromBackup(settings: BackupManifest['data']['setti
 }
 
 async function buildTagRestoreMap(manifest: BackupManifest) {
-  const existingByName = new Map(
+  const existingByName = new Map<string, BackupTagRow>(
     (
       await prisma.tag.findMany({
         where: {
@@ -440,7 +484,7 @@ async function buildTagRestoreMap(manifest: BackupManifest) {
           }
         }
       })
-    ).map((tag) => [tag.name, tag])
+    ).map((tag: BackupTagRow) => [tag.name, tag] as const)
   )
 
   const idMap = new Map<string, string>()
@@ -478,7 +522,8 @@ async function buildTagRestoreMap(manifest: BackupManifest) {
 async function importLogoFromAsset(
   subscriptionId: string,
   manifest: BackupManifest,
-  logoAssets: Map<string, { buffer: Buffer; contentType: string }>
+  logoAssets: Map<string, { buffer: Buffer; contentType: string }>,
+  locale: AppLocale = DEFAULT_APP_LOCALE
 ) {
   const asset = manifest.assets.logos.find((item) => item.referencedBySubscriptionIds.includes(subscriptionId))
   if (!asset) return null
@@ -486,7 +531,7 @@ async function importLogoFromAsset(
   const entry = logoAssets.get(normalizeZipLogoPath(asset.path))
   if (!entry) return null
 
-  return saveImportedLogoBuffer(entry.buffer, entry.contentType, 'backup-zip')
+  return saveImportedLogoBuffer(entry.buffer, entry.contentType, 'backup-zip', locale)
 }
 
 function toPaymentRecordCreateManyInput(records: PaymentRecordDto[]) {
@@ -505,13 +550,16 @@ function toPaymentRecordCreateManyInput(records: PaymentRecordDto[]) {
   }))
 }
 
-export async function commitSubtrackerBackup(input: SubtrackerBackupCommitInput): Promise<SubtrackerBackupCommitResultDto> {
+export async function commitSubtrackerBackup(
+  input: SubtrackerBackupCommitInput,
+  locale: AppLocale = DEFAULT_APP_LOCALE
+): Promise<SubtrackerBackupCommitResultDto> {
   cleanupExpiredImports()
 
   const cached = previewCache.get(input.importToken)
   if (!cached || cached.expiresAt <= Date.now()) {
     previewCache.delete(input.importToken)
-    throw new Error('导入令牌不存在或已失效，请重新生成预览')
+    throw new Error(getMessage(locale, 'api.errors.imports.importTokenInvalid'))
   }
   previewCache.delete(input.importToken)
 
@@ -535,7 +583,7 @@ export async function commitSubtrackerBackup(input: SubtrackerBackupCommitInput)
           id: true
         }
       })
-    ).map((item) => item.id)
+    ).map((item: ExistingIdRow) => item.id)
   )
   const incomingPaymentSubscriptionIds = Array.from(new Set(manifest.data.paymentRecords.map((item) => item.subscriptionId)))
   const existingPaymentRecordRows: ExistingIdRow[] =
@@ -569,7 +617,7 @@ export async function commitSubtrackerBackup(input: SubtrackerBackupCommitInput)
     }
 
     const importedLogo = subscription.logoUrl?.startsWith('/static/logos/')
-      ? await importLogoFromAsset(subscription.id, manifest, logoAssets)
+      ? await importLogoFromAsset(subscription.id, manifest, logoAssets, locale)
       : null
 
     if (importedLogo) {

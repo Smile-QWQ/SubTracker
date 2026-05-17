@@ -53,7 +53,7 @@ export async function getVersionUpdateSummary(currentVersion: string): Promise<V
   })
 
   if (!response.ok) {
-    throw new Error(`获取版本更新失败：HTTP ${response.status}`)
+    throw new Error(`api.errors.version.updateFetchFailed: HTTP ${response.status}`)
   }
 
   const releases = (await response.json()) as GitHubRelease[]

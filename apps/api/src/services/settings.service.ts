@@ -87,7 +87,7 @@ function hasDirectForgotPasswordChannelEnabled(settings: {
 
 export async function getAppSettings(): Promise<SettingsInput> {
   const rows = await prisma.setting.findMany()
-  const settingsMap = new Map(rows.map((row) => [row.key, row.valueJson]))
+  const settingsMap = new Map<string, unknown>(rows.map((row: { key: string; valueJson: unknown }) => [row.key, row.valueJson]))
 
   const baseCurrency = readSettingsValue(settingsMap, 'baseCurrency', config.baseCurrency)
   const timezoneFallback = normalizeAppTimezone(process.env.TZ ?? DEFAULT_TIMEZONE)

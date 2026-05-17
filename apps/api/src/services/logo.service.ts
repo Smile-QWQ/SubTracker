@@ -2,7 +2,7 @@ import { mkdir, readdir, stat, unlink, writeFile } from 'node:fs/promises'
 import crypto from 'node:crypto'
 import path from 'node:path'
 import { prisma } from '../db'
-import type { LogoSearchResultDto } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE, getMessage, type AppLocale, type LogoSearchResultDto } from '@subtracker/shared'
 
 const logoDir = path.resolve(process.cwd(), 'apps/api/storage/logos')
 const SEARCH_USER_AGENT =
@@ -37,6 +37,10 @@ type SearchCacheEntry = {
 }
 
 const searchCache = new Map<string, SearchCacheEntry>()
+
+function getLogoMessage(locale: AppLocale, key: string, params?: Record<string, string | number | boolean | null | undefined>) {
+  return getMessage(locale, key, params)
+}
 
 function normalizeWebsiteUrl(input?: string) {
   if (!input) return ''
@@ -188,7 +192,7 @@ function extractMetaImageMatches(html: string) {
   return matches
 }
 
-async function fetchManifestCandidates(manifestUrl: string, websiteUrl: string) {
+async function fetchManifestCandidates(manifestUrl: string, websiteUrl: string, locale: AppLocale = DEFAULT_APP_LOCALE) {
   const candidates: RawCandidate[] = []
 
   try {
@@ -199,11 +203,17 @@ async function fetchManifestCandidates(manifestUrl: string, websiteUrl: string) 
 
       const [width, height] = parseSizes(icon.sizes)
       const sizeLabel = icon.sizes ? ` (${icon.sizes})` : ''
-      makeCandidate(candidates, `Manifest 图标${sizeLabel}`, iconUrl, icon.purpose ? `manifest:${icon.purpose}` : 'manifest', {
-        websiteUrl,
-        width,
-        height
-      })
+      makeCandidate(
+        candidates,
+        getLogoMessage(locale, 'logos.search.manifestIcon', { sizeLabel }),
+        iconUrl,
+        icon.purpose ? `manifest:${icon.purpose}` : 'manifest',
+        {
+          websiteUrl,
+          width,
+          height
+        }
+      )
     }
   } catch {
     return candidates
@@ -220,7 +230,7 @@ function parseSizes(sizes?: string) {
   return [Number.isFinite(width) ? width : undefined, Number.isFinite(height) ? height : undefined] as const
 }
 
-async function fetchWebsiteCandidates(origin: string) {
+async function fetchWebsiteCandidates(origin: string, locale: AppLocale = DEFAULT_APP_LOCALE) {
   const candidates: RawCandidate[] = []
 
   try {
@@ -232,13 +242,13 @@ async function fetchWebsiteCandidates(origin: string) {
       if (!href) continue
 
       if (link.rel.includes('apple-touch-icon')) {
-        makeCandidate(candidates, 'Apple Touch Icon', href, 'apple-touch-icon', { websiteUrl: origin })
+        makeCandidate(candidates, getLogoMessage(locale, 'logos.search.appleTouchIcon'), href, 'apple-touch-icon', { websiteUrl: origin })
       } else if (link.rel.includes('mask-icon')) {
-        makeCandidate(candidates, 'Mask Icon', href, 'mask-icon', { websiteUrl: origin })
+        makeCandidate(candidates, getLogoMessage(locale, 'logos.search.maskIcon'), href, 'mask-icon', { websiteUrl: origin })
       } else if (link.rel.includes('icon')) {
-        makeCandidate(candidates, '站点图标', href, 'html-icon', { websiteUrl: origin })
+        makeCandidate(candidates, getLogoMessage(locale, 'logos.search.siteIcon'), href, 'html-icon', { websiteUrl: origin })
       } else if (link.rel.includes('manifest')) {
-        const manifestCandidates = await fetchManifestCandidates(href, origin)
+        const manifestCandidates = await fetchManifestCandidates(href, origin, locale)
         manifestCandidates.forEach((item) => makeCandidate(candidates, item.label, item.logoUrl, item.source, item))
       }
     }
@@ -246,7 +256,7 @@ async function fetchWebsiteCandidates(origin: string) {
     for (const image of extractMetaImageMatches(html)) {
       const imageUrl = resolveUrl(origin, image)
       if (imageUrl) {
-        makeCandidate(candidates, '站点分享图', imageUrl, 'og-image', { websiteUrl: origin })
+        makeCandidate(candidates, getLogoMessage(locale, 'logos.search.siteShareImage'), imageUrl, 'og-image', { websiteUrl: origin })
       }
     }
   } catch {
@@ -266,7 +276,7 @@ async function getDuckDuckGoVqd(searchTerm: string) {
   }
 }
 
-async function fetchDuckDuckGoCandidates(searchTerm: string) {
+async function fetchDuckDuckGoCandidates(searchTerm: string, locale: AppLocale = DEFAULT_APP_LOCALE) {
   const candidates: RawCandidate[] = []
   const vqd = await getDuckDuckGoVqd(searchTerm)
   if (!vqd) return candidates
@@ -292,7 +302,7 @@ async function fetchDuckDuckGoCandidates(searchTerm: string) {
       const imageUrl = row.image || row.thumbnail || ''
       if (!imageUrl) continue
 
-      makeCandidate(candidates, `DuckDuckGo 候选 ${index + 1}`, imageUrl, 'duckduckgo', {
+      makeCandidate(candidates, getLogoMessage(locale, 'logos.search.duckduckgoCandidate', { index: index + 1 }), imageUrl, 'duckduckgo', {
         width: row.width,
         height: row.height
       })
@@ -305,7 +315,7 @@ async function fetchDuckDuckGoCandidates(searchTerm: string) {
   return candidates
 }
 
-async function fetchBraveCandidates(searchTerm: string) {
+async function fetchBraveCandidates(searchTerm: string, locale: AppLocale = DEFAULT_APP_LOCALE) {
   const candidates: RawCandidate[] = []
 
   try {
@@ -321,7 +331,7 @@ async function fetchBraveCandidates(searchTerm: string) {
       if (imageUrl.includes('cdn.search.brave.com')) continue
       if (/favicon|logo\.svg/i.test(imageUrl)) continue
 
-      makeCandidate(candidates, `Brave 候选 ${index + 1}`, imageUrl, 'brave')
+      makeCandidate(candidates, getLogoMessage(locale, 'logos.search.braveCandidate', { index: index + 1 }), imageUrl, 'brave')
       if (candidates.length >= 24) break
     }
   } catch {
@@ -505,7 +515,10 @@ function filenameFromLogoUrl(logoUrl: string) {
   return path.basename(new URL(logoUrl, 'http://localhost').pathname)
 }
 
-export async function searchSubscriptionLogos(params: { name: string; websiteUrl?: string; tagName?: string }) {
+export async function searchSubscriptionLogos(
+  params: { name: string; websiteUrl?: string; tagName?: string },
+  locale: AppLocale = DEFAULT_APP_LOCALE
+) {
   const cacheKey = JSON.stringify({
     name: params.name.trim().toLowerCase(),
     websiteUrl: params.websiteUrl?.trim().toLowerCase() ?? '',
@@ -523,22 +536,22 @@ export async function searchSubscriptionLogos(params: { name: string; websiteUrl
 
   const rawCandidates: RawCandidate[] = []
   const [websiteCandidates, duckCandidates, braveCandidates] = await Promise.all([
-    guessedOrigin ? fetchWebsiteCandidates(guessedOrigin) : Promise.resolve<RawCandidate[]>([]),
-    fetchDuckDuckGoCandidates(`${searchTerm} logo`),
-    fetchBraveCandidates(`${searchTerm} logo`)
+    guessedOrigin ? fetchWebsiteCandidates(guessedOrigin, locale) : Promise.resolve<RawCandidate[]>([]),
+    fetchDuckDuckGoCandidates(`${searchTerm} logo`, locale),
+    fetchBraveCandidates(`${searchTerm} logo`, locale)
   ])
 
   if (guessedOrigin) {
     const hostname = new URL(guessedOrigin).hostname
     websiteCandidates.forEach((item) => makeCandidate(rawCandidates, item.label, item.logoUrl, item.source, item))
 
-    makeCandidate(rawCandidates, '站点 favicon', `${guessedOrigin}/favicon.ico`, 'favicon', {
+    makeCandidate(rawCandidates, getLogoMessage(locale, 'logos.search.siteFavicon'), `${guessedOrigin}/favicon.ico`, 'favicon', {
       websiteUrl: guessedOrigin,
       fallback: true
     })
     makeCandidate(
       rawCandidates,
-      'Google Favicon',
+      getLogoMessage(locale, 'logos.search.googleFavicon'),
       `https://www.google.com/s2/favicons?sz=256&domain_url=${encodeURIComponent(guessedOrigin)}`,
       'google-favicon',
       {
@@ -548,11 +561,11 @@ export async function searchSubscriptionLogos(params: { name: string; websiteUrl
         height: 256
       }
     )
-    makeCandidate(rawCandidates, 'Icon Horse', `https://icon.horse/icon/${hostname}`, 'icon-horse', {
+    makeCandidate(rawCandidates, getLogoMessage(locale, 'logos.search.iconHorse'), `https://icon.horse/icon/${hostname}`, 'icon-horse', {
       websiteUrl: guessedOrigin,
       fallback: true
     })
-    makeCandidate(rawCandidates, 'Clearbit Logo', `https://logo.clearbit.com/${hostname}`, 'clearbit', {
+    makeCandidate(rawCandidates, getLogoMessage(locale, 'logos.search.clearbitLogo'), `https://logo.clearbit.com/${hostname}`, 'clearbit', {
       websiteUrl: guessedOrigin,
       fallback: true
     })
@@ -608,12 +621,17 @@ async function writeLogoBuffer(buffer: Buffer, contentType: string, logoSource: 
   }
 }
 
-export async function saveImportedLogoBuffer(buffer: Buffer, contentType: string, logoSource = 'wallos-zip') {
+export async function saveImportedLogoBuffer(
+  buffer: Buffer,
+  contentType: string,
+  logoSource = 'wallos-zip',
+  locale: AppLocale = DEFAULT_APP_LOCALE
+) {
   if (!allowedTypes.has(contentType)) {
-    throw new Error('不支持的 Logo 图片类型')
+    throw new Error(getLogoMessage(locale, 'api.errors.subscriptions.logoUnsupportedImageType'))
   }
   if (!buffer.length) {
-    throw new Error('Logo 图片内容为空')
+    throw new Error(getLogoMessage(locale, 'api.errors.subscriptions.logoBufferEmpty'))
   }
   return writeLogoBuffer(buffer, contentType, logoSource)
 }
@@ -622,29 +640,38 @@ function isLocalLogoUrl(url?: string | null) {
   return Boolean(url && url.startsWith('/static/logos/'))
 }
 
-export async function saveUploadedLogo(input: { filename: string; contentType: string; base64: string }) {
+export async function saveUploadedLogo(
+  input: { filename: string; contentType: string; base64: string },
+  locale: AppLocale = DEFAULT_APP_LOCALE
+) {
   if (!allowedTypes.has(input.contentType)) {
-    throw new Error('仅支持 PNG、JPG、WEBP、SVG 图片')
+    throw new Error(getLogoMessage(locale, 'api.errors.subscriptions.logoUploadTypeUnsupported'))
   }
 
   const buffer = Buffer.from(input.base64, 'base64')
   if (!buffer.length) {
-    throw new Error('图片内容为空')
+    throw new Error(getLogoMessage(locale, 'api.errors.subscriptions.imageBufferEmpty'))
   }
 
   return writeLogoBuffer(buffer, input.contentType, 'upload')
 }
 
-export async function importRemoteLogo(input: { logoUrl: string; source?: string }) {
+export async function importRemoteLogo(
+  input: { logoUrl: string; source?: string },
+  locale: AppLocale = DEFAULT_APP_LOCALE
+) {
   const meta = await inspectRemoteImage(input.logoUrl)
   if (!meta) {
-    throw new Error('远程 Logo 下载失败或图片不可用')
+    throw new Error(getLogoMessage(locale, 'api.errors.subscriptions.logoRemoteUnavailable'))
   }
 
   return writeLogoBuffer(meta.buffer, meta.contentType, input.source || 'remote')
 }
 
-export async function normalizeLogoForStorage(input: { logoUrl?: string | null; logoSource?: string | null }) {
+export async function normalizeLogoForStorage(
+  input: { logoUrl?: string | null; logoSource?: string | null },
+  locale: AppLocale = DEFAULT_APP_LOCALE
+) {
   if (!input.logoUrl) {
     return {
       logoUrl: null,
@@ -665,7 +692,7 @@ export async function normalizeLogoForStorage(input: { logoUrl?: string | null; 
     const imported = await importRemoteLogo({
       logoUrl: input.logoUrl,
       source: input.logoSource ?? 'remote'
-    })
+    }, locale)
 
     return {
       logoUrl: imported.logoUrl,
@@ -734,7 +761,7 @@ export async function getLocalLogoLibrary() {
     const filePath = path.join(logoDir, file)
     const info = await stat(filePath)
     map.set(logoUrl, {
-      label: '未使用 Logo',
+      label: getLogoMessage(DEFAULT_APP_LOCALE, 'logos.library.unusedLogo'),
       logoUrl,
       source: 'local-file',
       isLocal: true,
@@ -752,10 +779,10 @@ export async function getLocalLogoLibrary() {
   })
 }
 
-export async function deleteLocalLogoFromLibrary(filename: string) {
+export async function deleteLocalLogoFromLibrary(filename: string, locale: AppLocale = DEFAULT_APP_LOCALE) {
   const safeName = path.basename(filename)
   if (!safeName) {
-    throw new Error('无效的 Logo 文件名')
+    throw new Error(getLogoMessage(locale, 'api.errors.subscriptions.logoFilenameInvalid'))
   }
 
   const logoUrl = `/static/logos/${safeName}`
@@ -766,7 +793,7 @@ export async function deleteLocalLogoFromLibrary(filename: string) {
   })
 
   if (usageCount > 0) {
-    throw new Error('该 Logo 已被订阅使用，不能删除')
+    throw new Error(getLogoMessage(locale, 'api.errors.subscriptions.logoInUseCannotDelete'))
   }
 
   const filePath = path.join(logoDir, safeName)

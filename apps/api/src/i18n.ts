@@ -28,3 +28,26 @@ export function translateMessage(messageKey: string, options?: TranslateOptions)
 export function translateErrorMessage(messageKey: string, options?: TranslateOptions) {
   return translateMessage(messageKey, options)
 }
+
+function translateErrorDetailValue(value: unknown, options?: TranslateOptions): unknown {
+  if (typeof value === 'string') {
+    const translated = translateMessage(value, options)
+    return translated === value ? value : translated
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => translateErrorDetailValue(item, options))
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, child]) => [key, translateErrorDetailValue(child, options)])
+    )
+  }
+
+  return value
+}
+
+export function translateErrorDetails(details: unknown, options?: TranslateOptions) {
+  return translateErrorDetailValue(details, options)
+}

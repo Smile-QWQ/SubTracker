@@ -1,6 +1,5 @@
 import http from 'node:http'
 import https from 'node:https'
-import { Prisma } from '@prisma/client'
 import {
   DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
   DEFAULT_APP_LOCALE,
@@ -20,6 +19,7 @@ import {
 } from './notification-merge.service'
 
 type DeliveryPayload = Record<string, unknown>
+type JsonPayload = Record<string, unknown>
 
 export type PrimaryWebhookInput = NotificationWebhookSettingsInput
 
@@ -89,7 +89,7 @@ function buildTemplateValues(params: { eventType: WebhookEventType | 'test'; pay
     days_until: String(payload.daysUntilRenewal ?? 0),
     days_overdue: String(payload.daysOverdue ?? 0),
     subscription_id: String(payload.id ?? payload.subscriptionId ?? ''),
-    subscription_name: String(payload.name ?? '测试订阅'),
+    subscription_name: String(payload.name ?? ''),
     subscription_amount: String(payload.amount ?? 0),
     subscription_currency: String(payload.currency ?? 'CNY'),
     subscription_next_renewal_date: String(payload.nextRenewalDate ?? new Date().toISOString()),
@@ -110,9 +110,13 @@ async function resolveWebhookLocale(locale?: AppLocale) {
 
 async function sendWebhookRequest(
   input: NotificationWebhookSettingsInput,
-  params: { eventType: WebhookEventType | 'test'; payload: DeliveryPayload }
+  params: { eventType: WebhookEventType | 'test'; payload: DeliveryPayload },
+  locale: AppLocale = DEFAULT_APP_LOCALE
 ) {
-  const target = validateNotificationTargetUrl(input.url.trim(), 'Webhook URL')
+  const target = validateNotificationTargetUrl(input.url.trim(), {
+    label: getMessage(locale, 'settings.labels.webhookTargetUrl'),
+    locale
+  })
   const headers = parseHeaders(input.headers)
   const requestBody = applyPayloadTemplate(input.payloadTemplate, params)
   const isHttps = target.protocol === 'https:'
@@ -191,7 +195,7 @@ export async function sendTestWebhookNotificationWithConfig(
       daysUntilRenewal: 5,
       daysOverdue: 0
     }
-  })
+  }, locale)
 
   if (result.statusCode >= 400) {
     throw new Error(`${getMessage(locale, 'api.errors.notifications.webhookTestFailed')}: HTTP ${result.statusCode} ${result.responseBody || ''}`.trim())
@@ -235,7 +239,7 @@ async function upsertWebhookDeliveryRecord(
       subscriptionId: entry.subscriptionId,
       targetUrl,
       requestMethod,
-      payloadJson: payload as Prisma.InputJsonValue,
+      payloadJson: payload as JsonPayload,
       status: 'pending'
     }
   })
@@ -293,7 +297,7 @@ async function updateWebhookDeliveryRecords(
           lastAttemptAt: new Date(),
           targetUrl: config.url,
           requestMethod: config.requestMethod,
-          payloadJson: payload as Prisma.InputJsonValue
+          payloadJson: payload as JsonPayload
         }
       })
     )
@@ -346,10 +350,11 @@ export async function dispatchWebhookEvent(
   const targets = await ensureWebhookDeliveryRecords(deliveryEntries, dispatchParams.payload, config)
 
   try {
+    const locale = await resolveWebhookLocale(_context.locale)
     const result = await sendWebhookRequest(config, {
       eventType: dispatchParams.eventType,
       payload: dispatchParams.payload
-    })
+    }, locale)
 
     await updateWebhookDeliveryRecords(
       targets,

@@ -89,7 +89,8 @@ describe('ai routes', () => {
         providerName: '阿里百炼',
         providerPreset: 'aliyun-bailian',
         model: 'qwen3-vl-plus'
-      })
+      }),
+      undefined
     )
   })
 
@@ -140,7 +141,7 @@ describe('ai routes', () => {
   })
 
   it('rejects vision test when vision capability is disabled', async () => {
-    summaryRouteMocks.testAiVisionConnectionMock.mockRejectedValue(new Error('当前 Provider 未启用视觉输入能力'))
+    summaryRouteMocks.testAiVisionConnectionMock.mockRejectedValue(new Error('AI vision capability is disabled'))
 
     const res = await app.inject({
       method: 'POST',
@@ -161,7 +162,7 @@ describe('ai routes', () => {
     })
 
     expect(res.statusCode).toBe(400)
-    expect(res.json().error.message).toContain('视觉输入能力')
+    expect(res.json().error.message).toContain('AI vision')
   })
 
   it('returns english ai errors when X-SubTracker-Locale is en-US', async () => {

@@ -98,6 +98,14 @@ describe('subscription service', () => {
     expect(subscriptionMocks.getAppTimezoneMock).toHaveBeenCalledTimes(1)
   })
 
+  it('returns a locale-aware not-found error when the subscription is missing', async () => {
+    subscriptionMocks.findUniqueMock.mockResolvedValue(null)
+
+    await expect(renewSubscription('missing', undefined, undefined, undefined, undefined, 'en-US')).rejects.toThrow(
+      'Subscription not found'
+    )
+  })
+
   it('uses configured batch limit and shared context for auto renew', async () => {
     const dueSubscriptions = [createSubscription('a'), createSubscription('b')]
     subscriptionMocks.findManyMock.mockResolvedValue(dueSubscriptions)

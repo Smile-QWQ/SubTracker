@@ -41,6 +41,7 @@ function validateSettingsPayload(
   settings: Awaited<ReturnType<typeof getAppSettings>>,
   locale: AppLocale = 'zh-CN'
 ) {
+  const fieldSeparator = getMessage(locale, 'common.separators.fieldList')
   const labels = {
     smtpHost: getMessage(locale, 'settings.labels.smtpHost'),
     port: getMessage(locale, 'common.labels.port'),
@@ -86,7 +87,7 @@ function validateSettingsPayload(
     if (missingEmailLabels.length) {
       throw new Error(
         getMessage(locale, 'api.errors.settings.emailFieldsRequired', {
-          fields: missingEmailLabels.join(locale === 'en-US' ? ', ' : '、')
+          fields: missingEmailLabels.join(fieldSeparator)
         })
       )
     }
@@ -104,11 +105,11 @@ function validateSettingsPayload(
     .map(([label]) => label)
 
   if (settings.telegramNotificationsEnabled && missingTelegramFields.length) {
-    throw new Error(
-      getMessage(locale, 'api.errors.settings.telegramFieldsRequired', {
-        fields: missingTelegramFields.join(locale === 'en-US' ? ', ' : '、')
-      })
-    )
+      throw new Error(
+        getMessage(locale, 'api.errors.settings.telegramFieldsRequired', {
+          fields: missingTelegramFields.join(fieldSeparator)
+        })
+      )
   }
 
   if (settings.serverchanNotificationsEnabled && !settings.serverchanConfig.sendkey.trim()) {
@@ -126,12 +127,15 @@ function validateSettingsPayload(
     if (missingGotifyFields.length) {
       throw new Error(
         getMessage(locale, 'api.errors.settings.gotifyFieldsRequired', {
-          fields: missingGotifyFields.join(locale === 'en-US' ? ', ' : '、')
+          fields: missingGotifyFields.join(fieldSeparator)
         })
       )
     }
 
-    validateNotificationTargetUrl(settings.gotifyConfig.url.trim(), 'Gotify URL')
+    validateNotificationTargetUrl(settings.gotifyConfig.url.trim(), {
+      label: getMessage(locale, 'settings.labels.gotifyTargetUrl'),
+      locale
+    })
   }
 
   const missingAiFields = [
@@ -144,22 +148,23 @@ function validateSettingsPayload(
     .map(([label]) => label)
 
   if (settings.aiConfig.enabled && missingAiFields.length) {
-    throw new Error(
-      getMessage(locale, 'api.errors.settings.aiFieldsRequired', {
-        fields: missingAiFields.join(locale === 'en-US' ? ', ' : '、')
-      })
-    )
+      throw new Error(
+        getMessage(locale, 'api.errors.settings.aiFieldsRequired', {
+          fields: missingAiFields.join(fieldSeparator)
+        })
+      )
   }
 }
 
 function normalizeReminderSettingsPayload(
   payload: Partial<Awaited<ReturnType<typeof getAppSettings>>>,
-  currentSettings: Awaited<ReturnType<typeof getAppSettings>>
+  currentSettings: Awaited<ReturnType<typeof getAppSettings>>,
+  locale: AppLocale = 'zh-CN'
 ) {
   const nextSettings = {
     defaultAdvanceReminderRules:
       payload.defaultAdvanceReminderRules !== undefined
-        ? normalizeReminderRules(payload.defaultAdvanceReminderRules, 'advance')
+        ? normalizeReminderRules(payload.defaultAdvanceReminderRules, 'advance', locale)
         : payload.defaultNotifyDays !== undefined || payload.notifyOnDueDay !== undefined
           ? buildAdvanceReminderRulesFromLegacy(
               payload.defaultNotifyDays ?? currentSettings.defaultNotifyDays,
@@ -168,7 +173,7 @@ function normalizeReminderSettingsPayload(
           : currentSettings.defaultAdvanceReminderRules,
     defaultOverdueReminderRules:
       payload.defaultOverdueReminderRules !== undefined
-        ? normalizeReminderRules(payload.defaultOverdueReminderRules, 'overdue')
+        ? normalizeReminderRules(payload.defaultOverdueReminderRules, 'overdue', locale)
         : payload.overdueReminderDays !== undefined
           ? buildOverdueReminderRules(payload.overdueReminderDays) || DEFAULT_OVERDUE_REMINDER_RULES
           : currentSettings.defaultOverdueReminderRules
@@ -215,7 +220,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     let normalizedReminderSettings: ReturnType<typeof normalizeReminderSettingsPayload>
 
     try {
-      normalizedReminderSettings = normalizeReminderSettingsPayload(parsed.data, currentSettings)
+      normalizedReminderSettings = normalizeReminderSettingsPayload(parsed.data, currentSettings, locale)
     } catch (error) {
       return sendError(reply, 422, 'validation_error', error instanceof Error ? error.message : 'api.errors.validation.invalidReminderRules', undefined, {
         locale

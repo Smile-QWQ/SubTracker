@@ -1,6 +1,6 @@
 import type { FastifyReply } from 'fastify'
 import { resolveAppLocaleFromAcceptLanguage, type AppLocale } from '@subtracker/shared'
-import { translateErrorMessage } from './i18n'
+import { translateErrorDetails, translateErrorMessage } from './i18n'
 
 export function sendOk<T>(reply: FastifyReply, data: T, meta?: Record<string, unknown>) {
   return reply.status(200).send({ data, meta })
@@ -32,14 +32,15 @@ export function sendError(
         : request?.headers?.['accept-language'],
       'zh-CN'
     )
+  const translateOptions = {
+    locale: options?.locale ?? requestLocale,
+    params: options?.params
+  } as const
   return reply.status(status).send({
     error: {
       code,
-      message: translateErrorMessage(messageKey, {
-        locale: options?.locale ?? requestLocale,
-        params: options?.params
-      }),
-      details
+      message: translateErrorMessage(messageKey, translateOptions),
+      details: translateErrorDetails(details, translateOptions)
     }
   })
 }

@@ -1,3 +1,5 @@
+import { DEFAULT_APP_LOCALE, getMessage, type AppLocale } from '@subtracker/shared'
+
 function isPrivateHostname(hostname: string) {
   const normalized = hostname.toLowerCase()
   if (['localhost', '0.0.0.0', '::1'].includes(normalized) || normalized.endsWith('.local')) return true
@@ -14,20 +16,28 @@ function isPrivateHostname(hostname: string) {
   return false
 }
 
-export function validateNotificationTargetUrl(rawUrl: string, label = 'URL') {
+export function validateNotificationTargetUrl(
+  rawUrl: string,
+  options: {
+    label?: string
+    locale?: AppLocale
+  } = {}
+) {
+  const locale = options.locale ?? DEFAULT_APP_LOCALE
+  const label = options.label ?? getMessage(locale, 'common.labels.url')
   let parsed: URL
   try {
     parsed = new URL(rawUrl)
   } catch {
-    throw new Error(`${label} 格式无效`)
+    throw new Error(getMessage(locale, 'validation.notificationTargetUrl.invalidFormat', { label }))
   }
 
   if (!['http:', 'https:'].includes(parsed.protocol)) {
-    throw new Error(`${label} 仅支持 http 或 https`)
+    throw new Error(getMessage(locale, 'validation.notificationTargetUrl.unsupportedProtocol', { label }))
   }
 
   if (isPrivateHostname(parsed.hostname)) {
-    throw new Error(`${label} 不允许指向本地或内网地址`)
+    throw new Error(getMessage(locale, 'validation.notificationTargetUrl.privateHostBlocked', { label }))
   }
 
   return parsed

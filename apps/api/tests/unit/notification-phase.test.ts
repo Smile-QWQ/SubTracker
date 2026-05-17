@@ -28,6 +28,9 @@ describe('reminder rules helpers', () => {
     expect(() => parseReminderRules('abc', 'advance')).toThrow('格式无效')
     expect(() => parseReminderRules('0&09:30;', 'overdue')).toThrow('必须大于等于 1')
     expect(() => parseReminderRules('3&25:00;', 'advance')).toThrow('时间必须为 HH:mm')
+    expect(() => parseReminderRules('abc', 'advance', 'en-US')).toThrow('Expected format: days&HH:mm')
+    expect(() => parseReminderRules('0&09:30;', 'overdue', 'en-US')).toThrow('greater than or equal to 1')
+    expect(() => parseReminderRules('3&25:00;', 'advance', 'en-US')).toThrow('must use HH:mm')
   })
 
   it('derives legacy-compatible values from rules', () => {

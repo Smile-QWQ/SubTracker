@@ -1,5 +1,4 @@
 import { FastifyInstance } from 'fastify'
-import type { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { prisma } from '../db'
 import { sendCreated, sendError, sendOk } from '../http'
@@ -42,6 +41,8 @@ import { normalizeWebsiteUrlInput } from '../utils/website-url'
 const subscriptionInclude = {
   tags: { include: { tag: true } }
 } as const
+
+type SubscriptionDetailRow = Awaited<ReturnType<typeof prisma.subscription.findUnique>>
 
 async function resolveSubscriptionReminderFields(payload: {
   advanceReminderRules?: string | null
@@ -103,13 +104,14 @@ function getSubscriptionValidationMessageKey(error: string) {
 }
 
 function normalizeSubscriptionPayloadWebsiteUrl<T extends Record<string, unknown>>(
-  payload: T
+  payload: T,
+  locale: AppLocale = 'zh-CN'
 ): { payload: T; websiteUrlError: string | null } {
   if (!Object.prototype.hasOwnProperty.call(payload, 'websiteUrl')) {
     return { payload, websiteUrlError: null }
   }
 
-  const normalizedWebsite = normalizeWebsiteUrlInput(payload.websiteUrl as string | null | undefined)
+  const normalizedWebsite = normalizeWebsiteUrlInput(payload.websiteUrl as string | null | undefined, locale)
   if (normalizedWebsite.error) {
     return { payload, websiteUrlError: normalizedWebsite.error }
   }
@@ -142,7 +144,7 @@ async function runBatchAction(
   })
 
   if (rows.length !== ids.length) {
-    const existing = new Set(rows.map((item) => item.id))
+    const existing = new Set(rows.map((item: { id: string }) => item.id))
     const missingId = ids.find((id) => !existing.has(id))
     return {
       successCount: 0,
@@ -191,9 +193,7 @@ async function runBatchAction(
 }
 
 async function buildSubscriptionDetailResponse(
-  row: Prisma.SubscriptionGetPayload<{
-    include: typeof subscriptionInclude
-  }> | null,
+  row: SubscriptionDetailRow | null,
   timezone: string
 ) {
   if (!row) return null
@@ -224,7 +224,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       })
     }
 
-    return sendOk(reply, await searchSubscriptionLogos(parsed.data))
+    return sendOk(reply, await searchSubscriptionLogos(parsed.data, request.locale))
   })
 
   app.get('/subscriptions/logo/library', async (_request, reply) => {
@@ -240,7 +240,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     }
 
     try {
-      return sendOk(reply, await deleteLocalLogoFromLibrary(parsed.data.filename))
+      return sendOk(reply, await deleteLocalLogoFromLibrary(parsed.data.filename, request.locale))
     } catch (error) {
       return sendError(reply, 400, 'logo_delete_failed', error instanceof Error ? error.message : 'api.errors.subscriptions.logoDeleteFailed', undefined, {
         locale: request.locale
@@ -257,7 +257,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     }
 
     try {
-      return sendOk(reply, await saveUploadedLogo(parsed.data))
+      return sendOk(reply, await saveUploadedLogo(parsed.data, request.locale))
     } catch (error) {
       return sendError(reply, 400, 'logo_upload_failed', error instanceof Error ? error.message : 'api.errors.subscriptions.logoUploadFailed', undefined, {
         locale: request.locale
@@ -278,7 +278,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     }
 
     try {
-      return sendOk(reply, await importRemoteLogo(parsed.data))
+      return sendOk(reply, await importRemoteLogo(parsed.data, request.locale))
     } catch (error) {
       return sendError(reply, 400, 'logo_import_failed', error instanceof Error ? error.message : 'api.errors.subscriptions.logoImportFailed', undefined, {
         locale: request.locale
@@ -456,7 +456,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     })
 
     if (rows.length !== parsed.data.ids.length) {
-      const existing = new Set(rows.map((item) => item.id))
+      const existing = new Set(rows.map((item: { id: string }) => item.id))
       const missingId = parsed.data.ids.find((id) => !existing.has(id))
       return sendError(reply, 404, 'not_found', 'api.errors.subscriptions.notFound', {
         successCount: 0,
@@ -541,7 +541,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   })
 
   app.post('/subscriptions', async (request, reply) => {
-    const normalizedPayload = normalizeSubscriptionPayloadWebsiteUrl((request.body ?? {}) as Record<string, unknown>)
+    const normalizedPayload = normalizeSubscriptionPayloadWebsiteUrl((request.body ?? {}) as Record<string, unknown>, request.locale)
     if (normalizedPayload.websiteUrlError) {
       return sendError(reply, 422, 'validation_error', 'api.errors.subscriptions.websiteUrlInvalid', {
         fieldErrors: {
@@ -564,7 +564,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       normalizedLogo = await normalizeLogoForStorage({
         logoUrl: parsed.data.logoUrl ?? null,
         logoSource: parsed.data.logoSource ?? null
-      })
+      }, request.locale)
     } catch (error) {
       return sendError(reply, 400, 'logo_import_failed', error instanceof Error ? error.message : 'api.errors.subscriptions.logoImportFailed', undefined, {
         locale: request.locale
@@ -584,7 +584,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
 
     const timezone = await getAppTimezone()
 
-    const created = await prisma.$transaction(async (tx) => {
+    const created = await prisma.$transaction(async (tx: any) => {
       const subscription = await tx.subscription.create({
         data: {
           name: parsed.data.name,
@@ -631,7 +631,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       })
     }
 
-    const normalizedPayload = normalizeSubscriptionPayloadWebsiteUrl((request.body ?? {}) as Record<string, unknown>)
+    const normalizedPayload = normalizeSubscriptionPayloadWebsiteUrl((request.body ?? {}) as Record<string, unknown>, request.locale)
     if (normalizedPayload.websiteUrlError) {
       return sendError(reply, 422, 'validation_error', 'api.errors.subscriptions.websiteUrlInvalid', {
         fieldErrors: {
@@ -658,11 +658,11 @@ export async function subscriptionRoutes(app: FastifyInstance) {
           ? await normalizeLogoForStorage({
               logoUrl: payload.logoUrl ?? null,
               logoSource: payload.logoSource ?? null
-            })
+            }, request.locale)
           : null
 
       const timezone = await getAppTimezone()
-      const updated = await prisma.$transaction(async (tx) => {
+      const updated = await prisma.$transaction(async (tx: any) => {
         const tagIds = payload.tagIds !== undefined ? normalizeTagIds(payload.tagIds) : null
         const existing = await tx.subscription.findUnique({
           where: { id: params.data.id }

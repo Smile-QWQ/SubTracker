@@ -73,7 +73,7 @@ describe('import routes', () => {
       filename: 'subtracker-backup.zip',
       contentType: 'application/zip',
       base64: 'ZmFrZQ=='
-    })
+    }, undefined)
   })
 
   it('accepts subtracker backup commit payloads', async () => {
@@ -106,7 +106,7 @@ describe('import routes', () => {
       importToken: '0123456789abcdef',
       mode: 'append',
       restoreSettings: true
-    })
+    }, undefined)
   })
 
   it('keeps subtracker backup commit response shape stable for frontend consumers', async () => {

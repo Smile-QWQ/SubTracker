@@ -2,6 +2,32 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 import initSqlJs from 'sql.js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('../../src/db', () => ({
+  prisma: {
+    tag: { findMany: vi.fn(), createMany: vi.fn() },
+    subscription: { createMany: vi.fn() },
+    subscriptionTag: { createMany: vi.fn() }
+  }
+}))
+
+vi.mock('../../src/services/settings.service', () => ({
+  getAppSettings: vi.fn(async () => ({
+    defaultNotifyDays: 3,
+    baseCurrency: 'CNY',
+    timezone: 'Asia/Shanghai'
+  })),
+  getAppTimezone: vi.fn(async () => 'Asia/Shanghai')
+}))
+
+vi.mock('../../src/services/subscription-order.service', () => ({
+  appendSubscriptionOrders: vi.fn(async () => undefined)
+}))
+
+vi.mock('../../src/services/logo.service', () => ({
+  saveImportedLogoBuffer: vi.fn()
+}))
+
 import {
   mapWallosBillingInterval,
   resolveWallosEffectiveNextPayment,

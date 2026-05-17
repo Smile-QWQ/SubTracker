@@ -1,7 +1,10 @@
 import {
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_OVERDUE_REMINDER_RULES,
-  DEFAULT_REMINDER_RULE_TIME
+  DEFAULT_REMINDER_RULE_TIME,
+  DEFAULT_APP_LOCALE,
+  getMessage,
+  type AppLocale
 } from '@subtracker/shared'
 
 export type ReminderRuleKind = 'advance' | 'overdue'
@@ -15,32 +18,32 @@ export type ReminderRule = {
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/
 
-function parseRuleSegment(segment: string, kind: ReminderRuleKind): ReminderRule {
+function parseRuleSegment(segment: string, kind: ReminderRuleKind, locale: AppLocale): ReminderRule {
   const [rawDays, rawTime, ...rest] = segment.split('&').map((item) => item.trim())
   if (!rawDays || !rawTime || rest.length > 0) {
-    throw new Error(`规则 "${segment}" 格式无效，应为 天数&HH:mm`)
+    throw new Error(getMessage(locale, 'validation.reminderRules.invalidSegmentFormat', { segment }))
   }
 
   if (!/^\d+$/.test(rawDays)) {
-    throw new Error(`规则 "${segment}" 中的天数必须为整数`)
+    throw new Error(getMessage(locale, 'validation.reminderRules.invalidDaysInteger', { segment }))
   }
 
   const days = Number(rawDays)
   if (!Number.isInteger(days)) {
-    throw new Error(`规则 "${segment}" 中的天数必须为整数`)
+    throw new Error(getMessage(locale, 'validation.reminderRules.invalidDaysInteger', { segment }))
   }
 
   if (kind === 'advance' && days < 0) {
-    throw new Error(`规则 "${segment}" 中的天数不能小于 0`)
+    throw new Error(getMessage(locale, 'validation.reminderRules.invalidAdvanceDays', { segment }))
   }
 
   if (kind === 'overdue' && days < 1) {
-    throw new Error(`规则 "${segment}" 中的天数必须大于等于 1`)
+    throw new Error(getMessage(locale, 'validation.reminderRules.invalidOverdueDays', { segment }))
   }
 
   const timeMatch = rawTime.match(TIME_PATTERN)
   if (!timeMatch) {
-    throw new Error(`规则 "${segment}" 中的时间必须为 HH:mm`)
+    throw new Error(getMessage(locale, 'validation.reminderRules.invalidTime', { segment }))
   }
 
   return {
@@ -72,7 +75,7 @@ function dedupeRules(rules: ReminderRule[]) {
   return result
 }
 
-export function parseReminderRules(value: string, kind: ReminderRuleKind) {
+export function parseReminderRules(value: string, kind: ReminderRuleKind, locale: AppLocale = DEFAULT_APP_LOCALE) {
   const compact = value.replace(/\s+/g, '')
   if (!compact) return []
 
@@ -81,20 +84,24 @@ export function parseReminderRules(value: string, kind: ReminderRuleKind) {
     .map((item) => item.trim())
     .filter(Boolean)
 
-  const parsed = dedupeRules(segments.map((segment) => parseRuleSegment(segment, kind)))
+  const parsed = dedupeRules(segments.map((segment) => parseRuleSegment(segment, kind, locale)))
   parsed.sort((a, b) => compareRules(a, b, kind))
   return parsed
 }
 
-export function normalizeReminderRules(value: string, kind: ReminderRuleKind) {
-  const parsed = parseReminderRules(value, kind)
+export function normalizeReminderRules(value: string, kind: ReminderRuleKind, locale: AppLocale = DEFAULT_APP_LOCALE) {
+  const parsed = parseReminderRules(value, kind, locale)
   return parsed.map((rule) => `${rule.days}&${rule.time};`).join('')
 }
 
-export function normalizeOptionalReminderRules(value: string | null | undefined, kind: ReminderRuleKind) {
+export function normalizeOptionalReminderRules(
+  value: string | null | undefined,
+  kind: ReminderRuleKind,
+  locale: AppLocale = DEFAULT_APP_LOCALE
+) {
   if (value === undefined || value === null) return null
   const trimmed = value.trim()
-  return trimmed ? normalizeReminderRules(trimmed, kind) : ''
+  return trimmed ? normalizeReminderRules(trimmed, kind, locale) : ''
 }
 
 export function buildAdvanceReminderRulesFromLegacy(

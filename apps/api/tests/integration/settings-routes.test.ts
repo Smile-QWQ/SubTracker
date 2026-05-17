@@ -158,7 +158,7 @@ describe('settings routes validation', () => {
     })
 
     expect(res.statusCode).toBe(422)
-    expect(res.json().error.message).toBe('To enable Email notifications, fill in: SMTP Host, Username, Password, From, To')
+    expect(res.json().error.message).toBe('To enable email notifications, fill in: SMTP Host, Username, Password, From, To')
   })
 
   it('accepts dashboard summary switch without forcing AI recognition to be enabled', async () => {

@@ -77,7 +77,7 @@ export async function tagRoutes(app: FastifyInstance) {
     }
 
     try {
-      await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx: any) => {
         await tx.subscriptionTag.deleteMany({
           where: { tagId: params.data.id }
         })

@@ -114,9 +114,12 @@ describe('ai service', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await recognizeSubscriptionByAi({
-      text: 'Netflix 9.99 USD monthly'
-    })
+    const result = await recognizeSubscriptionByAi(
+      {
+        text: 'Netflix 9.99 USD monthly'
+      },
+      'en-US'
+    )
 
     expect(result.name).toBe('Netflix')
     expect(fetchMock).toHaveBeenCalledTimes(2)
@@ -124,7 +127,7 @@ describe('ai service', () => {
     const secondBody = JSON.parse(String((((fetchMock.mock.calls[1] as unknown) as [unknown, RequestInit])[1])?.body))
     expect(firstBody.response_format).toEqual({ type: 'json_object' })
     expect(secondBody.response_format).toBeUndefined()
-    expect(secondBody.messages[0].content).toContain('合法 JSON 对象')
+    expect(secondBody.messages[0].content).toContain('valid JSON object')
   })
 
   it('uses english default prompt when resolved app locale is en-US', async () => {
@@ -141,9 +144,12 @@ describe('ai service', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    await recognizeSubscriptionByAi({
-      text: 'Netflix 9.99 USD monthly'
-    })
+    await recognizeSubscriptionByAi(
+      {
+        text: 'Netflix 9.99 USD monthly'
+      },
+      'en-US'
+    )
 
     const requestBody = JSON.parse(String((((fetchMock.mock.calls[0] as unknown) as [unknown, RequestInit])[1])?.body))
     expect(requestBody.messages[0].content).toContain('subscription billing extractor')
@@ -165,15 +171,18 @@ describe('ai service', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await recognizeSubscriptionByAi({
-      imageBase64: 'dGVzdA==',
-      mimeType: 'image/png'
-    })
+    const result = await recognizeSubscriptionByAi(
+      {
+        imageBase64: 'dGVzdA==',
+        mimeType: 'image/png'
+      },
+      'en-US'
+    )
 
     expect(result.name).toBe('OCR Result')
     expect(recognizeMock).toHaveBeenCalledTimes(1)
     const requestBody = JSON.parse(String((((fetchMock.mock.calls[0] as unknown) as [unknown, RequestInit])[1])?.body))
     expect(typeof requestBody.messages[1].content).toBe('string')
-    expect(requestBody.messages[1].content).toContain('OCR 提取文本')
+    expect(requestBody.messages[1].content).toContain('OCR extracted text')
   })
 })
