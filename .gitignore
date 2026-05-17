@@ -5,6 +5,8 @@ coverage
 .env
 .env.local
 *.log
+/.tmp/
+/docs/
 apps/api/prisma/dev.db
 apps/api/prisma/dev.db-journal
 apps/api/prisma/test.db

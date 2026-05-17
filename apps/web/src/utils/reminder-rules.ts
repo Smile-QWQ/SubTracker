@@ -1,3 +1,5 @@
+import { DEFAULT_APP_LOCALE, getMessage, type AppLocale } from '@subtracker/shared'
+
 export type ReminderRulesKind = 'advance' | 'overdue'
 
 export type ReminderRuleEntry = {
@@ -51,31 +53,31 @@ function formatI18n(template: string, params: Record<string, string | number>) {
   return template.replace(/\{(\w+)\}/g, (_match, key) => String(params[key] ?? `{${key}}`))
 }
 
-function getDefaultI18n(): ReminderRulesI18n {
+export function getDefaultReminderRulesI18n(locale: AppLocale = DEFAULT_APP_LOCALE): ReminderRulesI18n {
   return {
-    fallback: '沿用系统默认',
-    emptyTitle: '请先输入规则后再演算',
-    resultTitle: '演算结果',
-    invalidTitle: '规则格式有误',
-    defaultRulesLabel: '系统默认规则',
-    defaultAdvanceRulesLabel: '系统默认到期前规则',
-    defaultOverdueRulesLabel: '系统默认过期规则',
-    fallbackPreviewTitle: '当前未填写，以下按{label}演算',
-    fallbackInvalidTitle: '{label}格式有误',
-    noAdvance: '暂无到期前提醒规则',
-    noOverdue: '暂无过期提醒规则',
-    parseFailed: '规则解析失败',
-    invalidSegmentFormat: '规则 "{segment}" 格式无效，应为 天数&HH:mm',
-    invalidDaysInteger: '规则 "{segment}" 中的天数必须为整数',
-    invalidOverdueDays: '规则 "{segment}" 中的天数必须大于等于 1',
-    invalidAdvanceDays: '规则 "{segment}" 中的天数不能小于 0',
-    invalidTime: '规则 "{segment}" 中的时间必须为 HH:mm',
-    inlineAdvanceSameDay: '当天 {time}',
-    inlineAdvanceBefore: '提前 {days} 天 {time}',
-    inlineOverdue: '过期 {days} 天 {time}',
-    evalAdvanceSameDay: '到期当天 {time} 提醒',
-    evalAdvanceBefore: '提前 {days} 天 {time} 提醒',
-    evalOverdue: '过期 {days} 天 {time} 提醒'
+    fallback: getMessage(locale, 'validation.reminderRules.fallback'),
+    emptyTitle: getMessage(locale, 'validation.reminderRules.emptyTitle'),
+    resultTitle: getMessage(locale, 'validation.reminderRules.resultTitle'),
+    invalidTitle: getMessage(locale, 'validation.reminderRules.invalidTitle'),
+    defaultRulesLabel: getMessage(locale, 'validation.reminderRules.defaultRulesLabel'),
+    defaultAdvanceRulesLabel: getMessage(locale, 'validation.reminderRules.defaultAdvanceRulesLabel'),
+    defaultOverdueRulesLabel: getMessage(locale, 'validation.reminderRules.defaultOverdueRulesLabel'),
+    fallbackPreviewTitle: getMessage(locale, 'validation.reminderRules.fallbackPreviewTitle', { label: '{label}' }),
+    fallbackInvalidTitle: getMessage(locale, 'validation.reminderRules.fallbackInvalidTitle', { label: '{label}' }),
+    noAdvance: getMessage(locale, 'validation.reminderRules.noAdvance'),
+    noOverdue: getMessage(locale, 'validation.reminderRules.noOverdue'),
+    parseFailed: getMessage(locale, 'validation.reminderRules.parseFailed'),
+    invalidSegmentFormat: getMessage(locale, 'validation.reminderRules.invalidSegmentFormat', { segment: '{segment}' }),
+    invalidDaysInteger: getMessage(locale, 'validation.reminderRules.invalidDaysInteger', { segment: '{segment}' }),
+    invalidOverdueDays: getMessage(locale, 'validation.reminderRules.invalidOverdueDays', { segment: '{segment}' }),
+    invalidAdvanceDays: getMessage(locale, 'validation.reminderRules.invalidAdvanceDays', { segment: '{segment}' }),
+    invalidTime: getMessage(locale, 'validation.reminderRules.invalidTime', { segment: '{segment}' }),
+    inlineAdvanceSameDay: getMessage(locale, 'validation.reminderRules.inlineAdvanceSameDay', { time: '{time}' }),
+    inlineAdvanceBefore: getMessage(locale, 'validation.reminderRules.inlineAdvanceBefore', { days: '{days}', time: '{time}' }),
+    inlineOverdue: getMessage(locale, 'validation.reminderRules.inlineOverdue', { days: '{days}', time: '{time}' }),
+    evalAdvanceSameDay: getMessage(locale, 'validation.reminderRules.evalAdvanceSameDay', { time: '{time}' }),
+    evalAdvanceBefore: getMessage(locale, 'validation.reminderRules.evalAdvanceBefore', { days: '{days}', time: '{time}' }),
+    evalOverdue: getMessage(locale, 'validation.reminderRules.evalOverdue', { days: '{days}', time: '{time}' })
   }
 }
 
@@ -172,20 +174,21 @@ function toEvaluationDescription(rule: ParsedReminderRule, kind: ReminderRulesKi
 export function formatReminderRulesText(
   value: string | null | undefined,
   kind: ReminderRulesKind,
-  fallback = getDefaultI18n().fallback,
+  fallback?: string,
   options?: {
     i18n?: Partial<ReminderRulesI18n>
   }
 ) {
-  const copy = { ...getDefaultI18n(), ...options?.i18n }
-  if (!value?.trim()) return fallback
+  const copy = { ...getDefaultReminderRulesI18n(), ...options?.i18n }
+  const fallbackText = fallback ?? copy.fallback
+  if (!value?.trim()) return fallbackText
 
   try {
     const parts = parseReminderRulesStrict(value, kind, copy)
-    if (!parts.length) return fallback
+    if (!parts.length) return fallbackText
     return parts.map((item) => toInlineDescription(item, kind, copy)).join('；')
   } catch {
-    return fallback
+    return fallbackText
   }
 }
 
@@ -197,7 +200,7 @@ export function listReminderRuleDescriptions(
     i18n?: Partial<ReminderRulesI18n>
   }
 ) {
-  const copy = { ...getDefaultI18n(), ...options?.i18n }
+  const copy = { ...getDefaultReminderRulesI18n(), ...options?.i18n }
   const currentValue = value?.trim() ?? ''
 
   try {
@@ -223,7 +226,7 @@ export function evaluateReminderRules(
     i18n?: Partial<ReminderRulesI18n>
   }
 ): ReminderRulesEvaluation {
-  const copy = { ...getDefaultI18n(), ...options?.i18n }
+  const copy = { ...getDefaultReminderRulesI18n(), ...options?.i18n }
   const fallbackLabel =
     options?.fallbackLabel ??
     (kind === 'advance' ? copy.defaultAdvanceRulesLabel : kind === 'overdue' ? copy.defaultOverdueRulesLabel : copy.defaultRulesLabel)

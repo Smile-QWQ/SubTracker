@@ -23,6 +23,7 @@ describe('buildTopSubscriptionsOption', () => {
 
     expect(option?.yAxis.data).toEqual(['Netflix'])
     expect(option?.yAxis.inverse).toBe(true)
+    expect(option?.xAxis.name).toBe('金额（CNY）')
     expect(option?.series[0].data).toEqual([88])
   })
 

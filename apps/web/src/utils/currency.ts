@@ -3,10 +3,13 @@ import { getAppLocale } from '@/locales'
 
 export function getCurrencyLabel(code: string) {
   const upper = code.toUpperCase()
-  if (getAppLocale() === 'en-US' && typeof Intl !== 'undefined' && typeof Intl.DisplayNames === 'function') {
-    const displayNames = new Intl.DisplayNames(['en-US'], { type: 'currency' })
-    const englishName = displayNames.of(upper)
-    return englishName ? `${englishName} (${upper})` : upper
+  const locale = getAppLocale()
+  if (typeof Intl !== 'undefined' && typeof Intl.DisplayNames === 'function') {
+    const displayNames = new Intl.DisplayNames([locale], { type: 'currency' })
+    const localizedName = displayNames.of(upper)
+    if (localizedName && localizedName !== upper) {
+      return `${localizedName} (${upper})`
+    }
   }
 
   const name = (currencyNameMap as Record<string, string>)[upper]

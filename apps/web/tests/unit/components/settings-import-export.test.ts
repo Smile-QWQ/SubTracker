@@ -76,7 +76,7 @@ describe('settings import export section', () => {
     expect(source).toContain('forgotPasswordToggleUnlocked')
     expect(source).toContain('savingForgotPasswordToggle')
     expect(source).toContain('handleForgotPasswordToggleChange')
-    expect(source).toContain('需先启用至少一个直达通知渠道')
+    expect(source).toContain("t('settings.helps.forgotPasswordChannelRequired')")
     expect(source).toContain("@update:value=\"handleForgotPasswordToggleChange\"")
     expect(source).toContain('switch-group switch-group--single')
     expect(source).toContain('switch-inline-label')

@@ -568,7 +568,7 @@
                         />
                       </div>
                     </template>
-                    <span>需先启用至少一个直达通知渠道</span>
+                    <span>{{ t('settings.helps.forgotPasswordChannelRequired') }}</span>
                   </n-tooltip>
                   <n-switch
                     v-else
@@ -1400,10 +1400,10 @@ async function handleForgotPasswordToggleChange(value: boolean) {
       forgotPasswordEnabled: value
     })
     applySavedSettings(result)
-    message.success(value ? '找回密码已开启' : '找回密码已关闭')
+    message.success(value ? t('settings.messages.forgotPasswordEnabled') : t('settings.messages.forgotPasswordDisabled'))
   } catch (error) {
     settingsForm.forgotPasswordEnabled = previousValue
-    message.error(error instanceof Error ? error.message : '找回密码设置保存失败')
+    message.error(error instanceof Error ? error.message : t('settings.messages.forgotPasswordSaveFailed'))
   } finally {
     savingForgotPasswordToggle.value = false
   }

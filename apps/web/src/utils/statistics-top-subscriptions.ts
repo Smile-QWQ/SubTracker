@@ -1,3 +1,5 @@
+import { getMessage } from '@subtracker/shared'
+import { getAppLocale } from '@/locales'
 import type { StatisticsOverview } from '@/types/api'
 
 interface TopSubscriptionsThemeTokens {
@@ -15,6 +17,7 @@ export function buildTopSubscriptionsOption(
 ) {
   const data = (items ?? []).slice(0, 10)
   if (!data.length) return null
+  const locale = getAppLocale()
 
   return {
     tooltip: {
@@ -29,7 +32,7 @@ export function buildTopSubscriptionsOption(
     grid: { left: 160, right: 24, top: 20, bottom: 20 },
     xAxis: {
       type: 'value',
-      name: `金额(${baseCurrency})`,
+      name: getMessage(locale, 'statistics.labels.amountAxis', { currency: baseCurrency }),
       nameTextStyle: {
         color: theme?.secondaryTextColor
       },
