@@ -273,7 +273,7 @@ export default {
       optional: 'Optional',
       notFilledRecipient: 'Recipient not set',
       notFilledSmtpHost: 'SMTP Host not set',
-      fromAddress: 'SubTracker <noreply@example.com>',
+      fromAddress: 'SubTracker <noreply{at}example.com>',
       advanceReminderRules: 'Example: 3&09:30;0&09:30;',
       overdueReminderRules: 'Example: 1&09:30;2&09:30;3&09:30;',
       multiEmail: 'Separate multiple emails with commas',

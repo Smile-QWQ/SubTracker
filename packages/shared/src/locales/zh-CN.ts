@@ -274,7 +274,7 @@ export default {
       optional: '可选',
       notFilledRecipient: '未填写收件人',
       notFilledSmtpHost: '未填写 SMTP Host',
-      fromAddress: 'SubTracker <noreply@example.com>',
+      fromAddress: 'SubTracker <noreply{at}example.com>',
       advanceReminderRules: '例如：3&09:30;0&09:30;',
       overdueReminderRules: '例如：1&09:30;2&09:30;3&09:30;',
       multiEmail: '多个邮箱请用英文逗号分隔',

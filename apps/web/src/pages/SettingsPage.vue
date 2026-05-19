@@ -274,7 +274,10 @@
                         <n-input v-model:value="settingsForm.smtpConfig.password" type="password" show-password-on="click" />
                       </n-form-item>
                       <n-form-item :label="t('common.labels.from')">
-                        <n-input v-model:value="settingsForm.smtpConfig.from" :placeholder="t('settings.placeholders.fromAddress')" />
+                        <n-input
+                          v-model:value="settingsForm.smtpConfig.from"
+                          :placeholder="t('settings.placeholders.fromAddress', { at: '@' })"
+                        />
                       </n-form-item>
                       <n-form-item :label="t('common.labels.to')">
                         <n-input v-model:value="settingsForm.smtpConfig.to" :placeholder="t('settings.placeholders.multiEmail')" />
@@ -288,7 +291,10 @@
                         <n-input v-model:value="settingsForm.resendConfig.apiKey" type="password" show-password-on="click" />
                       </n-form-item>
                       <n-form-item :label="t('common.labels.from')">
-                        <n-input v-model:value="settingsForm.resendConfig.from" :placeholder="t('settings.placeholders.fromAddress')" />
+                        <n-input
+                          v-model:value="settingsForm.resendConfig.from"
+                          :placeholder="t('settings.placeholders.fromAddress', { at: '@' })"
+                        />
                       </n-form-item>
                       <n-form-item :label="t('common.labels.to')">
                         <n-input v-model:value="settingsForm.resendConfig.to" :placeholder="t('settings.placeholders.multiEmail')" />
