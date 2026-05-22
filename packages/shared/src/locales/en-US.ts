@@ -33,8 +33,8 @@ export default {
       paused: 'Paused',
       cancelled: 'Cancelled',
       expired: 'Expired',
-      stale: 'Stale',
-      fresh: 'Fresh'
+      stale: 'Outdated',
+      fresh: 'Up to date'
     },
     labels: {
       name: 'Name',
@@ -182,7 +182,7 @@ export default {
     },
     sections: {
       basic: 'General settings',
-      exchangeSnapshot: 'Exchange rate snapshot',
+      exchangeSnapshot: 'Exchange rate status',
       currentRates: 'Current exchange rates',
       converter: 'Currency converter',
       notifications: 'Notifications',
@@ -221,8 +221,8 @@ export default {
       notificationProvider: 'Provider',
       providerName: 'Provider name',
       providerUrl: 'Endpoint',
-      fetchedAt: 'Fetched at',
-      snapshotStatus: 'Snapshot status',
+      fetchedAt: 'Last fetched at',
+      snapshotStatus: 'Refresh status',
       requestMethod: 'Request method',
       customHeaders: 'Custom headers',
       payloadTemplate: 'Payload template',
@@ -680,6 +680,7 @@ export default {
       logoImportFailed: 'Failed to import logo',
       logoReused: 'Reused from local library',
       localLogoDeleted: 'Local logo deleted',
+      invalidCustomFrequency: 'Frequency must be a positive integer',
       logoDeleteFailed: 'Failed to delete logo',
       logoUploadSuccess: 'Logo uploaded successfully',
       logoUploadFailed: 'Failed to upload logo',
@@ -719,7 +720,7 @@ export default {
       descriptionPlaceholder: 'Optional, briefly describe the subscription',
       amountPlaceholder: 'Enter an amount, use 0 for free subscriptions',
       currencyPlaceholder: 'Select a currency',
-      frequencyPlaceholder: 'Select frequency',
+      frequencyPlaceholder: 'Pick from 1-12 or type any positive integer',
       unitPlaceholder: 'Select a unit',
       tagPlaceholder: 'Select tags',
       websiteLabel: 'Official or platform URL',
@@ -739,6 +740,8 @@ export default {
         noSearchResults: 'No web results are available right now',
         loadingLocal: 'Loading local logos...',
         noLocalResults: 'No reusable local logos yet',
+        noLocalMatches: 'No saved logos match your search',
+        localSearchPlaceholder: 'Search saved logos',
         usedCount: 'Used {count} times',
         source: {
           upload: 'Local upload',
@@ -809,7 +812,7 @@ export default {
     backupModal: {
       title: 'Restore backup',
       description:
-        'This ZIP restores subscriptions, tags, payment records, ordering, settings, and local logos. It does not restore credentials, session secrets, webhook history, or exchange rate snapshots.',
+        'This ZIP restores subscriptions, tags, payment records, ordering, settings, and local logos. It does not restore credentials, session secrets, webhook history, or exchange-rate data.',
       pickZip: 'Choose a ZIP file',
       noFileSelected: 'No file selected',
       previewBackup: 'Preview backup',
@@ -1150,7 +1153,7 @@ Hard requirements:
   },
   api: {
     runtime: {
-      initialExchangeRateRefreshFailed: '[api] Initial exchange rate refresh failed. Falling back to the existing snapshot.',
+      initialExchangeRateRefreshFailed: '[api] Initial exchange rate refresh failed. Falling back to the existing exchange-rate data.',
       started: '[api] Started: http://{host}:{port}'
     },
     errors: {
@@ -1307,7 +1310,7 @@ Hard requirements:
       subtrackerBackupWarnings: {
         noLocalLogos: 'This backup does not include local logo files.',
         noPaymentRecords: 'This backup does not include payment records.',
-        excludedSecretsAndHistory: 'Login credentials, session secrets, webhook history, and exchange-rate snapshots will not be restored.',
+        excludedSecretsAndHistory: 'Login credentials, session secrets, webhook history, and exchange-rate data will not be restored.',
         appendModeDedup:
           'In append mode, subscriptions and payment records are skipped idempotently by their backup CUIDs, and tags with the same name are reused.'
       },

@@ -33,8 +33,8 @@ export default {
       paused: '暂停',
       cancelled: '停用',
       expired: '过期',
-      stale: '旧快照',
-      fresh: '最新'
+      stale: '需刷新',
+      fresh: '正常'
     },
     labels: {
       name: '名称',
@@ -182,7 +182,7 @@ export default {
     },
     sections: {
       basic: '基础设置',
-      exchangeSnapshot: '汇率快照',
+      exchangeSnapshot: '汇率状态',
       currentRates: '当前汇率（常用货币）',
       converter: '汇率转换器',
       notifications: '通知设置',
@@ -221,8 +221,8 @@ export default {
       notificationProvider: '通知提供商',
       providerName: 'Provider 名称',
       providerUrl: '接口地址',
-      fetchedAt: '拉取时间',
-      snapshotStatus: '数据状态',
+      fetchedAt: '最近获取时间',
+      snapshotStatus: '刷新状态',
       requestMethod: '请求方法',
       customHeaders: '自定义请求头',
       payloadTemplate: 'Payload 模板',
@@ -681,6 +681,7 @@ export default {
       logoImportFailed: 'Logo 导入失败',
       logoReused: '已从本地库复用',
       localLogoDeleted: '本地 Logo 已删除',
+      invalidCustomFrequency: '频率必须为正整数',
       logoDeleteFailed: '删除 Logo 失败',
       logoUploadSuccess: 'Logo 上传成功',
       logoUploadFailed: 'Logo 上传失败',
@@ -718,7 +719,7 @@ export default {
       descriptionPlaceholder: '可选，简单记录订阅用途',
       amountPlaceholder: '输入金额，免费可填 0',
       currencyPlaceholder: '选择货币',
-      frequencyPlaceholder: '选择频率',
+      frequencyPlaceholder: '可选 1-12，也可输入任意正整数',
       unitPlaceholder: '选择单位',
       tagPlaceholder: '选择标签',
       websiteLabel: '官网 / 平台地址',
@@ -738,6 +739,8 @@ export default {
         noSearchResults: '当前没有可用的网络搜索结果',
         loadingLocal: '正在加载本地 Logo...',
         noLocalResults: '本地还没有可复用的 Logo',
+        noLocalMatches: '没有匹配的本地 Logo',
+        localSearchPlaceholder: '搜索已保存 Logo',
         usedCount: '已用 {count} 次',
         source: {
           upload: '本地上传',
@@ -808,7 +811,7 @@ export default {
     backupModal: {
       title: '恢复备份',
       description:
-        '该 ZIP 会恢复订阅、标签、支付记录、排序、系统设置与本地 Logo；不会恢复登录凭据、会话密钥、Webhook 历史和汇率快照',
+        '该 ZIP 会恢复订阅、标签、支付记录、排序、系统设置与本地 Logo；不会恢复登录凭据、会话密钥、Webhook 历史和汇率数据',
       pickZip: '选择 ZIP 文件',
       noFileSelected: '未选择文件',
       previewBackup: '预览备份',
@@ -1148,7 +1151,7 @@ export default {
   },
   api: {
     runtime: {
-      initialExchangeRateRefreshFailed: '[api] 初始汇率刷新失败，将回退到已有快照。',
+      initialExchangeRateRefreshFailed: '[api] 初始汇率刷新失败，将回退到已有汇率数据。',
       started: '[api] 已启动: http://{host}:{port}'
     },
     errors: {
@@ -1305,7 +1308,7 @@ export default {
       subtrackerBackupWarnings: {
         noLocalLogos: '该备份不包含本地 Logo 文件',
         noPaymentRecords: '该备份不包含支付记录',
-        excludedSecretsAndHistory: '不会恢复登录凭据、会话密钥、Webhook 历史和汇率快照',
+        excludedSecretsAndHistory: '不会恢复登录凭据、会话密钥、Webhook 历史和汇率数据',
         appendModeDedup: '追加导入时，订阅与支付记录按备份中的唯一标识（CUID）幂等跳过；同名标签会复用现有标签'
       },
       wallosZipMissingDatabase: 'ZIP 中未找到 db/wallos.db',

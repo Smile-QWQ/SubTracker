@@ -1,5 +1,6 @@
 import dayjs from 'dayjs'
 import { getMessage, type BillingIntervalUnit } from '@subtracker/shared'
+import type { SelectOption } from 'naive-ui/es/select/src/interface'
 import { getAppLocale } from '@/locales'
 import { normalizeWebsiteUrlInput } from './website-url'
 
@@ -17,6 +18,47 @@ export interface SubscriptionFormValidationInput {
 }
 
 export type SubscriptionFormErrors = Partial<Record<keyof SubscriptionFormValidationInput, string>>
+
+export type FrequencyOption = SelectOption
+
+const DEFAULT_FREQUENCY_PRESET_MAX = 12
+
+export function buildFrequencyOptions(
+  selectedValue?: number | null,
+  presetMax = DEFAULT_FREQUENCY_PRESET_MAX
+): FrequencyOption[] {
+  const options = Array.from({ length: presetMax }, (_, index) => ({
+    label: `${index + 1}`,
+    value: index + 1
+  }))
+
+  const normalizedSelected = normalizeFrequencyCount(selectedValue)
+  if (normalizedSelected !== null && normalizedSelected > presetMax) {
+    options.push({
+      label: `${normalizedSelected}`,
+      value: normalizedSelected
+    })
+  }
+
+  return options
+}
+
+export function parseFrequencyOptionCreateInput(input: string): FrequencyOption | null {
+  const trimmed = input.trim()
+  if (!/^\d+$/.test(trimmed)) {
+    return null
+  }
+
+  const value = Number(trimmed)
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    return null
+  }
+
+  return {
+    label: `${value}`,
+    value
+  }
+}
 
 export function calculateNextRenewalDateTs(startDateTs: number, intervalCount: number, unit: BillingIntervalUnit): number {
   const start = dayjs(startDateTs)
@@ -115,4 +157,17 @@ export function validateSubscriptionForm(input: SubscriptionFormValidationInput)
     errors,
     normalizedWebsiteUrl: normalizedWebsite.value
   }
+}
+
+function normalizeFrequencyCount(value?: number | null): number | null {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  const normalized = Number(value)
+  if (!Number.isSafeInteger(normalized) || normalized <= 0) {
+    return null
+  }
+
+  return normalized
 }

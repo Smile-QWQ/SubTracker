@@ -73,14 +73,21 @@
                 <n-empty v-else :description="t('subscriptions.form.logo.noSearchResults')" size="small" class="logo-panel__empty" />
               </n-tab-pane>
 
-              <n-tab-pane :name="LOGO_TAB_LIBRARY" :tab="t('subscriptions.form.logo.libraryTab', { count: localLogoLibrary.length })">
+              <n-tab-pane :name="LOGO_TAB_LIBRARY" :tab="t('subscriptions.form.logo.libraryTab', { count: filteredLocalLogoLibrary.length })">
+                <n-input
+                  v-model:value="localLogoSearchQuery"
+                  clearable
+                  class="logo-panel__search"
+                  :placeholder="t('subscriptions.form.logo.localSearchPlaceholder')"
+                />
+
                 <div v-if="loadingLocalLogoLibrary" class="logo-panel__state">
                   <n-spin size="small" />
                   <span>{{ t('subscriptions.form.logo.loadingLocal') }}</span>
                 </div>
 
-                <div v-else-if="localLogoLibrary.length" class="logo-panel__list">
-                  <div v-for="item in localLogoLibrary" :key="item.logoUrl" class="logo-panel__item-wrap">
+                <div v-else-if="localLogoLibrary.length && filteredLocalLogoLibrary.length" class="logo-panel__list">
+                  <div v-for="item in filteredLocalLogoLibrary" :key="item.logoUrl" class="logo-panel__item-wrap">
                     <button
                       v-if="(item.usageCount ?? 0) === 0 && item.filename"
                       type="button"
@@ -104,7 +111,12 @@
                   </div>
                 </div>
 
-                <n-empty v-else :description="t('subscriptions.form.logo.noLocalResults')" size="small" class="logo-panel__empty" />
+                <n-empty
+                  v-else
+                  :description="localLogoLibrary.length ? t('subscriptions.form.logo.noLocalMatches') : t('subscriptions.form.logo.noLocalResults')"
+                  size="small"
+                  class="logo-panel__empty"
+                />
               </n-tab-pane>
             </n-tabs>
           </div>
@@ -147,7 +159,14 @@
         </n-grid-item>
         <n-grid-item>
           <n-form-item :label="t('common.labels.frequency')" :validation-status="validationStatusOf('billingIntervalCount')" :feedback="formErrors.billingIntervalCount">
-            <n-select v-model:value="form.billingIntervalCount" :options="frequencyOptions" :placeholder="t('subscriptions.form.frequencyPlaceholder')" />
+            <n-select
+              v-model:value="form.billingIntervalCount"
+              filterable
+              tag
+              :options="frequencyOptions"
+              :placeholder="t('subscriptions.form.frequencyPlaceholder')"
+              :on-create="handleCreateFrequencyOption"
+            />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
@@ -319,12 +338,15 @@ import { buildCurrencyOptions } from '@/utils/currency'
 import { resolveLogoUrl } from '@/utils/logo'
 import { businessDateToPickerTs, currentBusinessDatePickerTs, pickerTsToDateString } from '@/utils/timezone'
 import {
+  buildFrequencyOptions,
   calculateNextRenewalDateTs,
   canRecalculateNextRenewal,
+  parseFrequencyOptionCreateInput,
   type SubscriptionFormErrors,
   validateSubscriptionForm
 } from '@/utils/subscription-form'
 import { useLocalizedMessage } from '@/utils/localized-message'
+import { filterLocalLogoLibrary } from '@/utils/logo-library'
 import type { AiRecognitionResult, LogoSearchResult, Subscription, Tag } from '@/types/api'
 
 const LOGO_TAB_WEB = 'web'
@@ -358,6 +380,7 @@ const searchingLogoCandidates = ref(false)
 const loadingLocalLogoLibrary = ref(false)
 const logoCandidates = ref<LogoSearchResult[]>([])
 const localLogoLibrary = ref<LogoSearchResult[]>([])
+const localLogoSearchQuery = ref('')
 const logoFileInputRef = ref<HTMLInputElement | null>(null)
 const formErrors = reactive<SubscriptionFormErrors>({})
 const dateFieldMode = ref<'default' | 'model' | 'manual'>('default')
@@ -374,10 +397,7 @@ const intervalOptions = computed(() => [
   { label: t('common.units.year'), value: 'year' }
 ])
 
-const frequencyOptions = Array.from({ length: 12 }, (_, index) => ({
-  label: `${index + 1}`,
-  value: index + 1
-}))
+const frequencyOptions = computed(() => buildFrequencyOptions(form.billingIntervalCount))
 
 const tagOptions = computed(() =>
   props.tags.map((item) => ({
@@ -388,6 +408,10 @@ const tagOptions = computed(() =>
 
 const currencyOptions = computed(() =>
   buildCurrencyOptions(props.currencies?.length ? props.currencies : ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'HKD'])
+)
+
+const filteredLocalLogoLibrary = computed(() =>
+  filterLocalLogoLibrary(localLogoLibrary.value, localLogoSearchQuery.value)
 )
 
 const form = reactive({
@@ -438,6 +462,8 @@ watch(
     if (!value) {
       showLogoPanel.value = false
       searchingLogoCandidates.value = false
+      localLogoLibrary.value = []
+      localLogoSearchQuery.value = ''
       if (!props.model) {
         resetForm()
       }
@@ -506,6 +532,7 @@ function resetForm() {
   form.logoUrl = ''
   form.logoSource = ''
   logoCandidates.value = []
+  localLogoSearchQuery.value = ''
   showLogoPanel.value = false
   clearFormErrors()
 }
@@ -529,6 +556,7 @@ function hydrateFromModel(model: Subscription) {
   form.logoUrl = model.logoUrl ?? ''
   form.logoSource = model.logoSource ?? ''
   logoCandidates.value = []
+  localLogoSearchQuery.value = ''
   showLogoPanel.value = false
   clearFormErrors()
 }
@@ -546,6 +574,7 @@ function handleReset() {
 
 async function openLogoPanel() {
   showLogoPanel.value = true
+  localLogoSearchQuery.value = ''
   await loadLocalLogoLibrary()
 
   if (!form.name.trim() && !form.websiteUrl.trim()) {
@@ -673,6 +702,19 @@ async function handleLogoFileChange(event: Event) {
 function clearLogo() {
   form.logoUrl = ''
   form.logoSource = ''
+}
+
+function handleCreateFrequencyOption(input: string) {
+  const created = parseFrequencyOptionCreateInput(input)
+  if (!created) {
+    message.warning(t('subscriptions.messages.invalidCustomFrequency'))
+    return {
+      label: `${Number(form.billingIntervalCount) || 1}`,
+      value: Number(form.billingIntervalCount) || 1
+    }
+  }
+
+  return created
 }
 
 function applyAiResult(result: AiRecognitionResult) {
@@ -979,6 +1021,10 @@ function formatLogoSource(source: string) {
 
 .logo-panel__tabs {
   margin-top: 10px;
+}
+
+.logo-panel__search {
+  margin-bottom: 10px;
 }
 
 .logo-panel__state {

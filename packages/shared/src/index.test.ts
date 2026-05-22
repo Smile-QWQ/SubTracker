@@ -142,6 +142,8 @@ describe('shared schema', () => {
   it('provides locale-aware shared messages with fallback and interpolation', () => {
     expect(getMessage('en-US', 'validation.reminderRules.fallback')).toBe('Use the system default')
     expect(getMessage('en-US', 'api.errors.ai.disabled')).toBe('AI is disabled')
+    expect(getMessage('en-US', 'common.status.fresh')).toBe('Up to date')
+    expect(getMessage('en-US', 'common.status.stale')).toBe('Outdated')
     expect(getMessage('en-US', 'notifications.forgotPassword.expiresInMinutes', { minutes: 15 })).toBe(
       'Expires in: 15 minutes'
     )
@@ -156,6 +158,10 @@ describe('shared schema', () => {
     expect(
       getMessage('en-US', 'statistics.labels.amountAxis', { currency: 'CNY' })
     ).toBe('Amount (CNY)')
+    expect(getMessage('en-US', 'subscriptions.backupModal.description')).toContain('exchange-rate data')
+    expect(getMessage('en-US', 'api.runtime.initialExchangeRateRefreshFailed')).toContain(
+      'existing exchange-rate data'
+    )
     expect(getMessage('en-US', 'api.errors.exchangeRates.payloadEmpty')).toBe('The exchange-rate payload is empty')
     expect(getMessage('en-US', 'api.errors.notifications.emptyDedupEntries')).toBe(
       'Cannot build notification dispatch params from empty dedup entries'
