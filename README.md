@@ -5,7 +5,7 @@
 <h1 align="center">SubTracker</h1>
 
 <p align="center">
-  一个现代化的自托管订阅管理工具，用来统一管理多币种订阅、续订提醒、预算分析、Logo 资源，以及 Wallos 数据迁移
+  Manage subscriptions, renewal reminders, budgets, logos, and Wallos migrations in one self-hosted dashboard.
 </p>
 
 <p align="center">
@@ -15,27 +15,29 @@
 </p>
 
 <p align="center">
-  <a href="#本地开发">本地开发</a> ·
-  <a href="#部署">部署</a> ·
-  <a href="./DEPLOYMENT.md">部署文档</a> ·
+  <a href="./README.zh-CN.md">简体中文</a> ·
+  <a href="#local-development">Local development</a> ·
+  <a href="#deployment">Deployment</a> ·
+  <a href="./DEPLOYMENT.md">Deployment guide</a> ·
   <a href="https://github.com/Smile-QWQ/SubTracker/releases">Releases</a>
 </p>
 
-> 当前 `main` 分支提供 **Docker / Docker Compose** 部署；如果你需要 **Cloudflare Worker 无服务器部署**，请前往 [`lite`](https://github.com/Smile-QWQ/SubTracker/tree/lite) 分支，对应的部署说明、工作流与 Worker 适配实现都维护在该分支
+> The current `main` branch ships with **Docker / Docker Compose** deployment. If you need **Cloudflare Worker serverless deployment**, use the [`lite`](https://github.com/Smile-QWQ/SubTracker/tree/lite) branch, where the Worker-specific workflows, deployment notes, and runtime adaptations are maintained.
 
-## 快速开始
+## Quick Start
 
-### 想直接部署
+### Deploy with the install script
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/install.sh | bash
 ```
 
-- 推荐使用 **完整部署（full）**
-- 支持 **x86 / ARM** 双架构
-- 详细步骤见 [`DEPLOYMENT.md`](./DEPLOYMENT.md)
+- **Full mode** is recommended for most users.
+- The installer now asks you to choose **中文** or **English** at the start. You can still force it with `--lang zh` or `--lang en`.
+- Release artifacts support both **x86** and **ARM**.
+- See [`DEPLOYMENT.md`](./DEPLOYMENT.md) for the full deployment flow.
 
-### 想本地开发
+### Run locally
 
 ```bash
 npm install
@@ -45,62 +47,66 @@ npm run prisma:seed
 npm run dev
 ```
 
-默认地址：
+Default addresses:
 
-- Web：`http://127.0.0.1:5173`
-- API：`http://127.0.0.1:3001`
+- Web: `http://127.0.0.1:5173`
+- API: `http://127.0.0.1:3001`
 
-默认账户：
+Default credentials:
 
-- 用户名：`admin`
-- 密码：`admin`
+- Username: `admin`
+- Password: `admin`
 
-## 界面预览
+## Screenshots
 
-### 仪表盘
+### Dashboard
 
-![仪表盘](./screenshot/仪表盘.png)
+![Dashboard](./screenshot/仪表盘.png)
 
-### 更多截图
+### More views
 
-| 订阅管理 | 费用统计 |
+| Subscriptions | Spending |
 | --- | --- |
-| ![订阅管理](./screenshot/订阅管理.png) | ![费用统计](./screenshot/费用统计.png) |
+| ![Subscriptions](./screenshot/订阅管理.png) | ![Spending](./screenshot/费用统计.png) |
 
-| AI 识别 | Wallos 导入 |
+| AI recognition | Wallos import |
 | --- | --- |
-| ![AI识别](./screenshot/AI识别.png) | ![导入Wallos](./screenshot/导入Wallos.png) |
+| ![AI recognition](./screenshot/AI识别.png) | ![Wallos import](./screenshot/导入Wallos.png) |
 
-## 功能亮点
+## Features
 
-- **多币种订阅管理**：统一维护订阅名称、金额、计费周期、开始日期、下次续订时间、标签、自动续订状态，并支持暂停、停用、恢复、搜索、自定义排序和批量操作
-- **灵活提醒规则**：支持到期前、当天、过期后的自定义提醒规则，按 `天数&时间;` 格式配置，适合同时覆盖提前提醒、当天提醒和过期补提醒
-- **预算与统计视图**：提供月 / 年预算、未来 12 个月趋势、标签占比、状态分布、未来 30 天续订分布、订阅日历等视图，方便从总览和分类两个层面看支出
-- **AI 辅助录入**：支持文本 / 图片识别自动填充订阅信息，并在统计页生成 AI 总结，减少手动录入和整理成本
-- **备份与迁移**：支持原生 ZIP 备份导出、检查、导入与恢复，也兼容 Wallos 的 JSON、SQLite、ZIP 导入，迁移老数据会更顺手
-- **Logo 与品牌资源**：支持上传、本地复用、网络搜索、导入匹配和品牌图展示，方便把订阅列表整理得更直观
-- **登录与通知能力**：支持记住我、默认密码修改提醒、登录失败限流，以及 SMTP / Resend 邮件、PushPlus、Telegram Bot、Server 酱、Gotify、Webhook 等通知渠道
+- **Subscription management**: create, edit, renew, pause, disable, and restore subscriptions; review renewal history; and manage larger collections with tags, multi-tag filtering, custom ordering, search, bulk status updates, and bulk deletion.
+- **Reminder rules**: define reminders before renewal, on the renewal day, and after expiration with the `days&time;` format; override defaults per subscription; and preview the resulting trigger schedule before saving.
+- **Statistics and budgets**: normalize multi-currency subscriptions into a base currency, track spending totals and trends, inspect tag and status breakdowns, review the next 30 days of renewals, compare auto-renew ratios, and configure monthly, yearly, or per-tag budgets.
+- **AI assistance**: extract subscription details from text or images into the form, and generate an AI summary on the statistics page.
+- **Calendar and overview**: view subscriptions in a calendar, track upcoming renewals from a dedicated list, and use the dashboard for a consolidated overview.
+- **Notifications**: send reminders through Webhook, SMTP / Resend email, PushPlus, Telegram Bot, Server 酱, and Gotify.
+- **Logos and assets**: upload logos, reuse saved local logos, search online, and preserve or match logos during Wallos ZIP imports when possible.
+- **Backup and migration**: import Wallos JSON, SQLite, and ZIP backups, and export, inspect, import, or restore native SubTracker ZIP backups.
+- **Multi-currency tools**: maintain exchange-rate data, convert values into the base currency, and use the built-in currency converter.
+- **Login and session controls**: support remember-me sessions, default-password change reminders, and rate limiting after repeated login failures.
+- **Interface**: support Simplified Chinese and English, light, dark, and system themes, with a sticky desktop sidebar and independently scrollable content.
 
-## 技术栈
+## Tech Stack
 
-- **前端**：Vue 3、Vite、TypeScript、Naive UI、Pinia、TanStack Query、ECharts
-- **后端**：Fastify、Prisma、SQLite、Zod、node-cron
+- **Frontend**: Vue 3, Vite, TypeScript, Naive UI, Pinia, TanStack Query, ECharts
+- **Backend**: Fastify, Prisma, SQLite, Zod, node-cron
 
-## 本地开发
+## Local Development
 
-### 1. 安装依赖
+### 1. Install dependencies
 
 ```bash
 npm install
 ```
 
-### 2. 复制开发环境变量
+### 2. Copy the API environment template
 
 ```bash
 cp apps/api/.env.example apps/api/.env
 ```
 
-### 3. 初始化数据库
+### 3. Initialize the database
 
 ```bash
 npm run prisma:generate
@@ -108,15 +114,15 @@ npm run prisma:push
 npm run prisma:seed
 ```
 
-### 4. 启动开发环境
+### 4. Start the dev environment
 
 ```bash
 npm run dev
 ```
 
-首次登录后建议立即修改默认密码；登录接口在连续失败过多时会触发限流保护
+After the first login, changing the default admin password is strongly recommended. Login attempts are rate-limited after too many failures.
 
-## 常用命令
+## Useful Commands
 
 ```bash
 npm run dev
@@ -125,73 +131,66 @@ npm run lint
 npm test
 ```
 
-## 部署
+## Deployment
 
-推荐直接使用安装脚本
+Use the install script for the smoothest setup:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Smile-QWQ/SubTracker/main/scripts/install.sh | bash
 ```
 
-脚本会按你选择的方式自动下载 Release 产物并生成部署目录：
+The script downloads release artifacts, prepares the deployment directory, and lets you choose between:
 
-- **完整部署（full）**：前端 + 后端一起部署，直接使用前端镜像
-- **仅后端部署（api）**：只部署后端 API，前端静态文件由你自己的 Nginx 托管
+- **Full deployment (`full`)**: deploy web and API together with the published frontend image
+- **API-only deployment (`api`)**: deploy only the API container and host the web assets yourself
 
-推荐使用**完整部署**，步骤更少
+**Full deployment** is the recommended default.
 
-API 容器首次启动时会自动初始化 SQLite 数据库表结构
+On first startup, the API container initializes the SQLite schema automatically.
 
-### 升级
+### Updating
 
-日常升级直接拉取新镜像并重启：
+For routine upgrades:
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-仅后端部署升级时，还需要重新下载并覆盖 `subtracker-web-dist.zip` 解压后的前端静态文件目录
+If you use API-only mode, you also need to download and replace the extracted contents of `subtracker-web-dist.zip`.
 
-只有在这些场景下，才需要重新运行安装脚本：
+You only need to rerun the install script when:
 
-- 首次部署
-- 想重建部署目录
-- 想切换部署方式（`仅后端部署 / 完整部署`）
-- 部署模板或 `.env` 模板有明显变化
+- deploying for the first time
+- rebuilding the deployment directory
+- switching between `api` and `full`
+- adopting a newer deployment template or updated `.env` defaults
 
-详细部署说明见 [`DEPLOYMENT.md`](./DEPLOYMENT.md)
+See [`DEPLOYMENT.md`](./DEPLOYMENT.md) for the complete guide.
 
-当前提供两种方式：
+## Release Artifacts
 
-1. **推荐**：完整部署，脚本准备部署目录后直接 `docker compose up -d`
-2. **可选**：仅后端部署，外部 Nginx 托管前端静态文件，Docker 仅部署 API
+Each release currently provides:
 
-## Release 产物
+- `subtracker-web-dist.zip`: frontend static assets
+- `ghcr.io/smile-qwq/subtracker-api`: API Docker image
+- `ghcr.io/smile-qwq/subtracker-web`: frontend image used in full deployment
 
-发布 Release 时会提供：
+All published images support both x86 and ARM architectures.
 
-- `subtracker-web-dist.zip`：前端静态文件
-- `ghcr.io/smile-qwq/subtracker-api`：API Docker 镜像
-- `ghcr.io/smile-qwq/subtracker-web`：完整部署使用的前端 Docker 镜像
+## License
 
-以上 Docker 镜像均支持 x86 / ARM 双架构，Docker 会根据宿主机架构自动拉取对应变体
+This project is released under the **GNU General Public License v3.0 (GPLv3)**.
 
-适合直接用于服务器部署
+## Acknowledgements
 
-## 许可证
+Thanks to the following projects and ecosystems:
 
-本项目采用 **GNU General Public License v3.0（GPLv3）** 许可证发布
-
-## 致谢
-
-感谢以下项目和生态为 SubTracker 提供支持：
-
-- [Wallos](https://github.com/ellite/Wallos) —— 提供了导入兼容方向与迁移参考
-- [Vue 3](https://vuejs.org/) 与 [Vite](https://vitejs.dev/) —— 提供前端开发基础
-- [Naive UI](https://www.naiveui.com/) —— 提供界面组件支持
-- [Fastify](https://fastify.dev/) 与 [Prisma](https://www.prisma.io/) —— 提供后端与数据访问能力
-- [Pinia](https://pinia.vuejs.org/)、[TanStack Query](https://tanstack.com/query/latest) 与 [ECharts](https://echarts.apache.org/) —— 提供状态管理、数据请求与图表展示能力
+- [Wallos](https://github.com/ellite/Wallos) — migration reference and compatibility direction
+- [Vue 3](https://vuejs.org/) and [Vite](https://vitejs.dev/) — frontend foundation
+- [Naive UI](https://www.naiveui.com/) — UI components
+- [Fastify](https://fastify.dev/) and [Prisma](https://www.prisma.io/) — backend and data access
+- [Pinia](https://pinia.vuejs.org/), [TanStack Query](https://tanstack.com/query/latest), and [ECharts](https://echarts.apache.org/) — state, data fetching, and charts
 
 ## Star History
 
