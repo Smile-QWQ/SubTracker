@@ -158,7 +158,8 @@ vi.mock('node:https', () => {
 
 vi.mock('../../src/services/settings.service', () => ({
   getSetting: webhookState.getSettingMock,
-  setSetting: webhookState.setSettingMock
+  setSetting: webhookState.setSettingMock,
+  getResolvedAppLocale: vi.fn(async () => 'zh-CN')
 }))
 
 vi.mock('../../src/db', () => ({

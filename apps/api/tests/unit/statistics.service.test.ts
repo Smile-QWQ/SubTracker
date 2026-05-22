@@ -94,7 +94,8 @@ vi.mock('../../src/services/settings.service', () => ({
         structuredOutput: true
       }
     }
-  }))
+  })),
+  getResolvedAppLocale: vi.fn(async () => 'zh-CN')
 }))
 
 vi.mock('../../src/services/worker-lite-repository.service', () => ({

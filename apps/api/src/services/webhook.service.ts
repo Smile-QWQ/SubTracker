@@ -9,6 +9,7 @@ import {
   type NotificationWebhookSettingsInput,
   type WebhookEventType
 } from '@subtracker/shared'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '../db'
 import { getResolvedAppLocale, getSetting, setSetting } from './settings.service'
 import { validateNotificationTargetUrl } from './notification-url.service'
@@ -19,7 +20,7 @@ import {
 } from './notification-merge.service'
 
 type DeliveryPayload = Record<string, unknown>
-type JsonPayload = Record<string, unknown>
+type JsonPayload = Prisma.InputJsonValue
 
 export type PrimaryWebhookInput = NotificationWebhookSettingsInput
 
@@ -239,7 +240,7 @@ async function upsertWebhookDeliveryRecord(
       subscriptionId: entry.subscriptionId,
       targetUrl,
       requestMethod,
-      payloadJson: payload as JsonPayload,
+      payloadJson: payload as Prisma.InputJsonValue,
       status: 'pending'
     }
   })
@@ -297,7 +298,7 @@ async function updateWebhookDeliveryRecords(
           lastAttemptAt: new Date(),
           targetUrl: config.url,
           requestMethod: config.requestMethod,
-          payloadJson: payload as JsonPayload
+          payloadJson: payload as Prisma.InputJsonValue
         }
       })
     )

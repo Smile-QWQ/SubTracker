@@ -1,4 +1,5 @@
 import { FastifyInstance } from 'fastify'
+import type { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { prisma } from '../db'
 import { sendCreated, sendError, sendOk } from '../http'
@@ -42,7 +43,7 @@ const subscriptionInclude = {
   tags: { include: { tag: true } }
 } as const
 
-type SubscriptionDetailRow = Awaited<ReturnType<typeof prisma.subscription.findUnique>>
+type SubscriptionDetailPayload = Prisma.SubscriptionGetPayload<{ include: typeof subscriptionInclude }>
 
 async function resolveSubscriptionReminderFields(payload: {
   advanceReminderRules?: string | null
@@ -193,7 +194,7 @@ async function runBatchAction(
 }
 
 async function buildSubscriptionDetailResponse(
-  row: SubscriptionDetailRow | null,
+  row: SubscriptionDetailPayload | null,
   timezone: string
 ) {
   if (!row) return null
