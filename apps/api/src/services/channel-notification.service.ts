@@ -564,7 +564,8 @@ async function sendServerchanNotification(
 async function sendGotifyWithConfig(message: DirectNotificationMessage, config: GotifyConfigInput, locale: AppLocale = DEFAULT_APP_LOCALE) {
   const target = validateNotificationTargetUrl(config.url.trim(), {
     label: getMessage(locale, 'settings.labels.gotifyTargetUrl'),
-    locale
+    locale,
+    allowPrivateHost: true
   })
   const token = config.token?.trim()
   if (!token) {
@@ -642,16 +643,54 @@ function buildNotifyxDescription(title: string) {
   return `SubTracker · ${title}`.slice(0, 500)
 }
 
-function resolveBarkPushUrl(serverUrl: string, locale: AppLocale = DEFAULT_APP_LOCALE) {
+function isBarkCustomServerUrl(target: URL) {
+  return target.pathname.replace(/\/+$/, '') !== ''
+}
+
+function buildBarkRequestTarget(
+  serverUrl: string,
+  deviceKey: string | undefined,
+  locale: AppLocale = DEFAULT_APP_LOCALE
+) {
   const target = validateNotificationTargetUrl(serverUrl.trim(), {
     label: getMessage(locale, 'settings.labels.barkServerUrl'),
-    locale
+    locale,
+    allowPrivateHost: true
   })
-  const basePath = target.pathname.replace(/\/+$/, '')
-  target.pathname = basePath ? `${basePath}/push` : '/push'
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  }
+
+  if (target.username) {
+    const username = decodeURIComponent(target.username)
+    const password = decodeURIComponent(target.password || '')
+    headers.Authorization = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`
+    target.username = ''
+    target.password = ''
+  }
+
+  if (isBarkCustomServerUrl(target)) {
+    target.hash = ''
+    return {
+      url: target,
+      headers,
+      includeDeviceKey: false
+    }
+  }
+
+  if (!deviceKey?.trim()) {
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.barkDisabledOrIncomplete'))
+  }
+
+  target.pathname = '/push'
   target.search = ''
   target.hash = ''
-  return target
+  return {
+    url: target,
+    headers,
+    includeDeviceKey: true
+  }
 }
 
 async function sendBarkWithConfig(
@@ -661,19 +700,19 @@ async function sendBarkWithConfig(
 ) {
   const serverUrl = config.serverUrl?.trim()
   const deviceKey = config.deviceKey?.trim()
-  if (!serverUrl || !deviceKey) {
+  if (!serverUrl) {
     throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.barkDisabledOrIncomplete'))
   }
 
-  const response = await fetch(resolveBarkPushUrl(serverUrl, locale), {
+  const requestTarget = buildBarkRequestTarget(serverUrl, deviceKey, locale)
+
+  const response = await fetch(requestTarget.url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
+    headers: requestTarget.headers,
     body: JSON.stringify({
-      device_key: deviceKey,
       title: message.title,
       body: message.text,
+      ...(requestTarget.includeDeviceKey ? { device_key: deviceKey } : {}),
       ...(config.isArchive ? { isArchive: 1 } : {})
     })
   })

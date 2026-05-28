@@ -1219,13 +1219,25 @@ function validateBarkSettings(action: 'save' | 'test') {
     return true
   }
 
-  const missing = getMissingRequiredFields([
-    [t('common.labels.serverUrl'), settingsForm.barkConfig.serverUrl],
-    [t('common.labels.deviceKey'), settingsForm.barkConfig.deviceKey]
-  ])
+  const requiredFields: Array<[string, string | number | boolean | null | undefined]> = [
+    [t('common.labels.serverUrl'), settingsForm.barkConfig.serverUrl]
+  ]
+  if (!isBarkCustomServerUrl(settingsForm.barkConfig.serverUrl)) {
+    requiredFields.push([t('common.labels.deviceKey'), settingsForm.barkConfig.deviceKey])
+  }
+  const missing = getMissingRequiredFields(requiredFields)
   if (!missing.length) return true
   message.error(t('settings.validation.barkMissingFields', { fields: joinFieldLabels(missing) }))
   return false
+}
+
+function isBarkCustomServerUrl(serverUrl: string) {
+  try {
+    const parsed = new URL(serverUrl.trim())
+    return parsed.pathname.replace(/\/+$/, '') !== ''
+  } catch {
+    return false
+  }
 }
 
 function validateNotifyxSettings(action: 'save' | 'test') {

@@ -96,4 +96,13 @@ describe('settings import export section', () => {
     expect(source).not.toContain("t('settings.labels.interfaceLocale')")
     expect(source).not.toContain('localeOptions')
   })
+
+  it('allows custom bark server urls without requiring a separate device key', () => {
+    const source = readFileSync('src/pages/SettingsPage.vue', 'utf8')
+
+    expect(source).toContain('function isBarkCustomServerUrl')
+    expect(source).toContain("const parsed = new URL(serverUrl.trim())")
+    expect(source).toContain("parsed.pathname.replace(/\\/+$/, '') !== ''")
+    expect(source).toContain("if (!isBarkCustomServerUrl(settingsForm.barkConfig.serverUrl))")
+  })
 })

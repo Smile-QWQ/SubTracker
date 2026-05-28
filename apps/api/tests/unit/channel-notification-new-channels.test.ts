@@ -199,11 +199,57 @@ describe('channel notification new direct channels', () => {
     })
   })
 
+  it('sends bark test notifications to a custom bark url without appending /push', async () => {
+    mockFetchResponse({
+      status: 200,
+      body: JSON.stringify({ code: 200, message: 'success' })
+    })
+
+    const { sendTestBarkNotificationWithConfig } = await import('../../src/services/channel-notification.service')
+    await expect(
+      sendTestBarkNotificationWithConfig({
+        serverUrl: 'https://my-bark.example/custom-key',
+        deviceKey: '',
+        isArchive: false
+      })
+    ).resolves.toEqual({ success: true })
+
+    const [url, init] = channelState.fetchMock.mock.calls[0]
+    expect(String(url)).toBe('https://my-bark.example/custom-key')
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      title: expect.any(String),
+      body: expect.any(String)
+    })
+    expect(JSON.parse(String(init?.body))).not.toHaveProperty('device_key')
+  })
+
+  it('sends bark test notifications with basic auth when the custom server url contains credentials', async () => {
+    mockFetchResponse({
+      status: 200,
+      body: JSON.stringify({ code: 200, message: 'success' })
+    })
+
+    const { sendTestBarkNotificationWithConfig } = await import('../../src/services/channel-notification.service')
+    await expect(
+      sendTestBarkNotificationWithConfig({
+        serverUrl: 'https://admin:p%40ss@my-bark.example/custom-key',
+        deviceKey: '',
+        isArchive: false
+      })
+    ).resolves.toEqual({ success: true })
+
+    const [url, init] = channelState.fetchMock.mock.calls[0]
+    expect(String(url)).toBe('https://my-bark.example/custom-key')
+    expect(init?.headers).toMatchObject({
+      Authorization: `Basic ${Buffer.from('admin:p@ss').toString('base64')}`
+    })
+  })
+
   it('rejects bark test notifications when config is incomplete', async () => {
     const { sendTestBarkNotificationWithConfig } = await import('../../src/services/channel-notification.service')
     await expect(
       sendTestBarkNotificationWithConfig({
-        serverUrl: '',
+        serverUrl: 'https://api.day.app',
         deviceKey: '',
         isArchive: false
       })
@@ -332,6 +378,25 @@ describe('channel notification new direct channels', () => {
         team: ''
       })
     ).rejects.toThrow('rejected')
+  })
+
+  it('sends bark test notifications to a private self-hosted server url', async () => {
+    mockFetchResponse({
+      status: 200,
+      body: JSON.stringify({ code: 200, message: 'success' })
+    })
+
+    const { sendTestBarkNotificationWithConfig } = await import('../../src/services/channel-notification.service')
+    await expect(
+      sendTestBarkNotificationWithConfig({
+        serverUrl: 'http://192.168.50.11:8080',
+        deviceKey: 'device-key',
+        isArchive: false
+      })
+    ).resolves.toEqual({ success: true })
+
+    const [url] = channelState.fetchMock.mock.calls[0]
+    expect(String(url)).toBe('http://192.168.50.11:8080/push')
   })
 
   it('marks bark dispatches as sent and skips repeated dispatches', async () => {

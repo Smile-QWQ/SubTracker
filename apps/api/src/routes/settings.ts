@@ -75,6 +75,15 @@ function normalizeAppriseConfigPayload(
   }
 }
 
+function isBarkCustomServerUrl(rawUrl: string) {
+  try {
+    const parsed = new URL(rawUrl.trim())
+    return parsed.pathname.replace(/\/+$/, '') !== ''
+  } catch {
+    return false
+  }
+}
+
 function validateSettingsPayload(
   settings: Awaited<ReturnType<typeof getAppSettings>>,
   locale: AppLocale = 'zh-CN'
@@ -178,30 +187,33 @@ function validateSettingsPayload(
 
     validateNotificationTargetUrl(settings.gotifyConfig.url.trim(), {
       label: getMessage(locale, 'settings.labels.gotifyTargetUrl'),
-      locale
+      locale,
+      allowPrivateHost: true
     })
   }
 
   if (settings.barkNotificationsEnabled) {
-    const missingBarkFields = [
-      [labels.serverUrl, settings.barkConfig.serverUrl],
-      [labels.deviceKey, settings.barkConfig.deviceKey]
-    ]
-      .filter(([, value]) => !String(value ?? '').trim())
-      .map(([label]) => label)
-
-    if (missingBarkFields.length) {
+    if (!String(settings.barkConfig.serverUrl ?? '').trim()) {
       throw new Error(
         getMessage(locale, 'api.errors.settings.barkFieldsRequired', {
-          fields: missingBarkFields.join(fieldSeparator)
+          fields: labels.serverUrl
         })
       )
     }
 
-    validateNotificationTargetUrl(settings.barkConfig.serverUrl.trim(), {
+    const barkUrl = validateNotificationTargetUrl(settings.barkConfig.serverUrl.trim(), {
       label: getMessage(locale, 'settings.labels.barkServerUrl'),
-      locale
+      locale,
+      allowPrivateHost: true
     })
+
+    if (!isBarkCustomServerUrl(barkUrl.toString()) && !String(settings.barkConfig.deviceKey ?? '').trim()) {
+      throw new Error(
+        getMessage(locale, 'api.errors.settings.barkFieldsRequired', {
+          fields: labels.deviceKey
+        })
+      )
+    }
   }
 
   if (settings.notifyxNotificationsEnabled) {

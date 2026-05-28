@@ -300,7 +300,7 @@ describe('settings routes validation', () => {
       payload: {
         gotifyNotificationsEnabled: true,
         gotifyConfig: {
-          url: 'http://127.0.0.1:8080',
+          url: 'ftp://gotify.example.com',
           token: 'token',
           ignoreSsl: false
         }
@@ -311,6 +311,28 @@ describe('settings routes validation', () => {
     expect(res.json().error.message).toContain('Gotify URL')
   })
 
+  it('accepts a private gotify url for self-hosted deployments', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      payload: {
+        gotifyNotificationsEnabled: true,
+        gotifyConfig: {
+          url: 'http://192.168.50.10:8080',
+          token: 'token',
+          ignoreSsl: false
+        }
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(store.get('gotifyConfig')).toMatchObject({
+      url: 'http://192.168.50.10:8080',
+      token: 'token',
+      ignoreSsl: false
+    })
+  })
+
   it('rejects incomplete bark config when enabling bark notifications', async () => {
     const res = await app.inject({
       method: 'PATCH',
@@ -318,7 +340,7 @@ describe('settings routes validation', () => {
       payload: {
         barkNotificationsEnabled: true,
         barkConfig: {
-          serverUrl: '',
+          serverUrl: 'https://api.day.app',
           deviceKey: ''
         }
       }
@@ -326,6 +348,50 @@ describe('settings routes validation', () => {
 
     expect(res.statusCode).toBe(422)
     expect(res.json().error.message).toContain('启用 Bark 时必须填写')
+  })
+
+  it('accepts bark custom url mode without a separate device key', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      payload: {
+        barkNotificationsEnabled: true,
+        barkConfig: {
+          serverUrl: 'https://my-bark.example/custom-key',
+          deviceKey: '',
+          isArchive: false
+        }
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(store.get('barkConfig')).toMatchObject({
+      serverUrl: 'https://my-bark.example/custom-key',
+      deviceKey: '',
+      isArchive: false
+    })
+  })
+
+  it('accepts a private bark server url for self-hosted deployments', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      payload: {
+        barkNotificationsEnabled: true,
+        barkConfig: {
+          serverUrl: 'http://192.168.50.11:8080',
+          deviceKey: 'device-key',
+          isArchive: false
+        }
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(store.get('barkConfig')).toMatchObject({
+      serverUrl: 'http://192.168.50.11:8080',
+      deviceKey: 'device-key',
+      isArchive: false
+    })
   })
 
   it('rejects incomplete notifyx config when enabling notifyx notifications in english locale', async () => {
