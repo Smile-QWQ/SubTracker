@@ -1189,11 +1189,14 @@ function formatLogoSource(source: string) {
   .form-footer {
     flex-direction: column;
     align-items: stretch;
+    justify-content: flex-start;
   }
 
-  .form-footer :deep(.n-space) {
+  .form-footer__toggles,
+  .form-footer__actions {
     width: 100%;
-    justify-content: space-between;
+    flex: none;
+    align-items: center;
   }
 }
 </style>

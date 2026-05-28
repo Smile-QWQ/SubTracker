@@ -29,4 +29,15 @@ describe('subscription form modal frequency and local logo search', () => {
     expect(source).toContain('() => props.show')
     expect(source).toContain('localLogoLibrary.value = []')
   })
+
+  it('keeps the mobile footer actions compact instead of stretching the whole edit form', () => {
+    const source = readFileSync('src/components/SubscriptionFormModal.vue', 'utf8')
+
+    expect(source).toContain('.form-footer {')
+    expect(source).toContain('justify-content: flex-start;')
+    expect(source).toContain('.form-footer__toggles,')
+    expect(source).toContain('.form-footer__actions {')
+    expect(source).toContain('flex: none;')
+    expect(source).toContain('align-items: center;')
+  })
 })
