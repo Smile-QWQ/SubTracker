@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { getMessage } from '@subtracker/shared'
+import { createEmptyNotificationTemplateConfig, getMessage } from '@subtracker/shared'
 import {
+  buildTelegramMarkdownV2FromMarkdown,
   buildNotificationMessage,
+  buildForgotPasswordNotificationMessage,
+  buildTestNotificationMessage,
   resolveNotificationPresentation
 } from '../../src/services/notification-presentation.service'
 import { type NotificationDispatchParams } from '../../src/services/notification-merge.service'
@@ -131,5 +134,188 @@ describe('notification presentation', () => {
         count: 1
       })
     )
+  })
+
+  it('renders markdown reminder bodies for markdown-capable channels', () => {
+    const message = buildNotificationMessage(
+      {
+        eventType: 'subscription.reminder_due',
+        resourceKey: 'subscription:sub-1',
+        periodKey: '2026-05-01:due_today:advance-0@09:30',
+        subscriptionId: 'sub-1',
+        payload: {
+          ...netflixPayload
+        }
+      },
+      'zh-CN',
+      {
+        group: 'markdown',
+        templateConfig: createEmptyNotificationTemplateConfig()
+      }
+    )
+
+    expect(message.markdown).toContain('- **名称**：Netflix')
+    expect(message.html).toBeUndefined()
+  })
+
+  it('converts shared markdown into Telegram MarkdownV2 without leaking extra escapes', () => {
+    const message = buildTestNotificationMessage(
+      {
+        eventType: 'subscription.reminder_due',
+        resourceKey: 'subscription:sub-1',
+        periodKey: '2026-05-01:due_today:advance-0@09:30',
+        subscriptionId: 'sub-1',
+        payload: {
+          ...netflixPayload,
+          nextRenewalDate: '2026-05-28',
+          amount: 19.9,
+          currency: 'CNY',
+          websiteUrl: 'https://example.com',
+          notes: '这是一条测试通知',
+          phase: 'upcoming',
+          daysUntilRenewal: 3,
+          reminderRuleDays: 3
+        }
+      },
+      'zh-CN',
+      {
+        group: 'markdown',
+        templateConfig: createEmptyNotificationTemplateConfig()
+      }
+    )
+
+    expect(message.markdown).toContain('https://example\\.com')
+    expect(message.html).toBeUndefined()
+
+    const telegramMarkdown = buildTelegramMarkdownV2FromMarkdown(message.markdown ?? '')
+    expect(telegramMarkdown).toContain('> 这是一条测试通知，用于验证当前通知渠道和模板配置。')
+    expect(telegramMarkdown).toContain('2026\\-05\\-28')
+    expect(telegramMarkdown).toContain('19\\.9 CNY')
+    expect(telegramMarkdown).toContain('[https://example\\.com](https://example.com)')
+    expect(telegramMarkdown).not.toContain('<blockquote>')
+  })
+
+  it('renders html reminder bodies for html-capable channels', () => {
+    const message = buildNotificationMessage(
+      {
+        eventType: 'subscription.reminder_due',
+        resourceKey: 'subscription:sub-1',
+        periodKey: '2026-05-01:due_today:advance-0@09:30',
+        subscriptionId: 'sub-1',
+        payload: {
+          ...netflixPayload
+        }
+      },
+      'zh-CN',
+      {
+        group: 'html',
+        templateConfig: createEmptyNotificationTemplateConfig()
+      }
+    )
+
+    expect(message.html).toContain('<div class="subtracker-notification subtracker-notification--single">')
+    expect(message.html).toContain('<li><strong>名称</strong>：Netflix</li>')
+    expect(message.text).toContain('名称：Netflix')
+  })
+
+  it('renders forgot-password templates by group', () => {
+    const markdownMessage = buildForgotPasswordNotificationMessage(
+      {
+        username: 'admin',
+        code: '123456',
+        expiresInMinutes: 10
+      },
+      'zh-CN',
+      {
+        group: 'markdown',
+        templateConfig: createEmptyNotificationTemplateConfig()
+      }
+    )
+
+    const htmlMessage = buildForgotPasswordNotificationMessage(
+      {
+        username: 'admin',
+        code: '123456',
+        expiresInMinutes: 10
+      },
+      'zh-CN',
+      {
+        group: 'html',
+        templateConfig: createEmptyNotificationTemplateConfig()
+      }
+    )
+
+    expect(markdownMessage.markdown).toContain('**用户名**')
+    expect(htmlMessage.html).toContain('<strong>用户名</strong>：admin')
+    expect(htmlMessage.text).toContain('用户名：admin')
+  })
+
+  it('renders test notifications with template intro blocks', () => {
+    const message = buildTestNotificationMessage(
+      {
+        eventType: 'subscription.reminder_due',
+        resourceKey: 'subscription:sub-1',
+        periodKey: '2026-05-01:due_today:advance-0@09:30',
+        subscriptionId: 'sub-1',
+        payload: {
+          ...netflixPayload
+        }
+      },
+      'zh-CN',
+      {
+        group: 'markdown',
+        templateConfig: createEmptyNotificationTemplateConfig()
+      }
+    )
+
+    expect(message.title).toContain('测试')
+    expect(message.markdown).toContain('> 这是一条测试通知')
+    expect(message.markdown).toContain('Netflix')
+  })
+
+  it('handles quotes, lists, code blocks and special characters in Telegram MarkdownV2 output', () => {
+    const telegramMarkdown = buildTelegramMarkdownV2FromMarkdown([
+      '> 引用说明',
+      '',
+      '- **名称**：Netflix',
+      '- **金额**：19\\.9 CNY',
+      '- **备注**：hello = world ~ wow',
+      '',
+      '### 小节标题',
+      '',
+      '1. **第一项**',
+      '',
+      '`code.with-dash`',
+      '',
+      '```ts',
+      'const value = a_b;',
+      '```',
+      '',
+      'emoji 😀'
+    ].join('\n'))
+
+    expect(telegramMarkdown).toContain('> 引用说明')
+    expect(telegramMarkdown).toContain('• *名称*：Netflix')
+    expect(telegramMarkdown).toContain('• *金额*：19\\.9 CNY')
+    expect(telegramMarkdown).toContain('• *备注*：hello \\= world \\~ wow')
+    expect(telegramMarkdown).toContain('*小节标题*')
+    expect(telegramMarkdown).toContain('1\\. *第一项*')
+    expect(telegramMarkdown).toContain('`code.with-dash`')
+    expect(telegramMarkdown).toContain('```ts\nconst value = a_b;\n```')
+    expect(telegramMarkdown).toContain('emoji 😀')
+  })
+
+  it('wraps bare urls into Telegram MarkdownV2 links', () => {
+    const telegramMarkdown = buildTelegramMarkdownV2FromMarkdown([
+      '普通文本 https://example.com/path?a=1&b=2',
+      '- **网址**：https://sub.example.com/foo-bar',
+      '`https://code.example.com`',
+      '[已有链接](https://wrapped.example.com)'
+    ].join('\n'))
+
+    expect(telegramMarkdown).toContain('[https://example\\.com/path?a\\=1&b\\=2](https://example.com/path?a=1&b=2)')
+    expect(telegramMarkdown).toContain('[https://sub\\.example\\.com/foo\\-bar](https://sub.example.com/foo-bar)')
+    expect(telegramMarkdown).toContain('`https://code.example.com`')
+    expect(telegramMarkdown).toContain('[已有链接](https://wrapped.example.com)')
   })
 })

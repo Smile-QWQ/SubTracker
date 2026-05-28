@@ -10,6 +10,7 @@ import {
   type BarkConfigInput,
   type EmailConfigInput,
   type GotifyConfigInput,
+  type NotificationTemplateGroup,
   type NotifyxConfigInput,
   type ResendConfigInput,
   type PushPlusConfigInput,
@@ -31,6 +32,9 @@ import {
 } from './notification-merge.service'
 import {
   buildNotificationMessage,
+  buildForgotPasswordNotificationMessage,
+  buildTestNotificationMessage,
+  buildTelegramMarkdownV2FromMarkdown,
   type DirectNotificationMessage
 } from './notification-presentation.service'
 
@@ -82,6 +86,8 @@ type NotificationLocaleContext = {
 
 type DirectChannelDispatchOptions = {
   channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx' | 'apprise'
+  templateGroup: NotificationTemplateGroup
+  templateConfig?: Awaited<ReturnType<typeof getNotificationChannelSettings>>['notificationTemplateConfig']
   enabled: boolean
   disabledMessage: string
   alreadySentMessage: string
@@ -90,6 +96,20 @@ type DirectChannelDispatchOptions = {
 
 const NOTIFICATION_DEDUP_KEY_PREFIX = 'notification:'
 export const NOTIFICATION_DEDUP_RETENTION_DAYS = 30
+
+const CHANNEL_TEMPLATE_GROUPS: Record<
+  DirectChannelDispatchOptions['channel'],
+  NotificationTemplateGroup
+> = {
+  email: 'html',
+  pushplus: 'html',
+  telegram: 'markdown',
+  serverchan: 'markdown',
+  gotify: 'markdown',
+  bark: 'markdown',
+  notifyx: 'markdown',
+  apprise: 'markdown'
+}
 
 function buildNotificationKey(
   channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx' | 'apprise',
@@ -232,19 +252,6 @@ function resolveDispatchParamsForChannel(
   })
 }
 
-function buildForgotPasswordTitle(locale: AppLocale) {
-  return getMessage(locale, 'notifications.forgotPassword.title')
-}
-
-function buildForgotPasswordBody(payload: ForgotPasswordNotificationPayload, locale: AppLocale) {
-  return [
-    getMessage(locale, 'notifications.forgotPassword.username', { username: payload.username }),
-    getMessage(locale, 'notifications.forgotPassword.code', { code: payload.code }),
-    getMessage(locale, 'notifications.forgotPassword.expiresInMinutes', { minutes: payload.expiresInMinutes }),
-    getMessage(locale, 'notifications.forgotPassword.ignoreHint')
-  ].join('\n')
-}
-
 async function sendSmtpEmailWithConfig(message: DirectNotificationMessage, config: EmailConfigInput) {
   const { host, port, secure, username, password, from, to } = config
   if (!host || !port || !username || !password || !from || !to) {
@@ -265,7 +272,8 @@ async function sendSmtpEmailWithConfig(message: DirectNotificationMessage, confi
     from,
     to,
     subject: message.title,
-    text: message.text
+    text: message.text,
+    html: message.html
   })
 }
 
@@ -292,7 +300,8 @@ async function sendResendEmailWithConfig(message: DirectNotificationMessage, con
         .map((item) => item.trim())
         .filter(Boolean),
       subject: message.title,
-      text: message.text
+      text: message.text,
+      html: message.html || undefined
     })
   })
 
@@ -341,7 +350,12 @@ async function dispatchDirectChannelNotification(
     }
   }
 
-  await options.send(buildNotificationMessage(dispatchParams, locale))
+  await options.send(
+    buildNotificationMessage(dispatchParams, locale, {
+      group: options.templateGroup,
+      templateConfig: options.templateConfig
+    })
+  )
   await markNotificationEntriesSent(options.channel, dispatchParams)
 
   return {
@@ -357,6 +371,8 @@ async function sendEmailNotification(
   const settings = await getNotificationChannelSettings()
   return dispatchDirectChannelNotification(params, {
     channel: 'email',
+    templateGroup: CHANNEL_TEMPLATE_GROUPS.email,
+    templateConfig: settings.notificationTemplateConfig,
     enabled: settings.emailNotificationsEnabled,
     disabledMessage: 'email_disabled',
     alreadySentMessage: 'email_already_sent',
@@ -439,6 +455,8 @@ async function sendPushplusNotification(
   const settings = await getNotificationChannelSettings()
   return dispatchDirectChannelNotification(params, {
     channel: 'pushplus',
+    templateGroup: CHANNEL_TEMPLATE_GROUPS.pushplus,
+    templateConfig: settings.notificationTemplateConfig,
     enabled: settings.pushplusNotificationsEnabled,
     disabledMessage: 'pushplus_disabled',
     alreadySentMessage: 'pushplus_already_sent',
@@ -452,6 +470,9 @@ async function sendTelegramWithConfig(message: DirectNotificationMessage, config
     throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.telegramDisabledOrIncomplete'))
   }
 
+  const titleMarkdown = buildTelegramMarkdownV2FromMarkdown(`**${message.title}**`)
+  const bodyMarkdown = buildTelegramMarkdownV2FromMarkdown(message.markdown || message.text)
+
   const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
     method: 'POST',
     headers: {
@@ -459,7 +480,8 @@ async function sendTelegramWithConfig(message: DirectNotificationMessage, config
     },
     body: JSON.stringify({
       chat_id: chatId,
-      text: `${message.title}\n\n${message.text}`
+      text: [titleMarkdown, bodyMarkdown].filter(Boolean).join('\n\n'),
+      parse_mode: 'MarkdownV2'
     })
   })
 
@@ -489,6 +511,8 @@ async function sendTelegramNotification(
   const settings = await getNotificationChannelSettings()
   return dispatchDirectChannelNotification(params, {
     channel: 'telegram',
+    templateGroup: CHANNEL_TEMPLATE_GROUPS.telegram,
+    templateConfig: settings.notificationTemplateConfig,
     enabled: settings.telegramNotificationsEnabled,
     disabledMessage: 'telegram_disabled',
     alreadySentMessage: 'telegram_already_sent',
@@ -517,7 +541,7 @@ async function sendServerchanWithConfig(message: DirectNotificationMessage, conf
   const url = resolveServerchanUrl(config.sendkey)
   const body = new URLSearchParams({
     text: message.title,
-    desp: message.text
+    desp: message.markdown || message.text
   })
 
   const response = await fetch(url, {
@@ -554,6 +578,8 @@ async function sendServerchanNotification(
   const settings = await getNotificationChannelSettings()
   return dispatchDirectChannelNotification(params, {
     channel: 'serverchan',
+    templateGroup: CHANNEL_TEMPLATE_GROUPS.serverchan,
+    templateConfig: settings.notificationTemplateConfig,
     enabled: settings.serverchanNotificationsEnabled,
     disabledMessage: 'serverchan_disabled',
     alreadySentMessage: 'serverchan_already_sent',
@@ -574,11 +600,18 @@ async function sendGotifyWithConfig(message: DirectNotificationMessage, config: 
 
   const isHttps = target.protocol === 'https:'
   const transport = isHttps ? https : http
-  const payload = new URLSearchParams({
+  const payload = JSON.stringify({
     title: message.title,
-    message: message.text,
-    priority: '5'
-  }).toString()
+    message: message.markdown || message.text,
+    priority: 5,
+    extras: {
+      client: {
+        display: {
+          contentType: 'text/markdown'
+        }
+      }
+    }
+  })
   const requestUrl = new URL(`/message?token=${encodeURIComponent(token)}`, target.toString())
 
   return new Promise<void>((resolve, reject) => {
@@ -587,7 +620,7 @@ async function sendGotifyWithConfig(message: DirectNotificationMessage, config: 
       {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(payload).toString()
         },
         ...(isHttps ? { agent: new https.Agent({ rejectUnauthorized: !config.ignoreSsl }) } : {})
@@ -624,6 +657,8 @@ async function sendGotifyNotification(
   const settings = await getNotificationChannelSettings()
   return dispatchDirectChannelNotification(params, {
     channel: 'gotify',
+    templateGroup: CHANNEL_TEMPLATE_GROUPS.gotify,
+    templateConfig: settings.notificationTemplateConfig,
     enabled: settings.gotifyNotificationsEnabled,
     disabledMessage: 'gotify_disabled',
     alreadySentMessage: 'gotify_already_sent',
@@ -711,7 +746,7 @@ async function sendBarkWithConfig(
     headers: requestTarget.headers,
     body: JSON.stringify({
       title: message.title,
-      body: message.text,
+      ...(message.markdown ? { markdown: message.markdown } : { body: message.text }),
       ...(requestTarget.includeDeviceKey ? { device_key: deviceKey } : {}),
       ...(config.isArchive ? { isArchive: 1 } : {})
     })
@@ -743,6 +778,8 @@ async function sendBarkNotification(
   const settings = await getNotificationChannelSettings()
   return dispatchDirectChannelNotification(params, {
     channel: 'bark',
+    templateGroup: CHANNEL_TEMPLATE_GROUPS.bark,
+    templateConfig: settings.notificationTemplateConfig,
     enabled: settings.barkNotificationsEnabled,
     disabledMessage: 'bark_disabled',
     alreadySentMessage: 'bark_already_sent',
@@ -763,7 +800,7 @@ async function sendNotifyxWithConfig(message: DirectNotificationMessage, config:
     },
     body: JSON.stringify({
       title: message.title,
-      content: normalizeMarkdownNotificationText(message.text),
+      content: normalizeMarkdownNotificationText(message.markdown || message.text),
       description: buildNotifyxDescription(message.title),
       team: config.team?.trim() || undefined
     })
@@ -797,6 +834,8 @@ async function sendNotifyxNotification(
   const settings = await getNotificationChannelSettings()
   return dispatchDirectChannelNotification(params, {
     channel: 'notifyx',
+    templateGroup: CHANNEL_TEMPLATE_GROUPS.notifyx,
+    templateConfig: settings.notificationTemplateConfig,
     enabled: settings.notifyxNotificationsEnabled,
     disabledMessage: 'notifyx_disabled',
     alreadySentMessage: 'notifyx_already_sent',
@@ -811,6 +850,8 @@ async function sendAppriseNotification(
   const settings = await getNotificationChannelSettings()
   return dispatchDirectChannelNotification(params, {
     channel: 'apprise',
+    templateGroup: CHANNEL_TEMPLATE_GROUPS.apprise,
+    templateConfig: settings.notificationTemplateConfig,
     enabled: settings.appriseNotificationsEnabled && hasEnabledAppriseTargets(settings.appriseConfig),
     disabledMessage: 'apprise_disabled',
     alreadySentMessage: 'apprise_already_sent',
@@ -916,9 +957,13 @@ function buildTestReminderPayload(locale: AppLocale) {
   }
 }
 
-async function buildTestReminderMessage(locale: AppLocale) {
+async function buildTestReminderMessage(
+  locale: AppLocale,
+  group: NotificationTemplateGroup = 'text',
+  templateConfig?: Awaited<ReturnType<typeof getNotificationChannelSettings>>['notificationTemplateConfig']
+) {
   const timezone = await getAppTimezone()
-  return buildNotificationMessage({
+  return buildTestNotificationMessage({
     eventType: 'subscription.reminder_due',
     resourceKey: 'test:notification',
     periodKey: `${toIsoDate(new Date(), timezone)}:upcoming`,
@@ -926,7 +971,18 @@ async function buildTestReminderMessage(locale: AppLocale) {
       ...buildTestReminderPayload(locale),
       nextRenewalDate: formatDateInTimezone(new Date(), timezone)
     }
+  }, locale, {
+    group,
+    templateConfig
   })
+}
+
+function buildStoredTestMessage(
+  settings: Awaited<ReturnType<typeof getNotificationChannelSettings>>,
+  channel: keyof typeof CHANNEL_TEMPLATE_GROUPS,
+  locale: AppLocale
+) {
+  return buildTestReminderMessage(locale, CHANNEL_TEMPLATE_GROUPS[channel], settings.notificationTemplateConfig)
 }
 
 export async function sendTestEmailNotification(context: NotificationLocaleContext = {}) {
@@ -937,7 +993,7 @@ export async function sendTestEmailNotification(context: NotificationLocaleConte
 
   const locale = await resolveNotificationLocale(context.locale)
   await sendEmailWithProvider(
-    await buildTestReminderMessage(locale),
+    await buildStoredTestMessage(settings, 'email', locale),
     settings.emailProvider,
     settings.smtpConfig,
     settings.resendConfig
@@ -951,15 +1007,15 @@ export async function sendForgotPasswordVerificationCode(
   const settings = await getNotificationChannelSettings()
   const results: NotificationChannelResult[] = []
   const locale = await resolveNotificationLocale(context.locale)
-  const message: DirectNotificationMessage = {
-    title: buildForgotPasswordTitle(locale),
-    text: buildForgotPasswordBody(payload, locale),
-    html: `<pre>${buildForgotPasswordBody(payload, locale)}</pre>`
-  }
+  const buildChannelMessage = (channel: keyof typeof CHANNEL_TEMPLATE_GROUPS) =>
+    buildForgotPasswordNotificationMessage(payload, locale, {
+      group: CHANNEL_TEMPLATE_GROUPS[channel],
+      templateConfig: settings.notificationTemplateConfig
+    })
 
   if (settings.emailNotificationsEnabled) {
     try {
-      await sendEmailWithProvider(message, settings.emailProvider, settings.smtpConfig, settings.resendConfig)
+      await sendEmailWithProvider(buildChannelMessage('email'), settings.emailProvider, settings.smtpConfig, settings.resendConfig)
       results.push({ channel: 'email', status: 'success' })
     } catch (error) {
       results.push({
@@ -974,7 +1030,7 @@ export async function sendForgotPasswordVerificationCode(
 
   if (settings.pushplusNotificationsEnabled) {
     try {
-      await sendPushplusWithConfig(message, settings.pushplusConfig)
+      await sendPushplusWithConfig(buildChannelMessage('pushplus'), settings.pushplusConfig)
       results.push({ channel: 'pushplus', status: 'success' })
     } catch (error) {
       results.push({
@@ -989,7 +1045,7 @@ export async function sendForgotPasswordVerificationCode(
 
   if (settings.telegramNotificationsEnabled) {
     try {
-      await sendTelegramWithConfig(message, settings.telegramConfig)
+      await sendTelegramWithConfig(buildChannelMessage('telegram'), settings.telegramConfig)
       results.push({ channel: 'telegram', status: 'success' })
     } catch (error) {
       results.push({
@@ -1004,7 +1060,7 @@ export async function sendForgotPasswordVerificationCode(
 
   if (settings.serverchanNotificationsEnabled) {
     try {
-      await sendServerchanWithConfig(message, settings.serverchanConfig)
+      await sendServerchanWithConfig(buildChannelMessage('serverchan'), settings.serverchanConfig)
       results.push({ channel: 'serverchan', status: 'success' })
     } catch (error) {
       results.push({
@@ -1019,7 +1075,7 @@ export async function sendForgotPasswordVerificationCode(
 
   if (settings.gotifyNotificationsEnabled) {
     try {
-      await sendGotifyWithConfig(message, settings.gotifyConfig, locale)
+      await sendGotifyWithConfig(buildChannelMessage('gotify'), settings.gotifyConfig, locale)
       results.push({ channel: 'gotify', status: 'success' })
     } catch (error) {
       results.push({
@@ -1034,7 +1090,7 @@ export async function sendForgotPasswordVerificationCode(
 
   if (settings.barkNotificationsEnabled) {
     try {
-      await sendBarkWithConfig(message, settings.barkConfig, locale)
+      await sendBarkWithConfig(buildChannelMessage('bark'), settings.barkConfig, locale)
       results.push({ channel: 'bark', status: 'success' })
     } catch (error) {
       results.push({
@@ -1049,7 +1105,7 @@ export async function sendForgotPasswordVerificationCode(
 
   if (settings.notifyxNotificationsEnabled) {
     try {
-      await sendNotifyxWithConfig(message, settings.notifyxConfig)
+      await sendNotifyxWithConfig(buildChannelMessage('notifyx'), settings.notifyxConfig)
       results.push({ channel: 'notifyx', status: 'success' })
     } catch (error) {
       results.push({
@@ -1064,7 +1120,7 @@ export async function sendForgotPasswordVerificationCode(
 
   if (settings.appriseNotificationsEnabled && hasEnabledAppriseTargets(settings.appriseConfig)) {
     try {
-      await sendAppriseWithConfig(message, settings.appriseConfig, {
+      await sendAppriseWithConfig(buildChannelMessage('apprise'), settings.appriseConfig, {
         locale,
         syncBeforeSend: settings.appriseConfig.lastSyncStatus !== 'synced'
       })
@@ -1089,8 +1145,9 @@ export async function sendTestEmailNotificationWithConfig(config: {
   resendConfig: ResendConfigInput
 }, context: NotificationLocaleContext = {}) {
   const locale = await resolveNotificationLocale(context.locale)
+  const settings = await getNotificationChannelSettings()
   await sendEmailWithProvider(
-    await buildTestReminderMessage(locale),
+    await buildTestReminderMessage(locale, CHANNEL_TEMPLATE_GROUPS.email, settings.notificationTemplateConfig),
     config.emailProvider,
     config.smtpConfig,
     config.resendConfig
@@ -1104,7 +1161,7 @@ export async function sendTestPushplusNotification(context: NotificationLocaleCo
   }
 
   const locale = await resolveNotificationLocale(context.locale)
-  await sendPushplusWithConfig(await buildTestReminderMessage(locale), settings.pushplusConfig)
+  await sendPushplusWithConfig(await buildStoredTestMessage(settings, 'pushplus', locale), settings.pushplusConfig)
 
   return {
     accepted: true,
@@ -1117,7 +1174,11 @@ export async function sendTestPushplusNotificationWithConfig(
   context: NotificationLocaleContext = {}
 ) {
   const locale = await resolveNotificationLocale(context.locale)
-  return sendPushplusWithConfig(await buildTestReminderMessage(locale), config)
+  const settings = await getNotificationChannelSettings()
+  return sendPushplusWithConfig(
+    await buildTestReminderMessage(locale, CHANNEL_TEMPLATE_GROUPS.pushplus, settings.notificationTemplateConfig),
+    config
+  )
 }
 
 export async function sendTestTelegramNotification(context: NotificationLocaleContext = {}) {
@@ -1127,7 +1188,7 @@ export async function sendTestTelegramNotification(context: NotificationLocaleCo
   }
 
   const locale = await resolveNotificationLocale(context.locale)
-  await sendTelegramWithConfig(await buildTestReminderMessage(locale), settings.telegramConfig)
+  await sendTelegramWithConfig(await buildStoredTestMessage(settings, 'telegram', locale), settings.telegramConfig)
 
   return { success: true }
 }
@@ -1137,7 +1198,11 @@ export async function sendTestTelegramNotificationWithConfig(
   context: NotificationLocaleContext = {}
 ) {
   const locale = await resolveNotificationLocale(context.locale)
-  await sendTelegramWithConfig(await buildTestReminderMessage(locale), config)
+  const settings = await getNotificationChannelSettings()
+  await sendTelegramWithConfig(
+    await buildTestReminderMessage(locale, CHANNEL_TEMPLATE_GROUPS.telegram, settings.notificationTemplateConfig),
+    config
+  )
 
   return { success: true }
 }
@@ -1149,7 +1214,7 @@ export async function sendTestServerchanNotification(context: NotificationLocale
   }
 
   const locale = await resolveNotificationLocale(context.locale)
-  await sendServerchanWithConfig(await buildTestReminderMessage(locale), settings.serverchanConfig)
+  await sendServerchanWithConfig(await buildStoredTestMessage(settings, 'serverchan', locale), settings.serverchanConfig)
 
   return { success: true }
 }
@@ -1159,7 +1224,11 @@ export async function sendTestServerchanNotificationWithConfig(
   context: NotificationLocaleContext = {}
 ) {
   const locale = await resolveNotificationLocale(context.locale)
-  await sendServerchanWithConfig(await buildTestReminderMessage(locale), config)
+  const settings = await getNotificationChannelSettings()
+  await sendServerchanWithConfig(
+    await buildTestReminderMessage(locale, CHANNEL_TEMPLATE_GROUPS.serverchan, settings.notificationTemplateConfig),
+    config
+  )
 
   return { success: true }
 }
@@ -1171,7 +1240,7 @@ export async function sendTestGotifyNotification(context: NotificationLocaleCont
   }
 
   const locale = await resolveNotificationLocale(context.locale)
-  await sendGotifyWithConfig(await buildTestReminderMessage(locale), settings.gotifyConfig, locale)
+  await sendGotifyWithConfig(await buildStoredTestMessage(settings, 'gotify', locale), settings.gotifyConfig, locale)
 
   return { success: true }
 }
@@ -1181,7 +1250,12 @@ export async function sendTestGotifyNotificationWithConfig(
   context: NotificationLocaleContext = {}
 ) {
   const locale = await resolveNotificationLocale(context.locale)
-  await sendGotifyWithConfig(await buildTestReminderMessage(locale), config, locale)
+  const settings = await getNotificationChannelSettings()
+  await sendGotifyWithConfig(
+    await buildTestReminderMessage(locale, CHANNEL_TEMPLATE_GROUPS.gotify, settings.notificationTemplateConfig),
+    config,
+    locale
+  )
 
   return { success: true }
 }
@@ -1193,7 +1267,7 @@ export async function sendTestBarkNotification(context: NotificationLocaleContex
   }
 
   const locale = await resolveNotificationLocale(context.locale)
-  await sendBarkWithConfig(await buildTestReminderMessage(locale), settings.barkConfig, locale)
+  await sendBarkWithConfig(await buildStoredTestMessage(settings, 'bark', locale), settings.barkConfig, locale)
 
   return { success: true }
 }
@@ -1203,7 +1277,12 @@ export async function sendTestBarkNotificationWithConfig(
   context: NotificationLocaleContext = {}
 ) {
   const locale = await resolveNotificationLocale(context.locale)
-  await sendBarkWithConfig(await buildTestReminderMessage(locale), config, locale)
+  const settings = await getNotificationChannelSettings()
+  await sendBarkWithConfig(
+    await buildTestReminderMessage(locale, CHANNEL_TEMPLATE_GROUPS.bark, settings.notificationTemplateConfig),
+    config,
+    locale
+  )
 
   return { success: true }
 }
@@ -1215,7 +1294,7 @@ export async function sendTestNotifyxNotification(context: NotificationLocaleCon
   }
 
   const locale = await resolveNotificationLocale(context.locale)
-  await sendNotifyxWithConfig(await buildTestReminderMessage(locale), settings.notifyxConfig)
+  await sendNotifyxWithConfig(await buildStoredTestMessage(settings, 'notifyx', locale), settings.notifyxConfig)
 
   return { success: true }
 }
@@ -1225,7 +1304,11 @@ export async function sendTestNotifyxNotificationWithConfig(
   context: NotificationLocaleContext = {}
 ) {
   const locale = await resolveNotificationLocale(context.locale)
-  await sendNotifyxWithConfig(await buildTestReminderMessage(locale), config)
+  const settings = await getNotificationChannelSettings()
+  await sendNotifyxWithConfig(
+    await buildTestReminderMessage(locale, CHANNEL_TEMPLATE_GROUPS.notifyx, settings.notificationTemplateConfig),
+    config
+  )
 
   return { success: true }
 }
@@ -1241,7 +1324,7 @@ export async function sendTestAppriseNotification(context: NotificationLocaleCon
   }
 
   const locale = await resolveNotificationLocale(context.locale)
-  await sendAppriseWithConfig(await buildTestReminderMessage(locale), settings.appriseConfig, {
+  await sendAppriseWithConfig(await buildStoredTestMessage(settings, 'apprise', locale), settings.appriseConfig, {
     locale,
     targetId: context.targetId,
     syncBeforeSend: settings.appriseConfig.lastSyncStatus !== 'synced'
@@ -1259,6 +1342,7 @@ export async function sendTestAppriseNotificationWithConfig(
   }
 
   const locale = await resolveNotificationLocale(context.locale)
+  const settings = await getNotificationChannelSettings()
   const temporaryKey = createAppriseTemporaryKey(config.key)
 
   try {
@@ -1267,11 +1351,15 @@ export async function sendTestAppriseNotificationWithConfig(
       keyOverride: temporaryKey
     })
 
-    await sendAppriseWithConfig(await buildTestReminderMessage(locale), config, {
-      locale,
-      targetId: context.targetId,
-      keyOverride: temporaryKey
-    })
+    await sendAppriseWithConfig(
+      await buildTestReminderMessage(locale, CHANNEL_TEMPLATE_GROUPS.apprise, settings.notificationTemplateConfig),
+      config,
+      {
+        locale,
+        targetId: context.targetId,
+        keyOverride: temporaryKey
+      }
+    )
 
     return { success: true }
   } finally {

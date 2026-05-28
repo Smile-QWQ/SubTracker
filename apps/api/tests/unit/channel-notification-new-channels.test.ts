@@ -2,6 +2,26 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NotificationDispatchParams } from '../../src/services/notification-merge.service'
 
 const channelState = vi.hoisted(() => {
+  const createNotificationTemplateConfig = () => ({
+    text: {
+      singleReminder: { titleTemplate: '', bodyTemplate: '' },
+      mergedReminder: { titleTemplate: '', bodyTemplate: '' },
+      testNotification: { titleTemplate: '', bodyTemplate: '' },
+      forgotPassword: { titleTemplate: '', bodyTemplate: '' }
+    },
+    markdown: {
+      singleReminder: { titleTemplate: '', bodyTemplate: '' },
+      mergedReminder: { titleTemplate: '', bodyTemplate: '' },
+      testNotification: { titleTemplate: '', bodyTemplate: '' },
+      forgotPassword: { titleTemplate: '', bodyTemplate: '' }
+    },
+    html: {
+      singleReminder: { titleTemplate: '', bodyTemplate: '' },
+      mergedReminder: { titleTemplate: '', bodyTemplate: '' },
+      testNotification: { titleTemplate: '', bodyTemplate: '' },
+      forgotPassword: { titleTemplate: '', bodyTemplate: '' }
+    }
+  })
   const store = new Map<string, unknown>()
 
   const settings = {
@@ -35,6 +55,7 @@ const channelState = vi.hoisted(() => {
     gotifyConfig: { url: '', token: '', ignoreSsl: false },
     barkConfig: { serverUrl: '', deviceKey: '', isArchive: false },
     notifyxConfig: { apiKey: '', team: '' },
+    notificationTemplateConfig: createNotificationTemplateConfig(),
     appriseConfig: {
       apiBaseUrl: '',
       key: '',
@@ -85,6 +106,7 @@ const channelState = vi.hoisted(() => {
       settings.appriseNotificationsEnabled = false
       settings.barkConfig = { serverUrl: '', deviceKey: '', isArchive: false }
       settings.notifyxConfig = { apiKey: '', team: '' }
+      settings.notificationTemplateConfig = createNotificationTemplateConfig()
       settings.appriseConfig = {
         apiBaseUrl: '',
         key: '',
@@ -194,9 +216,11 @@ describe('channel notification new direct channels', () => {
     const [url, init] = channelState.fetchMock.mock.calls[0]
     expect(String(url)).toBe('https://api.day.app/push')
     expect(JSON.parse(String(init?.body))).toMatchObject({
+      markdown: expect.stringContaining('> 这是一条测试通知'),
       device_key: 'device-key',
       isArchive: 1
     })
+    expect(JSON.parse(String(init?.body))).not.toHaveProperty('body')
   })
 
   it('sends bark test notifications to a custom bark url without appending /push', async () => {
@@ -218,8 +242,9 @@ describe('channel notification new direct channels', () => {
     expect(String(url)).toBe('https://my-bark.example/custom-key')
     expect(JSON.parse(String(init?.body))).toMatchObject({
       title: expect.any(String),
-      body: expect.any(String)
+      markdown: expect.any(String)
     })
+    expect(JSON.parse(String(init?.body))).not.toHaveProperty('body')
     expect(JSON.parse(String(init?.body))).not.toHaveProperty('device_key')
   })
 
@@ -323,6 +348,127 @@ describe('channel notification new direct channels', () => {
     expect(JSON.parse(String(init?.body))).toMatchObject({
       team: 'team-id'
     })
+  })
+
+  it('uses saved test templates for pushplus payload-based test requests', async () => {
+    channelState.configureSettings({
+      notificationTemplateConfig: {
+        text: {
+          singleReminder: { titleTemplate: '', bodyTemplate: '' },
+          mergedReminder: { titleTemplate: '', bodyTemplate: '' },
+          testNotification: { titleTemplate: 'TEXT-TITLE', bodyTemplate: 'TEXT-BODY' },
+          forgotPassword: { titleTemplate: '', bodyTemplate: '' }
+        },
+        markdown: {
+          singleReminder: { titleTemplate: '', bodyTemplate: '' },
+          mergedReminder: { titleTemplate: '', bodyTemplate: '' },
+          testNotification: { titleTemplate: 'MD-TITLE', bodyTemplate: 'MD-BODY' },
+          forgotPassword: { titleTemplate: '', bodyTemplate: '' }
+        },
+        html: {
+          singleReminder: { titleTemplate: '', bodyTemplate: '' },
+          mergedReminder: { titleTemplate: '', bodyTemplate: '' },
+          testNotification: { titleTemplate: 'HTML-TITLE', bodyTemplate: '<div>HTML-BODY</div>' },
+          forgotPassword: { titleTemplate: '', bodyTemplate: '' }
+        }
+      }
+    })
+    mockFetchResponse({
+      status: 200,
+      body: JSON.stringify({ code: 200, msg: 'ok', data: 'short-code' })
+    })
+
+    const { sendTestPushplusNotificationWithConfig } = await import('../../src/services/channel-notification.service')
+    await sendTestPushplusNotificationWithConfig({
+      token: 'token',
+      topic: ''
+    })
+
+    const [, init] = channelState.fetchMock.mock.calls[0]
+    const payload = JSON.parse(String(init?.body))
+    expect(payload.title).toBe('HTML-TITLE')
+    expect(payload.content).toContain('HTML-BODY')
+  })
+
+  it('sends smtp test notifications with html content for html templates', async () => {
+    const sendMailMock = vi.fn()
+    channelState.createTransportMock.mockReturnValueOnce({
+      sendMail: sendMailMock
+    })
+
+    const { sendTestEmailNotificationWithConfig } = await import('../../src/services/channel-notification.service')
+    await expect(
+      sendTestEmailNotificationWithConfig({
+        emailProvider: 'smtp',
+        smtpConfig: {
+          host: 'smtp.example.com',
+          port: 587,
+          secure: false,
+          username: 'user',
+          password: 'secret',
+          from: 'from@example.com',
+          to: 'to@example.com'
+        },
+        resendConfig: {
+          apiBaseUrl: '',
+          apiKey: '',
+          from: '',
+          to: ''
+        }
+      })
+    ).resolves.toBeUndefined()
+
+    expect(sendMailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: expect.stringContaining('测试'),
+        text: expect.stringContaining('测试订阅'),
+        html: expect.stringContaining('subtracker-notification')
+      })
+    )
+  })
+
+  it('sends telegram test notifications with MarkdownV2 parse mode converted from markdown templates', async () => {
+    mockFetchResponse({
+      status: 200,
+      body: JSON.stringify({ ok: true, result: { message_id: 1 } })
+    })
+
+    const { sendTestTelegramNotificationWithConfig } = await import('../../src/services/channel-notification.service')
+    await expect(
+      sendTestTelegramNotificationWithConfig({
+        botToken: 'bot-token',
+        chatId: 'chat-id'
+      })
+    ).resolves.toEqual({ success: true })
+
+    const [url, init] = channelState.fetchMock.mock.calls[0]
+    expect(String(url)).toBe('https://api.telegram.org/botbot-token/sendMessage')
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      chat_id: 'chat-id',
+      parse_mode: 'MarkdownV2'
+    })
+    expect(JSON.parse(String(init?.body)).text).toContain('*')
+    expect(JSON.parse(String(init?.body)).text).not.toContain('<b>')
+  })
+
+  it('sends serverchan test notifications with markdown desp content', async () => {
+    mockFetchResponse({
+      status: 200,
+      body: JSON.stringify({ code: 0, message: 'success' })
+    })
+
+    const { sendTestServerchanNotificationWithConfig } = await import('../../src/services/channel-notification.service')
+    await expect(
+      sendTestServerchanNotificationWithConfig({
+        sendkey: 'sctkey'
+      })
+    ).resolves.toEqual({ success: true })
+
+    const [url, init] = channelState.fetchMock.mock.calls[0]
+    expect(String(url)).toBe('https://sctapi.ftqq.com/sctkey.send')
+    const body = String(init?.body)
+    expect(body).toContain('desp=')
+    expect(decodeURIComponent(body)).toContain('**')
   })
 
   it('rejects notifyx test notifications when api key is missing', async () => {

@@ -3,6 +3,26 @@ import { getMessage } from '@subtracker/shared'
 import { type NotificationDedupEntry, type NotificationDispatchParams } from '../../src/services/notification-merge.service'
 
 const channelState = vi.hoisted(() => {
+  const createNotificationTemplateConfig = () => ({
+    text: {
+      singleReminder: { titleTemplate: '', bodyTemplate: '' },
+      mergedReminder: { titleTemplate: '', bodyTemplate: '' },
+      testNotification: { titleTemplate: '', bodyTemplate: '' },
+      forgotPassword: { titleTemplate: '', bodyTemplate: '' }
+    },
+    markdown: {
+      singleReminder: { titleTemplate: '', bodyTemplate: '' },
+      mergedReminder: { titleTemplate: '', bodyTemplate: '' },
+      testNotification: { titleTemplate: '', bodyTemplate: '' },
+      forgotPassword: { titleTemplate: '', bodyTemplate: '' }
+    },
+    html: {
+      singleReminder: { titleTemplate: '', bodyTemplate: '' },
+      mergedReminder: { titleTemplate: '', bodyTemplate: '' },
+      testNotification: { titleTemplate: '', bodyTemplate: '' },
+      forgotPassword: { titleTemplate: '', bodyTemplate: '' }
+    }
+  })
   const store = new Map<string, unknown>()
 
   const dedupEntries: NotificationDedupEntry[] = [
@@ -93,6 +113,7 @@ const channelState = vi.hoisted(() => {
       gotifyConfig: { url: '', token: '', ignoreSsl: false },
       barkConfig: { serverUrl: '', deviceKey: '', isArchive: false },
       notifyxConfig: { apiKey: '', team: '' },
+      notificationTemplateConfig: createNotificationTemplateConfig(),
       appriseConfig: {
         apiBaseUrl: '',
         key: '',

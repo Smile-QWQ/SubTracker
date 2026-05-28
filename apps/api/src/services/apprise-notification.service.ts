@@ -219,8 +219,8 @@ async function notifyAppriseKey(
     locale: options.locale,
     body: JSON.stringify({
       title: message.title,
-      body: message.text,
-      format: 'text',
+      body: message.markdown || message.text,
+      format: 'markdown',
       type: 'info',
       tag: resolveAppriseTag(config, options.targetId)
     }),
