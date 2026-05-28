@@ -183,6 +183,7 @@ describe('subtracker backup service', () => {
               gotifyNotificationsEnabled: false,
               barkNotificationsEnabled: false,
               notifyxNotificationsEnabled: false,
+              appriseNotificationsEnabled: false,
               smtpConfig: { host: '', port: 587, secure: false, username: '', password: '', from: '', to: '' },
               resendConfig: { apiBaseUrl: 'https://api.resend.com/emails', apiKey: '', from: '', to: '' },
               pushplusConfig: { token: '', topic: '' },
@@ -191,6 +192,15 @@ describe('subtracker backup service', () => {
               gotifyConfig: { url: '', token: '', ignoreSsl: false },
               barkConfig: { serverUrl: '', deviceKey: '', isArchive: false },
               notifyxConfig: { apiKey: '', team: '' },
+              appriseConfig: {
+                apiBaseUrl: '',
+                key: '',
+                ignoreSsl: false,
+                targets: [],
+                lastSyncStatus: 'idle',
+                lastSyncAt: null,
+                lastSyncError: null
+              },
               aiConfig: {
                 enabled: false,
                 dashboardSummaryEnabled: false,
@@ -335,6 +345,7 @@ describe('subtracker backup service', () => {
               gotifyNotificationsEnabled: false,
               barkNotificationsEnabled: false,
               notifyxNotificationsEnabled: false,
+              appriseNotificationsEnabled: false,
               smtpConfig: { host: '', port: 587, secure: false, username: '', password: '', from: '', to: '' },
               resendConfig: { apiBaseUrl: 'https://api.resend.com/emails', apiKey: '', from: '', to: '' },
               pushplusConfig: { token: '', topic: '' },
@@ -343,6 +354,15 @@ describe('subtracker backup service', () => {
               gotifyConfig: { url: '', token: '', ignoreSsl: false },
               barkConfig: { serverUrl: '', deviceKey: '', isArchive: false },
               notifyxConfig: { apiKey: '', team: '' },
+              appriseConfig: {
+                apiBaseUrl: '',
+                key: '',
+                ignoreSsl: false,
+                targets: [],
+                lastSyncStatus: 'idle',
+                lastSyncAt: null,
+                lastSyncError: null
+              },
               aiConfig: {
                 enabled: false,
                 dashboardSummaryEnabled: false,
@@ -466,6 +486,7 @@ describe('subtracker backup service', () => {
       gotifyNotificationsEnabled: false,
       barkNotificationsEnabled: false,
       notifyxNotificationsEnabled: false,
+      appriseNotificationsEnabled: false,
       smtpConfig: { host: '', port: 587, secure: false, username: '', password: '', from: '', to: '' },
       resendConfig: { apiBaseUrl: 'https://api.resend.com/emails', apiKey: '', from: '', to: '' },
       pushplusConfig: { token: '', topic: '' },
@@ -474,6 +495,15 @@ describe('subtracker backup service', () => {
       gotifyConfig: { url: '', token: '', ignoreSsl: false },
       barkConfig: { serverUrl: '', deviceKey: '', isArchive: false },
       notifyxConfig: { apiKey: '', team: '' },
+      appriseConfig: {
+        apiBaseUrl: '',
+        key: '',
+        ignoreSsl: false,
+        targets: [],
+        lastSyncStatus: 'idle',
+        lastSyncAt: null,
+        lastSyncError: null
+      },
       aiConfig: {
         enabled: false,
         dashboardSummaryEnabled: false,
@@ -599,6 +629,7 @@ describe('subtracker backup service', () => {
               gotifyNotificationsEnabled: false,
               barkNotificationsEnabled: false,
               notifyxNotificationsEnabled: false,
+              appriseNotificationsEnabled: false,
               smtpConfig: { host: '', port: 587, secure: false, username: '', password: '', from: '', to: '' },
               resendConfig: { apiBaseUrl: 'https://api.resend.com/emails', apiKey: '', from: '', to: '' },
               pushplusConfig: { token: '', topic: '' },
@@ -607,6 +638,15 @@ describe('subtracker backup service', () => {
               gotifyConfig: { url: '', token: '', ignoreSsl: false },
               barkConfig: { serverUrl: '', deviceKey: '', isArchive: false },
               notifyxConfig: { apiKey: '', team: '' },
+              appriseConfig: {
+                apiBaseUrl: '',
+                key: '',
+                ignoreSsl: false,
+                targets: [],
+                lastSyncStatus: 'idle',
+                lastSyncAt: null,
+                lastSyncError: null
+              },
               aiConfig: {
                 enabled: false,
                 dashboardSummaryEnabled: false,

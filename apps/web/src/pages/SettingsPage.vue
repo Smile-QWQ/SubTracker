@@ -444,6 +444,40 @@
             <n-grid-item>
               <div class="channel-card">
                 <div class="channel-card__header">
+                  <span>{{ t('settings.channels.apprise') }}</span>
+                  <n-switch v-model:value="settingsForm.appriseNotificationsEnabled" />
+                </div>
+                <n-form label-placement="top">
+                  <n-form-item :label="t('settings.labels.appriseApiBaseUrl')">
+                    <n-input v-model:value="settingsForm.appriseConfig.apiBaseUrl" :placeholder="t('settings.placeholders.appriseApiBaseUrl')" />
+                  </n-form-item>
+                  <n-form-item :label="t('settings.labels.appriseKey')">
+                    <n-input v-model:value="settingsForm.appriseConfig.key" />
+                  </n-form-item>
+                  <div class="compact-switch-row">
+                    <n-switch v-model:value="settingsForm.appriseConfig.ignoreSsl" />
+                    <span class="switch-inline-label">{{ t('settings.labels.ignoreSsl') }}</span>
+                  </div>
+                  <n-space class="settings-header-tags" wrap>
+                    <n-tag type="info">{{ t('settings.apprise.summary.targets', { count: appriseTargetCount }) }}</n-tag>
+                    <n-tag type="success">{{ t('settings.apprise.summary.enabledTargets', { count: appriseEnabledTargetCount }) }}</n-tag>
+                    <n-tag :type="appriseSyncTagType">{{ t('settings.apprise.summary.syncStatus', { status: appriseSyncStatusText }) }}</n-tag>
+                  </n-space>
+                  <div v-if="settingsForm.appriseConfig.lastSyncError" class="card-muted apprise-sync-error">
+                    {{ settingsForm.appriseConfig.lastSyncError }}
+                  </div>
+                  <n-space class="channel-card__actions" wrap>
+                    <n-button @click="showAppriseTargetsModal = true">{{ t('common.actions.manage') }}</n-button>
+                    <n-button :loading="savingAppriseSettings" :disabled="savingAppriseSettings" @click="saveAppriseSettings">{{ t('common.actions.save') }}</n-button>
+                    <n-button type="primary" @click="testApprise">{{ t('common.actions.test') }}</n-button>
+                  </n-space>
+                </n-form>
+              </div>
+            </n-grid-item>
+
+            <n-grid-item>
+              <div class="channel-card">
+                <div class="channel-card__header">
                   <span>{{ t('settings.channels.webhook') }}</span>
                   <n-switch v-model:value="webhookForm.enabled" />
                 </div>
@@ -711,6 +745,15 @@
       @close="showWallosImportModal = false"
       @imported="handleWallosImported"
     />
+
+    <apprise-targets-modal
+      :show="showAppriseTargetsModal"
+      :targets="settingsForm.appriseConfig.targets"
+      :testing-target-id="testingAppriseTargetId"
+      @close="showAppriseTargetsModal = false"
+      @save="handleAppriseTargetsSave"
+      @test-target="handleAppriseTargetTest"
+    />
   </div>
 </template>
 
@@ -765,6 +808,7 @@ import { EXCHANGE_RATE_SNAPSHOT_QUERY_KEY, useExchangeRateSnapshotQuery } from '
 import { NOTIFICATION_WEBHOOK_QUERY_KEY, useNotificationWebhookQuery } from '@/composables/notification-webhook-query'
 import { SETTINGS_QUERY_KEY, useSettingsQuery } from '@/composables/settings-query'
 import PageHeader from '@/components/PageHeader.vue'
+import AppriseTargetsModal from '@/components/AppriseTargetsModal.vue'
 import ReminderRulesPreview from '@/components/ReminderRulesPreview.vue'
 import SubtrackerBackupModal from '@/components/SubtrackerBackupModal.vue'
 import WallosImportModal from '@/components/WallosImportModal.vue'
@@ -775,7 +819,15 @@ import { swapCurrencyPair } from '@/utils/currency-converter'
 import { cloneSettingsForForm, type SettingsPageForm } from '@/utils/settings-form'
 import { buildTimeZoneOptions, formatDateTimeInTimezone, normalizeAppTimezone } from '@/utils/timezone'
 import { useLocalizedMessage } from '@/utils/localized-message'
-import type { AiProviderPreset, ChangeCredentialsPayload, ExchangeRateSnapshot, NotificationWebhookSettings, Settings } from '@/types/api'
+import type {
+  AiProviderPreset,
+  AppriseConfig,
+  AppriseTarget,
+  ChangeCredentialsPayload,
+  ExchangeRateSnapshot,
+  NotificationWebhookSettings,
+  Settings
+} from '@/types/api'
 
 const message = useLocalizedMessage()
 const appVersion = __APP_VERSION__
@@ -853,6 +905,7 @@ const settingsForm = reactive<SettingsPageForm>({
   gotifyNotificationsEnabled: false,
   barkNotificationsEnabled: false,
   notifyxNotificationsEnabled: false,
+  appriseNotificationsEnabled: false,
   smtpConfig: {
     host: '',
     port: 587,
@@ -893,6 +946,15 @@ const settingsForm = reactive<SettingsPageForm>({
     apiKey: '',
     team: ''
   },
+  appriseConfig: {
+    apiBaseUrl: '',
+    key: '',
+    ignoreSsl: false,
+    targets: [],
+    lastSyncStatus: 'idle',
+    lastSyncAt: null,
+    lastSyncError: null
+  },
   aiConfig: {
     ...DEFAULT_AI_CONFIG,
     capabilities: {
@@ -928,6 +990,7 @@ const savingServerchanSettings = ref(false)
 const savingGotifySettings = ref(false)
 const savingBarkSettings = ref(false)
 const savingNotifyxSettings = ref(false)
+const savingAppriseSettings = ref(false)
 const savingWebhookSettings = ref(false)
 const savingAiSettings = ref(false)
 const savingCredentials = ref(false)
@@ -937,7 +1000,9 @@ const targetCurrency = ref('CNY')
 const converterAmount = ref(1)
 const showSubtrackerBackupModal = ref(false)
 const showWallosImportModal = ref(false)
+const showAppriseTargetsModal = ref(false)
 const emailDetailsExpanded = ref(false)
+const testingAppriseTargetId = ref<string | null>(null)
 const isMobile = computed(() => width.value < 960)
 const formCols = computed(() => (width.value < 640 ? 1 : 2))
 const gridCols = computed(() => (isMobile.value ? 1 : 2))
@@ -974,8 +1039,17 @@ const forgotPasswordToggleUnlocked = computed(
     settingsForm.serverchanNotificationsEnabled ||
     settingsForm.gotifyNotificationsEnabled ||
     settingsForm.barkNotificationsEnabled ||
-    settingsForm.notifyxNotificationsEnabled
+    settingsForm.notifyxNotificationsEnabled ||
+    (settingsForm.appriseNotificationsEnabled && settingsForm.appriseConfig.targets.some((target) => target.enabled))
 )
+const appriseTargetCount = computed(() => settingsForm.appriseConfig.targets.length)
+const appriseEnabledTargetCount = computed(() => settingsForm.appriseConfig.targets.filter((target) => target.enabled).length)
+const appriseSyncStatusText = computed(() => t(`settings.apprise.syncStatus.${settingsForm.appriseConfig.lastSyncStatus}`))
+const appriseSyncTagType = computed(() => {
+  if (settingsForm.appriseConfig.lastSyncStatus === 'failed') return 'error'
+  if (settingsForm.appriseConfig.lastSyncStatus === 'synced') return 'success'
+  return 'default'
+})
 const aboutEntries = computed(() => [
   {
     title: `SubTracker ${appVersion}`,
@@ -1163,6 +1237,61 @@ function validateNotifyxSettings(action: 'save' | 'test') {
   if (!missing.length) return true
   message.error(t('settings.validation.notifyxMissingFields', { fields: joinFieldLabels(missing) }))
   return false
+}
+
+function buildAppriseConfigPayload(
+  overrides: Partial<AppriseConfig> = {}
+): AppriseConfig {
+  const baseConfig = {
+    ...settingsForm.appriseConfig,
+    targets: settingsForm.appriseConfig.targets.map((target) => ({
+      ...target
+    }))
+  }
+
+  return {
+    ...baseConfig,
+    ...overrides,
+    targets: overrides.targets
+      ? overrides.targets.map((target) => ({
+          ...target
+        }))
+      : baseConfig.targets
+  }
+}
+
+function validateAppriseSettings(action: 'save' | 'test', config: AppriseConfig = buildAppriseConfigPayload()) {
+  if (action === 'save' && !settingsForm.appriseNotificationsEnabled) {
+    return true
+  }
+
+  const missing = getMissingRequiredFields([
+    [t('settings.labels.appriseApiBaseUrl'), config.apiBaseUrl],
+    [t('settings.labels.appriseKey'), config.key]
+  ])
+
+  if (missing.length) {
+    message.error(t('settings.validation.appriseMissingFields', { fields: joinFieldLabels(missing) }))
+    return false
+  }
+
+  if (!config.targets.length) {
+    message.error(t('settings.validation.appriseMissingFields', { fields: t('settings.labels.appriseTargets') }))
+    return false
+  }
+
+  if (action === 'save' && !config.targets.some((target) => target.enabled)) {
+    message.error(t('api.errors.settings.appriseEnabledTargetsRequired'))
+    return false
+  }
+
+  const invalidTarget = config.targets.find((target) => !target.id || !target.name.trim() || !target.url.trim())
+  if (invalidTarget) {
+    message.error(t('api.errors.settings.appriseTargetFieldsRequired'))
+    return false
+  }
+
+  return true
 }
 
 function validateWebhookSettings(action: 'save' | 'test') {
@@ -1383,6 +1512,28 @@ async function saveNotifyxSettings() {
     message.success(settingsForm.notifyxNotificationsEnabled ? t('settings.messages.notifyxSaved') : t('settings.messages.notifyxDisabled'))
   } finally {
     savingNotifyxSettings.value = false
+  }
+}
+
+async function saveAppriseSettings() {
+  if (savingAppriseSettings.value) return
+  const payload = buildAppriseConfigPayload()
+  if (!validateAppriseSettings('save', payload)) return
+
+  savingAppriseSettings.value = true
+  try {
+    const result = await api.updateSettings({
+      appriseNotificationsEnabled: settingsForm.appriseNotificationsEnabled,
+      appriseConfig: payload
+    })
+    applySavedSettings(result)
+    if (result.appriseConfig.lastSyncStatus === 'failed' && result.appriseConfig.lastSyncError) {
+      message.warning(t('settings.messages.appriseSavedWithSyncFailure', { error: result.appriseConfig.lastSyncError }))
+    } else {
+      message.success(settingsForm.appriseNotificationsEnabled ? t('settings.messages.appriseSaved') : t('settings.messages.appriseDisabled'))
+    }
+  } finally {
+    savingAppriseSettings.value = false
   }
 }
 
@@ -1608,6 +1759,49 @@ async function testNotifyx() {
     message.success(t('settings.messages.notifyxTestSent'))
   } catch (error) {
     message.error(error instanceof Error ? error.message : t('settings.messages.notifyxTestFailed'))
+  }
+}
+
+function handleAppriseTargetsSave(targets: AppriseTarget[]) {
+  settingsForm.appriseConfig.targets = targets
+  showAppriseTargetsModal.value = false
+}
+
+async function handleAppriseTargetTest(payload: { targetId: string; targets: AppriseTarget[] }) {
+  const config = buildAppriseConfigPayload({
+    targets: payload.targets
+  })
+  if (!validateAppriseSettings('test', config)) {
+    return
+  }
+
+  testingAppriseTargetId.value = payload.targetId
+  try {
+    await api.testAppriseNotificationWithPayload({
+      ...config,
+      targetId: payload.targetId
+    })
+    message.success(t('settings.messages.appriseTestSent'))
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : t('settings.messages.appriseTestFailed'))
+  } finally {
+    testingAppriseTargetId.value = null
+  }
+}
+
+async function testApprise() {
+  const config = buildAppriseConfigPayload()
+  if (!validateAppriseSettings('test', config)) return
+  if (!config.targets.some((target) => target.enabled)) {
+    message.error(t('api.errors.settings.appriseEnabledTargetsRequired'))
+    return
+  }
+
+  try {
+    await api.testAppriseNotificationWithPayload(config)
+    message.success(t('settings.messages.appriseTestSent'))
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : t('settings.messages.appriseTestFailed'))
   }
 }
 
@@ -1933,6 +2127,12 @@ function previewSettingsReminderRules() {
 .email-summary {
   margin: 2px 0 14px;
   line-height: 1.5;
+}
+
+.apprise-sync-error {
+  margin-top: 8px;
+  margin-bottom: 4px;
+  word-break: break-word;
 }
 
 .compact-switch-row {

@@ -5,6 +5,7 @@ import type {
   AiDashboardSummary,
   AiRecognitionResult,
   AiTestResponse,
+  AppriseConfig,
   AuthResponse,
   AuthUserResponse,
   BarkConfig,
@@ -384,6 +385,10 @@ export const api = {
 
   async testNotifyxNotificationWithPayload(payload: NotifyxConfig) {
     return postOnce<{ success: boolean }>('/notifications/test/notifyx', payload)
+  },
+
+  async testAppriseNotificationWithPayload(payload: AppriseConfig & { targetId?: string }) {
+    return postOnce<{ success: boolean }>('/notifications/test/apprise', payload)
   },
 
   async getNotificationWebhook() {

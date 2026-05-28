@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import {
+  AppriseConfigSchema,
   BarkConfigSchema,
   EmailConfigSchema,
   EmailProviderSchema,
@@ -23,6 +24,8 @@ import {
   sendTestGotifyNotificationWithConfig,
   sendTestNotifyxNotification,
   sendTestNotifyxNotificationWithConfig,
+  sendTestAppriseNotification,
+  sendTestAppriseNotificationWithConfig,
   sendTestPushplusNotification,
   sendTestPushplusNotificationWithConfig,
   sendTestServerchanNotification,
@@ -47,6 +50,10 @@ const EmailNotificationTestSchema = z.object({
 const NotificationScanDebugSchema = z.object({
   now: z.string().datetime({ offset: true }).optional(),
   dryRun: z.boolean().default(true)
+})
+
+const AppriseNotificationTestSchema = AppriseConfigSchema.partial().extend({
+  targetId: z.string().min(1).max(100).optional()
 })
 
 export async function notificationRoutes(app: FastifyInstance) {
@@ -281,6 +288,55 @@ export async function notificationRoutes(app: FastifyInstance) {
       return sendOk(reply, result)
     } catch (error) {
       return sendError(reply, 400, 'notifyx_test_failed', error instanceof Error ? error.message : 'api.errors.notifications.notifyxTestFailed', undefined, {
+        locale: request.locale
+      })
+    }
+  })
+
+  app.post('/notifications/test/apprise', async (request, reply) => {
+    const locale = request.locale ?? detectRequestLocale(request)
+    try {
+      if (request.body) {
+        const parsed = AppriseNotificationTestSchema.safeParse(request.body)
+        if (!parsed.success) {
+          return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidAppriseConfigPayload', parsed.error.flatten(), {
+            locale: request.locale
+          })
+        }
+
+        const hasInlineConfig =
+          parsed.data.apiBaseUrl !== undefined ||
+          parsed.data.key !== undefined ||
+          parsed.data.ignoreSsl !== undefined ||
+          parsed.data.targets !== undefined
+
+        if (!hasInlineConfig) {
+          const result = await sendTestAppriseNotification({
+            locale,
+            targetId: parsed.data.targetId
+          })
+          return sendOk(reply, result)
+        }
+
+        const result = await sendTestAppriseNotificationWithConfig({
+          apiBaseUrl: parsed.data.apiBaseUrl ?? '',
+          key: parsed.data.key ?? '',
+          ignoreSsl: parsed.data.ignoreSsl ?? false,
+          targets: parsed.data.targets ?? [],
+          lastSyncStatus: parsed.data.lastSyncStatus ?? 'idle',
+          lastSyncAt: parsed.data.lastSyncAt ?? null,
+          lastSyncError: parsed.data.lastSyncError ?? null
+        }, {
+          locale,
+          targetId: parsed.data.targetId
+        })
+        return sendOk(reply, result)
+      }
+
+      const result = await sendTestAppriseNotification({ locale })
+      return sendOk(reply, result)
+    } catch (error) {
+      return sendError(reply, 400, 'apprise_test_failed', error instanceof Error ? error.message : 'api.errors.notifications.appriseTestFailed', undefined, {
         locale: request.locale
       })
     }

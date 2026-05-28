@@ -23,6 +23,7 @@ export interface SettingsPageForm {
   gotifyNotificationsEnabled: Settings['gotifyNotificationsEnabled']
   barkNotificationsEnabled: Settings['barkNotificationsEnabled']
   notifyxNotificationsEnabled: Settings['notifyxNotificationsEnabled']
+  appriseNotificationsEnabled: Settings['appriseNotificationsEnabled']
   smtpConfig: Settings['smtpConfig']
   resendConfig: Settings['resendConfig']
   pushplusConfig: Settings['pushplusConfig']
@@ -31,6 +32,7 @@ export interface SettingsPageForm {
   gotifyConfig: Settings['gotifyConfig']
   barkConfig: Settings['barkConfig']
   notifyxConfig: Settings['notifyxConfig']
+  appriseConfig: Settings['appriseConfig']
   aiConfig: Settings['aiConfig']
 }
 
@@ -47,6 +49,12 @@ export function cloneSettingsForForm(settings: Settings): SettingsPageForm {
     gotifyConfig: { ...settings.gotifyConfig },
     barkConfig: { ...settings.barkConfig },
     notifyxConfig: { ...settings.notifyxConfig },
+    appriseConfig: {
+      ...settings.appriseConfig,
+      targets: settings.appriseConfig.targets.map((target) => ({
+        ...target
+      }))
+    },
     aiConfig: {
       ...settings.aiConfig,
       capabilities: {

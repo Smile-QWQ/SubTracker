@@ -3,6 +3,7 @@ import type { AppLocale } from '@subtracker/shared'
 import { getNotificationChannelSettings, getSetting, setSetting } from './settings.service'
 import { getStoredCredentials, resetPasswordForStoredUsername } from './auth.service'
 import { sendForgotPasswordVerificationCode } from './channel-notification.service'
+import { hasEnabledAppriseTargets } from './apprise-config.service'
 
 const FORGOT_PASSWORD_CHALLENGE_KEY = 'authForgotPasswordChallenge'
 const FORGOT_PASSWORD_IP_REQUEST_PREFIX = 'authForgotPasswordIpRequest'
@@ -101,7 +102,8 @@ export async function isForgotPasswordEnabled() {
       settings.serverchanNotificationsEnabled ||
       settings.gotifyNotificationsEnabled ||
       settings.barkNotificationsEnabled ||
-      settings.notifyxNotificationsEnabled
+      settings.notifyxNotificationsEnabled ||
+      (settings.appriseNotificationsEnabled && hasEnabledAppriseTargets(settings.appriseConfig))
   )
 }
 

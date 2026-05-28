@@ -48,6 +48,16 @@ describe('shared schema', () => {
     expect(parsed.overdueReminderDays).toEqual([1, 2, 3])
     expect(parsed.defaultOverdueReminderRules).toBe(DEFAULT_OVERDUE_REMINDER_RULES)
     expect(parsed.telegramNotificationsEnabled).toBe(false)
+    expect(parsed.appriseNotificationsEnabled).toBe(false)
+    expect(parsed.appriseConfig).toEqual({
+      apiBaseUrl: '',
+      key: '',
+      ignoreSsl: false,
+      targets: [],
+      lastSyncStatus: 'idle',
+      lastSyncAt: null,
+      lastSyncError: null
+    })
     expect(parsed.aiConfig.dashboardSummaryEnabled).toBe(false)
     expect(parsed.aiConfig.dashboardSummaryPromptTemplate).toBe('')
     expect(parsed.telegramConfig).toEqual({

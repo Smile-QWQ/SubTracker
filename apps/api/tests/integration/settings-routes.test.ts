@@ -5,9 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const store = new Map<string, unknown>()
 
 const prismaMock = vi.hoisted(() => ({}))
+const syncAppriseConfigMock = vi.hoisted(() => vi.fn())
 
 vi.mock('../../src/db', () => ({
   prisma: prismaMock
+}))
+
+vi.mock('../../src/services/apprise-notification.service', () => ({
+  syncAppriseConfig: syncAppriseConfigMock
 }))
 
 vi.mock('../../src/services/settings.service', () => ({
@@ -34,6 +39,7 @@ vi.mock('../../src/services/settings.service', () => ({
     gotifyNotificationsEnabled: (store.get('gotifyNotificationsEnabled') as boolean) ?? false,
     barkNotificationsEnabled: (store.get('barkNotificationsEnabled') as boolean) ?? false,
     notifyxNotificationsEnabled: (store.get('notifyxNotificationsEnabled') as boolean) ?? false,
+    appriseNotificationsEnabled: (store.get('appriseNotificationsEnabled') as boolean) ?? false,
     smtpConfig: {
       host: '',
       port: 587,
@@ -82,6 +88,16 @@ vi.mock('../../src/services/settings.service', () => ({
       team: '',
       ...(store.get('notifyxConfig') as Record<string, unknown> | undefined)
     },
+    appriseConfig: {
+      apiBaseUrl: '',
+      key: '',
+      ignoreSsl: false,
+      targets: [],
+      lastSyncStatus: 'idle',
+      lastSyncAt: null,
+      lastSyncError: null,
+      ...(store.get('appriseConfig') as Record<string, unknown> | undefined)
+    },
     aiConfig: {
       enabled: false,
       dashboardSummaryEnabled: false,
@@ -112,6 +128,8 @@ describe('settings routes validation', () => {
 
   beforeEach(async () => {
     store.clear()
+    syncAppriseConfigMock.mockReset()
+    syncAppriseConfigMock.mockResolvedValue(undefined)
     app = Fastify()
     await settingsRoutes(app)
   })
@@ -329,6 +347,103 @@ describe('settings routes validation', () => {
     expect(res.json().error.message).toBe('To enable NotifyX, fill in: API Key')
   })
 
+  it('accepts a private Apprise API base url and persists synced state when save succeeds', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      payload: {
+        appriseNotificationsEnabled: true,
+        appriseConfig: {
+          apiBaseUrl: 'https://127.0.0.1:8000',
+          key: 'subtracker-main',
+          ignoreSsl: true,
+          targets: [
+            {
+              id: 'target-1',
+              name: 'Primary',
+              url: 'mailto://demo:test@example.com',
+              enabled: true
+            }
+          ]
+        }
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(syncAppriseConfigMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiBaseUrl: 'https://127.0.0.1:8000',
+        key: 'subtracker-main',
+        targets: [
+          expect.objectContaining({
+            id: 'target-1',
+            name: 'Primary',
+            url: 'mailto://demo:test@example.com',
+            enabled: true
+          })
+        ]
+      }),
+      { locale: 'zh-CN' }
+    )
+    expect((store.get('appriseConfig') as Record<string, unknown>).lastSyncStatus).toBe('synced')
+  })
+
+  it('rejects enabling apprise without enabled targets in english locale', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      headers: {
+        'X-SubTracker-Locale': 'en-US'
+      },
+      payload: {
+        appriseNotificationsEnabled: true,
+        appriseConfig: {
+          apiBaseUrl: 'https://apprise.example.com',
+          key: 'subtracker-main',
+          targets: [
+            {
+              id: 'target-1',
+              name: 'Primary',
+              url: 'mailto://demo:test@example.com',
+              enabled: false
+            }
+          ]
+        }
+      }
+    })
+
+    expect(res.statusCode).toBe(422)
+    expect(res.json().error.message).toBe('To enable Apprise, keep at least one notification address enabled')
+  })
+
+  it('persists failed apprise sync state without rejecting the overall save', async () => {
+    syncAppriseConfigMock.mockRejectedValueOnce(new Error('connect ECONNREFUSED'))
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      payload: {
+        appriseNotificationsEnabled: true,
+        appriseConfig: {
+          apiBaseUrl: 'https://apprise.example.com',
+          key: 'subtracker-main',
+          targets: [
+            {
+              id: 'target-1',
+              name: 'Primary',
+              url: 'mailto://demo:test@example.com',
+              enabled: true
+            }
+          ]
+        }
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect((store.get('appriseConfig') as Record<string, unknown>).lastSyncStatus).toBe('failed')
+    expect((store.get('appriseConfig') as Record<string, unknown>).lastSyncError).toBe('connect ECONNREFUSED')
+  })
+
   it('rejects invalid reminder rules', async () => {
     const res = await app.inject({
       method: 'PATCH',
@@ -377,6 +492,37 @@ describe('settings routes validation', () => {
 
     expect(res.statusCode).toBe(422)
     expect(res.json().error.message).toContain('请先启用至少一个可直达的通知渠道')
+  })
+
+  it('treats apprise as a valid direct channel for forgot-password enablement', async () => {
+    store.set('appriseNotificationsEnabled', true)
+    store.set('appriseConfig', {
+      apiBaseUrl: 'https://apprise.example.com',
+      key: 'subtracker-main',
+      ignoreSsl: false,
+      targets: [
+        {
+          id: 'target-1',
+          name: 'Primary',
+          url: 'mailto://demo:test@example.com',
+          enabled: true
+        }
+      ],
+      lastSyncStatus: 'synced',
+      lastSyncAt: '2026-05-28T09:00:00.000Z',
+      lastSyncError: null
+    })
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      payload: {
+        forgotPasswordEnabled: true
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data.forgotPasswordEnabled).toBe(true)
   })
 
 })

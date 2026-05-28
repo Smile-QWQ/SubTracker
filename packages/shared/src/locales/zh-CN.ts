@@ -22,6 +22,7 @@ export default {
       edit: '编辑',
       reorder: '调整顺序',
       done: '完成调整',
+      manage: '管理',
       signOut: '退出登录',
       connectionTest: '连接测试',
       visionTest: '视觉测试'
@@ -72,6 +73,7 @@ export default {
       deviceKey: 'Device Key',
       apiBaseUrl: 'API Base URL',
       apiKey: 'API Key',
+      key: 'Key',
       team: 'Team ID',
       topic: 'Topic',
       gotifyTargetUrl: 'Gotify URL',
@@ -247,6 +249,13 @@ export default {
       team: 'Team ID',
       gotifyTargetUrl: 'Gotify URL',
       webhookTargetUrl: 'Webhook URL',
+      appriseApiBaseUrl: 'Apprise API Base URL',
+      appriseKey: 'Apprise Key',
+      appriseTargets: 'Apprise 通知地址',
+      appriseTargetName: '地址名称',
+      appriseTargetUrl: 'Apprise URL',
+      appriseTargetEnabled: '启用此地址',
+      appriseSyncStatus: '同步状态',
       oldUsername: '原用户名',
       oldPassword: '原密码',
       newUsername: '新用户名',
@@ -260,7 +269,7 @@ export default {
       overdueReminderRules:
         '格式说明：天数&时间;，例如 1&09:30; 表示过期 1 天后在 09:30 提醒；多条规则用 ; 分隔',
       notificationSettings:
-        '统一管理邮箱、PushPlus、Telegram、Server 酱、Gotify、Bark、NotifyX 与 Webhook。每个渠道都可以单独保存并单独测试。',
+        '统一管理邮箱、PushPlus、Telegram、Server 酱、Gotify、Bark、NotifyX、Apprise 与 Webhook。每个渠道都可以单独保存并单独测试。',
       aiSettings: 'AI 能力总开关控制识别与连接测试；AI 总结可单独开启或关闭。',
       forgotPasswordChannelRequired: '需先启用至少一个直达通知渠道',
       structuredOutput:
@@ -277,6 +286,27 @@ export default {
       importWallos: '导入 Wallos',
       swapCurrencies: '交换源货币和目标货币'
     },
+    apprise: {
+      summary: {
+        targets: '地址 {count} 个',
+        enabledTargets: '启用 {count} 个',
+        syncStatus: '同步：{status}'
+      },
+      syncStatus: {
+        idle: '未同步',
+        synced: '已同步',
+        failed: '同步失败'
+      },
+      modal: {
+        title: '管理 Apprise 通知地址',
+        description: '在这里添加多个 Apprise 通知地址，每个地址都可以单独启用、测试或删除',
+        addTarget: '新增地址',
+        empty: '还没有 Apprise 通知地址',
+        testHint: '单独测试只会发送到当前地址',
+        namePlaceholder: '例如：我的手机通知',
+        urlPlaceholder: '例如：tgram://bot_token/chat_id'
+      }
+    },
     placeholders: {
       optional: '可选',
       notFilledRecipient: '未填写收件人',
@@ -288,6 +318,7 @@ export default {
       chatIdExample: '例如：123456789 或 -100xxxxxxxxxx',
       gotifyUrl: 'https://gotify.example.com',
       barkServerUrl: 'https://api.day.app',
+      appriseApiBaseUrl: '例如：http://apprise:8000 或 https://apprise.example.com',
       webhookUrl: 'https://example.com/hook',
       aiBaseUrl: 'https://api.deepseek.com',
       customHeaders:
@@ -311,6 +342,7 @@ export default {
       gotify: 'Gotify',
       bark: 'Bark',
       notifyx: 'NotifyX',
+      apprise: 'Apprise',
       webhook: 'Webhook'
     },
     options: {
@@ -333,6 +365,7 @@ export default {
       gotifyMissingFields: 'Gotify 缺少必填项：{fields}',
       barkMissingFields: 'Bark 缺少必填项：{fields}',
       notifyxMissingFields: 'NotifyX 缺少必填项：{fields}',
+      appriseMissingFields: 'Apprise 缺少必填项：{fields}',
       webhookMissingFields: 'Webhook 缺少必填项：{fields}',
       aiMissingFields: 'AI 能力缺少必填项：{fields}'
     },
@@ -353,6 +386,9 @@ export default {
       barkDisabled: 'Bark 已关闭',
       notifyxSaved: 'NotifyX 配置已保存',
       notifyxDisabled: 'NotifyX 已关闭',
+      appriseSaved: 'Apprise 配置已保存',
+      appriseDisabled: 'Apprise 已关闭',
+      appriseSavedWithSyncFailure: 'Apprise 配置已保存到本地，但同步到 Apprise API 失败：{error}',
       aiSaved: 'AI 能力配置已保存',
       aiDisabled: 'AI 能力已关闭',
       aiConnectionTestSuccess: '连接测试成功：{provider} / {model} / {response}',
@@ -379,6 +415,8 @@ export default {
       barkTestFailed: 'Bark 测试失败',
       notifyxTestSent: 'NotifyX 测试消息已发送',
       notifyxTestFailed: 'NotifyX 测试失败',
+      appriseTestSent: 'Apprise 测试消息已发送',
+      appriseTestFailed: 'Apprise 测试失败',
       zipExportStarted: 'ZIP 导出已开始',
       zipExportFailed: 'ZIP 导出失败',
       backupRestored: '备份已恢复',
@@ -922,6 +960,7 @@ export default {
       gotify: 'Gotify',
       bark: 'Bark',
       notifyx: 'NotifyX',
+      apprise: 'Apprise',
       webhook: 'Webhook'
     },
     status: {
@@ -1193,6 +1232,7 @@ export default {
         invalidGotifyConfigPayload: 'Gotify 配置请求体不合法',
         invalidBarkConfigPayload: 'Bark 配置请求体不合法',
         invalidNotifyxConfigPayload: 'NotifyX 配置请求体不合法',
+        invalidAppriseConfigPayload: 'Apprise 配置请求体不合法',
         invalidWebhookSettingsPayload: 'Webhook 配置请求体不合法',
         invalidForgotPasswordRequestPayload: '忘记密码请求体不合法',
         invalidForgotPasswordResetPayload: '忘记密码重置请求体不合法',
@@ -1248,6 +1288,11 @@ export default {
         gotifyFieldsRequired: '启用 Gotify 时必须填写：{fields}',
         barkFieldsRequired: '启用 Bark 时必须填写：{fields}',
         notifyxFieldsRequired: '启用 NotifyX 时必须填写：{fields}',
+        appriseFieldsRequired: '启用 Apprise 时必须填写：{fields}',
+        appriseTargetsRequired: '启用 Apprise 时至少需要一个通知地址',
+        appriseEnabledTargetsRequired: '启用 Apprise 时至少要保留一个启用中的通知地址',
+        appriseTargetFieldsRequired: '每个 Apprise 通知地址都必须包含 ID、名称和 URL',
+        appriseTargetUrlDuplicate: 'Apprise 通知地址 URL 不能重复',
         aiFieldsRequired: '启用 AI 能力时必须填写：{fields}'
       },
       ai: {
@@ -1278,6 +1323,10 @@ export default {
         gotifyDisabledOrIncomplete: 'Gotify 通知未启用或配置不完整',
         barkDisabledOrIncomplete: 'Bark 通知未启用或配置不完整',
         notifyxDisabledOrIncomplete: 'NotifyX 通知未启用或配置不完整',
+        appriseDisabledOrIncomplete: 'Apprise 通知未启用或配置不完整',
+        appriseSyncFailed: '同步 Apprise 配置失败',
+        appriseRequestFailed: 'Apprise 请求失败',
+        appriseTargetNotFound: '指定的 Apprise 通知地址不存在',
         emptyDedupEntries: '无法从空的去重记录构建通知分发参数',
         resendRequestFailed: 'Resend 请求失败',
         pushplusRequestFailed: 'PushPlus 请求失败',
@@ -1305,7 +1354,8 @@ export default {
         serverchanTestFailed: 'Server 酱测试失败',
         gotifyTestFailed: 'Gotify 测试失败',
         barkTestFailed: 'Bark 测试失败',
-        notifyxTestFailed: 'NotifyX 测试失败'
+        notifyxTestFailed: 'NotifyX 测试失败',
+        appriseTestFailed: 'Apprise 测试失败'
       },
       imports: {
         wallosInspectFailed: 'Wallos 预览失败',

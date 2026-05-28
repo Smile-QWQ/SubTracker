@@ -13,6 +13,7 @@ const channelState = vi.hoisted(() => {
     gotifyNotificationsEnabled: false,
     barkNotificationsEnabled: false,
     notifyxNotificationsEnabled: false,
+    appriseNotificationsEnabled: false,
     smtpConfig: {
       host: '',
       port: 587,
@@ -33,7 +34,16 @@ const channelState = vi.hoisted(() => {
     serverchanConfig: { sendkey: '' },
     gotifyConfig: { url: '', token: '', ignoreSsl: false },
     barkConfig: { serverUrl: '', deviceKey: '', isArchive: false },
-    notifyxConfig: { apiKey: '', team: '' }
+    notifyxConfig: { apiKey: '', team: '' },
+    appriseConfig: {
+      apiBaseUrl: '',
+      key: '',
+      ignoreSsl: false,
+      targets: [] as Array<{ id: string; name: string; url: string; enabled: boolean }>,
+      lastSyncStatus: 'idle' as 'idle' | 'synced' | 'failed',
+      lastSyncAt: null as string | null,
+      lastSyncError: null as string | null
+    }
   }
 
   return {
@@ -72,8 +82,18 @@ const channelState = vi.hoisted(() => {
       settings.gotifyNotificationsEnabled = false
       settings.barkNotificationsEnabled = false
       settings.notifyxNotificationsEnabled = false
+      settings.appriseNotificationsEnabled = false
       settings.barkConfig = { serverUrl: '', deviceKey: '', isArchive: false }
       settings.notifyxConfig = { apiKey: '', team: '' }
+      settings.appriseConfig = {
+        apiBaseUrl: '',
+        key: '',
+        ignoreSsl: false,
+        targets: [],
+        lastSyncStatus: 'idle' as 'idle' | 'synced' | 'failed',
+        lastSyncAt: null as string | null,
+        lastSyncError: null as string | null
+      }
     }
   }
 })
@@ -367,5 +387,135 @@ describe('channel notification new direct channels', () => {
 
     expect(results.find((result) => result.channel === 'notifyx')).toMatchObject({ status: 'success' })
     expect(results.find((result) => result.channel === 'bark')).toMatchObject({ status: 'skipped', message: 'bark_disabled' })
+  })
+
+  it('sends apprise test notifications through a temporary stateful key and cleans it up afterwards', async () => {
+    mockFetchResponse({
+      status: 200,
+      body: '{"status":"ok"}'
+    })
+    mockFetchResponse({
+      status: 200,
+      body: '{"status":"ok"}'
+    })
+    mockFetchResponse({
+      status: 200,
+      body: '{"status":"ok"}'
+    })
+
+    const { sendTestAppriseNotificationWithConfig } = await import('../../src/services/channel-notification.service')
+    await expect(
+      sendTestAppriseNotificationWithConfig({
+        apiBaseUrl: 'https://apprise.example.com/base',
+        key: 'subtracker-main',
+        ignoreSsl: false,
+        targets: [
+          {
+            id: 'target-1',
+            name: 'Primary',
+            url: 'mailto://demo:test@example.com',
+            enabled: true
+          }
+        ],
+        lastSyncStatus: 'idle',
+        lastSyncAt: null,
+        lastSyncError: null
+      }, {
+        targetId: 'target-1'
+      })
+    ).resolves.toEqual({ success: true })
+
+    expect(String(channelState.fetchMock.mock.calls[0]?.[0])).toContain('/base/add/')
+    expect(JSON.parse(String(channelState.fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      format: 'text'
+    })
+    expect(String(channelState.fetchMock.mock.calls[1]?.[0])).toContain('/base/notify/')
+    expect(JSON.parse(String(channelState.fetchMock.mock.calls[1]?.[1]?.body))).toMatchObject({
+      tag: 'st-target-target-1'
+    })
+    expect(String(channelState.fetchMock.mock.calls[2]?.[0])).toContain('/base/del/')
+  })
+
+  it('marks apprise dispatches as sent and skips repeated dispatches', async () => {
+    channelState.configureSettings({
+      appriseNotificationsEnabled: true,
+      appriseConfig: {
+        apiBaseUrl: 'https://apprise.example.com',
+        key: 'subtracker-main',
+        ignoreSsl: false,
+        targets: [
+          {
+            id: 'target-1',
+            name: 'Primary',
+            url: 'mailto://demo:test@example.com',
+            enabled: true
+          }
+        ],
+        lastSyncStatus: 'synced',
+        lastSyncAt: '2026-05-28T09:00:00.000Z',
+        lastSyncError: null
+      }
+    })
+    mockFetchResponse({
+      status: 200,
+      body: '{"status":"ok"}'
+    })
+
+    const { dispatchNotificationEvent } = await import('../../src/services/channel-notification.service')
+    const firstResults = await dispatchNotificationEvent(dispatchParams)
+    expect(firstResults.find((result) => result.channel === 'apprise')).toMatchObject({ status: 'success' })
+    expect(channelState.setSettingMock).toHaveBeenCalledWith(
+      'notification:apprise:subscription.reminder_due:subscription:test-subscription:2026-05-28:upcoming:advance-3@09:30',
+      true
+    )
+
+    channelState.fetchMock.mockClear()
+    const secondResults = await dispatchNotificationEvent(dispatchParams)
+    expect(secondResults.find((result) => result.channel === 'apprise')).toMatchObject({
+      status: 'skipped',
+      message: 'apprise_already_sent'
+    })
+    expect(channelState.fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('includes apprise in forgot-password channel dispatch results', async () => {
+    channelState.configureSettings({
+      appriseNotificationsEnabled: true,
+      appriseConfig: {
+        apiBaseUrl: 'https://apprise.example.com',
+        key: 'subtracker-main',
+        ignoreSsl: false,
+        targets: [
+          {
+            id: 'target-1',
+            name: 'Primary',
+            url: 'mailto://demo:test@example.com',
+            enabled: true
+          }
+        ],
+        lastSyncStatus: 'failed',
+        lastSyncAt: null,
+        lastSyncError: 'temporary failure'
+      }
+    })
+    mockFetchResponse({
+      status: 200,
+      body: '{"status":"ok"}'
+    })
+    mockFetchResponse({
+      status: 200,
+      body: '{"status":"ok"}'
+    })
+
+    const { sendForgotPasswordVerificationCode } = await import('../../src/services/channel-notification.service')
+    const results = await sendForgotPasswordVerificationCode({
+      username: 'admin',
+      code: '123456',
+      expiresInMinutes: 10
+    })
+
+    expect(results.find((result) => result.channel === 'apprise')).toMatchObject({ status: 'success' })
+    expect(String(channelState.fetchMock.mock.calls[0]?.[0])).toBe('https://apprise.example.com/add/subtracker-main')
+    expect(String(channelState.fetchMock.mock.calls[1]?.[0])).toBe('https://apprise.example.com/notify/subtracker-main')
   })
 })

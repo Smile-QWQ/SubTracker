@@ -49,6 +49,7 @@ vi.mock('../../src/services/settings.service', () => ({
     gotifyNotificationsEnabled: false,
     barkNotificationsEnabled: false,
     notifyxNotificationsEnabled: false,
+    appriseNotificationsEnabled: false,
     smtpConfig: {
       host: '',
       port: 587,
@@ -88,6 +89,15 @@ vi.mock('../../src/services/settings.service', () => ({
     notifyxConfig: {
       apiKey: '',
       team: ''
+    },
+    appriseConfig: {
+      apiBaseUrl: '',
+      key: '',
+      ignoreSsl: false,
+      targets: [],
+      lastSyncStatus: 'idle',
+      lastSyncAt: null,
+      lastSyncError: null
     },
     aiConfig: {
       enabled: false,

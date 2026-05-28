@@ -300,6 +300,25 @@ export const NotifyxConfigSchema = z.object({
   team: z.string().max(32).default('')
 })
 
+export const AppriseSyncStatusSchema = z.enum(['idle', 'synced', 'failed'])
+
+export const AppriseTargetSchema = z.object({
+  id: z.string().min(1).max(100),
+  name: z.string().trim().min(1).max(100),
+  url: z.string().trim().min(1).max(1000),
+  enabled: z.boolean().default(true)
+})
+
+export const AppriseConfigSchema = z.object({
+  apiBaseUrl: z.string().trim().max(500).default(''),
+  key: z.string().trim().max(100).default(''),
+  ignoreSsl: z.boolean().default(false),
+  targets: z.array(AppriseTargetSchema).default([]),
+  lastSyncStatus: AppriseSyncStatusSchema.default('idle'),
+  lastSyncAt: z.string().max(100).nullable().default(null),
+  lastSyncError: z.string().max(2000).nullable().default(null)
+})
+
 export const AiProviderPresetSchema = z.enum(['custom', 'aliyun-bailian', 'tencent-hunyuan', 'volcengine-ark'])
 
 export const DEFAULT_AI_CAPABILITIES = {
@@ -380,6 +399,7 @@ export const SettingsSchema = z.object({
   gotifyNotificationsEnabled: z.boolean().default(false),
   barkNotificationsEnabled: z.boolean().default(false),
   notifyxNotificationsEnabled: z.boolean().default(false),
+  appriseNotificationsEnabled: z.boolean().default(false),
   smtpConfig: EmailConfigSchema.default({}),
   resendConfig: ResendConfigSchema.default({}),
   pushplusConfig: PushPlusConfigSchema.default({}),
@@ -388,6 +408,7 @@ export const SettingsSchema = z.object({
   gotifyConfig: GotifyConfigSchema.default({}),
   barkConfig: BarkConfigSchema.default({}),
   notifyxConfig: NotifyxConfigSchema.default({}),
+  appriseConfig: AppriseConfigSchema.default({}),
   aiConfig: AiConfigSchema.default({})
 })
 
@@ -492,6 +513,9 @@ export type ServerchanConfigInput = z.infer<typeof ServerchanConfigSchema>
 export type GotifyConfigInput = z.infer<typeof GotifyConfigSchema>
 export type BarkConfigInput = z.infer<typeof BarkConfigSchema>
 export type NotifyxConfigInput = z.infer<typeof NotifyxConfigSchema>
+export type AppriseSyncStatus = z.infer<typeof AppriseSyncStatusSchema>
+export type AppriseTargetInput = z.infer<typeof AppriseTargetSchema>
+export type AppriseConfigInput = z.infer<typeof AppriseConfigSchema>
 export type NotificationWebhookSettingsInput = z.infer<typeof NotificationWebhookSettingsSchema>
 export type AiProviderPreset = z.infer<typeof AiProviderPresetSchema>
 export type AiCapabilitiesInput = z.infer<typeof AiCapabilitiesSchema>

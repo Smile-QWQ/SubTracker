@@ -16,6 +16,8 @@ const notificationMocks = vi.hoisted(() => ({
   sendTestGotifyNotificationWithConfigMock: vi.fn(),
   sendTestNotifyxNotificationMock: vi.fn(),
   sendTestNotifyxNotificationWithConfigMock: vi.fn(),
+  sendTestAppriseNotificationMock: vi.fn(),
+  sendTestAppriseNotificationWithConfigMock: vi.fn(),
   scanRenewalNotificationsMock: vi.fn(),
   sendTestWebhookNotificationMock: vi.fn(),
   sendTestWebhookNotificationWithConfigMock: vi.fn()
@@ -35,7 +37,9 @@ vi.mock('../../src/services/channel-notification.service', () => ({
   sendTestGotifyNotification: notificationMocks.sendTestGotifyNotificationMock,
   sendTestGotifyNotificationWithConfig: notificationMocks.sendTestGotifyNotificationWithConfigMock,
   sendTestNotifyxNotification: notificationMocks.sendTestNotifyxNotificationMock,
-  sendTestNotifyxNotificationWithConfig: notificationMocks.sendTestNotifyxNotificationWithConfigMock
+  sendTestNotifyxNotificationWithConfig: notificationMocks.sendTestNotifyxNotificationWithConfigMock,
+  sendTestAppriseNotification: notificationMocks.sendTestAppriseNotificationMock,
+  sendTestAppriseNotificationWithConfig: notificationMocks.sendTestAppriseNotificationWithConfigMock
 }))
 
 vi.mock('../../src/services/notification.service', () => ({
@@ -78,6 +82,8 @@ describe('notification routes', () => {
     notificationMocks.sendTestGotifyNotificationWithConfigMock.mockReset()
     notificationMocks.sendTestNotifyxNotificationMock.mockReset()
     notificationMocks.sendTestNotifyxNotificationWithConfigMock.mockReset()
+    notificationMocks.sendTestAppriseNotificationMock.mockReset()
+    notificationMocks.sendTestAppriseNotificationWithConfigMock.mockReset()
     notificationMocks.scanRenewalNotificationsMock.mockReset()
     notificationMocks.sendTestWebhookNotificationMock.mockReset()
     notificationMocks.sendTestWebhookNotificationWithConfigMock.mockReset()
@@ -95,6 +101,8 @@ describe('notification routes', () => {
     notificationMocks.sendTestGotifyNotificationWithConfigMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestNotifyxNotificationMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestNotifyxNotificationWithConfigMock.mockResolvedValue({ success: true })
+    notificationMocks.sendTestAppriseNotificationMock.mockResolvedValue({ success: true })
+    notificationMocks.sendTestAppriseNotificationWithConfigMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestWebhookNotificationMock.mockResolvedValue({ success: true, statusCode: 200, responseBody: '' })
     notificationMocks.sendTestWebhookNotificationWithConfigMock.mockResolvedValue({ success: true, statusCode: 200, responseBody: '' })
     notificationMocks.scanRenewalNotificationsMock.mockResolvedValue({
@@ -228,6 +236,37 @@ describe('notification routes', () => {
 
     expect(res.statusCode).toBe(200)
     expect(notificationMocks.sendTestNotifyxNotificationMock).toHaveBeenCalled()
+  })
+
+  it('tests apprise notification for a specific target with payload', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/notifications/test/apprise',
+      payload: {
+        apiBaseUrl: 'https://apprise.example.com',
+        key: 'subtracker-main',
+        ignoreSsl: true,
+        targets: [
+          {
+            id: 'target-1',
+            name: 'Primary',
+            url: 'mailto://demo:test@example.com',
+            enabled: true
+          }
+        ],
+        targetId: 'target-1'
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(notificationMocks.sendTestAppriseNotificationWithConfigMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiBaseUrl: 'https://apprise.example.com',
+        key: 'subtracker-main',
+        ignoreSsl: true
+      }),
+      { locale: 'zh-CN', targetId: 'target-1' }
+    )
   })
 
   it('runs notification scan debug in dry-run mode by default', async () => {

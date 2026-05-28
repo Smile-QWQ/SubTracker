@@ -22,6 +22,7 @@ export default {
       edit: 'Edit',
       reorder: 'Reorder',
       done: 'Done',
+      manage: 'Manage',
       signOut: 'Sign out',
       connectionTest: 'Test connection',
       visionTest: 'Vision test'
@@ -72,6 +73,7 @@ export default {
       deviceKey: 'Device Key',
       apiBaseUrl: 'API Base URL',
       apiKey: 'API Key',
+      key: 'Key',
       team: 'Team ID',
       topic: 'Topic',
       gotifyTargetUrl: 'Gotify URL',
@@ -247,6 +249,13 @@ export default {
       team: 'Team ID',
       gotifyTargetUrl: 'Gotify URL',
       webhookTargetUrl: 'Webhook URL',
+      appriseApiBaseUrl: 'Apprise API Base URL',
+      appriseKey: 'Apprise Key',
+      appriseTargets: 'Apprise notification addresses',
+      appriseTargetName: 'Address name',
+      appriseTargetUrl: 'Apprise URL',
+      appriseTargetEnabled: 'Enable this address',
+      appriseSyncStatus: 'Sync status',
       oldUsername: 'Current username',
       oldPassword: 'Current password',
       newUsername: 'New username',
@@ -260,7 +269,7 @@ export default {
       overdueReminderRules:
         'Format: days&time;. For example, 1&09:30; reminds at 09:30 on overdue day 1. Separate multiple rules with ;',
       notificationSettings:
-        'Manage Email, PushPlus, Telegram, ServerChan, Gotify, Bark, NotifyX, and Webhook in one place. Save and test each channel independently.',
+        'Manage Email, PushPlus, Telegram, ServerChan, Gotify, Bark, NotifyX, Apprise, and Webhook in one place. Save and test each channel independently.',
       aiSettings: 'The main AI switch controls recognition and connection tests. AI summaries can be turned on or off separately.',
       forgotPasswordChannelRequired: 'Enable at least one direct notification channel first',
       structuredOutput:
@@ -276,6 +285,27 @@ export default {
       importWallos: 'Import Wallos',
       swapCurrencies: 'Swap source and target currencies'
     },
+    apprise: {
+      summary: {
+        targets: 'Addresses: {count}',
+        enabledTargets: 'Enabled: {count}',
+        syncStatus: 'Sync: {status}'
+      },
+      syncStatus: {
+        idle: 'Idle',
+        synced: 'Synced',
+        failed: 'Sync failed'
+      },
+      modal: {
+        title: 'Manage Apprise notification addresses',
+        description: 'Add multiple Apprise notification addresses here. Each address can be enabled, tested, or removed independently.',
+        addTarget: 'Add address',
+        empty: 'No Apprise notification addresses yet',
+        testHint: 'Single-address tests only send to the current address',
+        namePlaceholder: 'For example: My phone alerts',
+        urlPlaceholder: 'For example: tgram://bot_token/chat_id'
+      }
+    },
     placeholders: {
       optional: 'Optional',
       notFilledRecipient: 'Recipient not set',
@@ -287,6 +317,7 @@ export default {
       chatIdExample: 'For example: 123456789 or -100xxxxxxxxxx',
       gotifyUrl: 'https://gotify.example.com',
       barkServerUrl: 'https://api.day.app',
+      appriseApiBaseUrl: 'http://apprise:8000 or https://apprise.example.com',
       webhookUrl: 'https://example.com/hook',
       aiBaseUrl: 'https://api.deepseek.com',
       customHeaders:
@@ -310,6 +341,7 @@ export default {
       gotify: 'Gotify',
       bark: 'Bark',
       notifyx: 'NotifyX',
+      apprise: 'Apprise',
       webhook: 'Webhook'
     },
     options: {
@@ -332,6 +364,7 @@ export default {
       gotifyMissingFields: 'Gotify is missing required fields: {fields}',
       barkMissingFields: 'Bark is missing required fields: {fields}',
       notifyxMissingFields: 'NotifyX is missing required fields: {fields}',
+      appriseMissingFields: 'Apprise is missing required fields: {fields}',
       webhookMissingFields: 'Webhook is missing required fields: {fields}',
       aiMissingFields: 'AI settings are missing required fields: {fields}'
     },
@@ -352,6 +385,9 @@ export default {
       barkDisabled: 'Bark disabled',
       notifyxSaved: 'NotifyX settings saved',
       notifyxDisabled: 'NotifyX disabled',
+      appriseSaved: 'Apprise settings saved',
+      appriseDisabled: 'Apprise disabled',
+      appriseSavedWithSyncFailure: 'Apprise settings were saved locally, but syncing to the Apprise API failed: {error}',
       aiSaved: 'AI settings saved',
       aiDisabled: 'AI disabled',
       aiConnectionTestSuccess: 'Connection test succeeded: {provider} / {model} / {response}',
@@ -378,6 +414,8 @@ export default {
       barkTestFailed: 'Bark test failed',
       notifyxTestSent: 'NotifyX test message sent',
       notifyxTestFailed: 'NotifyX test failed',
+      appriseTestSent: 'Apprise test message sent',
+      appriseTestFailed: 'Apprise test failed',
       zipExportStarted: 'Backup export started',
       zipExportFailed: 'Backup export failed',
       backupRestored: 'Backup restored',
@@ -923,6 +961,7 @@ export default {
       gotify: 'Gotify',
       bark: 'Bark',
       notifyx: 'NotifyX',
+      apprise: 'Apprise',
       webhook: 'Webhook'
     },
     status: {
@@ -1195,6 +1234,7 @@ Hard requirements:
         invalidGotifyConfigPayload: 'Invalid Gotify config payload',
         invalidBarkConfigPayload: 'Invalid Bark config payload',
         invalidNotifyxConfigPayload: 'Invalid NotifyX config payload',
+        invalidAppriseConfigPayload: 'Invalid Apprise config payload',
         invalidWebhookSettingsPayload: 'Invalid webhook settings payload',
         invalidForgotPasswordRequestPayload: 'Invalid forgot password request payload',
         invalidForgotPasswordResetPayload: 'Invalid forgot password reset payload',
@@ -1250,6 +1290,11 @@ Hard requirements:
         gotifyFieldsRequired: 'To enable Gotify, fill in: {fields}',
         barkFieldsRequired: 'To enable Bark, fill in: {fields}',
         notifyxFieldsRequired: 'To enable NotifyX, fill in: {fields}',
+        appriseFieldsRequired: 'To enable Apprise, fill in: {fields}',
+        appriseTargetsRequired: 'To enable Apprise, add at least one notification address',
+        appriseEnabledTargetsRequired: 'To enable Apprise, keep at least one notification address enabled',
+        appriseTargetFieldsRequired: 'Each Apprise notification address must include an ID, name, and URL',
+        appriseTargetUrlDuplicate: 'Apprise notification address URLs must be unique',
         aiFieldsRequired: 'To enable AI, fill in: {fields}'
       },
       ai: {
@@ -1280,6 +1325,10 @@ Hard requirements:
         gotifyDisabledOrIncomplete: 'Gotify notifications are disabled or incomplete',
         barkDisabledOrIncomplete: 'Bark notifications are disabled or incomplete',
         notifyxDisabledOrIncomplete: 'NotifyX notifications are disabled or incomplete',
+        appriseDisabledOrIncomplete: 'Apprise notifications are disabled or incomplete',
+        appriseSyncFailed: 'Failed to sync the Apprise configuration',
+        appriseRequestFailed: 'Apprise request failed',
+        appriseTargetNotFound: 'The requested Apprise notification address does not exist',
         emptyDedupEntries: 'Cannot build notification dispatch params from empty dedup entries',
         resendRequestFailed: 'Resend request failed',
         pushplusRequestFailed: 'PushPlus request failed',
@@ -1307,7 +1356,8 @@ Hard requirements:
         serverchanTestFailed: 'ServerChan test failed',
         gotifyTestFailed: 'Gotify test failed',
         barkTestFailed: 'Bark test failed',
-        notifyxTestFailed: 'NotifyX test failed'
+        notifyxTestFailed: 'NotifyX test failed',
+        appriseTestFailed: 'Apprise test failed'
       },
       imports: {
         wallosInspectFailed: 'Wallos inspect failed',

@@ -81,7 +81,7 @@ describe('settings import export section', () => {
     expect(source).toContain('switch-group switch-group--single')
     expect(source).toContain('switch-inline-label')
     expect(source).toContain("t('settings.labels.newPassword')")
-    expect(source).toContain('<n-space style="margin-top: 12px">')
+    expect(source).toContain('<n-space class="settings-actions" style="margin-top: 12px">')
     expect(source).toContain("t('common.actions.update')")
     expect(source).not.toContain('label="找回密码说明"')
     expect(source).not.toContain('forgotPasswordHintText')

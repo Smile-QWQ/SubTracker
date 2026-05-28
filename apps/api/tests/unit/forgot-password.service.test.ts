@@ -44,7 +44,17 @@ describe('forgot password service', () => {
       serverchanNotificationsEnabled: false,
       gotifyNotificationsEnabled: false,
       barkNotificationsEnabled: false,
-      notifyxNotificationsEnabled: false
+      notifyxNotificationsEnabled: false,
+      appriseNotificationsEnabled: false,
+      appriseConfig: {
+        apiBaseUrl: '',
+        key: '',
+        ignoreSsl: false,
+        targets: [],
+        lastSyncStatus: 'idle',
+        lastSyncAt: null,
+        lastSyncError: null
+      }
     })
 
     const { isForgotPasswordEnabled } = await import('../../src/services/forgot-password.service')
@@ -62,7 +72,17 @@ describe('forgot password service', () => {
       serverchanNotificationsEnabled: false,
       gotifyNotificationsEnabled: false,
       barkNotificationsEnabled: false,
-      notifyxNotificationsEnabled: false
+      notifyxNotificationsEnabled: false,
+      appriseNotificationsEnabled: false,
+      appriseConfig: {
+        apiBaseUrl: '',
+        key: '',
+        ignoreSsl: false,
+        targets: [],
+        lastSyncStatus: 'idle',
+        lastSyncAt: null,
+        lastSyncError: null
+      }
     })
 
     const { isForgotPasswordEnabled } = await import('../../src/services/forgot-password.service')
@@ -84,7 +104,17 @@ describe('forgot password service', () => {
       serverchanNotificationsEnabled: false,
       gotifyNotificationsEnabled: false,
       barkNotificationsEnabled: false,
-      notifyxNotificationsEnabled: false
+      notifyxNotificationsEnabled: false,
+      appriseNotificationsEnabled: false,
+      appriseConfig: {
+        apiBaseUrl: '',
+        key: '',
+        ignoreSsl: false,
+        targets: [],
+        lastSyncStatus: 'idle',
+        lastSyncAt: null,
+        lastSyncError: null
+      }
     })
     forgotPasswordState.getStoredCredentialsMock.mockResolvedValue({
       username: 'admin',
@@ -118,7 +148,52 @@ describe('forgot password service', () => {
       serverchanNotificationsEnabled: false,
       gotifyNotificationsEnabled: false,
       barkNotificationsEnabled: true,
-      notifyxNotificationsEnabled: false
+      notifyxNotificationsEnabled: false,
+      appriseNotificationsEnabled: false,
+      appriseConfig: {
+        apiBaseUrl: '',
+        key: '',
+        ignoreSsl: false,
+        targets: [],
+        lastSyncStatus: 'idle',
+        lastSyncAt: null,
+        lastSyncError: null
+      }
+    })
+
+    const { isForgotPasswordEnabled } = await import('../../src/services/forgot-password.service')
+    await expect(isForgotPasswordEnabled()).resolves.toBe(true)
+  })
+
+  it('treats apprise with an enabled target as a valid direct channel for forgot-password enablement', async () => {
+    forgotPasswordState.getSettingMock.mockImplementation(async (key: string, fallback: unknown) =>
+      key === 'forgotPasswordEnabled' ? true : fallback
+    )
+    forgotPasswordState.getNotificationChannelSettingsMock.mockResolvedValue({
+      emailNotificationsEnabled: false,
+      pushplusNotificationsEnabled: false,
+      telegramNotificationsEnabled: false,
+      serverchanNotificationsEnabled: false,
+      gotifyNotificationsEnabled: false,
+      barkNotificationsEnabled: false,
+      notifyxNotificationsEnabled: false,
+      appriseNotificationsEnabled: true,
+      appriseConfig: {
+        apiBaseUrl: 'https://apprise.example.com',
+        key: 'subtracker-main',
+        ignoreSsl: false,
+        targets: [
+          {
+            id: 'target-1',
+            name: 'Primary',
+            url: 'mailto://demo:test@example.com',
+            enabled: true
+          }
+        ],
+        lastSyncStatus: 'synced',
+        lastSyncAt: '2026-05-28T09:00:00.000Z',
+        lastSyncError: null
+      }
     })
 
     const { isForgotPasswordEnabled } = await import('../../src/services/forgot-password.service')

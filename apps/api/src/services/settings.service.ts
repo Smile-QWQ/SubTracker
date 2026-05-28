@@ -1,4 +1,5 @@
 import {
+  AppriseConfigSchema,
   AiConfigSchema,
   DEFAULT_RESEND_API_URL,
   DEFAULT_AI_CONFIG,
@@ -17,6 +18,7 @@ import {
   resolveDefaultOverdueReminderRules
 } from './reminder-rules.service'
 import { normalizeAppTimezone } from '../utils/timezone'
+import { buildIdleAppriseSyncState, hasEnabledAppriseTargets } from './apprise-config.service'
 
 const DEFAULT_SMTP_CONFIG: SettingsInput['smtpConfig'] = {
   host: '',
@@ -56,6 +58,14 @@ const DEFAULT_NOTIFYX_CONFIG: SettingsInput['notifyxConfig'] = {
   team: ''
 }
 
+const DEFAULT_APPRISE_CONFIG: SettingsInput['appriseConfig'] = {
+  apiBaseUrl: '',
+  key: '',
+  ignoreSsl: false,
+  targets: [],
+  ...buildIdleAppriseSyncState()
+}
+
 export async function getSetting<T>(key: string, fallback: T): Promise<T> {
   const row = await prisma.setting.findUnique({ where: { key } })
   if (!row) return fallback
@@ -88,6 +98,7 @@ function hasDirectForgotPasswordChannelEnabled(settings: {
   gotifyNotificationsEnabled: boolean
   barkNotificationsEnabled: boolean
   notifyxNotificationsEnabled: boolean
+  appriseDirectChannelEnabled: boolean
 }) {
   return Boolean(
     settings.emailNotificationsEnabled ||
@@ -96,7 +107,8 @@ function hasDirectForgotPasswordChannelEnabled(settings: {
       settings.serverchanNotificationsEnabled ||
       settings.gotifyNotificationsEnabled ||
       settings.barkNotificationsEnabled ||
-      settings.notifyxNotificationsEnabled
+      settings.notifyxNotificationsEnabled ||
+      settings.appriseDirectChannelEnabled
   )
 }
 
@@ -144,6 +156,10 @@ export async function getAppSettings(): Promise<SettingsInput> {
   const gotifyNotificationsEnabled = readSettingsValue(settingsMap, 'gotifyNotificationsEnabled', false)
   const barkNotificationsEnabled = readSettingsValue(settingsMap, 'barkNotificationsEnabled', false)
   const notifyxNotificationsEnabled = readSettingsValue(settingsMap, 'notifyxNotificationsEnabled', false)
+  const appriseNotificationsEnabled = readSettingsValue(settingsMap, 'appriseNotificationsEnabled', false)
+  const appriseConfig = AppriseConfigSchema.parse(
+    readSettingsValue<SettingsInput['appriseConfig']>(settingsMap, 'appriseConfig', DEFAULT_APPRISE_CONFIG)
+  )
   const forgotPasswordEnabled =
     readSettingsValue(settingsMap, 'forgotPasswordEnabled', false) &&
     hasDirectForgotPasswordChannelEnabled({
@@ -153,7 +169,8 @@ export async function getAppSettings(): Promise<SettingsInput> {
       serverchanNotificationsEnabled,
       gotifyNotificationsEnabled,
       barkNotificationsEnabled,
-      notifyxNotificationsEnabled
+      notifyxNotificationsEnabled,
+      appriseDirectChannelEnabled: appriseNotificationsEnabled && hasEnabledAppriseTargets(appriseConfig)
     })
   const serverchanConfig = readSettingsValue<SettingsInput['serverchanConfig']>(settingsMap, 'serverchanConfig', DEFAULT_SERVERCHAN_CONFIG)
   const gotifyConfig = readSettingsValue<SettingsInput['gotifyConfig']>(settingsMap, 'gotifyConfig', DEFAULT_GOTIFY_CONFIG)
@@ -184,6 +201,7 @@ export async function getAppSettings(): Promise<SettingsInput> {
     gotifyNotificationsEnabled,
     barkNotificationsEnabled,
     notifyxNotificationsEnabled,
+    appriseNotificationsEnabled,
     smtpConfig,
     resendConfig,
     pushplusConfig,
@@ -192,6 +210,7 @@ export async function getAppSettings(): Promise<SettingsInput> {
     gotifyConfig,
     barkConfig,
     notifyxConfig,
+    appriseConfig,
     aiConfig
   })
 }
@@ -254,6 +273,7 @@ export async function getNotificationChannelSettings() {
     gotifyNotificationsEnabled,
     barkNotificationsEnabled,
     notifyxNotificationsEnabled,
+    appriseNotificationsEnabled,
     smtpConfig,
     legacySmtpConfig,
     resendConfig,
@@ -262,7 +282,8 @@ export async function getNotificationChannelSettings() {
     serverchanConfig,
     gotifyConfig,
     barkConfig,
-    notifyxConfig
+    notifyxConfig,
+    appriseConfig
   ] =
     await Promise.all([
       getSetting('emailNotificationsEnabled', false),
@@ -273,6 +294,7 @@ export async function getNotificationChannelSettings() {
       getSetting('gotifyNotificationsEnabled', false),
       getSetting('barkNotificationsEnabled', false),
       getSetting('notifyxNotificationsEnabled', false),
+      getSetting('appriseNotificationsEnabled', false),
       getSetting<SettingsInput['smtpConfig']>('smtpConfig', DEFAULT_SMTP_CONFIG),
       getSetting<SettingsInput['smtpConfig'] | null>('emailConfig', null),
       getSetting<SettingsInput['resendConfig']>('resendConfig', DEFAULT_RESEND_CONFIG),
@@ -287,7 +309,8 @@ export async function getNotificationChannelSettings() {
       getSetting<SettingsInput['serverchanConfig']>('serverchanConfig', DEFAULT_SERVERCHAN_CONFIG),
       getSetting<SettingsInput['gotifyConfig']>('gotifyConfig', DEFAULT_GOTIFY_CONFIG),
       getSetting<SettingsInput['barkConfig']>('barkConfig', DEFAULT_BARK_CONFIG),
-      getSetting<SettingsInput['notifyxConfig']>('notifyxConfig', DEFAULT_NOTIFYX_CONFIG)
+      getSetting<SettingsInput['notifyxConfig']>('notifyxConfig', DEFAULT_NOTIFYX_CONFIG),
+      getSetting<SettingsInput['appriseConfig']>('appriseConfig', DEFAULT_APPRISE_CONFIG)
     ])
 
   return {
@@ -299,6 +322,7 @@ export async function getNotificationChannelSettings() {
     gotifyNotificationsEnabled,
     barkNotificationsEnabled,
     notifyxNotificationsEnabled,
+    appriseNotificationsEnabled,
     smtpConfig: legacySmtpConfig ? { ...DEFAULT_SMTP_CONFIG, ...legacySmtpConfig, ...smtpConfig } : smtpConfig,
     resendConfig,
     pushplusConfig,
@@ -306,7 +330,8 @@ export async function getNotificationChannelSettings() {
     serverchanConfig,
     gotifyConfig,
     barkConfig,
-    notifyxConfig
+    notifyxConfig,
+    appriseConfig: AppriseConfigSchema.parse(appriseConfig)
   }
 }
 

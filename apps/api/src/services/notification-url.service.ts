@@ -21,6 +21,7 @@ export function validateNotificationTargetUrl(
   options: {
     label?: string
     locale?: AppLocale
+    allowPrivateHost?: boolean
   } = {}
 ) {
   const locale = options.locale ?? DEFAULT_APP_LOCALE
@@ -36,7 +37,7 @@ export function validateNotificationTargetUrl(
     throw new Error(getMessage(locale, 'validation.notificationTargetUrl.unsupportedProtocol', { label }))
   }
 
-  if (isPrivateHostname(parsed.hostname)) {
+  if (!options.allowPrivateHost && isPrivateHostname(parsed.hostname)) {
     throw new Error(getMessage(locale, 'validation.notificationTargetUrl.privateHostBlocked', { label }))
   }
 

@@ -80,7 +80,7 @@ Default credentials:
 - **Statistics and budgets**: normalize multi-currency subscriptions into a base currency, track spending totals and trends, inspect tag and status breakdowns, review the next 30 days of renewals, compare auto-renew ratios, and configure monthly, yearly, or per-tag budgets.
 - **AI assistance**: extract subscription details from text or images into the form, and generate an AI summary on the statistics page.
 - **Calendar and overview**: view subscriptions in a calendar, track upcoming renewals from a dedicated list, and use the dashboard for a consolidated overview.
-- **Notifications**: send reminders through Webhook, SMTP / Resend email, PushPlus, Telegram Bot, ServerChan, Gotify, Bark, and NotifyX.
+- **Notifications**: send reminders through Webhook, SMTP / Resend email, PushPlus, Telegram Bot, ServerChan, Gotify, Bark, NotifyX, and Apprise.
 - **Logos and assets**: upload logos, reuse saved local logos, search online, and preserve or match logos during Wallos ZIP imports when possible.
 - **Backup and migration**: import Wallos JSON, SQLite, and ZIP backups, and export, inspect, import, or restore native SubTracker ZIP backups.
 - **Multi-currency tools**: maintain exchange-rate data, convert values into the base currency, and use the built-in currency converter.
@@ -147,6 +147,8 @@ The script downloads release artifacts, prepares the deployment directory, and l
 **Full deployment** is the recommended default.
 
 On first startup, the API container initializes the SQLite schema automatically.
+
+If you want to use **Apprise**, deploy an **Apprise API** instance separately and point SubTracker to it in **Settings → Notifications → Apprise**. The default SubTracker compose files do **not** make Apprise a hard dependency.
 
 ### Updating
 

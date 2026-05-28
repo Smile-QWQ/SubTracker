@@ -28,6 +28,7 @@ describe('cloneSettingsForForm', () => {
       gotifyNotificationsEnabled: true,
       barkNotificationsEnabled: true,
       notifyxNotificationsEnabled: true,
+      appriseNotificationsEnabled: true,
       smtpConfig: {
         host: 'smtp.example.com',
         port: 587,
@@ -68,6 +69,22 @@ describe('cloneSettingsForForm', () => {
         apiKey: 'notifyx-key',
         team: 'team-id'
       },
+      appriseConfig: {
+        apiBaseUrl: 'https://apprise.example.com',
+        key: 'subtracker',
+        ignoreSsl: true,
+        targets: [
+          {
+            id: 'target-1',
+            name: 'Primary',
+            url: 'mailto://demo:test@example.com',
+            enabled: true
+          }
+        ],
+        lastSyncStatus: 'synced',
+        lastSyncAt: '2026-05-28T09:00:00.000Z',
+        lastSyncError: null
+      },
       aiConfig: {
         enabled: true,
         dashboardSummaryEnabled: true,
@@ -98,6 +115,9 @@ describe('cloneSettingsForForm', () => {
     expect(cloned.gotifyConfig).not.toBe(original.gotifyConfig)
     expect(cloned.barkConfig).not.toBe(original.barkConfig)
     expect(cloned.notifyxConfig).not.toBe(original.notifyxConfig)
+    expect(cloned.appriseConfig).not.toBe(original.appriseConfig)
+    expect(cloned.appriseConfig.targets).not.toBe(original.appriseConfig.targets)
+    expect(cloned.appriseConfig.targets[0]).not.toBe(original.appriseConfig.targets[0])
     expect(cloned.aiConfig).not.toBe(original.aiConfig)
     expect(cloned.aiConfig.capabilities).not.toBe(original.aiConfig.capabilities)
     expect(cloned.tagBudgets).not.toBe(original.tagBudgets)

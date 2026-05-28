@@ -6,6 +6,7 @@ import {
   DEFAULT_APP_LOCALE,
   getMessage,
   type AppLocale,
+  type AppriseConfigInput,
   type BarkConfigInput,
   type EmailConfigInput,
   type GotifyConfigInput,
@@ -18,6 +19,8 @@ import {
 import { dispatchWebhookEvent } from './webhook.service'
 import { getAppTimezone, getNotificationChannelSettings, getResolvedAppLocale, getSetting, setSetting } from './settings.service'
 import { validateNotificationTargetUrl } from './notification-url.service'
+import { createAppriseTemporaryKey, hasAppriseTargets, hasEnabledAppriseTargets } from './apprise-config.service'
+import { deleteAppriseConfig, sendAppriseWithConfig, syncAppriseConfig } from './apprise-notification.service'
 import { toIsoDate } from '../utils/date'
 import { formatDateInTimezone } from '../utils/timezone'
 import { prisma } from '../db'
@@ -28,7 +31,6 @@ import {
 } from './notification-merge.service'
 import {
   buildNotificationMessage,
-  formatNotificationDate,
   type DirectNotificationMessage
 } from './notification-presentation.service'
 
@@ -62,7 +64,7 @@ export type PushplusSendResult = {
 }
 
 export type NotificationChannelResult = {
-  channel: 'webhook' | 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx'
+  channel: 'webhook' | 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx' | 'apprise'
   status: 'success' | 'skipped' | 'failed'
   message?: string
 }
@@ -75,10 +77,11 @@ type ForgotPasswordNotificationPayload = {
 
 type NotificationLocaleContext = {
   locale?: AppLocale
+  targetId?: string
 }
 
 type DirectChannelDispatchOptions = {
-  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx'
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx' | 'apprise'
   enabled: boolean
   disabledMessage: string
   alreadySentMessage: string
@@ -89,7 +92,7 @@ const NOTIFICATION_DEDUP_KEY_PREFIX = 'notification:'
 export const NOTIFICATION_DEDUP_RETENTION_DAYS = 30
 
 function buildNotificationKey(
-  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx',
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx' | 'apprise',
   params: NotificationDispatchParams
 ) {
   return `${NOTIFICATION_DEDUP_KEY_PREFIX}${channel}:${params.eventType}:${params.resourceKey}:${params.periodKey}`
@@ -163,21 +166,21 @@ function logNotificationDispatch(params: NotificationDispatchParams, results: No
 }
 
 async function hasNotificationBeenSent(
-  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx',
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx' | 'apprise',
   params: NotificationDispatchParams
 ) {
   return getSetting<boolean>(buildNotificationKey(channel, params), false)
 }
 
 async function markNotificationSent(
-  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx',
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx' | 'apprise',
   params: NotificationDispatchParams
 ) {
   await setSetting(buildNotificationKey(channel, params), true)
 }
 
 async function resolvePendingNotificationEntries(
-  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx',
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx' | 'apprise',
   params: NotificationDispatchParams
 ) {
   const dedupEntries = params.dedupEntries
@@ -198,7 +201,7 @@ async function resolvePendingNotificationEntries(
 }
 
 async function markNotificationEntriesSent(
-  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx',
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx' | 'apprise',
   params: NotificationDispatchParams
 ) {
   if (params.dedupEntries?.length) {
@@ -762,6 +765,24 @@ async function sendNotifyxNotification(
   }, locale)
 }
 
+async function sendAppriseNotification(
+  params: NotificationDispatchParams,
+  locale: AppLocale
+): Promise<NotificationChannelResult> {
+  const settings = await getNotificationChannelSettings()
+  return dispatchDirectChannelNotification(params, {
+    channel: 'apprise',
+    enabled: settings.appriseNotificationsEnabled && hasEnabledAppriseTargets(settings.appriseConfig),
+    disabledMessage: 'apprise_disabled',
+    alreadySentMessage: 'apprise_already_sent',
+    send: (message) =>
+      sendAppriseWithConfig(message, settings.appriseConfig, {
+        locale,
+        syncBeforeSend: settings.appriseConfig.lastSyncStatus !== 'synced'
+      })
+  }, locale)
+}
+
 export async function dispatchNotificationEvent(
   params: NotificationDispatchParams,
   context: NotificationLocaleContext = {}
@@ -828,6 +849,13 @@ export async function dispatchNotificationEvent(
     message: error instanceof Error ? error.message : 'notifyx_dispatch_failed'
   }))) as NotificationChannelResult
   results.push(notifyxResult)
+
+  const appriseResult = (await Promise.resolve(sendAppriseNotification(params, locale)).catch((error) => ({
+    channel: 'apprise',
+    status: 'failed',
+    message: error instanceof Error ? error.message : 'apprise_dispatch_failed'
+  }))) as NotificationChannelResult
+  results.push(appriseResult)
 
   logNotificationDispatch(params, results, locale)
 
@@ -995,6 +1023,24 @@ export async function sendForgotPasswordVerificationCode(
     results.push({ channel: 'notifyx', status: 'skipped', message: 'notifyx_disabled' })
   }
 
+  if (settings.appriseNotificationsEnabled && hasEnabledAppriseTargets(settings.appriseConfig)) {
+    try {
+      await sendAppriseWithConfig(message, settings.appriseConfig, {
+        locale,
+        syncBeforeSend: settings.appriseConfig.lastSyncStatus !== 'synced'
+      })
+      results.push({ channel: 'apprise', status: 'success' })
+    } catch (error) {
+      results.push({
+        channel: 'apprise',
+        status: 'failed',
+        message: error instanceof Error ? error.message : 'apprise_dispatch_failed'
+      })
+    }
+  } else {
+    results.push({ channel: 'apprise', status: 'skipped', message: 'apprise_disabled' })
+  }
+
   return results
 }
 
@@ -1143,4 +1189,53 @@ export async function sendTestNotifyxNotificationWithConfig(
   await sendNotifyxWithConfig(await buildTestReminderMessage(locale), config)
 
   return { success: true }
+}
+
+export async function sendTestAppriseNotification(context: NotificationLocaleContext = {}) {
+  const settings = await getNotificationChannelSettings()
+  if (
+    !settings.appriseNotificationsEnabled ||
+    !hasAppriseTargets(settings.appriseConfig) ||
+    (!context.targetId && !hasEnabledAppriseTargets(settings.appriseConfig))
+  ) {
+    throw new Error(getMessage(await resolveNotificationLocale(context.locale), 'api.errors.notifications.appriseDisabledOrIncomplete'))
+  }
+
+  const locale = await resolveNotificationLocale(context.locale)
+  await sendAppriseWithConfig(await buildTestReminderMessage(locale), settings.appriseConfig, {
+    locale,
+    targetId: context.targetId,
+    syncBeforeSend: settings.appriseConfig.lastSyncStatus !== 'synced'
+  })
+
+  return { success: true }
+}
+
+export async function sendTestAppriseNotificationWithConfig(
+  config: AppriseConfigInput,
+  context: NotificationLocaleContext = {}
+) {
+  if (!hasAppriseTargets(config) || (!context.targetId && !hasEnabledAppriseTargets(config))) {
+    throw new Error(getMessage(await resolveNotificationLocale(context.locale), 'api.errors.notifications.appriseDisabledOrIncomplete'))
+  }
+
+  const locale = await resolveNotificationLocale(context.locale)
+  const temporaryKey = createAppriseTemporaryKey(config.key)
+
+  try {
+    await syncAppriseConfig(config, {
+      locale,
+      keyOverride: temporaryKey
+    })
+
+    await sendAppriseWithConfig(await buildTestReminderMessage(locale), config, {
+      locale,
+      targetId: context.targetId,
+      keyOverride: temporaryKey
+    })
+
+    return { success: true }
+  } finally {
+    await deleteAppriseConfig(config, temporaryKey, locale)
+  }
 }

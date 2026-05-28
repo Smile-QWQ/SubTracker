@@ -1,12 +1,12 @@
 import { FastifyInstance } from 'fastify'
 import {
+  AppriseConfigSchema,
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_OVERDUE_REMINDER_RULES,
   SettingsSchema,
   getMessage,
   type AppLocale
 } from '@subtracker/shared'
-import { prisma } from '../db'
 import { sendError, sendOk } from '../http'
 import { detectRequestLocale } from '../i18n'
 import { getAppSettings, setSetting } from '../services/settings.service'
@@ -19,6 +19,15 @@ import {
   deriveOverdueReminderDaysFromRules,
   normalizeReminderRules
 } from '../services/reminder-rules.service'
+import {
+  buildFailedAppriseSyncState,
+  buildIdleAppriseSyncState,
+  buildSuccessfulAppriseSyncState,
+  hasEnabledAppriseTargets,
+  normalizeAppriseTargets,
+  withAppriseSyncState
+} from '../services/apprise-config.service'
+import { syncAppriseConfig } from '../services/apprise-notification.service'
 import { createSubtrackerBackupArchive } from '../services/subtracker-backup.service'
 
 function hasDirectForgotPasswordChannelEnabled(settings: {
@@ -29,6 +38,8 @@ function hasDirectForgotPasswordChannelEnabled(settings: {
   gotifyNotificationsEnabled: boolean
   barkNotificationsEnabled: boolean
   notifyxNotificationsEnabled: boolean
+  appriseNotificationsEnabled: boolean
+  appriseConfig: Awaited<ReturnType<typeof getAppSettings>>['appriseConfig']
 }) {
   return Boolean(
     settings.emailNotificationsEnabled ||
@@ -37,8 +48,31 @@ function hasDirectForgotPasswordChannelEnabled(settings: {
       settings.serverchanNotificationsEnabled ||
       settings.gotifyNotificationsEnabled ||
       settings.barkNotificationsEnabled ||
-      settings.notifyxNotificationsEnabled
+      settings.notifyxNotificationsEnabled ||
+      (settings.appriseNotificationsEnabled && hasEnabledAppriseTargets(settings.appriseConfig))
   )
+}
+
+function normalizeAppriseConfigPayload(
+  currentConfig: Awaited<ReturnType<typeof getAppSettings>>['appriseConfig'],
+  incomingConfig?: Partial<Awaited<ReturnType<typeof getAppSettings>>['appriseConfig']>
+) {
+  if (!incomingConfig) {
+    return currentConfig
+  }
+
+  const merged = AppriseConfigSchema.parse({
+    ...currentConfig,
+    ...incomingConfig,
+    targets: incomingConfig.targets ? normalizeAppriseTargets(incomingConfig.targets) : currentConfig.targets
+  })
+
+  return {
+    ...merged,
+    lastSyncStatus: currentConfig.lastSyncStatus,
+    lastSyncAt: currentConfig.lastSyncAt,
+    lastSyncError: currentConfig.lastSyncError
+  }
 }
 
 function validateSettingsPayload(
@@ -62,11 +96,14 @@ function validateSettingsPayload(
     token: getMessage(locale, 'common.labels.token'),
     serverUrl: getMessage(locale, 'common.labels.serverUrl'),
     deviceKey: getMessage(locale, 'common.labels.deviceKey'),
+    key: getMessage(locale, 'common.labels.key'),
     team: getMessage(locale, 'common.labels.team'),
     providerName: getMessage(locale, 'settings.labels.providerName'),
     model: getMessage(locale, 'common.labels.model'),
     apiBaseUrl: getMessage(locale, 'settings.labels.apiBaseUrl'),
-    apiKey: getMessage(locale, 'settings.labels.apiKey')
+    apiKey: getMessage(locale, 'settings.labels.apiKey'),
+    appriseApiBaseUrl: getMessage(locale, 'settings.labels.appriseApiBaseUrl'),
+    appriseKey: getMessage(locale, 'settings.labels.appriseKey')
   }
 
   if (settings.emailNotificationsEnabled) {
@@ -181,6 +218,46 @@ function validateSettingsPayload(
     }
   }
 
+  if (settings.appriseNotificationsEnabled) {
+    const missingAppriseFields = [
+      [labels.appriseApiBaseUrl, settings.appriseConfig.apiBaseUrl],
+      [labels.appriseKey, settings.appriseConfig.key]
+    ]
+      .filter(([, value]) => !String(value ?? '').trim())
+      .map(([label]) => label)
+
+    if (missingAppriseFields.length) {
+      throw new Error(
+        getMessage(locale, 'api.errors.settings.appriseFieldsRequired', {
+          fields: missingAppriseFields.join(fieldSeparator)
+        })
+      )
+    }
+
+    if (!settings.appriseConfig.targets.length) {
+      throw new Error(getMessage(locale, 'api.errors.settings.appriseTargetsRequired'))
+    }
+
+    if (!hasEnabledAppriseTargets(settings.appriseConfig)) {
+      throw new Error(getMessage(locale, 'api.errors.settings.appriseEnabledTargetsRequired'))
+    }
+
+    if (settings.appriseConfig.targets.some((target) => !target.id || !target.name.trim() || !target.url.trim())) {
+      throw new Error(getMessage(locale, 'api.errors.settings.appriseTargetFieldsRequired'))
+    }
+
+    const targetUrls = settings.appriseConfig.targets.map((target) => target.url.trim())
+    if (new Set(targetUrls).size !== targetUrls.length) {
+      throw new Error(getMessage(locale, 'api.errors.settings.appriseTargetUrlDuplicate'))
+    }
+
+    validateNotificationTargetUrl(settings.appriseConfig.apiBaseUrl.trim(), {
+      label: getMessage(locale, 'settings.labels.appriseApiBaseUrl'),
+      locale,
+      allowPrivateHost: true
+    })
+  }
+
   const missingAiFields = [
     [labels.providerName, settings.aiConfig.providerName],
     [labels.model, settings.aiConfig.model],
@@ -285,6 +362,7 @@ export async function settingsRoutes(app: FastifyInstance) {
       gotifyNotificationsEnabled: parsed.data.gotifyNotificationsEnabled ?? currentSettings.gotifyNotificationsEnabled,
       barkNotificationsEnabled: parsed.data.barkNotificationsEnabled ?? currentSettings.barkNotificationsEnabled,
       notifyxNotificationsEnabled: parsed.data.notifyxNotificationsEnabled ?? currentSettings.notifyxNotificationsEnabled,
+      appriseNotificationsEnabled: parsed.data.appriseNotificationsEnabled ?? currentSettings.appriseNotificationsEnabled,
       serverchanConfig: parsed.data.serverchanConfig
         ? { ...currentSettings.serverchanConfig, ...parsed.data.serverchanConfig }
         : currentSettings.serverchanConfig,
@@ -293,6 +371,7 @@ export async function settingsRoutes(app: FastifyInstance) {
       notifyxConfig: parsed.data.notifyxConfig
         ? { ...currentSettings.notifyxConfig, ...parsed.data.notifyxConfig }
         : currentSettings.notifyxConfig,
+      appriseConfig: normalizeAppriseConfigPayload(currentSettings.appriseConfig, parsed.data.appriseConfig),
       aiConfig: parsed.data.aiConfig
         ? {
             ...currentSettings.aiConfig,
@@ -334,8 +413,9 @@ export async function settingsRoutes(app: FastifyInstance) {
       'defaultAdvanceReminderRules',
       'defaultOverdueReminderRules'
     ])
+    const appriseRelatedKeys = new Set(['appriseConfig'])
 
-    const filteredEntries = settingsToPersist.filter(([key]) => !reminderRelatedKeys.has(key))
+    const filteredEntries = settingsToPersist.filter(([key]) => !reminderRelatedKeys.has(key) && !appriseRelatedKeys.has(key))
     filteredEntries.push(
       ['forgotPasswordEnabled', nextSettings.forgotPasswordEnabled],
       ['defaultAdvanceReminderRules', normalizedReminderSettings.defaultAdvanceReminderRules],
@@ -346,6 +426,25 @@ export async function settingsRoutes(app: FastifyInstance) {
     )
 
     await Promise.all(filteredEntries.map(([key, value]) => setSetting(key, value)))
+
+    const appriseTouched = parsed.data.appriseNotificationsEnabled !== undefined || parsed.data.appriseConfig !== undefined
+    if (appriseTouched) {
+      let persistedAppriseConfig = nextSettings.appriseConfig
+
+      if (!nextSettings.appriseNotificationsEnabled) {
+        persistedAppriseConfig = withAppriseSyncState(nextSettings.appriseConfig, buildIdleAppriseSyncState())
+      } else {
+        try {
+          await syncAppriseConfig(nextSettings.appriseConfig, { locale })
+          persistedAppriseConfig = withAppriseSyncState(nextSettings.appriseConfig, buildSuccessfulAppriseSyncState())
+        } catch (error) {
+          persistedAppriseConfig = withAppriseSyncState(nextSettings.appriseConfig, buildFailedAppriseSyncState(error))
+        }
+      }
+
+      nextSettings.appriseConfig = persistedAppriseConfig
+      await setSetting('appriseConfig', persistedAppriseConfig)
+    }
 
     const settings = await getAppSettings()
     return sendOk(reply, settings)

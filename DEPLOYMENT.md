@@ -282,7 +282,63 @@ WEB_ORIGIN=https://subtracker.example.com
 
 ---
 
-## 6. 反向代理 / SSL 说明
+## 6. 可选：部署 Apprise API
+
+SubTracker 的 Apprise 通道依赖一个**独立部署的 Apprise API 服务**。它不是默认 compose 的强依赖，按需额外部署即可。
+
+典型做法是单独准备一个目录，例如：
+
+```text
+apprise/
+  ├─ docker-compose.yml
+  └─ config/
+```
+
+一个最小可用的 `docker-compose.yml` 可以类似这样：
+
+```yaml
+services:
+  apprise:
+    image: caronc/apprise:latest
+    container_name: apprise
+    ports:
+      - "8000:8000"
+    environment:
+      APPRISE_STATEFUL_MODE: simple
+      APPRISE_WORKER_COUNT: "1"
+      APPRISE_ADMIN: "y"
+      TZ: Asia/Shanghai
+    volumes:
+      - ./config:/config
+      - ./plugin:/plugin
+      - ./attach:/attach
+```
+
+启动：
+
+```bash
+cd apprise
+docker compose pull
+docker compose up -d
+```
+
+然后在 SubTracker 的 **系统设置 → 通知设置 → Apprise** 中填写：
+
+- `Apprise API Base URL`：
+  - 如果 Apprise 和 SubTracker API 在**同一个 Docker Compose 网络**里，优先填服务名，例如 `http://apprise:8000`
+  - 如果 Apprise 走的是外部反代 / 内网域名，就填 API 容器**实际能访问到**的地址，例如 `https://apprise.example.com`
+  - **不要直接填 `127.0.0.1` / `localhost`**，因为对 Docker 里的 SubTracker API 来说，这只会指向 API 容器自己，不是宿主机或别的容器
+- `Apprise Key`：你希望 SubTracker 使用的 stateful key
+- `Ignore SSL`：仅在自签名 HTTPS 场景下按需开启
+
+当前 Apprise 接入边界：
+
+- SubTracker 维护 **通知地址列表**，并把配置同步到 Apprise API 的 stateful `KEY`
+- 支持多个通知地址、每个地址单独启停、单地址测试和整体验证
+
+---
+
+## 7. 反向代理 / SSL 说明
 
 生产环境通常会在最外层再套一层 Nginx 处理：
 
@@ -313,7 +369,7 @@ http://127.0.0.1:9000
 
 ---
 
-## 7. 升级
+## 8. 升级
 
 ### 仅后端部署
 

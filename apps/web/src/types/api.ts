@@ -226,6 +226,25 @@ export interface NotifyxConfig {
   team: string
 }
 
+export type AppriseSyncStatus = 'idle' | 'synced' | 'failed'
+
+export interface AppriseTarget {
+  id: string
+  name: string
+  url: string
+  enabled: boolean
+}
+
+export interface AppriseConfig {
+  apiBaseUrl: string
+  key: string
+  ignoreSsl: boolean
+  targets: AppriseTarget[]
+  lastSyncStatus: AppriseSyncStatus
+  lastSyncAt: string | null
+  lastSyncError: string | null
+}
+
 export type EmailProvider = 'smtp' | 'resend'
 export type AiProviderPreset = 'custom' | 'aliyun-bailian' | 'tencent-hunyuan' | 'volcengine-ark'
 
@@ -300,6 +319,7 @@ export interface Settings {
   gotifyNotificationsEnabled: boolean
   barkNotificationsEnabled: boolean
   notifyxNotificationsEnabled: boolean
+  appriseNotificationsEnabled: boolean
   smtpConfig: EmailConfig
   resendConfig: ResendConfig
   pushplusConfig: PushplusConfig
@@ -308,6 +328,7 @@ export interface Settings {
   gotifyConfig: GotifyConfig
   barkConfig: BarkConfig
   notifyxConfig: NotifyxConfig
+  appriseConfig: AppriseConfig
   aiConfig: AiConfig
 }
 

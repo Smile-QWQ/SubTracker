@@ -71,6 +71,7 @@ const channelState = vi.hoisted(() => {
       gotifyNotificationsEnabled: false,
       barkNotificationsEnabled: false,
       notifyxNotificationsEnabled: false,
+      appriseNotificationsEnabled: false,
       smtpConfig: {
         host: 'smtp.example.com',
         port: 587,
@@ -91,7 +92,16 @@ const channelState = vi.hoisted(() => {
       serverchanConfig: { sendkey: '' },
       gotifyConfig: { url: '', token: '', ignoreSsl: false },
       barkConfig: { serverUrl: '', deviceKey: '', isArchive: false },
-      notifyxConfig: { apiKey: '', team: '' }
+      notifyxConfig: { apiKey: '', team: '' },
+      appriseConfig: {
+        apiBaseUrl: '',
+        key: '',
+        ignoreSsl: false,
+        targets: [],
+        lastSyncStatus: 'idle',
+        lastSyncAt: null,
+        lastSyncError: null
+      }
     })),
     getSettingMock: vi.fn(async <T>(key: string, fallback: T) => (store.has(key) ? (store.get(key) as T) : fallback)),
     setSettingMock: vi.fn(async (key: string, value: unknown) => {
