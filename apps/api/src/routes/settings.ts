@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import {
   AppriseConfigSchema,
+  resolveNotificationTemplateConfig,
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_OVERDUE_REMINDER_RULES,
   SettingsSchema,
@@ -384,6 +385,24 @@ export async function settingsRoutes(app: FastifyInstance) {
         ? { ...currentSettings.notifyxConfig, ...parsed.data.notifyxConfig }
         : currentSettings.notifyxConfig,
       appriseConfig: normalizeAppriseConfigPayload(currentSettings.appriseConfig, parsed.data.appriseConfig),
+      notificationTemplateConfig: parsed.data.notificationTemplateConfig
+        ? resolveNotificationTemplateConfig({
+            ...currentSettings.notificationTemplateConfig,
+            ...parsed.data.notificationTemplateConfig,
+            text: {
+              ...currentSettings.notificationTemplateConfig.text,
+              ...parsed.data.notificationTemplateConfig.text
+            },
+            markdown: {
+              ...currentSettings.notificationTemplateConfig.markdown,
+              ...parsed.data.notificationTemplateConfig.markdown
+            },
+            html: {
+              ...currentSettings.notificationTemplateConfig.html,
+              ...parsed.data.notificationTemplateConfig.html
+            }
+          }, locale)
+        : currentSettings.notificationTemplateConfig,
       aiConfig: parsed.data.aiConfig
         ? {
             ...currentSettings.aiConfig,
@@ -427,7 +446,13 @@ export async function settingsRoutes(app: FastifyInstance) {
     ])
     const appriseRelatedKeys = new Set(['appriseConfig'])
 
-    const filteredEntries = settingsToPersist.filter(([key]) => !reminderRelatedKeys.has(key) && !appriseRelatedKeys.has(key))
+    const filteredEntries = settingsToPersist
+      .filter(([key]) => !reminderRelatedKeys.has(key) && !appriseRelatedKeys.has(key))
+      .map(([key, value]) =>
+        key === 'notificationTemplateConfig'
+          ? [key, nextSettings.notificationTemplateConfig] as const
+          : [key, value] as const
+      )
     filteredEntries.push(
       ['forgotPasswordEnabled', nextSettings.forgotPasswordEnabled],
       ['defaultAdvanceReminderRules', normalizedReminderSettings.defaultAdvanceReminderRules],

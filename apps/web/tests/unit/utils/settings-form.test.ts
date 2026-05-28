@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_RESEND_API_URL } from '@subtracker/shared'
+import { DEFAULT_RESEND_API_URL, createEmptyNotificationTemplateConfig } from '@subtracker/shared'
 import { cloneSettingsForForm } from '@/utils/settings-form'
 import type { Settings } from '@/types/api'
 
@@ -85,6 +85,16 @@ describe('cloneSettingsForForm', () => {
         lastSyncAt: '2026-05-28T09:00:00.000Z',
         lastSyncError: null
       },
+      notificationTemplateConfig: {
+        ...createEmptyNotificationTemplateConfig(),
+        markdown: {
+          ...createEmptyNotificationTemplateConfig().markdown,
+          singleReminder: {
+            titleTemplate: '## {{title}}',
+            bodyTemplate: '- **名称**：{{subscription.name}}'
+          }
+        }
+      },
       aiConfig: {
         enabled: true,
         dashboardSummaryEnabled: true,
@@ -118,6 +128,9 @@ describe('cloneSettingsForForm', () => {
     expect(cloned.appriseConfig).not.toBe(original.appriseConfig)
     expect(cloned.appriseConfig.targets).not.toBe(original.appriseConfig.targets)
     expect(cloned.appriseConfig.targets[0]).not.toBe(original.appriseConfig.targets[0])
+    expect(cloned.notificationTemplateConfig).not.toBe(original.notificationTemplateConfig)
+    expect(cloned.notificationTemplateConfig.markdown).not.toBe(original.notificationTemplateConfig.markdown)
+    expect(cloned.notificationTemplateConfig.markdown.singleReminder).not.toBe(original.notificationTemplateConfig.markdown.singleReminder)
     expect(cloned.aiConfig).not.toBe(original.aiConfig)
     expect(cloned.aiConfig.capabilities).not.toBe(original.aiConfig.capabilities)
     expect(cloned.tagBudgets).not.toBe(original.tagBudgets)

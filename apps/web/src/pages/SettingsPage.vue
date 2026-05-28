@@ -214,6 +214,11 @@
 
       <n-grid-item :span="gridSpanFull">
         <n-card :title="t('settings.sections.notifications')" class="settings-card">
+          <template #header-extra>
+            <n-button quaternary size="small" @click="showNotificationTemplatesModal = true">
+              {{ t('settings.templates.button') }}
+            </n-button>
+          </template>
           <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
             {{ t('settings.helps.notificationSettings') }}
           </n-alert>
@@ -754,6 +759,13 @@
       @save="handleAppriseTargetsSave"
       @test-target="handleAppriseTargetTest"
     />
+
+    <notification-templates-modal
+      :show="showNotificationTemplatesModal"
+      :config="settingsForm.notificationTemplateConfig"
+      @close="showNotificationTemplatesModal = false"
+      @save="handleNotificationTemplatesSave"
+    />
   </div>
 </template>
 
@@ -766,7 +778,8 @@ import {
   DEFAULT_AI_CONFIG,
   DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
   DEFAULT_OVERDUE_REMINDER_RULES,
-  DEFAULT_RESEND_API_URL
+  DEFAULT_RESEND_API_URL,
+  createEmptyNotificationTemplateConfig
 } from '@subtracker/shared'
 import {
   NAlert,
@@ -809,6 +822,7 @@ import { NOTIFICATION_WEBHOOK_QUERY_KEY, useNotificationWebhookQuery } from '@/c
 import { SETTINGS_QUERY_KEY, useSettingsQuery } from '@/composables/settings-query'
 import PageHeader from '@/components/PageHeader.vue'
 import AppriseTargetsModal from '@/components/AppriseTargetsModal.vue'
+import NotificationTemplatesModal from '@/components/NotificationTemplatesModal.vue'
 import ReminderRulesPreview from '@/components/ReminderRulesPreview.vue'
 import SubtrackerBackupModal from '@/components/SubtrackerBackupModal.vue'
 import WallosImportModal from '@/components/WallosImportModal.vue'
@@ -825,6 +839,7 @@ import type {
   AppriseTarget,
   ChangeCredentialsPayload,
   ExchangeRateSnapshot,
+  NotificationTemplateConfig,
   NotificationWebhookSettings,
   Settings
 } from '@/types/api'
@@ -955,6 +970,7 @@ const settingsForm = reactive<SettingsPageForm>({
     lastSyncAt: null,
     lastSyncError: null
   },
+  notificationTemplateConfig: createEmptyNotificationTemplateConfig(),
   aiConfig: {
     ...DEFAULT_AI_CONFIG,
     capabilities: {
@@ -1001,6 +1017,7 @@ const converterAmount = ref(1)
 const showSubtrackerBackupModal = ref(false)
 const showWallosImportModal = ref(false)
 const showAppriseTargetsModal = ref(false)
+const showNotificationTemplatesModal = ref(false)
 const emailDetailsExpanded = ref(false)
 const testingAppriseTargetId = ref<string | null>(null)
 const isMobile = computed(() => width.value < 960)
@@ -1777,6 +1794,19 @@ async function testNotifyx() {
 function handleAppriseTargetsSave(targets: AppriseTarget[]) {
   settingsForm.appriseConfig.targets = targets
   showAppriseTargetsModal.value = false
+}
+
+async function handleNotificationTemplatesSave(config: NotificationTemplateConfig) {
+  try {
+    const result = await api.updateSettings({
+      notificationTemplateConfig: config
+    })
+    applySavedSettings(result)
+    showNotificationTemplatesModal.value = false
+    message.success(t('settings.messages.notificationTemplatesSaved'))
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : t('settings.messages.notificationTemplatesSaveFailed'))
+  }
 }
 
 async function handleAppriseTargetTest(payload: { targetId: string; targets: AppriseTarget[] }) {

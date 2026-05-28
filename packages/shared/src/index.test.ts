@@ -7,13 +7,17 @@ import {
   DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT,
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_OVERDUE_REMINDER_RULES,
+  applyNotificationTemplate,
+  createEmptyNotificationTemplateConfig,
   formatAiSummaryPreviewText,
   getDefaultAiDashboardSummaryPreviewPrompt,
   getDefaultAiDashboardSummaryPrompt,
   getDefaultAiSubscriptionPrompt,
+  getDefaultNotificationTemplate,
   getMessage,
   normalizeWebsiteUrlInput,
   normalizeAppLocale,
+  resolveNotificationTemplateConfig,
   resolveAppLocaleFromAcceptLanguage,
   SettingsSchema,
   SubtrackerBackupCommitSchema,
@@ -58,6 +62,7 @@ describe('shared schema', () => {
       lastSyncAt: null,
       lastSyncError: null
     })
+    expect(parsed.notificationTemplateConfig).toEqual(createEmptyNotificationTemplateConfig())
     expect(parsed.aiConfig.dashboardSummaryEnabled).toBe(false)
     expect(parsed.aiConfig.dashboardSummaryPromptTemplate).toBe('')
     expect(parsed.telegramConfig).toEqual({
@@ -187,5 +192,37 @@ describe('shared schema', () => {
     ).toBe(
       '当前 13 个活跃订阅，月支出 1254.61 元，占预算 69.7%。年度支出已用 83.6%，剩余预算仅 2944.68 元。未来 30 天续订密集，年度预算可能在 2-3 个月内耗尽。'
     )
+  })
+
+  it('resolves notification template defaults by group and locale', () => {
+    const defaults = getDefaultNotificationTemplate('markdown', 'singleReminder', 'en-US')
+
+    expect(defaults.titleTemplate).toContain('{{subscription.name}}')
+    expect(defaults.bodyTemplate).toContain('{{detailsBlock}}')
+
+    const resolved = resolveNotificationTemplateConfig(
+      {
+        markdown: {
+          ...createEmptyNotificationTemplateConfig().markdown,
+          singleReminder: {
+            titleTemplate: '## {{title}}',
+            bodyTemplate: ''
+          }
+        }
+      },
+      'en-US'
+    )
+
+    expect(resolved.markdown.singleReminder.titleTemplate).toBe('## {{title}}')
+    expect(resolved.markdown.singleReminder.bodyTemplate).toContain('{{detailsBlock}}')
+    expect(resolved.text.forgotPassword.titleTemplate).toBe(getMessage('en-US', 'notifications.forgotPassword.title'))
+  })
+
+  it('applies notification templates with placeholder replacement and preserves unknown keys', () => {
+    expect(
+      applyNotificationTemplate('Hello {{ name }}\n\n\n{{unknown}}', {
+        name: 'SubTracker'
+      })
+    ).toBe('Hello SubTracker\n\n{{unknown}}')
   })
 })

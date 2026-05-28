@@ -4,6 +4,7 @@ import {
   DEFAULT_RESEND_API_URL,
   DEFAULT_AI_CONFIG,
   DEFAULT_TIMEZONE,
+  createEmptyNotificationTemplateConfig,
   SettingsSchema,
   type AppLocale,
   type SettingsInput
@@ -65,6 +66,8 @@ const DEFAULT_APPRISE_CONFIG: SettingsInput['appriseConfig'] = {
   targets: [],
   ...buildIdleAppriseSyncState()
 }
+
+const DEFAULT_NOTIFICATION_TEMPLATE_CONFIG: SettingsInput['notificationTemplateConfig'] = createEmptyNotificationTemplateConfig()
 
 export async function getSetting<T>(key: string, fallback: T): Promise<T> {
   const row = await prisma.setting.findUnique({ where: { key } })
@@ -176,6 +179,11 @@ export async function getAppSettings(): Promise<SettingsInput> {
   const gotifyConfig = readSettingsValue<SettingsInput['gotifyConfig']>(settingsMap, 'gotifyConfig', DEFAULT_GOTIFY_CONFIG)
   const barkConfig = readSettingsValue<SettingsInput['barkConfig']>(settingsMap, 'barkConfig', DEFAULT_BARK_CONFIG)
   const notifyxConfig = readSettingsValue<SettingsInput['notifyxConfig']>(settingsMap, 'notifyxConfig', DEFAULT_NOTIFYX_CONFIG)
+  const notificationTemplateConfig = readSettingsValue<SettingsInput['notificationTemplateConfig']>(
+    settingsMap,
+    'notificationTemplateConfig',
+    DEFAULT_NOTIFICATION_TEMPLATE_CONFIG
+  )
   const aiConfig = AiConfigSchema.parse(readSettingsValue<unknown>(settingsMap, 'aiConfig', DEFAULT_AI_CONFIG))
 
   return SettingsSchema.parse({
@@ -211,6 +219,7 @@ export async function getAppSettings(): Promise<SettingsInput> {
     barkConfig,
     notifyxConfig,
     appriseConfig,
+    notificationTemplateConfig,
     aiConfig
   })
 }
@@ -283,7 +292,8 @@ export async function getNotificationChannelSettings() {
     gotifyConfig,
     barkConfig,
     notifyxConfig,
-    appriseConfig
+    appriseConfig,
+    notificationTemplateConfig
   ] =
     await Promise.all([
       getSetting('emailNotificationsEnabled', false),
@@ -310,7 +320,8 @@ export async function getNotificationChannelSettings() {
       getSetting<SettingsInput['gotifyConfig']>('gotifyConfig', DEFAULT_GOTIFY_CONFIG),
       getSetting<SettingsInput['barkConfig']>('barkConfig', DEFAULT_BARK_CONFIG),
       getSetting<SettingsInput['notifyxConfig']>('notifyxConfig', DEFAULT_NOTIFYX_CONFIG),
-      getSetting<SettingsInput['appriseConfig']>('appriseConfig', DEFAULT_APPRISE_CONFIG)
+      getSetting<SettingsInput['appriseConfig']>('appriseConfig', DEFAULT_APPRISE_CONFIG),
+      getSetting<SettingsInput['notificationTemplateConfig']>('notificationTemplateConfig', DEFAULT_NOTIFICATION_TEMPLATE_CONFIG)
     ])
 
   return {
@@ -331,7 +342,8 @@ export async function getNotificationChannelSettings() {
     gotifyConfig,
     barkConfig,
     notifyxConfig,
-    appriseConfig: AppriseConfigSchema.parse(appriseConfig)
+    appriseConfig: AppriseConfigSchema.parse(appriseConfig),
+    notificationTemplateConfig
   }
 }
 

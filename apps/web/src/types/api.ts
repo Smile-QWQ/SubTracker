@@ -245,6 +245,28 @@ export interface AppriseConfig {
   lastSyncError: string | null
 }
 
+export type NotificationTemplateGroup = 'text' | 'markdown' | 'html'
+
+export type NotificationTemplateScene = 'singleReminder' | 'mergedReminder' | 'testNotification' | 'forgotPassword'
+
+export interface NotificationTemplateEntry {
+  titleTemplate: string
+  bodyTemplate: string
+}
+
+export interface NotificationTemplateSection {
+  singleReminder: NotificationTemplateEntry
+  mergedReminder: NotificationTemplateEntry
+  testNotification: NotificationTemplateEntry
+  forgotPassword: NotificationTemplateEntry
+}
+
+export interface NotificationTemplateConfig {
+  text: NotificationTemplateSection
+  markdown: NotificationTemplateSection
+  html: NotificationTemplateSection
+}
+
 export type EmailProvider = 'smtp' | 'resend'
 export type AiProviderPreset = 'custom' | 'aliyun-bailian' | 'tencent-hunyuan' | 'volcengine-ark'
 
@@ -329,6 +351,7 @@ export interface Settings {
   barkConfig: BarkConfig
   notifyxConfig: NotifyxConfig
   appriseConfig: AppriseConfig
+  notificationTemplateConfig: NotificationTemplateConfig
   aiConfig: AiConfig
 }
 

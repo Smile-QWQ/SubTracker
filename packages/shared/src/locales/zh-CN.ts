@@ -307,6 +307,68 @@ export default {
         urlPlaceholder: '例如：tgram://bot_token/chat_id'
       }
     },
+    templates: {
+      button: '模板编辑',
+      title: '编辑通知模板',
+      description: '按纯文本、Markdown 和 HTML 三种能力分别管理通知模板。Webhook Payload 继续单独配置。',
+      groups: {
+        text: '纯文本',
+        markdown: 'Markdown',
+        html: 'HTML'
+      },
+      scenes: {
+        singleReminder: '单条提醒',
+        mergedReminder: '合并提醒',
+        testNotification: '测试通知',
+        forgotPassword: '忘记密码'
+      },
+      labels: {
+        titleTemplate: '标题模板',
+        bodyTemplate: '正文模板',
+        placeholders: '可用占位符',
+        preview: '预览',
+        supportedChannels: '适用渠道'
+      },
+      helps: {
+        text: '适合纯文本回退场景，不依赖富文本解析。',
+        markdown: '适合支持 Markdown 排版的渠道，例如 Telegram、Server 酱、Gotify、Bark、NotifyX、Apprise。',
+        html: '适合直接渲染 HTML 的渠道，例如邮件和 PushPlus。',
+        placeholders: '点击占位符可插入到当前聚焦的输入框。',
+        preview: '预览使用固定示例数据，不会修改真实通知内容。'
+      },
+      supportedChannels: {
+        text: '纯文本回退',
+        markdown: 'Telegram、Server 酱、Gotify、Bark、NotifyX、Apprise',
+        html: '邮件、PushPlus'
+      },
+      placeholders: {
+        appName: '应用名称',
+        title: '最终标题',
+        phaseLabel: '提醒阶段',
+        subscriptionCount: '订阅数量',
+        detailsBlock: '当前分组格式化后的单条详情块',
+        summaryBlock: '当前分组格式化后的汇总头部块',
+        sectionsBlock: '当前分组格式化后的合并列表块',
+        testIntroBlock: '测试通知说明块',
+        forgotPasswordBlock: '忘记密码说明块',
+        subscriptionName: '订阅名称',
+        subscriptionNextRenewalDate: '下次续订日期',
+        subscriptionAmount: '金额',
+        subscriptionCurrency: '货币',
+        subscriptionAmountWithCurrency: '金额和货币',
+        subscriptionTags: '标签列表',
+        subscriptionWebsiteUrl: '网址',
+        subscriptionNotes: '备注',
+        subscriptionDaysUntilRenewal: '距离到期天数',
+        subscriptionDaysOverdue: '过期天数',
+        username: '用户名',
+        code: '验证码',
+        expiresInMinutes: '有效分钟数'
+      },
+      actions: {
+        restoreDefault: '恢复默认模板'
+      }
+    },
     placeholders: {
       optional: '可选',
       notFilledRecipient: '未填写收件人',
@@ -389,6 +451,8 @@ export default {
       appriseSaved: 'Apprise 配置已保存',
       appriseDisabled: 'Apprise 已关闭',
       appriseSavedWithSyncFailure: 'Apprise 配置已保存到本地，但同步到 Apprise API 失败：{error}',
+      notificationTemplatesSaved: '通知模板已保存',
+      notificationTemplatesSaveFailed: '通知模板保存失败',
       aiSaved: 'AI 能力配置已保存',
       aiDisabled: 'AI 能力已关闭',
       aiConnectionTestSuccess: '连接测试成功：{provider} / {model} / {response}',
@@ -1004,6 +1068,8 @@ export default {
       ignoreHint: '如果这不是你的操作，请忽略本次通知。'
     },
     tests: {
+      title: '测试通知：{name}',
+      intro: '这是一条测试通知，用于验证当前通知渠道和模板配置。',
       subscriptionName: '测试订阅',
       tagName: '测试标签',
       note: '这是一条测试通知'

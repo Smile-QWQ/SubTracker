@@ -105,4 +105,21 @@ describe('settings import export section', () => {
     expect(source).toContain("parsed.pathname.replace(/\\/+$/, '') !== ''")
     expect(source).toContain("if (!isBarkCustomServerUrl(settingsForm.barkConfig.serverUrl))")
   })
+
+  it('exposes a notification template editor from the notification settings card', () => {
+    const source = readFileSync('src/pages/SettingsPage.vue', 'utf8')
+    const modal = readFileSync('src/components/NotificationTemplatesModal.vue', 'utf8')
+
+    expect(source).toContain("t('settings.templates.button')")
+    expect(source).toContain('showNotificationTemplatesModal')
+    expect(source).toContain('<notification-templates-modal')
+    expect(source).toContain(':config="settingsForm.notificationTemplateConfig"')
+    expect(source).toContain("@save=\"handleNotificationTemplatesSave\"")
+
+    expect(modal).toContain("t('settings.templates.title')")
+    expect(modal).toContain("t('settings.templates.groups.markdown')")
+    expect(modal).toContain("t('settings.templates.groups.html')")
+    expect(modal).toContain("t('settings.templates.actions.restoreDefault')")
+    expect(modal).toContain("t('settings.templates.labels.preview')")
+  })
 })

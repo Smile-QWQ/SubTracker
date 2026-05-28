@@ -306,6 +306,68 @@ export default {
         urlPlaceholder: 'For example: tgram://bot_token/chat_id'
       }
     },
+    templates: {
+      button: 'Edit templates',
+      title: 'Edit notification templates',
+      description: 'Manage notification templates by plain text, Markdown, and HTML capabilities. Webhook payload stays in its own configuration.',
+      groups: {
+        text: 'Plain text',
+        markdown: 'Markdown',
+        html: 'HTML'
+      },
+      scenes: {
+        singleReminder: 'Single reminder',
+        mergedReminder: 'Merged reminder',
+        testNotification: 'Test notification',
+        forgotPassword: 'Forgot password'
+      },
+      labels: {
+        titleTemplate: 'Title template',
+        bodyTemplate: 'Body template',
+        placeholders: 'Available placeholders',
+        preview: 'Preview',
+        supportedChannels: 'Channels'
+      },
+      helps: {
+        text: 'Best for plain-text fallback scenarios that do not rely on rich-text parsing.',
+        markdown: 'Best for channels that support Markdown formatting, such as Telegram, ServerChan, Gotify, Bark, NotifyX, and Apprise.',
+        html: 'Best for channels that render HTML directly, such as email and PushPlus.',
+        placeholders: 'Click a placeholder to insert it into the currently focused input.',
+        preview: 'Preview uses fixed sample data and does not affect real notifications.'
+      },
+      supportedChannels: {
+        text: 'Plain-text fallback',
+        markdown: 'Telegram, ServerChan, Gotify, Bark, NotifyX, Apprise',
+        html: 'Email, PushPlus'
+      },
+      placeholders: {
+        appName: 'App name',
+        title: 'Resolved title',
+        phaseLabel: 'Reminder phase',
+        subscriptionCount: 'Subscription count',
+        detailsBlock: 'Group-specific single reminder details block',
+        summaryBlock: 'Group-specific merged summary block',
+        sectionsBlock: 'Group-specific merged sections block',
+        testIntroBlock: 'Test notification intro block',
+        forgotPasswordBlock: 'Forgot-password message block',
+        subscriptionName: 'Subscription name',
+        subscriptionNextRenewalDate: 'Next renewal date',
+        subscriptionAmount: 'Amount',
+        subscriptionCurrency: 'Currency',
+        subscriptionAmountWithCurrency: 'Amount with currency',
+        subscriptionTags: 'Tag list',
+        subscriptionWebsiteUrl: 'Website URL',
+        subscriptionNotes: 'Notes',
+        subscriptionDaysUntilRenewal: 'Days until renewal',
+        subscriptionDaysOverdue: 'Overdue days',
+        username: 'Username',
+        code: 'Verification code',
+        expiresInMinutes: 'Minutes until expiration'
+      },
+      actions: {
+        restoreDefault: 'Restore default template'
+      }
+    },
     placeholders: {
       optional: 'Optional',
       notFilledRecipient: 'Recipient not set',
@@ -388,6 +450,8 @@ export default {
       appriseSaved: 'Apprise settings saved',
       appriseDisabled: 'Apprise disabled',
       appriseSavedWithSyncFailure: 'Apprise settings were saved locally, but syncing to the Apprise API failed: {error}',
+      notificationTemplatesSaved: 'Notification templates saved',
+      notificationTemplatesSaveFailed: 'Failed to save notification templates',
       aiSaved: 'AI settings saved',
       aiDisabled: 'AI disabled',
       aiConnectionTestSuccess: 'Connection test succeeded: {provider} / {model} / {response}',
@@ -1005,6 +1069,8 @@ export default {
       ignoreHint: 'If you did not request this, you can ignore this notification.'
     },
     tests: {
+      title: 'Test notification: {name}',
+      intro: 'This is a test notification used to verify the current channel and template setup.',
       subscriptionName: 'Test subscription',
       tagName: 'Test tag',
       note: 'This is a test notification.'

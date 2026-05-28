@@ -1,5 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify'
-import { DEFAULT_RESEND_API_URL } from '@subtracker/shared'
+import { DEFAULT_RESEND_API_URL, createEmptyNotificationTemplateConfig } from '@subtracker/shared'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const store = new Map<string, unknown>()
@@ -97,6 +97,10 @@ vi.mock('../../src/services/settings.service', () => ({
       lastSyncAt: null,
       lastSyncError: null,
       ...(store.get('appriseConfig') as Record<string, unknown> | undefined)
+    },
+    notificationTemplateConfig: {
+      ...createEmptyNotificationTemplateConfig(),
+      ...(store.get('notificationTemplateConfig') as Record<string, unknown> | undefined)
     },
     aiConfig: {
       enabled: false,
@@ -508,6 +512,34 @@ describe('settings routes validation', () => {
     expect(res.statusCode).toBe(200)
     expect((store.get('appriseConfig') as Record<string, unknown>).lastSyncStatus).toBe('failed')
     expect((store.get('appriseConfig') as Record<string, unknown>).lastSyncError).toBe('connect ECONNREFUSED')
+  })
+
+  it('persists notification template overrides and fills empty entries from defaults', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      payload: {
+        notificationTemplateConfig: {
+          markdown: {
+            singleReminder: {
+              titleTemplate: '## {{title}}',
+              bodyTemplate: ''
+            }
+          }
+        }
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect((store.get('notificationTemplateConfig') as Record<string, unknown>)).toMatchObject({
+      markdown: {
+        singleReminder: {
+          titleTemplate: '## {{title}}'
+        }
+      }
+    })
+    expect(res.json().data.notificationTemplateConfig.markdown.singleReminder.titleTemplate).toBe('## {{title}}')
+    expect(res.json().data.notificationTemplateConfig.markdown.singleReminder.bodyTemplate).toContain('{{detailsBlock}}')
   })
 
   it('rejects invalid reminder rules', async () => {

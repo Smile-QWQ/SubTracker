@@ -8,6 +8,7 @@ import {
   resolveAppLocaleFromAcceptLanguage,
   type AppLocale
 } from './locale-core'
+import { NotificationTemplateConfigSchema } from './notification-templates'
 
 const FQDN_LABEL_RE = /^[a-z_\u00a1-\uffff0-9-]+$/i
 const FQDN_TLD_RE = /^([a-z\u00A1-\u00A8\u00AA-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF]{2,}|xn[a-z0-9-]{2,})$/i
@@ -157,6 +158,24 @@ export {
   normalizeAppLocale,
   resolveAppLocaleFromAcceptLanguage
 } from './locale-core'
+export {
+  applyNotificationTemplate,
+  createEmptyNotificationTemplateConfig,
+  getDefaultNotificationTemplate,
+  NotificationTemplateConfigSchema,
+  NotificationTemplateEntrySchema,
+  NotificationTemplateGroupSchema,
+  NotificationTemplateSceneSchema,
+  NotificationTemplateSectionSchema,
+  NOTIFICATION_TEMPLATE_GROUPS,
+  NOTIFICATION_TEMPLATE_SCENES,
+  resolveNotificationTemplateConfig,
+  type NotificationTemplateConfigInput,
+  type NotificationTemplateEntryInput,
+  type NotificationTemplateGroup,
+  type NotificationTemplateScene,
+  type NotificationTemplateSectionInput
+} from './notification-templates'
 
 export const SubscriptionStatusSchema = z.enum(['active', 'paused', 'cancelled', 'expired'])
 export const BillingIntervalUnitSchema = z.enum(['day', 'week', 'month', 'quarter', 'year'])
@@ -409,6 +428,7 @@ export const SettingsSchema = z.object({
   barkConfig: BarkConfigSchema.default({}),
   notifyxConfig: NotifyxConfigSchema.default({}),
   appriseConfig: AppriseConfigSchema.default({}),
+  notificationTemplateConfig: NotificationTemplateConfigSchema.default({}),
   aiConfig: AiConfigSchema.default({})
 })
 
