@@ -123,7 +123,7 @@
               </n-grid-item>
             </n-grid>
 
-            <n-space style="margin-top: 12px">
+            <n-space class="settings-actions settings-actions--wrap" style="margin-top: 12px">
               <n-button type="primary" @click="saveBasicSettings">
                 <template #icon>
                   <n-icon><save-outline /></n-icon>
@@ -159,7 +159,7 @@
             </n-descriptions-item>
           </n-descriptions>
 
-          <n-space style="margin-top: 12px">
+          <n-space class="settings-actions" style="margin-top: 12px">
             <n-button @click="refreshRates">
               <template #icon>
                 <n-icon><refresh-outline /></n-icon>
@@ -173,7 +173,7 @@
       <n-grid-item>
         <n-card :title="t('settings.sections.currentRates')" class="settings-card">
           <template #header-extra>
-            <n-space>
+            <n-space class="settings-header-tags" wrap>
               <n-tag type="success">{{ t('settings.summary.baseCurrencyTag', { currency: settingsForm.baseCurrency }) }}</n-tag>
               <n-tag type="info">{{ t('settings.summary.supportedCurrenciesTag', { count: supportedCurrencyCount }) }}</n-tag>
             </n-space>
@@ -302,7 +302,7 @@
                     </template>
                   </n-collapse-transition>
 
-                  <n-space>
+                  <n-space class="channel-card__actions" wrap>
                     <n-button :loading="savingEmailSettings" :disabled="savingEmailSettings" @click="saveEmailSettings">{{ t('common.actions.save') }}</n-button>
                     <n-button type="primary" @click="testEmail">{{ t('common.actions.test') }}</n-button>
                   </n-space>
@@ -323,7 +323,7 @@
                   <n-form-item :label="t('common.labels.topic')">
                     <n-input v-model:value="settingsForm.pushplusConfig.topic" :placeholder="t('settings.placeholders.optional')" />
                   </n-form-item>
-                  <n-space>
+                  <n-space class="channel-card__actions" wrap>
                     <n-button :loading="savingPushplusSettings" :disabled="savingPushplusSettings" @click="savePushplusSettings">{{ t('common.actions.save') }}</n-button>
                     <n-button type="primary" @click="testPushplus">{{ t('common.actions.test') }}</n-button>
                   </n-space>
@@ -344,7 +344,7 @@
                   <n-form-item :label="t('common.labels.chatId')">
                     <n-input v-model:value="settingsForm.telegramConfig.chatId" :placeholder="t('settings.placeholders.chatIdExample')" />
                   </n-form-item>
-                  <n-space>
+                  <n-space class="channel-card__actions" wrap>
                     <n-button :loading="savingTelegramSettings" :disabled="savingTelegramSettings" @click="saveTelegramSettings">{{ t('common.actions.save') }}</n-button>
                     <n-button type="primary" @click="testTelegram">{{ t('common.actions.test') }}</n-button>
                   </n-space>
@@ -362,7 +362,7 @@
                   <n-form-item :label="t('common.labels.sendKey')">
                     <n-input v-model:value="settingsForm.serverchanConfig.sendkey" />
                   </n-form-item>
-                  <n-space>
+                  <n-space class="channel-card__actions" wrap>
                     <n-button :loading="savingServerchanSettings" :disabled="savingServerchanSettings" @click="saveServerchanSettings">{{ t('common.actions.save') }}</n-button>
                     <n-button type="primary" @click="testServerchan">{{ t('common.actions.test') }}</n-button>
                   </n-space>
@@ -387,9 +387,55 @@
                     <n-switch v-model:value="settingsForm.gotifyConfig.ignoreSsl" />
                     <span class="switch-inline-label">{{ t('settings.labels.ignoreSsl') }}</span>
                   </div>
-                  <n-space>
+                  <n-space class="channel-card__actions" wrap>
                     <n-button :loading="savingGotifySettings" :disabled="savingGotifySettings" @click="saveGotifySettings">{{ t('common.actions.save') }}</n-button>
                     <n-button type="primary" @click="testGotify">{{ t('common.actions.test') }}</n-button>
+                  </n-space>
+                </n-form>
+              </div>
+            </n-grid-item>
+
+            <n-grid-item>
+              <div class="channel-card">
+                <div class="channel-card__header">
+                  <span>{{ t('settings.channels.bark') }}</span>
+                  <n-switch v-model:value="settingsForm.barkNotificationsEnabled" />
+                </div>
+                <n-form label-placement="top">
+                  <n-form-item :label="t('settings.labels.barkServerUrl')">
+                    <n-input v-model:value="settingsForm.barkConfig.serverUrl" :placeholder="t('settings.placeholders.barkServerUrl')" />
+                  </n-form-item>
+                  <n-form-item :label="t('common.labels.deviceKey')">
+                    <n-input v-model:value="settingsForm.barkConfig.deviceKey" type="password" show-password-on="click" />
+                  </n-form-item>
+                  <div class="compact-switch-row">
+                    <n-switch v-model:value="settingsForm.barkConfig.isArchive" />
+                    <span class="switch-inline-label">{{ t('settings.labels.archiveNotification') }}</span>
+                  </div>
+                  <n-space class="channel-card__actions" wrap>
+                    <n-button :loading="savingBarkSettings" :disabled="savingBarkSettings" @click="saveBarkSettings">{{ t('common.actions.save') }}</n-button>
+                    <n-button type="primary" @click="testBark">{{ t('common.actions.test') }}</n-button>
+                  </n-space>
+                </n-form>
+              </div>
+            </n-grid-item>
+
+            <n-grid-item>
+              <div class="channel-card">
+                <div class="channel-card__header">
+                  <span>{{ t('settings.channels.notifyx') }}</span>
+                  <n-switch v-model:value="settingsForm.notifyxNotificationsEnabled" />
+                </div>
+                <n-form label-placement="top">
+                  <n-form-item :label="t('common.labels.apiKey')">
+                    <n-input v-model:value="settingsForm.notifyxConfig.apiKey" type="password" show-password-on="click" />
+                  </n-form-item>
+                  <n-form-item :label="t('common.labels.team')">
+                    <n-input v-model:value="settingsForm.notifyxConfig.team" :placeholder="t('settings.placeholders.optional')" />
+                  </n-form-item>
+                  <n-space class="channel-card__actions" wrap>
+                    <n-button :loading="savingNotifyxSettings" :disabled="savingNotifyxSettings" @click="saveNotifyxSettings">{{ t('common.actions.save') }}</n-button>
+                    <n-button type="primary" @click="testNotifyx">{{ t('common.actions.test') }}</n-button>
                   </n-space>
                 </n-form>
               </div>
@@ -443,7 +489,7 @@
                       </n-alert>
                     </n-collapse-item>
                   </n-collapse>
-                  <n-space>
+                  <n-space class="channel-card__actions" wrap>
                     <n-button :loading="savingWebhookSettings" :disabled="savingWebhookSettings" @click="saveWebhook">{{ t('common.actions.save') }}</n-button>
                     <n-button type="primary" @click="testWebhook">{{ t('common.actions.test') }}</n-button>
                   </n-space>
@@ -537,7 +583,7 @@
                 </n-form-item>
               </n-collapse-item>
             </n-collapse>
-            <n-space>
+            <n-space class="settings-actions settings-actions--wrap">
               <n-button :loading="savingAiSettings" :disabled="savingAiSettings" @click="saveAiSettings">{{ t('common.actions.save') }}</n-button>
               <n-button type="primary" ghost @click="testAiConnectionSettings">{{ t('common.actions.connectionTest') }}</n-button>
               <n-button v-if="settingsForm.aiConfig.capabilities.vision" type="primary" @click="testAiVisionSettings">{{ t('common.actions.visionTest') }}</n-button>
@@ -586,7 +632,7 @@
                 </div>
               </div>
             </div>
-            <n-space style="margin-top: 12px">
+            <n-space class="settings-actions" style="margin-top: 12px">
               <n-button type="primary" :loading="savingCredentials" :disabled="savingCredentials" @click="submitCredentialsChange">
                 {{ t('common.actions.update') }}
               </n-button>
@@ -601,7 +647,7 @@
             <n-card size="small" embedded :title="t('settings.sections.backup')">
               <n-space vertical style="width: 100%">
                 <div class="card-muted">{{ t('settings.helps.backup') }}</div>
-                <n-space wrap>
+                <n-space class="settings-actions settings-actions--wrap" wrap>
                   <n-button type="primary" @click="exportBackup">{{ t('settings.buttons.exportBackup') }}</n-button>
                   <n-button type="success" ghost @click="showSubtrackerBackupModal = true">{{ t('settings.buttons.restoreBackup') }}</n-button>
                 </n-space>
@@ -611,7 +657,7 @@
             <n-card size="small" embedded :title="t('settings.sections.migration')">
               <n-space vertical style="width: 100%">
                 <div class="card-muted">{{ t('settings.helps.migration') }}</div>
-                <n-space wrap>
+                <n-space class="settings-actions settings-actions--wrap" wrap>
                   <n-button type="success" @click="showWallosImportModal = true">{{ t('settings.buttons.importWallos') }}</n-button>
                 </n-space>
               </n-space>
@@ -805,6 +851,8 @@ const settingsForm = reactive<SettingsPageForm>({
   telegramNotificationsEnabled: false,
   serverchanNotificationsEnabled: false,
   gotifyNotificationsEnabled: false,
+  barkNotificationsEnabled: false,
+  notifyxNotificationsEnabled: false,
   smtpConfig: {
     host: '',
     port: 587,
@@ -835,6 +883,15 @@ const settingsForm = reactive<SettingsPageForm>({
     url: '',
     token: '',
     ignoreSsl: false
+  },
+  barkConfig: {
+    serverUrl: '',
+    deviceKey: '',
+    isArchive: false
+  },
+  notifyxConfig: {
+    apiKey: '',
+    team: ''
   },
   aiConfig: {
     ...DEFAULT_AI_CONFIG,
@@ -869,6 +926,8 @@ const savingPushplusSettings = ref(false)
 const savingTelegramSettings = ref(false)
 const savingServerchanSettings = ref(false)
 const savingGotifySettings = ref(false)
+const savingBarkSettings = ref(false)
+const savingNotifyxSettings = ref(false)
 const savingWebhookSettings = ref(false)
 const savingAiSettings = ref(false)
 const savingCredentials = ref(false)
@@ -896,7 +955,7 @@ const webhookMethodOptions = [
   { label: 'DELETE', value: 'DELETE' }
 ]
 const webhookVariablesText =
-  '{{phase}}、{{days_until}}、{{days_overdue}}、{{subscription_id}}、{{subscription_name}}、{{subscription_amount}}、{{subscription_currency}}、{{subscription_next_renewal_date}}、{{subscription_tags}}、{{subscription_url}}、{{subscription_notes}}'
+  '{{phase}}, {{days_until}}, {{days_overdue}}, {{subscription_id}}, {{subscription_name}}, {{subscription_amount}}, {{subscription_currency}}, {{subscription_next_renewal_date}}, {{subscription_tags}}, {{subscription_url}}, {{subscription_notes}}'
 const aiProviderPresetOptions = computed(() => [
   { label: t('settings.options.aiProviderPreset.custom'), value: 'custom' },
   { label: t('settings.options.aiProviderPreset.aliyunBailian'), value: 'aliyun-bailian' },
@@ -913,7 +972,9 @@ const forgotPasswordToggleUnlocked = computed(
     settingsForm.pushplusNotificationsEnabled ||
     settingsForm.telegramNotificationsEnabled ||
     settingsForm.serverchanNotificationsEnabled ||
-    settingsForm.gotifyNotificationsEnabled
+    settingsForm.gotifyNotificationsEnabled ||
+    settingsForm.barkNotificationsEnabled ||
+    settingsForm.notifyxNotificationsEnabled
 )
 const aboutEntries = computed(() => [
   {
@@ -1076,6 +1137,31 @@ function validateGotifySettings(action: 'save' | 'test') {
   ])
   if (!missing.length) return true
   message.error(t('settings.validation.gotifyMissingFields', { fields: joinFieldLabels(missing) }))
+  return false
+}
+
+function validateBarkSettings(action: 'save' | 'test') {
+  if (action === 'save' && !settingsForm.barkNotificationsEnabled) {
+    return true
+  }
+
+  const missing = getMissingRequiredFields([
+    [t('common.labels.serverUrl'), settingsForm.barkConfig.serverUrl],
+    [t('common.labels.deviceKey'), settingsForm.barkConfig.deviceKey]
+  ])
+  if (!missing.length) return true
+  message.error(t('settings.validation.barkMissingFields', { fields: joinFieldLabels(missing) }))
+  return false
+}
+
+function validateNotifyxSettings(action: 'save' | 'test') {
+  if (action === 'save' && !settingsForm.notifyxNotificationsEnabled) {
+    return true
+  }
+
+  const missing = getMissingRequiredFields([[t('common.labels.apiKey'), settingsForm.notifyxConfig.apiKey]])
+  if (!missing.length) return true
+  message.error(t('settings.validation.notifyxMissingFields', { fields: joinFieldLabels(missing) }))
   return false
 }
 
@@ -1265,6 +1351,38 @@ async function saveGotifySettings() {
     message.success(settingsForm.gotifyNotificationsEnabled ? t('settings.messages.gotifySaved') : t('settings.messages.gotifyDisabled'))
   } finally {
     savingGotifySettings.value = false
+  }
+}
+
+async function saveBarkSettings() {
+  if (savingBarkSettings.value) return
+  if (!validateBarkSettings('save')) return
+  savingBarkSettings.value = true
+  try {
+    const result = await api.updateSettings({
+      barkNotificationsEnabled: settingsForm.barkNotificationsEnabled,
+      barkConfig: settingsForm.barkConfig
+    })
+    applySavedSettings(result)
+    message.success(settingsForm.barkNotificationsEnabled ? t('settings.messages.barkSaved') : t('settings.messages.barkDisabled'))
+  } finally {
+    savingBarkSettings.value = false
+  }
+}
+
+async function saveNotifyxSettings() {
+  if (savingNotifyxSettings.value) return
+  if (!validateNotifyxSettings('save')) return
+  savingNotifyxSettings.value = true
+  try {
+    const result = await api.updateSettings({
+      notifyxNotificationsEnabled: settingsForm.notifyxNotificationsEnabled,
+      notifyxConfig: settingsForm.notifyxConfig
+    })
+    applySavedSettings(result)
+    message.success(settingsForm.notifyxNotificationsEnabled ? t('settings.messages.notifyxSaved') : t('settings.messages.notifyxDisabled'))
+  } finally {
+    savingNotifyxSettings.value = false
   }
 }
 
@@ -1470,6 +1588,26 @@ async function testGotify() {
     message.success(t('settings.messages.gotifyTestSent'))
   } catch (error) {
     message.error(error instanceof Error ? error.message : t('settings.messages.gotifyTestFailed'))
+  }
+}
+
+async function testBark() {
+  if (!validateBarkSettings('test')) return
+  try {
+    await api.testBarkNotificationWithPayload(settingsForm.barkConfig)
+    message.success(t('settings.messages.barkTestSent'))
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : t('settings.messages.barkTestFailed'))
+  }
+}
+
+async function testNotifyx() {
+  if (!validateNotifyxSettings('test')) return
+  try {
+    await api.testNotifyxNotificationWithPayload(settingsForm.notifyxConfig)
+    message.success(t('settings.messages.notifyxTestSent'))
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : t('settings.messages.notifyxTestFailed'))
   }
 }
 
@@ -1749,6 +1887,17 @@ function previewSettingsReminderRules() {
   color: var(--app-text-secondary);
 }
 
+.settings-actions,
+.settings-header-tags,
+.channel-card__actions {
+  width: 100%;
+}
+
+.settings-actions :deep(.n-space-item),
+.channel-card__actions :deep(.n-space-item) {
+  min-width: 0;
+}
+
 .channel-card {
   width: 100%;
   min-width: 0;
@@ -1765,9 +1914,15 @@ function previewSettingsReminderRules() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
   margin-bottom: 12px;
   font-weight: 700;
   color: var(--app-text-strong);
+}
+
+.channel-card__actions {
+  margin-top: 4px;
 }
 
 .email-details-toggle {
@@ -1836,6 +1991,17 @@ function previewSettingsReminderRules() {
 }
 
 @media (max-width: 640px) {
+  .settings-actions,
+  .settings-header-tags,
+  .channel-card__actions {
+    justify-content: flex-start;
+  }
+
+  .settings-actions :deep(.n-button),
+  .channel-card__actions :deep(.n-button) {
+    width: 100%;
+  }
+
   .switch-group--ai-capabilities-inline {
     justify-content: flex-start;
     min-width: 0;
@@ -1847,6 +2013,14 @@ function previewSettingsReminderRules() {
 
   .converter-swap-button {
     justify-self: center;
+  }
+
+  .channel-card__header {
+    align-items: flex-start;
+  }
+
+  .compact-switch-row {
+    align-items: flex-start;
   }
 }
 

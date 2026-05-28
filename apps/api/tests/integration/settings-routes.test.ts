@@ -32,6 +32,8 @@ vi.mock('../../src/services/settings.service', () => ({
     telegramNotificationsEnabled: (store.get('telegramNotificationsEnabled') as boolean) ?? false,
     serverchanNotificationsEnabled: (store.get('serverchanNotificationsEnabled') as boolean) ?? false,
     gotifyNotificationsEnabled: (store.get('gotifyNotificationsEnabled') as boolean) ?? false,
+    barkNotificationsEnabled: (store.get('barkNotificationsEnabled') as boolean) ?? false,
+    notifyxNotificationsEnabled: (store.get('notifyxNotificationsEnabled') as boolean) ?? false,
     smtpConfig: {
       host: '',
       port: 587,
@@ -68,6 +70,17 @@ vi.mock('../../src/services/settings.service', () => ({
       token: '',
       ignoreSsl: false,
       ...(store.get('gotifyConfig') as Record<string, unknown> | undefined)
+    },
+    barkConfig: {
+      serverUrl: '',
+      deviceKey: '',
+      isArchive: false,
+      ...(store.get('barkConfig') as Record<string, unknown> | undefined)
+    },
+    notifyxConfig: {
+      apiKey: '',
+      team: '',
+      ...(store.get('notifyxConfig') as Record<string, unknown> | undefined)
     },
     aiConfig: {
       enabled: false,
@@ -278,6 +291,42 @@ describe('settings routes validation', () => {
 
     expect(res.statusCode).toBe(422)
     expect(res.json().error.message).toContain('Gotify URL')
+  })
+
+  it('rejects incomplete bark config when enabling bark notifications', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      payload: {
+        barkNotificationsEnabled: true,
+        barkConfig: {
+          serverUrl: '',
+          deviceKey: ''
+        }
+      }
+    })
+
+    expect(res.statusCode).toBe(422)
+    expect(res.json().error.message).toContain('启用 Bark 时必须填写')
+  })
+
+  it('rejects incomplete notifyx config when enabling notifyx notifications in english locale', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      headers: {
+        'X-SubTracker-Locale': 'en-US'
+      },
+      payload: {
+        notifyxNotificationsEnabled: true,
+        notifyxConfig: {
+          apiKey: ''
+        }
+      }
+    })
+
+    expect(res.statusCode).toBe(422)
+    expect(res.json().error.message).toBe('To enable NotifyX, fill in: API Key')
   })
 
   it('rejects invalid reminder rules', async () => {

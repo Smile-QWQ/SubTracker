@@ -68,8 +68,11 @@ export default {
       chatId: 'Chat ID',
       botToken: 'Bot Token',
       sendKey: 'SendKey',
+      serverUrl: 'Server URL',
+      deviceKey: 'Device Key',
       apiBaseUrl: 'API Base URL',
       apiKey: 'API Key',
+      team: 'Team ID',
       topic: 'Topic',
       gotifyTargetUrl: 'Gotify URL',
       webhookTargetUrl: 'Webhook URL'
@@ -92,7 +95,7 @@ export default {
       notificationDetail: '; '
     },
     locales: {
-      zhCN: '简体中文',
+      zhCN: 'Simplified Chinese',
       enUS: 'English'
     },
     units: {
@@ -235,9 +238,13 @@ export default {
       botToken: 'Bot Token',
       chatId: 'Chat ID',
       sendKey: 'SendKey',
+      barkServerUrl: 'Bark Server URL',
+      deviceKey: 'Device Key',
+      archiveNotification: 'Archive notification on device',
       topic: 'Topic',
       apiBaseUrl: 'API Base URL',
       apiKey: 'API Key',
+      team: 'Team ID',
       gotifyTargetUrl: 'Gotify URL',
       webhookTargetUrl: 'Webhook URL',
       oldUsername: 'Current username',
@@ -253,7 +260,7 @@ export default {
       overdueReminderRules:
         'Format: days&time;. For example, 1&09:30; reminds at 09:30 on overdue day 1. Separate multiple rules with ;',
       notificationSettings:
-        'Manage Email, PushPlus, Telegram, ServerChan, Gotify, and Webhook in one place. Save and test each channel independently.',
+        'Manage Email, PushPlus, Telegram, ServerChan, Gotify, Bark, NotifyX, and Webhook in one place. Save and test each channel independently.',
       aiSettings: 'The main AI switch controls recognition and connection tests. AI summaries can be turned on or off separately.',
       forgotPasswordChannelRequired: 'Enable at least one direct notification channel first',
       structuredOutput:
@@ -279,6 +286,7 @@ export default {
       multiEmail: 'Separate multiple emails with commas',
       chatIdExample: 'For example: 123456789 or -100xxxxxxxxxx',
       gotifyUrl: 'https://gotify.example.com',
+      barkServerUrl: 'https://api.day.app',
       webhookUrl: 'https://example.com/hook',
       aiBaseUrl: 'https://api.deepseek.com',
       customHeaders:
@@ -300,6 +308,8 @@ export default {
       telegram: 'Telegram Bot',
       serverchan: 'ServerChan',
       gotify: 'Gotify',
+      bark: 'Bark',
+      notifyx: 'NotifyX',
       webhook: 'Webhook'
     },
     options: {
@@ -320,6 +330,8 @@ export default {
       telegramMissingFields: 'Telegram is missing required fields: {fields}',
       serverchanMissingFields: 'ServerChan is missing required fields: {fields}',
       gotifyMissingFields: 'Gotify is missing required fields: {fields}',
+      barkMissingFields: 'Bark is missing required fields: {fields}',
+      notifyxMissingFields: 'NotifyX is missing required fields: {fields}',
       webhookMissingFields: 'Webhook is missing required fields: {fields}',
       aiMissingFields: 'AI settings are missing required fields: {fields}'
     },
@@ -336,6 +348,10 @@ export default {
       serverchanDisabled: 'ServerChan disabled',
       gotifySaved: 'Gotify settings saved',
       gotifyDisabled: 'Gotify disabled',
+      barkSaved: 'Bark settings saved',
+      barkDisabled: 'Bark disabled',
+      notifyxSaved: 'NotifyX settings saved',
+      notifyxDisabled: 'NotifyX disabled',
       aiSaved: 'AI settings saved',
       aiDisabled: 'AI disabled',
       aiConnectionTestSuccess: 'Connection test succeeded: {provider} / {model} / {response}',
@@ -358,6 +374,10 @@ export default {
       serverchanTestFailed: 'ServerChan test failed',
       gotifyTestSent: 'Gotify test message sent',
       gotifyTestFailed: 'Gotify test failed',
+      barkTestSent: 'Bark test message sent',
+      barkTestFailed: 'Bark test failed',
+      notifyxTestSent: 'NotifyX test message sent',
+      notifyxTestFailed: 'NotifyX test failed',
       zipExportStarted: 'Backup export started',
       zipExportFailed: 'Backup export failed',
       backupRestored: 'Backup restored',
@@ -582,7 +602,8 @@ export default {
       namePlaceholder: 'Example: Cloud services',
       colorLabel: 'Color',
       colorPlaceholder: '#3b82f6 or rgb(59,130,246)',
-      sortOrderLabel: 'Order'
+      sortOrderLabel: 'Order',
+      invalidColor: 'Enter a valid color value, for example #3b82f6 or rgb(59,130,246)'
     },
     budget: {
       title: 'Set tag monthly budgets',
@@ -900,6 +921,8 @@ export default {
       telegram: 'Telegram',
       serverchan: 'ServerChan',
       gotify: 'Gotify',
+      bark: 'Bark',
+      notifyx: 'NotifyX',
       webhook: 'Webhook'
     },
     status: {
@@ -1170,6 +1193,8 @@ Hard requirements:
         invalidTelegramConfigPayload: 'Invalid Telegram config payload',
         invalidServerchanConfigPayload: 'Invalid ServerChan config payload',
         invalidGotifyConfigPayload: 'Invalid Gotify config payload',
+        invalidBarkConfigPayload: 'Invalid Bark config payload',
+        invalidNotifyxConfigPayload: 'Invalid NotifyX config payload',
         invalidWebhookSettingsPayload: 'Invalid webhook settings payload',
         invalidForgotPasswordRequestPayload: 'Invalid forgot password request payload',
         invalidForgotPasswordResetPayload: 'Invalid forgot password reset payload',
@@ -1223,6 +1248,8 @@ Hard requirements:
         telegramFieldsRequired: 'To enable Telegram notifications, fill in: {fields}',
         serverchanSendKeyRequired: 'To enable ServerChan, fill in SendKey',
         gotifyFieldsRequired: 'To enable Gotify, fill in: {fields}',
+        barkFieldsRequired: 'To enable Bark, fill in: {fields}',
+        notifyxFieldsRequired: 'To enable NotifyX, fill in: {fields}',
         aiFieldsRequired: 'To enable AI, fill in: {fields}'
       },
       ai: {
@@ -1251,6 +1278,8 @@ Hard requirements:
         telegramDisabledOrIncomplete: 'Telegram notifications are disabled or incomplete',
         serverchanDisabledOrIncomplete: 'ServerChan notifications are disabled or incomplete',
         gotifyDisabledOrIncomplete: 'Gotify notifications are disabled or incomplete',
+        barkDisabledOrIncomplete: 'Bark notifications are disabled or incomplete',
+        notifyxDisabledOrIncomplete: 'NotifyX notifications are disabled or incomplete',
         emptyDedupEntries: 'Cannot build notification dispatch params from empty dedup entries',
         resendRequestFailed: 'Resend request failed',
         pushplusRequestFailed: 'PushPlus request failed',
@@ -1264,13 +1293,21 @@ Hard requirements:
         serverchanInvalidResponse: 'ServerChan returned an invalid response',
         serverchanRejected: 'ServerChan request was rejected',
         gotifyRequestFailed: 'Gotify request failed',
+        barkRequestFailed: 'Bark request failed',
+        barkInvalidResponse: 'Bark returned an invalid response',
+        barkRejected: 'Bark request was rejected',
+        notifyxRequestFailed: 'NotifyX request failed',
+        notifyxInvalidResponse: 'NotifyX returned an invalid response',
+        notifyxRejected: 'NotifyX request was rejected',
         webhookConfigIncomplete: 'Webhook configuration is incomplete',
         webhookTestFailed: 'Webhook test failed',
         emailTestFailed: 'Email test failed',
         pushplusTestFailed: 'PushPlus test failed',
         telegramTestFailed: 'Telegram test failed',
         serverchanTestFailed: 'ServerChan test failed',
-        gotifyTestFailed: 'Gotify test failed'
+        gotifyTestFailed: 'Gotify test failed',
+        barkTestFailed: 'Bark test failed',
+        notifyxTestFailed: 'NotifyX test failed'
       },
       imports: {
         wallosInspectFailed: 'Wallos inspect failed',

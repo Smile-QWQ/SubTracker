@@ -289,6 +289,17 @@ export const GotifyConfigSchema = z.object({
   ignoreSsl: z.boolean().default(false)
 })
 
+export const BarkConfigSchema = z.object({
+  serverUrl: z.string().trim().max(500).default(''),
+  deviceKey: z.string().max(200).default(''),
+  isArchive: z.boolean().default(false)
+})
+
+export const NotifyxConfigSchema = z.object({
+  apiKey: z.string().max(200).default(''),
+  team: z.string().max(32).default('')
+})
+
 export const AiProviderPresetSchema = z.enum(['custom', 'aliyun-bailian', 'tencent-hunyuan', 'volcengine-ark'])
 
 export const DEFAULT_AI_CAPABILITIES = {
@@ -367,12 +378,16 @@ export const SettingsSchema = z.object({
   telegramNotificationsEnabled: z.boolean().default(false),
   serverchanNotificationsEnabled: z.boolean().default(false),
   gotifyNotificationsEnabled: z.boolean().default(false),
+  barkNotificationsEnabled: z.boolean().default(false),
+  notifyxNotificationsEnabled: z.boolean().default(false),
   smtpConfig: EmailConfigSchema.default({}),
   resendConfig: ResendConfigSchema.default({}),
   pushplusConfig: PushPlusConfigSchema.default({}),
   telegramConfig: TelegramConfigSchema.default({}),
   serverchanConfig: ServerchanConfigSchema.default({}),
   gotifyConfig: GotifyConfigSchema.default({}),
+  barkConfig: BarkConfigSchema.default({}),
+  notifyxConfig: NotifyxConfigSchema.default({}),
   aiConfig: AiConfigSchema.default({})
 })
 
@@ -475,6 +490,8 @@ export type PushPlusConfigInput = z.infer<typeof PushPlusConfigSchema>
 export type TelegramConfigInput = z.infer<typeof TelegramConfigSchema>
 export type ServerchanConfigInput = z.infer<typeof ServerchanConfigSchema>
 export type GotifyConfigInput = z.infer<typeof GotifyConfigSchema>
+export type BarkConfigInput = z.infer<typeof BarkConfigSchema>
+export type NotifyxConfigInput = z.infer<typeof NotifyxConfigSchema>
 export type NotificationWebhookSettingsInput = z.infer<typeof NotificationWebhookSettingsSchema>
 export type AiProviderPreset = z.infer<typeof AiProviderPresetSchema>
 export type AiCapabilitiesInput = z.infer<typeof AiCapabilitiesSchema>

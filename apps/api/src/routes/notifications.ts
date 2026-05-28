@@ -1,10 +1,12 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import {
+  BarkConfigSchema,
   EmailConfigSchema,
   EmailProviderSchema,
   GotifyConfigSchema,
   NotificationWebhookSettingsSchema,
+  NotifyxConfigSchema,
   PushPlusConfigSchema,
   ResendConfigSchema,
   ServerchanConfigSchema,
@@ -13,10 +15,14 @@ import {
 import { sendError, sendOk } from '../http'
 import { detectRequestLocale } from '../i18n'
 import {
+  sendTestBarkNotification,
+  sendTestBarkNotificationWithConfig,
   sendTestEmailNotification,
   sendTestEmailNotificationWithConfig,
   sendTestGotifyNotification,
   sendTestGotifyNotificationWithConfig,
+  sendTestNotifyxNotification,
+  sendTestNotifyxNotificationWithConfig,
   sendTestPushplusNotification,
   sendTestPushplusNotificationWithConfig,
   sendTestServerchanNotification,
@@ -222,6 +228,59 @@ export async function notificationRoutes(app: FastifyInstance) {
       return sendOk(reply, result)
     } catch (error) {
       return sendError(reply, 400, 'gotify_test_failed', error instanceof Error ? error.message : 'api.errors.notifications.gotifyTestFailed', undefined, {
+        locale: request.locale
+      })
+    }
+  })
+
+  app.post('/notifications/test/bark', async (request, reply) => {
+    const locale = request.locale ?? detectRequestLocale(request)
+    try {
+      if (request.body) {
+        const parsed = BarkConfigSchema.partial().safeParse(request.body)
+        if (!parsed.success) {
+          return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidBarkConfigPayload', parsed.error.flatten(), {
+            locale: request.locale
+          })
+        }
+        const result = await sendTestBarkNotificationWithConfig({
+          serverUrl: parsed.data.serverUrl ?? '',
+          deviceKey: parsed.data.deviceKey ?? '',
+          isArchive: parsed.data.isArchive ?? false
+        }, { locale })
+        return sendOk(reply, result)
+      }
+
+      const result = await sendTestBarkNotification({ locale })
+      return sendOk(reply, result)
+    } catch (error) {
+      return sendError(reply, 400, 'bark_test_failed', error instanceof Error ? error.message : 'api.errors.notifications.barkTestFailed', undefined, {
+        locale: request.locale
+      })
+    }
+  })
+
+  app.post('/notifications/test/notifyx', async (request, reply) => {
+    const locale = request.locale ?? detectRequestLocale(request)
+    try {
+      if (request.body) {
+        const parsed = NotifyxConfigSchema.partial().safeParse(request.body)
+        if (!parsed.success) {
+          return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidNotifyxConfigPayload', parsed.error.flatten(), {
+            locale: request.locale
+          })
+        }
+        const result = await sendTestNotifyxNotificationWithConfig({
+          apiKey: parsed.data.apiKey ?? '',
+          team: parsed.data.team ?? ''
+        }, { locale })
+        return sendOk(reply, result)
+      }
+
+      const result = await sendTestNotifyxNotification({ locale })
+      return sendOk(reply, result)
+    } catch (error) {
+      return sendError(reply, 400, 'notifyx_test_failed', error instanceof Error ? error.message : 'api.errors.notifications.notifyxTestFailed', undefined, {
         locale: request.locale
       })
     }

@@ -69,6 +69,8 @@ const channelState = vi.hoisted(() => {
       telegramNotificationsEnabled: false,
       serverchanNotificationsEnabled: false,
       gotifyNotificationsEnabled: false,
+      barkNotificationsEnabled: false,
+      notifyxNotificationsEnabled: false,
       smtpConfig: {
         host: 'smtp.example.com',
         port: 587,
@@ -87,7 +89,9 @@ const channelState = vi.hoisted(() => {
       pushplusConfig: { token: '', topic: '' },
       telegramConfig: { botToken: '', chatId: '' },
       serverchanConfig: { sendkey: '' },
-      gotifyConfig: { url: '', token: '', ignoreSsl: false }
+      gotifyConfig: { url: '', token: '', ignoreSsl: false },
+      barkConfig: { serverUrl: '', deviceKey: '', isArchive: false },
+      notifyxConfig: { apiKey: '', team: '' }
     })),
     getSettingMock: vi.fn(async <T>(key: string, fallback: T) => (store.has(key) ? (store.get(key) as T) : fallback)),
     setSettingMock: vi.fn(async (key: string, value: unknown) => {

@@ -21,12 +21,16 @@ export interface SettingsPageForm {
   telegramNotificationsEnabled: Settings['telegramNotificationsEnabled']
   serverchanNotificationsEnabled: Settings['serverchanNotificationsEnabled']
   gotifyNotificationsEnabled: Settings['gotifyNotificationsEnabled']
+  barkNotificationsEnabled: Settings['barkNotificationsEnabled']
+  notifyxNotificationsEnabled: Settings['notifyxNotificationsEnabled']
   smtpConfig: Settings['smtpConfig']
   resendConfig: Settings['resendConfig']
   pushplusConfig: Settings['pushplusConfig']
   telegramConfig: Settings['telegramConfig']
   serverchanConfig: Settings['serverchanConfig']
   gotifyConfig: Settings['gotifyConfig']
+  barkConfig: Settings['barkConfig']
+  notifyxConfig: Settings['notifyxConfig']
   aiConfig: Settings['aiConfig']
 }
 
@@ -41,6 +45,8 @@ export function cloneSettingsForForm(settings: Settings): SettingsPageForm {
     telegramConfig: { ...settings.telegramConfig },
     serverchanConfig: { ...settings.serverchanConfig },
     gotifyConfig: { ...settings.gotifyConfig },
+    barkConfig: { ...settings.barkConfig },
+    notifyxConfig: { ...settings.notifyxConfig },
     aiConfig: {
       ...settings.aiConfig,
       capabilities: {

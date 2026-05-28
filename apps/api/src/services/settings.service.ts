@@ -45,6 +45,17 @@ const DEFAULT_GOTIFY_CONFIG: SettingsInput['gotifyConfig'] = {
   ignoreSsl: false
 }
 
+const DEFAULT_BARK_CONFIG: SettingsInput['barkConfig'] = {
+  serverUrl: '',
+  deviceKey: '',
+  isArchive: false
+}
+
+const DEFAULT_NOTIFYX_CONFIG: SettingsInput['notifyxConfig'] = {
+  apiKey: '',
+  team: ''
+}
+
 export async function getSetting<T>(key: string, fallback: T): Promise<T> {
   const row = await prisma.setting.findUnique({ where: { key } })
   if (!row) return fallback
@@ -75,13 +86,17 @@ function hasDirectForgotPasswordChannelEnabled(settings: {
   telegramNotificationsEnabled: boolean
   serverchanNotificationsEnabled: boolean
   gotifyNotificationsEnabled: boolean
+  barkNotificationsEnabled: boolean
+  notifyxNotificationsEnabled: boolean
 }) {
   return Boolean(
     settings.emailNotificationsEnabled ||
       settings.pushplusNotificationsEnabled ||
       settings.telegramNotificationsEnabled ||
       settings.serverchanNotificationsEnabled ||
-      settings.gotifyNotificationsEnabled
+      settings.gotifyNotificationsEnabled ||
+      settings.barkNotificationsEnabled ||
+      settings.notifyxNotificationsEnabled
   )
 }
 
@@ -127,6 +142,8 @@ export async function getAppSettings(): Promise<SettingsInput> {
   })
   const serverchanNotificationsEnabled = readSettingsValue(settingsMap, 'serverchanNotificationsEnabled', false)
   const gotifyNotificationsEnabled = readSettingsValue(settingsMap, 'gotifyNotificationsEnabled', false)
+  const barkNotificationsEnabled = readSettingsValue(settingsMap, 'barkNotificationsEnabled', false)
+  const notifyxNotificationsEnabled = readSettingsValue(settingsMap, 'notifyxNotificationsEnabled', false)
   const forgotPasswordEnabled =
     readSettingsValue(settingsMap, 'forgotPasswordEnabled', false) &&
     hasDirectForgotPasswordChannelEnabled({
@@ -134,10 +151,14 @@ export async function getAppSettings(): Promise<SettingsInput> {
       pushplusNotificationsEnabled,
       telegramNotificationsEnabled,
       serverchanNotificationsEnabled,
-      gotifyNotificationsEnabled
+      gotifyNotificationsEnabled,
+      barkNotificationsEnabled,
+      notifyxNotificationsEnabled
     })
   const serverchanConfig = readSettingsValue<SettingsInput['serverchanConfig']>(settingsMap, 'serverchanConfig', DEFAULT_SERVERCHAN_CONFIG)
   const gotifyConfig = readSettingsValue<SettingsInput['gotifyConfig']>(settingsMap, 'gotifyConfig', DEFAULT_GOTIFY_CONFIG)
+  const barkConfig = readSettingsValue<SettingsInput['barkConfig']>(settingsMap, 'barkConfig', DEFAULT_BARK_CONFIG)
+  const notifyxConfig = readSettingsValue<SettingsInput['notifyxConfig']>(settingsMap, 'notifyxConfig', DEFAULT_NOTIFYX_CONFIG)
   const aiConfig = AiConfigSchema.parse(readSettingsValue<unknown>(settingsMap, 'aiConfig', DEFAULT_AI_CONFIG))
 
   return SettingsSchema.parse({
@@ -161,12 +182,16 @@ export async function getAppSettings(): Promise<SettingsInput> {
     telegramNotificationsEnabled,
     serverchanNotificationsEnabled,
     gotifyNotificationsEnabled,
+    barkNotificationsEnabled,
+    notifyxNotificationsEnabled,
     smtpConfig,
     resendConfig,
     pushplusConfig,
     telegramConfig,
     serverchanConfig,
     gotifyConfig,
+    barkConfig,
+    notifyxConfig,
     aiConfig
   })
 }
@@ -227,13 +252,17 @@ export async function getNotificationChannelSettings() {
     telegramNotificationsEnabled,
     serverchanNotificationsEnabled,
     gotifyNotificationsEnabled,
+    barkNotificationsEnabled,
+    notifyxNotificationsEnabled,
     smtpConfig,
     legacySmtpConfig,
     resendConfig,
     pushplusConfig,
     telegramConfig,
     serverchanConfig,
-    gotifyConfig
+    gotifyConfig,
+    barkConfig,
+    notifyxConfig
   ] =
     await Promise.all([
       getSetting('emailNotificationsEnabled', false),
@@ -242,6 +271,8 @@ export async function getNotificationChannelSettings() {
       getSetting('telegramNotificationsEnabled', false),
       getSetting('serverchanNotificationsEnabled', false),
       getSetting('gotifyNotificationsEnabled', false),
+      getSetting('barkNotificationsEnabled', false),
+      getSetting('notifyxNotificationsEnabled', false),
       getSetting<SettingsInput['smtpConfig']>('smtpConfig', DEFAULT_SMTP_CONFIG),
       getSetting<SettingsInput['smtpConfig'] | null>('emailConfig', null),
       getSetting<SettingsInput['resendConfig']>('resendConfig', DEFAULT_RESEND_CONFIG),
@@ -254,7 +285,9 @@ export async function getNotificationChannelSettings() {
         chatId: ''
       }),
       getSetting<SettingsInput['serverchanConfig']>('serverchanConfig', DEFAULT_SERVERCHAN_CONFIG),
-      getSetting<SettingsInput['gotifyConfig']>('gotifyConfig', DEFAULT_GOTIFY_CONFIG)
+      getSetting<SettingsInput['gotifyConfig']>('gotifyConfig', DEFAULT_GOTIFY_CONFIG),
+      getSetting<SettingsInput['barkConfig']>('barkConfig', DEFAULT_BARK_CONFIG),
+      getSetting<SettingsInput['notifyxConfig']>('notifyxConfig', DEFAULT_NOTIFYX_CONFIG)
     ])
 
   return {
@@ -264,12 +297,16 @@ export async function getNotificationChannelSettings() {
     telegramNotificationsEnabled,
     serverchanNotificationsEnabled,
     gotifyNotificationsEnabled,
+    barkNotificationsEnabled,
+    notifyxNotificationsEnabled,
     smtpConfig: legacySmtpConfig ? { ...DEFAULT_SMTP_CONFIG, ...legacySmtpConfig, ...smtpConfig } : smtpConfig,
     resendConfig,
     pushplusConfig,
     telegramConfig,
     serverchanConfig,
-    gotifyConfig
+    gotifyConfig,
+    barkConfig,
+    notifyxConfig
   }
 }
 

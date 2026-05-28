@@ -2,6 +2,8 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const notificationMocks = vi.hoisted(() => ({
+  sendTestBarkNotificationMock: vi.fn(),
+  sendTestBarkNotificationWithConfigMock: vi.fn(),
   sendTestEmailNotificationMock: vi.fn(),
   sendTestEmailNotificationWithConfigMock: vi.fn(),
   sendTestPushplusNotificationMock: vi.fn(),
@@ -12,12 +14,16 @@ const notificationMocks = vi.hoisted(() => ({
   sendTestServerchanNotificationWithConfigMock: vi.fn(),
   sendTestGotifyNotificationMock: vi.fn(),
   sendTestGotifyNotificationWithConfigMock: vi.fn(),
+  sendTestNotifyxNotificationMock: vi.fn(),
+  sendTestNotifyxNotificationWithConfigMock: vi.fn(),
   scanRenewalNotificationsMock: vi.fn(),
   sendTestWebhookNotificationMock: vi.fn(),
   sendTestWebhookNotificationWithConfigMock: vi.fn()
 }))
 
 vi.mock('../../src/services/channel-notification.service', () => ({
+  sendTestBarkNotification: notificationMocks.sendTestBarkNotificationMock,
+  sendTestBarkNotificationWithConfig: notificationMocks.sendTestBarkNotificationWithConfigMock,
   sendTestEmailNotification: notificationMocks.sendTestEmailNotificationMock,
   sendTestEmailNotificationWithConfig: notificationMocks.sendTestEmailNotificationWithConfigMock,
   sendTestPushplusNotification: notificationMocks.sendTestPushplusNotificationMock,
@@ -27,7 +33,9 @@ vi.mock('../../src/services/channel-notification.service', () => ({
   sendTestServerchanNotification: notificationMocks.sendTestServerchanNotificationMock,
   sendTestServerchanNotificationWithConfig: notificationMocks.sendTestServerchanNotificationWithConfigMock,
   sendTestGotifyNotification: notificationMocks.sendTestGotifyNotificationMock,
-  sendTestGotifyNotificationWithConfig: notificationMocks.sendTestGotifyNotificationWithConfigMock
+  sendTestGotifyNotificationWithConfig: notificationMocks.sendTestGotifyNotificationWithConfigMock,
+  sendTestNotifyxNotification: notificationMocks.sendTestNotifyxNotificationMock,
+  sendTestNotifyxNotificationWithConfig: notificationMocks.sendTestNotifyxNotificationWithConfigMock
 }))
 
 vi.mock('../../src/services/notification.service', () => ({
@@ -56,6 +64,8 @@ describe('notification routes', () => {
   beforeEach(async () => {
     app = Fastify()
     await notificationRoutes(app)
+    notificationMocks.sendTestBarkNotificationMock.mockReset()
+    notificationMocks.sendTestBarkNotificationWithConfigMock.mockReset()
     notificationMocks.sendTestEmailNotificationMock.mockReset()
     notificationMocks.sendTestEmailNotificationWithConfigMock.mockReset()
     notificationMocks.sendTestPushplusNotificationMock.mockReset()
@@ -66,9 +76,13 @@ describe('notification routes', () => {
     notificationMocks.sendTestServerchanNotificationWithConfigMock.mockReset()
     notificationMocks.sendTestGotifyNotificationMock.mockReset()
     notificationMocks.sendTestGotifyNotificationWithConfigMock.mockReset()
+    notificationMocks.sendTestNotifyxNotificationMock.mockReset()
+    notificationMocks.sendTestNotifyxNotificationWithConfigMock.mockReset()
     notificationMocks.scanRenewalNotificationsMock.mockReset()
     notificationMocks.sendTestWebhookNotificationMock.mockReset()
     notificationMocks.sendTestWebhookNotificationWithConfigMock.mockReset()
+    notificationMocks.sendTestBarkNotificationMock.mockResolvedValue({ success: true })
+    notificationMocks.sendTestBarkNotificationWithConfigMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestEmailNotificationMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestEmailNotificationWithConfigMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestPushplusNotificationMock.mockResolvedValue({ accepted: true, message: 'ok' })
@@ -79,6 +93,8 @@ describe('notification routes', () => {
     notificationMocks.sendTestServerchanNotificationWithConfigMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestGotifyNotificationMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestGotifyNotificationWithConfigMock.mockResolvedValue({ success: true })
+    notificationMocks.sendTestNotifyxNotificationMock.mockResolvedValue({ success: true })
+    notificationMocks.sendTestNotifyxNotificationWithConfigMock.mockResolvedValue({ success: true })
     notificationMocks.sendTestWebhookNotificationMock.mockResolvedValue({ success: true, statusCode: 200, responseBody: '' })
     notificationMocks.sendTestWebhookNotificationWithConfigMock.mockResolvedValue({ success: true, statusCode: 200, responseBody: '' })
     notificationMocks.scanRenewalNotificationsMock.mockResolvedValue({
@@ -180,6 +196,38 @@ describe('notification routes', () => {
 
     expect(res.statusCode).toBe(200)
     expect(notificationMocks.sendTestGotifyNotificationWithConfigMock).toHaveBeenCalled()
+  })
+
+  it('tests bark notification with payload', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/notifications/test/bark',
+      payload: {
+        serverUrl: 'https://api.day.app',
+        deviceKey: 'device-key',
+        isArchive: true
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(notificationMocks.sendTestBarkNotificationWithConfigMock).toHaveBeenCalledWith(
+      {
+        serverUrl: 'https://api.day.app',
+        deviceKey: 'device-key',
+        isArchive: true
+      },
+      { locale: 'zh-CN' }
+    )
+  })
+
+  it('tests notifyx notification with stored config', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/notifications/test/notifyx'
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(notificationMocks.sendTestNotifyxNotificationMock).toHaveBeenCalled()
   })
 
   it('runs notification scan debug in dry-run mode by default', async () => {

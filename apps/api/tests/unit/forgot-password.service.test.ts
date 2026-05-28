@@ -42,7 +42,9 @@ describe('forgot password service', () => {
       pushplusNotificationsEnabled: false,
       telegramNotificationsEnabled: false,
       serverchanNotificationsEnabled: false,
-      gotifyNotificationsEnabled: false
+      gotifyNotificationsEnabled: false,
+      barkNotificationsEnabled: false,
+      notifyxNotificationsEnabled: false
     })
 
     const { isForgotPasswordEnabled } = await import('../../src/services/forgot-password.service')
@@ -58,7 +60,9 @@ describe('forgot password service', () => {
       pushplusNotificationsEnabled: true,
       telegramNotificationsEnabled: false,
       serverchanNotificationsEnabled: false,
-      gotifyNotificationsEnabled: false
+      gotifyNotificationsEnabled: false,
+      barkNotificationsEnabled: false,
+      notifyxNotificationsEnabled: false
     })
 
     const { isForgotPasswordEnabled } = await import('../../src/services/forgot-password.service')
@@ -78,7 +82,9 @@ describe('forgot password service', () => {
       pushplusNotificationsEnabled: false,
       telegramNotificationsEnabled: false,
       serverchanNotificationsEnabled: false,
-      gotifyNotificationsEnabled: false
+      gotifyNotificationsEnabled: false,
+      barkNotificationsEnabled: false,
+      notifyxNotificationsEnabled: false
     })
     forgotPasswordState.getStoredCredentialsMock.mockResolvedValue({
       username: 'admin',
@@ -99,5 +105,23 @@ describe('forgot password service', () => {
       }),
       { locale: 'en-US' }
     )
+  })
+
+  it('treats bark as a valid direct channel for forgot-password enablement', async () => {
+    forgotPasswordState.getSettingMock.mockImplementation(async (key: string, fallback: unknown) =>
+      key === 'forgotPasswordEnabled' ? true : fallback
+    )
+    forgotPasswordState.getNotificationChannelSettingsMock.mockResolvedValue({
+      emailNotificationsEnabled: false,
+      pushplusNotificationsEnabled: false,
+      telegramNotificationsEnabled: false,
+      serverchanNotificationsEnabled: false,
+      gotifyNotificationsEnabled: false,
+      barkNotificationsEnabled: true,
+      notifyxNotificationsEnabled: false
+    })
+
+    const { isForgotPasswordEnabled } = await import('../../src/services/forgot-password.service')
+    await expect(isForgotPasswordEnabled()).resolves.toBe(true)
   })
 })

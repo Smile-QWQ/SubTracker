@@ -24,7 +24,7 @@
 - **统计与预算**：支持多币种统一换算到基准货币，提供费用统计、趋势图表、标签统计、未来 30 天续订分布、状态分布和自动续订占比，并支持月预算、年预算和标签预算。
 - **AI 能力**：支持通过文本或图片识别订阅信息并回填表单，统计页支持生成 AI 总结。
 - **日历与总览**：提供订阅日历、即将续订列表和仪表盘总览。
-- **通知通道**：支持 Webhook、SMTP / Resend 邮件、PushPlus、Telegram Bot、Server 酱和 Gotify。
+- **通知通道**：支持 Webhook、SMTP / Resend 邮件、PushPlus、Telegram Bot、Server 酱、Gotify、Bark 和 NotifyX。
 - **Logo 与资源管理**：支持 Logo 上传、本地复用、网络搜索，并在导入 Wallos ZIP 时尽量匹配已有 Logo。
 - **备份与迁移**：支持导入 Wallos 的 JSON、SQLite、ZIP 数据，并提供 SubTracker 原生 ZIP 备份的导出、检查、导入和恢复。
 - **多币种工具**：提供汇率数据管理、基准货币换算和内置货币转换器。

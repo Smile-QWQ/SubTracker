@@ -215,6 +215,17 @@ export interface GotifyConfig {
   ignoreSsl: boolean
 }
 
+export interface BarkConfig {
+  serverUrl: string
+  deviceKey: string
+  isArchive: boolean
+}
+
+export interface NotifyxConfig {
+  apiKey: string
+  team: string
+}
+
 export type EmailProvider = 'smtp' | 'resend'
 export type AiProviderPreset = 'custom' | 'aliyun-bailian' | 'tencent-hunyuan' | 'volcengine-ark'
 
@@ -287,12 +298,16 @@ export interface Settings {
   telegramNotificationsEnabled: boolean
   serverchanNotificationsEnabled: boolean
   gotifyNotificationsEnabled: boolean
+  barkNotificationsEnabled: boolean
+  notifyxNotificationsEnabled: boolean
   smtpConfig: EmailConfig
   resendConfig: ResendConfig
   pushplusConfig: PushplusConfig
   telegramConfig: TelegramConfig
   serverchanConfig: ServerchanConfig
   gotifyConfig: GotifyConfig
+  barkConfig: BarkConfig
+  notifyxConfig: NotifyxConfig
   aiConfig: AiConfig
 }
 

@@ -27,13 +27,17 @@ function hasDirectForgotPasswordChannelEnabled(settings: {
   telegramNotificationsEnabled: boolean
   serverchanNotificationsEnabled: boolean
   gotifyNotificationsEnabled: boolean
+  barkNotificationsEnabled: boolean
+  notifyxNotificationsEnabled: boolean
 }) {
   return Boolean(
     settings.emailNotificationsEnabled ||
       settings.pushplusNotificationsEnabled ||
       settings.telegramNotificationsEnabled ||
       settings.serverchanNotificationsEnabled ||
-      settings.gotifyNotificationsEnabled
+      settings.gotifyNotificationsEnabled ||
+      settings.barkNotificationsEnabled ||
+      settings.notifyxNotificationsEnabled
   )
 }
 
@@ -56,6 +60,9 @@ function validateSettingsPayload(
     sendKey: getMessage(locale, 'settings.labels.sendKey'),
     url: getMessage(locale, 'common.labels.url'),
     token: getMessage(locale, 'common.labels.token'),
+    serverUrl: getMessage(locale, 'common.labels.serverUrl'),
+    deviceKey: getMessage(locale, 'common.labels.deviceKey'),
+    team: getMessage(locale, 'common.labels.team'),
     providerName: getMessage(locale, 'settings.labels.providerName'),
     model: getMessage(locale, 'common.labels.model'),
     apiBaseUrl: getMessage(locale, 'settings.labels.apiBaseUrl'),
@@ -136,6 +143,42 @@ function validateSettingsPayload(
       label: getMessage(locale, 'settings.labels.gotifyTargetUrl'),
       locale
     })
+  }
+
+  if (settings.barkNotificationsEnabled) {
+    const missingBarkFields = [
+      [labels.serverUrl, settings.barkConfig.serverUrl],
+      [labels.deviceKey, settings.barkConfig.deviceKey]
+    ]
+      .filter(([, value]) => !String(value ?? '').trim())
+      .map(([label]) => label)
+
+    if (missingBarkFields.length) {
+      throw new Error(
+        getMessage(locale, 'api.errors.settings.barkFieldsRequired', {
+          fields: missingBarkFields.join(fieldSeparator)
+        })
+      )
+    }
+
+    validateNotificationTargetUrl(settings.barkConfig.serverUrl.trim(), {
+      label: getMessage(locale, 'settings.labels.barkServerUrl'),
+      locale
+    })
+  }
+
+  if (settings.notifyxNotificationsEnabled) {
+    const missingNotifyxFields = [[labels.apiKey, settings.notifyxConfig.apiKey]]
+      .filter(([, value]) => !String(value ?? '').trim())
+      .map(([label]) => label)
+
+    if (missingNotifyxFields.length) {
+      throw new Error(
+        getMessage(locale, 'api.errors.settings.notifyxFieldsRequired', {
+          fields: missingNotifyxFields.join(fieldSeparator)
+        })
+      )
+    }
   }
 
   const missingAiFields = [
@@ -240,10 +283,16 @@ export async function settingsRoutes(app: FastifyInstance) {
         : currentSettings.telegramConfig,
       serverchanNotificationsEnabled: parsed.data.serverchanNotificationsEnabled ?? currentSettings.serverchanNotificationsEnabled,
       gotifyNotificationsEnabled: parsed.data.gotifyNotificationsEnabled ?? currentSettings.gotifyNotificationsEnabled,
+      barkNotificationsEnabled: parsed.data.barkNotificationsEnabled ?? currentSettings.barkNotificationsEnabled,
+      notifyxNotificationsEnabled: parsed.data.notifyxNotificationsEnabled ?? currentSettings.notifyxNotificationsEnabled,
       serverchanConfig: parsed.data.serverchanConfig
         ? { ...currentSettings.serverchanConfig, ...parsed.data.serverchanConfig }
         : currentSettings.serverchanConfig,
       gotifyConfig: parsed.data.gotifyConfig ? { ...currentSettings.gotifyConfig, ...parsed.data.gotifyConfig } : currentSettings.gotifyConfig,
+      barkConfig: parsed.data.barkConfig ? { ...currentSettings.barkConfig, ...parsed.data.barkConfig } : currentSettings.barkConfig,
+      notifyxConfig: parsed.data.notifyxConfig
+        ? { ...currentSettings.notifyxConfig, ...parsed.data.notifyxConfig }
+        : currentSettings.notifyxConfig,
       aiConfig: parsed.data.aiConfig
         ? {
             ...currentSettings.aiConfig,

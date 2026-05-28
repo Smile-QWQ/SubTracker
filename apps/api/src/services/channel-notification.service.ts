@@ -6,13 +6,14 @@ import {
   DEFAULT_APP_LOCALE,
   getMessage,
   type AppLocale,
+  type BarkConfigInput,
   type EmailConfigInput,
   type GotifyConfigInput,
+  type NotifyxConfigInput,
   type ResendConfigInput,
   type PushPlusConfigInput,
   type ServerchanConfigInput,
-  type TelegramConfigInput,
-  type WebhookEventType
+  type TelegramConfigInput
 } from '@subtracker/shared'
 import { dispatchWebhookEvent } from './webhook.service'
 import { getAppTimezone, getNotificationChannelSettings, getResolvedAppLocale, getSetting, setSetting } from './settings.service'
@@ -42,6 +43,17 @@ type TelegramApiResponse = {
   description?: string
 }
 
+type BarkApiResponse = {
+  code?: number
+  message?: string
+}
+
+type NotifyxApiResponse = {
+  status?: string
+  message?: string
+  id?: number | string
+}
+
 export type PushplusSendResult = {
   accepted: boolean
   code: number
@@ -50,7 +62,7 @@ export type PushplusSendResult = {
 }
 
 export type NotificationChannelResult = {
-  channel: 'webhook' | 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify'
+  channel: 'webhook' | 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx'
   status: 'success' | 'skipped' | 'failed'
   message?: string
 }
@@ -66,7 +78,7 @@ type NotificationLocaleContext = {
 }
 
 type DirectChannelDispatchOptions = {
-  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify'
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx'
   enabled: boolean
   disabledMessage: string
   alreadySentMessage: string
@@ -77,7 +89,7 @@ const NOTIFICATION_DEDUP_KEY_PREFIX = 'notification:'
 export const NOTIFICATION_DEDUP_RETENTION_DAYS = 30
 
 function buildNotificationKey(
-  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify',
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx',
   params: NotificationDispatchParams
 ) {
   return `${NOTIFICATION_DEDUP_KEY_PREFIX}${channel}:${params.eventType}:${params.resourceKey}:${params.periodKey}`
@@ -151,21 +163,21 @@ function logNotificationDispatch(params: NotificationDispatchParams, results: No
 }
 
 async function hasNotificationBeenSent(
-  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify',
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx',
   params: NotificationDispatchParams
 ) {
   return getSetting<boolean>(buildNotificationKey(channel, params), false)
 }
 
 async function markNotificationSent(
-  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify',
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx',
   params: NotificationDispatchParams
 ) {
   await setSetting(buildNotificationKey(channel, params), true)
 }
 
 async function resolvePendingNotificationEntries(
-  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify',
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx',
   params: NotificationDispatchParams
 ) {
   const dedupEntries = params.dedupEntries
@@ -186,7 +198,7 @@ async function resolvePendingNotificationEntries(
 }
 
 async function markNotificationEntriesSent(
-  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify',
+  channel: 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx',
   params: NotificationDispatchParams
 ) {
   if (params.dedupEntries?.length) {
@@ -615,6 +627,141 @@ async function sendGotifyNotification(
   }, locale)
 }
 
+function normalizeMarkdownNotificationText(text: string) {
+  return String(text ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+function buildNotifyxDescription(title: string) {
+  return `SubTracker · ${title}`.slice(0, 500)
+}
+
+function resolveBarkPushUrl(serverUrl: string, locale: AppLocale = DEFAULT_APP_LOCALE) {
+  const target = validateNotificationTargetUrl(serverUrl.trim(), {
+    label: getMessage(locale, 'settings.labels.barkServerUrl'),
+    locale
+  })
+  const basePath = target.pathname.replace(/\/+$/, '')
+  target.pathname = basePath ? `${basePath}/push` : '/push'
+  target.search = ''
+  target.hash = ''
+  return target
+}
+
+async function sendBarkWithConfig(
+  message: DirectNotificationMessage,
+  config: BarkConfigInput,
+  locale: AppLocale = DEFAULT_APP_LOCALE
+) {
+  const serverUrl = config.serverUrl?.trim()
+  const deviceKey = config.deviceKey?.trim()
+  if (!serverUrl || !deviceKey) {
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.barkDisabledOrIncomplete'))
+  }
+
+  const response = await fetch(resolveBarkPushUrl(serverUrl, locale), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      device_key: deviceKey,
+      title: message.title,
+      body: message.text,
+      ...(config.isArchive ? { isArchive: 1 } : {})
+    })
+  })
+
+  const rawText = await response.text()
+  if (!response.ok) {
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.barkRequestFailed')}: HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim()
+    )
+  }
+
+  let parsed: BarkApiResponse | null = null
+  try {
+    parsed = rawText ? (JSON.parse(rawText) as BarkApiResponse) : null
+  } catch {
+    throw new Error(`${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.barkInvalidResponse')}: ${rawText || 'empty response'}`)
+  }
+
+  if (!parsed || parsed.code !== 200) {
+    throw new Error(`${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.barkRejected')}: ${parsed?.message || rawText || 'unknown error'}`)
+  }
+}
+
+async function sendBarkNotification(
+  params: NotificationDispatchParams,
+  locale: AppLocale
+): Promise<NotificationChannelResult> {
+  const settings = await getNotificationChannelSettings()
+  return dispatchDirectChannelNotification(params, {
+    channel: 'bark',
+    enabled: settings.barkNotificationsEnabled,
+    disabledMessage: 'bark_disabled',
+    alreadySentMessage: 'bark_already_sent',
+    send: (message) => sendBarkWithConfig(message, settings.barkConfig, locale)
+  }, locale)
+}
+
+async function sendNotifyxWithConfig(message: DirectNotificationMessage, config: NotifyxConfigInput) {
+  const apiKey = config.apiKey?.trim()
+  if (!apiKey) {
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.notifyxDisabledOrIncomplete'))
+  }
+
+  const response = await fetch(`https://www.notifyx.cn/api/v1/send/${encodeURIComponent(apiKey)}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      title: message.title,
+      content: normalizeMarkdownNotificationText(message.text),
+      description: buildNotifyxDescription(message.title),
+      team: config.team?.trim() || undefined
+    })
+  })
+
+  const rawText = await response.text()
+  if (!response.ok) {
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.notifyxRequestFailed')}: HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim()
+    )
+  }
+
+  let parsed: NotifyxApiResponse | null = null
+  try {
+    parsed = rawText ? (JSON.parse(rawText) as NotifyxApiResponse) : null
+  } catch {
+    throw new Error(`${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.notifyxInvalidResponse')}: ${rawText || 'empty response'}`)
+  }
+
+  if (!parsed || parsed.status !== 'queued') {
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.notifyxRejected')}: ${parsed?.message || rawText || 'unknown error'}`
+    )
+  }
+}
+
+async function sendNotifyxNotification(
+  params: NotificationDispatchParams,
+  locale: AppLocale
+): Promise<NotificationChannelResult> {
+  const settings = await getNotificationChannelSettings()
+  return dispatchDirectChannelNotification(params, {
+    channel: 'notifyx',
+    enabled: settings.notifyxNotificationsEnabled,
+    disabledMessage: 'notifyx_disabled',
+    alreadySentMessage: 'notifyx_already_sent',
+    send: (message) => sendNotifyxWithConfig(message, settings.notifyxConfig)
+  }, locale)
+}
+
 export async function dispatchNotificationEvent(
   params: NotificationDispatchParams,
   context: NotificationLocaleContext = {}
@@ -667,6 +814,20 @@ export async function dispatchNotificationEvent(
     message: error instanceof Error ? error.message : 'gotify_dispatch_failed'
   }))) as NotificationChannelResult
   results.push(gotifyResult)
+
+  const barkResult = (await Promise.resolve(sendBarkNotification(params, locale)).catch((error) => ({
+    channel: 'bark',
+    status: 'failed',
+    message: error instanceof Error ? error.message : 'bark_dispatch_failed'
+  }))) as NotificationChannelResult
+  results.push(barkResult)
+
+  const notifyxResult = (await Promise.resolve(sendNotifyxNotification(params, locale)).catch((error) => ({
+    channel: 'notifyx',
+    status: 'failed',
+    message: error instanceof Error ? error.message : 'notifyx_dispatch_failed'
+  }))) as NotificationChannelResult
+  results.push(notifyxResult)
 
   logNotificationDispatch(params, results, locale)
 
@@ -791,7 +952,7 @@ export async function sendForgotPasswordVerificationCode(
 
   if (settings.gotifyNotificationsEnabled) {
     try {
-      await sendGotifyWithConfig(message, settings.gotifyConfig)
+      await sendGotifyWithConfig(message, settings.gotifyConfig, locale)
       results.push({ channel: 'gotify', status: 'success' })
     } catch (error) {
       results.push({
@@ -802,6 +963,36 @@ export async function sendForgotPasswordVerificationCode(
     }
   } else {
     results.push({ channel: 'gotify', status: 'skipped', message: 'gotify_disabled' })
+  }
+
+  if (settings.barkNotificationsEnabled) {
+    try {
+      await sendBarkWithConfig(message, settings.barkConfig, locale)
+      results.push({ channel: 'bark', status: 'success' })
+    } catch (error) {
+      results.push({
+        channel: 'bark',
+        status: 'failed',
+        message: error instanceof Error ? error.message : 'bark_dispatch_failed'
+      })
+    }
+  } else {
+    results.push({ channel: 'bark', status: 'skipped', message: 'bark_disabled' })
+  }
+
+  if (settings.notifyxNotificationsEnabled) {
+    try {
+      await sendNotifyxWithConfig(message, settings.notifyxConfig)
+      results.push({ channel: 'notifyx', status: 'success' })
+    } catch (error) {
+      results.push({
+        channel: 'notifyx',
+        status: 'failed',
+        message: error instanceof Error ? error.message : 'notifyx_dispatch_failed'
+      })
+    }
+  } else {
+    results.push({ channel: 'notifyx', status: 'skipped', message: 'notifyx_disabled' })
   }
 
   return results
@@ -906,6 +1097,50 @@ export async function sendTestGotifyNotificationWithConfig(
 ) {
   const locale = await resolveNotificationLocale(context.locale)
   await sendGotifyWithConfig(await buildTestReminderMessage(locale), config, locale)
+
+  return { success: true }
+}
+
+export async function sendTestBarkNotification(context: NotificationLocaleContext = {}) {
+  const settings = await getNotificationChannelSettings()
+  if (!settings.barkNotificationsEnabled) {
+    throw new Error(getMessage(await resolveNotificationLocale(context.locale), 'api.errors.notifications.barkDisabledOrIncomplete'))
+  }
+
+  const locale = await resolveNotificationLocale(context.locale)
+  await sendBarkWithConfig(await buildTestReminderMessage(locale), settings.barkConfig, locale)
+
+  return { success: true }
+}
+
+export async function sendTestBarkNotificationWithConfig(
+  config: BarkConfigInput,
+  context: NotificationLocaleContext = {}
+) {
+  const locale = await resolveNotificationLocale(context.locale)
+  await sendBarkWithConfig(await buildTestReminderMessage(locale), config, locale)
+
+  return { success: true }
+}
+
+export async function sendTestNotifyxNotification(context: NotificationLocaleContext = {}) {
+  const settings = await getNotificationChannelSettings()
+  if (!settings.notifyxNotificationsEnabled) {
+    throw new Error(getMessage(await resolveNotificationLocale(context.locale), 'api.errors.notifications.notifyxDisabledOrIncomplete'))
+  }
+
+  const locale = await resolveNotificationLocale(context.locale)
+  await sendNotifyxWithConfig(await buildTestReminderMessage(locale), settings.notifyxConfig)
+
+  return { success: true }
+}
+
+export async function sendTestNotifyxNotificationWithConfig(
+  config: NotifyxConfigInput,
+  context: NotificationLocaleContext = {}
+) {
+  const locale = await resolveNotificationLocale(context.locale)
+  await sendNotifyxWithConfig(await buildTestReminderMessage(locale), config)
 
   return { success: true }
 }

@@ -68,8 +68,11 @@ export default {
       chatId: 'Chat ID',
       botToken: 'Bot Token',
       sendKey: 'SendKey',
+      serverUrl: 'Server URL',
+      deviceKey: 'Device Key',
       apiBaseUrl: 'API Base URL',
       apiKey: 'API Key',
+      team: 'Team ID',
       topic: 'Topic',
       gotifyTargetUrl: 'Gotify URL',
       webhookTargetUrl: 'Webhook URL'
@@ -235,9 +238,13 @@ export default {
       botToken: 'Bot Token',
       chatId: 'Chat ID',
       sendKey: 'SendKey',
+      barkServerUrl: 'Bark Server URL',
+      deviceKey: 'Device Key',
+      archiveNotification: '在设备端归档通知',
       topic: 'Topic',
       apiBaseUrl: 'API Base URL',
       apiKey: 'API Key',
+      team: 'Team ID',
       gotifyTargetUrl: 'Gotify URL',
       webhookTargetUrl: 'Webhook URL',
       oldUsername: '原用户名',
@@ -253,7 +260,7 @@ export default {
       overdueReminderRules:
         '格式说明：天数&时间;，例如 1&09:30; 表示过期 1 天后在 09:30 提醒；多条规则用 ; 分隔',
       notificationSettings:
-        '统一管理邮箱、PushPlus、Telegram、Server 酱、Gotify 与 Webhook。每个渠道都可以单独保存并单独测试。',
+        '统一管理邮箱、PushPlus、Telegram、Server 酱、Gotify、Bark、NotifyX 与 Webhook。每个渠道都可以单独保存并单独测试。',
       aiSettings: 'AI 能力总开关控制识别与连接测试；AI 总结可单独开启或关闭。',
       forgotPasswordChannelRequired: '需先启用至少一个直达通知渠道',
       structuredOutput:
@@ -280,6 +287,7 @@ export default {
       multiEmail: '多个邮箱请用英文逗号分隔',
       chatIdExample: '例如：123456789 或 -100xxxxxxxxxx',
       gotifyUrl: 'https://gotify.example.com',
+      barkServerUrl: 'https://api.day.app',
       webhookUrl: 'https://example.com/hook',
       aiBaseUrl: 'https://api.deepseek.com',
       customHeaders:
@@ -301,6 +309,8 @@ export default {
       telegram: 'Telegram Bot',
       serverchan: 'Server 酱',
       gotify: 'Gotify',
+      bark: 'Bark',
+      notifyx: 'NotifyX',
       webhook: 'Webhook'
     },
     options: {
@@ -321,6 +331,8 @@ export default {
       telegramMissingFields: 'Telegram 缺少必填项：{fields}',
       serverchanMissingFields: 'Server 酱缺少必填项：{fields}',
       gotifyMissingFields: 'Gotify 缺少必填项：{fields}',
+      barkMissingFields: 'Bark 缺少必填项：{fields}',
+      notifyxMissingFields: 'NotifyX 缺少必填项：{fields}',
       webhookMissingFields: 'Webhook 缺少必填项：{fields}',
       aiMissingFields: 'AI 能力缺少必填项：{fields}'
     },
@@ -337,6 +349,10 @@ export default {
       serverchanDisabled: 'Server 酱已关闭',
       gotifySaved: 'Gotify 配置已保存',
       gotifyDisabled: 'Gotify 已关闭',
+      barkSaved: 'Bark 配置已保存',
+      barkDisabled: 'Bark 已关闭',
+      notifyxSaved: 'NotifyX 配置已保存',
+      notifyxDisabled: 'NotifyX 已关闭',
       aiSaved: 'AI 能力配置已保存',
       aiDisabled: 'AI 能力已关闭',
       aiConnectionTestSuccess: '连接测试成功：{provider} / {model} / {response}',
@@ -359,6 +375,10 @@ export default {
       serverchanTestFailed: 'Server 酱测试失败',
       gotifyTestSent: 'Gotify 测试消息已发送',
       gotifyTestFailed: 'Gotify 测试失败',
+      barkTestSent: 'Bark 测试消息已发送',
+      barkTestFailed: 'Bark 测试失败',
+      notifyxTestSent: 'NotifyX 测试消息已发送',
+      notifyxTestFailed: 'NotifyX 测试失败',
       zipExportStarted: 'ZIP 导出已开始',
       zipExportFailed: 'ZIP 导出失败',
       backupRestored: '备份已恢复',
@@ -583,7 +603,8 @@ export default {
       namePlaceholder: '例如：云服务',
       colorLabel: '颜色',
       colorPlaceholder: '#3b82f6 或 rgb(59,130,246)',
-      sortOrderLabel: '排序'
+      sortOrderLabel: '排序',
+      invalidColor: '请输入合法的颜色值，例如 #3b82f6 或 rgb(59,130,246)'
     },
     budget: {
       title: '设置标签月预算',
@@ -899,6 +920,8 @@ export default {
       telegram: 'Telegram',
       serverchan: 'Server 酱',
       gotify: 'Gotify',
+      bark: 'Bark',
+      notifyx: 'NotifyX',
       webhook: 'Webhook'
     },
     status: {
@@ -1168,6 +1191,8 @@ export default {
         invalidTelegramConfigPayload: 'Telegram 配置请求体不合法',
         invalidServerchanConfigPayload: 'Server 酱配置请求体不合法',
         invalidGotifyConfigPayload: 'Gotify 配置请求体不合法',
+        invalidBarkConfigPayload: 'Bark 配置请求体不合法',
+        invalidNotifyxConfigPayload: 'NotifyX 配置请求体不合法',
         invalidWebhookSettingsPayload: 'Webhook 配置请求体不合法',
         invalidForgotPasswordRequestPayload: '忘记密码请求体不合法',
         invalidForgotPasswordResetPayload: '忘记密码重置请求体不合法',
@@ -1221,6 +1246,8 @@ export default {
         telegramFieldsRequired: '启用 Telegram 通知时必须填写：{fields}',
         serverchanSendKeyRequired: '启用 Server 酱时必须填写 SendKey',
         gotifyFieldsRequired: '启用 Gotify 时必须填写：{fields}',
+        barkFieldsRequired: '启用 Bark 时必须填写：{fields}',
+        notifyxFieldsRequired: '启用 NotifyX 时必须填写：{fields}',
         aiFieldsRequired: '启用 AI 能力时必须填写：{fields}'
       },
       ai: {
@@ -1249,6 +1276,8 @@ export default {
         telegramDisabledOrIncomplete: 'Telegram 通知未启用或配置不完整',
         serverchanDisabledOrIncomplete: 'Server 酱通知未启用或配置不完整',
         gotifyDisabledOrIncomplete: 'Gotify 通知未启用或配置不完整',
+        barkDisabledOrIncomplete: 'Bark 通知未启用或配置不完整',
+        notifyxDisabledOrIncomplete: 'NotifyX 通知未启用或配置不完整',
         emptyDedupEntries: '无法从空的去重记录构建通知分发参数',
         resendRequestFailed: 'Resend 请求失败',
         pushplusRequestFailed: 'PushPlus 请求失败',
@@ -1262,13 +1291,21 @@ export default {
         serverchanInvalidResponse: 'Server 酱返回了无法解析的响应',
         serverchanRejected: 'Server 酱请求被拒绝',
         gotifyRequestFailed: 'Gotify 请求失败',
+        barkRequestFailed: 'Bark 请求失败',
+        barkInvalidResponse: 'Bark 返回了无法解析的响应',
+        barkRejected: 'Bark 请求被拒绝',
+        notifyxRequestFailed: 'NotifyX 请求失败',
+        notifyxInvalidResponse: 'NotifyX 返回了无法解析的响应',
+        notifyxRejected: 'NotifyX 请求被拒绝',
         webhookConfigIncomplete: 'Webhook 配置不完整',
         webhookTestFailed: 'Webhook 测试失败',
         emailTestFailed: '邮箱测试失败',
         pushplusTestFailed: 'PushPlus 测试失败',
         telegramTestFailed: 'Telegram 测试失败',
         serverchanTestFailed: 'Server 酱测试失败',
-        gotifyTestFailed: 'Gotify 测试失败'
+        gotifyTestFailed: 'Gotify 测试失败',
+        barkTestFailed: 'Bark 测试失败',
+        notifyxTestFailed: 'NotifyX 测试失败'
       },
       imports: {
         wallosInspectFailed: 'Wallos 预览失败',

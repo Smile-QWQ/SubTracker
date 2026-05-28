@@ -26,6 +26,8 @@ describe('cloneSettingsForForm', () => {
       telegramNotificationsEnabled: true,
       serverchanNotificationsEnabled: true,
       gotifyNotificationsEnabled: true,
+      barkNotificationsEnabled: true,
+      notifyxNotificationsEnabled: true,
       smtpConfig: {
         host: 'smtp.example.com',
         port: 587,
@@ -57,6 +59,15 @@ describe('cloneSettingsForForm', () => {
         token: 'gotify-token',
         ignoreSsl: true
       },
+      barkConfig: {
+        serverUrl: 'https://api.day.app',
+        deviceKey: 'device-key',
+        isArchive: true
+      },
+      notifyxConfig: {
+        apiKey: 'notifyx-key',
+        team: 'team-id'
+      },
       aiConfig: {
         enabled: true,
         dashboardSummaryEnabled: true,
@@ -85,6 +96,8 @@ describe('cloneSettingsForForm', () => {
     expect(cloned.telegramConfig).not.toBe(original.telegramConfig)
     expect(cloned.serverchanConfig).not.toBe(original.serverchanConfig)
     expect(cloned.gotifyConfig).not.toBe(original.gotifyConfig)
+    expect(cloned.barkConfig).not.toBe(original.barkConfig)
+    expect(cloned.notifyxConfig).not.toBe(original.notifyxConfig)
     expect(cloned.aiConfig).not.toBe(original.aiConfig)
     expect(cloned.aiConfig.capabilities).not.toBe(original.aiConfig.capabilities)
     expect(cloned.tagBudgets).not.toBe(original.tagBudgets)

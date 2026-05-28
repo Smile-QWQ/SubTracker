@@ -47,6 +47,8 @@ vi.mock('../../src/services/settings.service', () => ({
     telegramNotificationsEnabled: false,
     serverchanNotificationsEnabled: false,
     gotifyNotificationsEnabled: false,
+    barkNotificationsEnabled: false,
+    notifyxNotificationsEnabled: false,
     smtpConfig: {
       host: '',
       port: 587,
@@ -77,6 +79,15 @@ vi.mock('../../src/services/settings.service', () => ({
       url: '',
       token: '',
       ignoreSsl: false
+    },
+    barkConfig: {
+      serverUrl: '',
+      deviceKey: '',
+      isArchive: false
+    },
+    notifyxConfig: {
+      apiKey: '',
+      team: ''
     },
     aiConfig: {
       enabled: false,

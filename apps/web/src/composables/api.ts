@@ -7,6 +7,7 @@ import type {
   AiTestResponse,
   AuthResponse,
   AuthUserResponse,
+  BarkConfig,
   BatchActionResult,
   CalendarEvent,
   BudgetStatistics,
@@ -20,6 +21,7 @@ import type {
   LoginPayload,
   LogoSearchResult,
   NotificationWebhookSettings,
+  NotifyxConfig,
   PaymentRecord,
   ResendConfig,
   ServerchanConfig,
@@ -374,6 +376,14 @@ export const api = {
 
   async testGotifyNotificationWithPayload(payload: GotifyConfig) {
     return postOnce<{ success: boolean }>('/notifications/test/gotify', payload)
+  },
+
+  async testBarkNotificationWithPayload(payload: BarkConfig) {
+    return postOnce<{ success: boolean }>('/notifications/test/bark', payload)
+  },
+
+  async testNotifyxNotificationWithPayload(payload: NotifyxConfig) {
+    return postOnce<{ success: boolean }>('/notifications/test/notifyx', payload)
   },
 
   async getNotificationWebhook() {

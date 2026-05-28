@@ -99,7 +99,9 @@ export async function isForgotPasswordEnabled() {
       settings.pushplusNotificationsEnabled ||
       settings.telegramNotificationsEnabled ||
       settings.serverchanNotificationsEnabled ||
-      settings.gotifyNotificationsEnabled
+      settings.gotifyNotificationsEnabled ||
+      settings.barkNotificationsEnabled ||
+      settings.notifyxNotificationsEnabled
   )
 }
 
