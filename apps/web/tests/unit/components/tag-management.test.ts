@@ -13,6 +13,9 @@ describe('tag management simplification', () => {
     expect(source).not.toContain('图标预览')
     expect(source).not.toContain('renderIconOption')
     expect(source).not.toContain('selectedIcon')
+    expect(source).toContain('colorTextInput')
+    expect(source).toContain('handleColorTextInputUpdate')
+    expect(source).toContain('<n-input :value="colorTextInput"')
   })
 
   it('does not render tag icon values in the management table', () => {
@@ -21,5 +24,6 @@ describe('tag management simplification', () => {
     expect(source).not.toContain('row.icon')
     expect(source).not.toContain('resolveTagIcon')
     expect(source).not.toContain('film-outline')
+    expect(source).toContain('<tag-form-modal :show="showFormModal" :model="editing" @close="closeFormModal" @submit="handleSubmit" />')
   })
 })

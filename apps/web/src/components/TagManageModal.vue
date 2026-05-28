@@ -8,12 +8,12 @@
     @update:show="handleUpdateShow"
   >
     <n-space vertical :size="16">
-      <n-space justify="space-between" align="center">
+      <n-space justify="space-between" align="center" wrap class="tag-manage-toolbar">
         <n-text depth="3">{{ t('tags.manage.description') }}</n-text>
         <n-button type="primary" @click="openCreate">{{ t('tags.manage.create') }}</n-button>
       </n-space>
 
-      <n-data-table :columns="columns" :data="tags" :pagination="{ pageSize: 8 }" :bordered="false" />
+      <n-data-table :columns="columns" :data="tags" :pagination="{ pageSize: 8 }" :bordered="false" :scroll-x="560" />
     </n-space>
 
     <tag-form-modal :show="showFormModal" :model="editing" @close="closeFormModal" @submit="handleSubmit" />
@@ -172,3 +172,15 @@ function handleUpdateShow(value: boolean) {
   }
 }
 </script>
+
+<style scoped>
+.tag-manage-toolbar {
+  width: 100%;
+}
+
+@media (max-width: 640px) {
+  .tag-manage-toolbar :deep(.n-button) {
+    width: 100%;
+  }
+}
+</style>
