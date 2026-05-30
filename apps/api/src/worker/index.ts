@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaD1 } from '@prisma/adapter-d1'
 import { Hono } from 'hono'
+import { appRoutes } from '../routes/app'
 import { authRoutes } from '../routes/auth'
 import { tagRoutes } from '../routes/tags'
 import { subscriptionRoutes } from '../routes/subscriptions'
@@ -33,8 +34,9 @@ function getPrismaClient(db: D1Database) {
   })
 }
 
-async function bootstrapRoutes() {
-  const legacy = new LegacyFastifyApp(app as unknown as Hono, '/api/v1')
+export async function registerWorkerRoutes(targetApp: Hono) {
+  const legacy = new LegacyFastifyApp(targetApp as unknown as Hono, '/api/v1')
+  await appRoutes(legacy as never)
   await authRoutes(legacy as never)
   await tagRoutes(legacy as never)
   await subscriptionRoutes(legacy as never)
@@ -46,6 +48,10 @@ async function bootstrapRoutes() {
   await aiRoutes(legacy as never)
   await importRoutes(legacy as never)
   await versionRoutes(legacy as never)
+}
+
+async function bootstrapRoutes() {
+  await registerWorkerRoutes(app as unknown as Hono)
 }
 
 const bootstrapPromise = bootstrapRoutes()
