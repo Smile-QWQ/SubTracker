@@ -1,6 +1,7 @@
-import type { BillingIntervalUnit } from '@subtracker/shared'
 import dayjs from 'dayjs'
-import { addIntervalToPickerTs } from './timezone'
+import { getMessage, type BillingIntervalUnit } from '@subtracker/shared'
+import type { SelectOption } from 'naive-ui/es/select/src/interface'
+import { getAppLocale } from '@/locales'
 import { normalizeWebsiteUrlInput } from './website-url'
 
 export interface SubscriptionFormValidationInput {
@@ -18,9 +19,65 @@ export interface SubscriptionFormValidationInput {
 
 export type SubscriptionFormErrors = Partial<Record<keyof SubscriptionFormValidationInput, string>>
 
+export type FrequencyOption = SelectOption
+
+const DEFAULT_FREQUENCY_PRESET_MAX = 12
+
+export function buildFrequencyOptions(
+  selectedValue?: number | null,
+  presetMax = DEFAULT_FREQUENCY_PRESET_MAX
+): FrequencyOption[] {
+  const options = Array.from({ length: presetMax }, (_, index) => ({
+    label: `${index + 1}`,
+    value: index + 1
+  }))
+
+  const normalizedSelected = normalizeFrequencyCount(selectedValue)
+  if (normalizedSelected !== null && normalizedSelected > presetMax) {
+    options.push({
+      label: `${normalizedSelected}`,
+      value: normalizedSelected
+    })
+  }
+
+  return options
+}
+
+export function parseFrequencyOptionCreateInput(input: string): FrequencyOption | null {
+  const trimmed = input.trim()
+  if (!/^\d+$/.test(trimmed)) {
+    return null
+  }
+
+  const value = Number(trimmed)
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    return null
+  }
+
+  return {
+    label: `${value}`,
+    value
+  }
+}
+
 export function calculateNextRenewalDateTs(startDateTs: number, intervalCount: number, unit: BillingIntervalUnit): number {
+  const start = dayjs(startDateTs)
   const count = Math.max(Number(intervalCount) || 1, 1)
-  return addIntervalToPickerTs(startDateTs, count, unit)
+
+  switch (unit) {
+    case 'day':
+      return start.add(count, 'day').valueOf()
+    case 'week':
+      return start.add(count, 'week').valueOf()
+    case 'month':
+      return start.add(count, 'month').valueOf()
+    case 'quarter':
+      return start.add(count * 3, 'month').valueOf()
+    case 'year':
+      return start.add(count, 'year').valueOf()
+    default:
+      return start.valueOf()
+  }
 }
 
 export function canRecalculateNextRenewal(input: {
@@ -40,40 +97,41 @@ export function validateSubscriptionForm(input: SubscriptionFormValidationInput)
   errors: SubscriptionFormErrors
   normalizedWebsiteUrl: string | null
 } {
+  const locale = getAppLocale()
   const errors: SubscriptionFormErrors = {}
 
   if (!input.name.trim()) {
-    errors.name = '请填写名称'
+    errors.name = getMessage(locale, 'validation.subscriptionForm.nameRequired')
   } else if (input.name.trim().length > 150) {
-    errors.name = '名称不能超过 150 个字符'
+    errors.name = getMessage(locale, 'validation.subscriptionForm.nameTooLong')
   }
 
   if (input.description.length > 500) {
-    errors.description = '描述不能超过 500 个字符'
+    errors.description = getMessage(locale, 'validation.subscriptionForm.descriptionTooLong')
   }
 
   if (input.amount === null || input.amount === undefined || Number.isNaN(Number(input.amount)) || Number(input.amount) < 0) {
-    errors.amount = '请填写有效金额'
+    errors.amount = getMessage(locale, 'validation.subscriptionForm.amountInvalid')
   }
 
   if (!/^[A-Z]{3}$/.test(String(input.currency || '').trim().toUpperCase())) {
-    errors.currency = '请选择合法货币'
+    errors.currency = getMessage(locale, 'validation.subscriptionForm.currencyInvalid')
   }
 
   if (!Number.isInteger(Number(input.billingIntervalCount)) || Number(input.billingIntervalCount) <= 0) {
-    errors.billingIntervalCount = '频率必须为正整数'
+    errors.billingIntervalCount = getMessage(locale, 'validation.subscriptionForm.billingIntervalCountInvalid')
   }
 
   if (!input.billingIntervalUnit) {
-    errors.billingIntervalUnit = '请选择频率单位'
+    errors.billingIntervalUnit = getMessage(locale, 'validation.subscriptionForm.billingIntervalUnitRequired')
   }
 
   if (input.startDateTs === null || !Number.isFinite(input.startDateTs)) {
-    errors.startDateTs = '请选择开始日期'
+    errors.startDateTs = getMessage(locale, 'validation.subscriptionForm.startDateRequired')
   }
 
   if (input.nextRenewalDateTs === null || !Number.isFinite(input.nextRenewalDateTs)) {
-    errors.nextRenewalDateTs = '请选择下次续订日期'
+    errors.nextRenewalDateTs = getMessage(locale, 'validation.subscriptionForm.nextRenewalDateRequired')
   }
 
   if (
@@ -83,7 +141,7 @@ export function validateSubscriptionForm(input: SubscriptionFormValidationInput)
     Number.isFinite(input.nextRenewalDateTs) &&
     dayjs(input.nextRenewalDateTs).isBefore(dayjs(input.startDateTs), 'day')
   ) {
-    errors.nextRenewalDateTs = '下次续订日期不能早于开始日期'
+    errors.nextRenewalDateTs = getMessage(locale, 'validation.subscriptionForm.nextRenewalDateEarlierThanStartDate')
   }
 
   const normalizedWebsite = normalizeWebsiteUrlInput(input.websiteUrl)
@@ -92,11 +150,24 @@ export function validateSubscriptionForm(input: SubscriptionFormValidationInput)
   }
 
   if (input.notes.length > 1000) {
-    errors.notes = '备注不能超过 1000 个字符'
+    errors.notes = getMessage(locale, 'validation.subscriptionForm.notesTooLong')
   }
 
   return {
     errors,
     normalizedWebsiteUrl: normalizedWebsite.value
   }
+}
+
+function normalizeFrequencyCount(value?: number | null): number | null {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  const normalized = Number(value)
+  if (!Number.isSafeInteger(normalized) || normalized <= 0) {
+    return null
+  }
+
+  return normalized
 }
