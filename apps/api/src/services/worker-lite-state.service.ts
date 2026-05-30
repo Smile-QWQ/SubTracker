@@ -3,7 +3,7 @@ import type { WebhookEventType } from '@subtracker/shared'
 import { prisma } from '../db'
 import { getRuntimeD1Database, isWorkerRuntime } from '../runtime'
 
-type NotificationChannel = 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify'
+type NotificationChannel = 'email' | 'pushplus' | 'telegram' | 'serverchan' | 'gotify' | 'bark' | 'notifyx' | 'apprise'
 
 type ImportPreviewRow = {
   token: string

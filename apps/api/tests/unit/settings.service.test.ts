@@ -23,7 +23,8 @@ vi.mock('../../src/config', () => ({
   config: {
     baseCurrency: 'CNY',
     defaultNotifyDays: 3,
-    resendApiUrl: 'https://api.resend.com'
+    resendApiUrl: 'https://api.resend.com',
+    defaultAppLocale: 'zh-CN'
   }
 }))
 
@@ -85,10 +86,37 @@ describe('settings service', () => {
     )
   })
 
+  it('reads app timezone through single-setting cache instead of full settings aggregation', async () => {
+    getSettingLiteMock.mockResolvedValueOnce('Asia/Tokyo')
+    const { getAppTimezone } = await import('../../src/services/settings.service')
+
+    await expect(getAppTimezone()).resolves.toBe('Asia/Tokyo')
+
+    expect(getCacheVersionMock).toHaveBeenCalledWith('settings')
+    expect(withWorkerLiteCacheMock).toHaveBeenCalledWith(
+      'settings',
+      'setting:timezone:v7',
+      expect.any(Function),
+      30
+    )
+    expect(listSettingsLiteMock).not.toHaveBeenCalled()
+  })
+
   it('reads forgot password toggle from stored settings', async () => {
     listSettingsLiteMock.mockResolvedValue(
-      new Map([
-        ['forgotPasswordEnabled', true]
+      new Map<string, unknown>([
+        ['forgotPasswordEnabled', true],
+        ['emailNotificationsEnabled', true],
+        ['emailProvider', 'resend'],
+        [
+          'resendConfig',
+          {
+            apiBaseUrl: 'https://api.resend.com',
+            apiKey: 'token',
+            from: 'noreply@example.com',
+            to: 'user@example.com'
+          }
+        ]
       ])
     )
 

@@ -1,10 +1,13 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import {
+  AppriseConfigSchema,
+  BarkConfigSchema,
   EmailConfigSchema,
   EmailProviderSchema,
   GotifyConfigSchema,
   NotificationWebhookSettingsSchema,
+  NotifyxConfigSchema,
   PushPlusConfigSchema,
   ResendConfigSchema,
   ServerchanConfigSchema,
@@ -14,8 +17,14 @@ import { sendError, sendOk } from '../http'
 import {
   sendTestEmailNotification,
   sendTestEmailNotificationWithConfig,
+  sendTestBarkNotification,
+  sendTestBarkNotificationWithConfig,
   sendTestGotifyNotification,
   sendTestGotifyNotificationWithConfig,
+  sendTestNotifyxNotification,
+  sendTestNotifyxNotificationWithConfig,
+  sendTestAppriseNotification,
+  sendTestAppriseNotificationWithConfig,
   sendTestPushplusNotification,
   sendTestPushplusNotificationWithConfig,
   sendTestServerchanNotification,
@@ -40,6 +49,10 @@ const EmailNotificationTestSchema = z.object({
 const NotificationScanDebugSchema = z.object({
   now: z.string().datetime({ offset: true }).optional(),
   dryRun: z.boolean().default(true)
+})
+
+const AppriseNotificationTestSchema = AppriseConfigSchema.partial().extend({
+  targetId: z.string().min(1).max(100).optional()
 })
 
 export async function notificationRoutes(app: FastifyInstance) {
@@ -191,6 +204,94 @@ export async function notificationRoutes(app: FastifyInstance) {
       return sendOk(reply, result)
     } catch (error) {
       return sendError(reply, 400, 'gotify_test_failed', error instanceof Error ? error.message : 'Gotify test failed')
+    }
+  })
+
+  app.post('/notifications/test/bark', async (request, reply) => {
+    try {
+      if (request.body) {
+        const parsed = BarkConfigSchema.partial().safeParse(request.body)
+        if (!parsed.success) {
+          return sendError(reply, 422, 'validation_error', 'Invalid Bark config payload', parsed.error.flatten())
+        }
+        const result = await sendTestBarkNotificationWithConfig({
+          serverUrl: parsed.data.serverUrl ?? '',
+          deviceKey: parsed.data.deviceKey ?? '',
+          isArchive: parsed.data.isArchive ?? false
+        })
+        return sendOk(reply, result)
+      }
+
+      const result = await sendTestBarkNotification()
+      return sendOk(reply, result)
+    } catch (error) {
+      return sendError(reply, 400, 'bark_test_failed', error instanceof Error ? error.message : 'Bark test failed')
+    }
+  })
+
+  app.post('/notifications/test/notifyx', async (request, reply) => {
+    try {
+      if (request.body) {
+        const parsed = NotifyxConfigSchema.partial().safeParse(request.body)
+        if (!parsed.success) {
+          return sendError(reply, 422, 'validation_error', 'Invalid NotifyX config payload', parsed.error.flatten())
+        }
+        const result = await sendTestNotifyxNotificationWithConfig({
+          apiKey: parsed.data.apiKey ?? '',
+          team: parsed.data.team ?? ''
+        })
+        return sendOk(reply, result)
+      }
+
+      const result = await sendTestNotifyxNotification()
+      return sendOk(reply, result)
+    } catch (error) {
+      return sendError(reply, 400, 'notifyx_test_failed', error instanceof Error ? error.message : 'NotifyX test failed')
+    }
+  })
+
+  app.post('/notifications/test/apprise', async (request, reply) => {
+    try {
+      if (request.body) {
+        const parsed = AppriseNotificationTestSchema.safeParse(request.body)
+        if (!parsed.success) {
+          return sendError(reply, 422, 'validation_error', 'Invalid Apprise config payload', parsed.error.flatten())
+        }
+
+        const hasInlineConfig =
+          parsed.data.apiBaseUrl !== undefined ||
+          parsed.data.key !== undefined ||
+          parsed.data.ignoreSsl !== undefined ||
+          parsed.data.targets !== undefined
+
+        if (!hasInlineConfig) {
+          const result = await sendTestAppriseNotification({
+            targetId: parsed.data.targetId
+          })
+          return sendOk(reply, result)
+        }
+
+        const result = await sendTestAppriseNotificationWithConfig(
+          {
+            apiBaseUrl: parsed.data.apiBaseUrl ?? '',
+            key: parsed.data.key ?? '',
+            ignoreSsl: parsed.data.ignoreSsl ?? false,
+            targets: parsed.data.targets ?? [],
+            lastSyncStatus: parsed.data.lastSyncStatus ?? 'idle',
+            lastSyncAt: parsed.data.lastSyncAt ?? null,
+            lastSyncError: parsed.data.lastSyncError ?? null
+          },
+          {
+            targetId: parsed.data.targetId
+          }
+        )
+        return sendOk(reply, result)
+      }
+
+      const result = await sendTestAppriseNotification()
+      return sendOk(reply, result)
+    } catch (error) {
+      return sendError(reply, 400, 'apprise_test_failed', error instanceof Error ? error.message : 'Apprise test failed')
     }
   })
 

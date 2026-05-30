@@ -1,64 +1,120 @@
 import { z } from 'zod'
+import { getMessage } from './i18n'
+import {
+  AppLocaleSchema,
+  DEFAULT_APP_LOCALE,
+  LOCALE_PREFERENCE_STORAGE_KEY,
+  normalizeAppLocale,
+  resolveAppLocaleFromAcceptLanguage,
+  type AppLocale
+} from './locale-core'
+import { NotificationTemplateConfigSchema } from './notification-templates'
 
-export const DEFAULT_AI_SUBSCRIPTION_PROMPT = `你是订阅账单信息提取助手。请从输入的文本或截图中提取订阅信息，并且只返回 JSON。
-输出字段：
-- name
-- description
-- amount
-- currency
-- billingIntervalCount
-- billingIntervalUnit(day|week|month|quarter|year)
-- startDate(YYYY-MM-DD)
-- nextRenewalDate(YYYY-MM-DD)
-- notifyDaysBefore
-- websiteUrl
-- notes
-- confidence(0~1)
-- rawText
+const FQDN_LABEL_RE = /^[a-z_\u00a1-\uffff0-9-]+$/i
+const FQDN_TLD_RE = /^([a-z\u00A1-\u00A8\u00AA-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF]{2,}|xn[a-z0-9-]{2,})$/i
+const FULL_WIDTH_RE = /[\uff01-\uff5e]/
+const IPV4_SEGMENT = '(?:[0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])'
+const IPV4_RE = new RegExp(`^(?:${IPV4_SEGMENT}[.]){3}${IPV4_SEGMENT}$`)
+const IPV6_SEGMENT = '(?:[0-9a-fA-F]{1,4})'
+const IPV6_RE = new RegExp(
+  '^(' +
+    `(?:${IPV6_SEGMENT}:){7}(?:${IPV6_SEGMENT}|:)|` +
+    `(?:${IPV6_SEGMENT}:){6}(?:(${IPV4_SEGMENT}[.]){3}${IPV4_SEGMENT}|:${IPV6_SEGMENT}|:)|` +
+    `(?:${IPV6_SEGMENT}:){5}(?:(:(${IPV4_SEGMENT}[.]){3}${IPV4_SEGMENT})|(:${IPV6_SEGMENT}){1,2}|:)|` +
+    `(?:${IPV6_SEGMENT}:){4}(?:(:${IPV6_SEGMENT}){0,1}:((${IPV4_SEGMENT}[.]){3}${IPV4_SEGMENT})|(:${IPV6_SEGMENT}){1,3}|:)|` +
+    `(?:${IPV6_SEGMENT}:){3}(?:(:${IPV6_SEGMENT}){0,2}:((${IPV4_SEGMENT}[.]){3}${IPV4_SEGMENT})|(:${IPV6_SEGMENT}){1,4}|:)|` +
+    `(?:${IPV6_SEGMENT}:){2}(?:(:${IPV6_SEGMENT}){0,3}:((${IPV4_SEGMENT}[.]){3}${IPV4_SEGMENT})|(:${IPV6_SEGMENT}){1,5}|:)|` +
+    `(?:${IPV6_SEGMENT}:){1}(?:(:${IPV6_SEGMENT}){0,4}:((${IPV4_SEGMENT}[.]){3}${IPV4_SEGMENT})|(:${IPV6_SEGMENT}){1,6}|:)|` +
+    `(?::((?::${IPV6_SEGMENT}){0,5}:((${IPV4_SEGMENT}[.]){3}${IPV4_SEGMENT})|(?::${IPV6_SEGMENT}){1,7}|:))` +
+    ')(%[0-9a-zA-Z.]{1,})?$'
+)
 
-规则：
-1. 不确定就留空，不要猜。
-2. 金额必须是数字。
-3. 币种必须是 3 位大写代码，例如 CNY、USD。
-4. 周期单位必须在 day/week/month/quarter/year 中。
-5. 只返回 JSON，不要返回 Markdown。`
+export function normalizeWebsiteUrlInput(input: string | null | undefined, locale: AppLocale = DEFAULT_APP_LOCALE): {
+  value: string | null
+  error: string | null
+} {
+  if (input === null || input === undefined) {
+    return { value: null, error: null }
+  }
 
-export const DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT = `你是订阅运营摘要助手。请基于用户当前的订阅统计数据，输出一份简洁、准确、可执行的 Markdown 总结。
+  const trimmed = input.trim()
+  if (!trimmed) {
+    return { value: null, error: null }
+  }
 
-目标：
-1. 帮助用户快速理解当前订阅规模、支出结构、预算压力和近期续订风险。
-2. 总结数据中的明显模式、异常点和需要关注的事项。
-3. 给出中性、可执行、但不依赖具体服务功能知识的建议。
+  const normalized = normalizeWebsiteUrlString(trimmed)
+  if (!normalized) {
+    return { value: null, error: getMessage(locale, 'validation.websiteUrlInvalid') }
+  }
 
-硬性要求：
-- 只能基于输入数据分析，不要虚构事实。
-- 不要假设你了解某个订阅服务的功能细节。
-- 不要输出“取消某服务更省钱”“某两个服务功能重叠”之类的建议。
-- 不要臆测用户偏好、使用频率或用途。
-- 不要输出 JSON，不要输出代码块，只输出 Markdown 正文。
+  return { value: normalized, error: null }
+}
 
-输出建议结构：
-## 总览
-## 支出结构
-## 近期风险
-## 值得注意的模式
-## 中性建议
+function normalizeWebsiteUrlString(input: string): string | null {
+  const parsedDirect = safelyParseHttpUrl(input)
+  if (parsedDirect && isTrustedHostname(parsedDirect.hostname)) {
+    return formatWebsiteUrl(parsedDirect)
+  }
 
-写作要求：
-- 使用简体中文。
-- 结论明确，少空话。
-- 每个小节控制在 2~5 条要点内。
-- 如果某部分没有明显异常，直接说明“暂无显著异常”或“整体平稳”。`
+  if (input.includes('://') || /\s/.test(input)) {
+    return null
+  }
 
-export const DEFAULT_AI_DASHBOARD_SUMMARY_PREVIEW_PROMPT = `你是订阅统计摘要压缩助手。请根据已经生成好的完整 AI 总结，提炼出一个默认折叠展示用的超简短摘要。
+  const parsedWithHttps = safelyParseHttpUrl(`https://${input}`)
+  return parsedWithHttps && isTrustedHostname(parsedWithHttps.hostname) ? formatWebsiteUrl(parsedWithHttps) : null
+}
 
-硬性要求：
-- 只输出简体中文纯文本，不要输出 Markdown，不要输出代码块。
-- 输出 2 到 3 行，每行一句，自然换行。
-- 不要输出标题，不要输出项目符号，不要编号。
-- 只保留最重要的结论：订阅规模、预算压力、近期风险。
-- 不要发散，不要补充原文没有的信息。
-- 如果原文信息有限，就直接给出 1 到 2 句自然语言摘要。`
+function safelyParseHttpUrl(input: string): URL | null {
+  try {
+    const url = new URL(input)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return null
+    }
+    return url
+  } catch {
+    return null
+  }
+}
+
+function isTrustedHostname(hostname: string): boolean {
+  if (!hostname) return false
+  const normalized = hostname.endsWith('.') ? hostname.slice(0, -1) : hostname
+
+  if (normalized.toLowerCase() === 'localhost') {
+    return true
+  }
+
+  const bracketless = normalized.startsWith('[') && normalized.endsWith(']') ? normalized.slice(1, -1) : normalized
+  if (IPV4_RE.test(bracketless) || IPV6_RE.test(bracketless)) {
+    return true
+  }
+
+  const parts = normalized.split('.')
+  if (parts.length < 2) {
+    return false
+  }
+
+  const tld = parts[parts.length - 1]
+  if (!FQDN_TLD_RE.test(tld) || /\s/.test(tld) || /^\d+$/.test(tld)) {
+    return false
+  }
+
+  return parts.every((part) => {
+    if (!part || part.length > 63) return false
+    if (!FQDN_LABEL_RE.test(part)) return false
+    if (FULL_WIDTH_RE.test(part)) return false
+    if (/^-|-$/.test(part)) return false
+    return true
+  })
+}
+
+function formatWebsiteUrl(url: URL): string {
+  const href = url.toString()
+  if (url.pathname === '/' && !url.search && !url.hash) {
+    return href.replace(/\/$/, '')
+  }
+  return href
+}
 
 function normalizePreviewSource(text: string) {
   return String(text ?? '')
@@ -81,6 +137,45 @@ function normalizePreviewSource(text: string) {
 export function formatAiSummaryPreviewText(text: string) {
   return normalizePreviewSource(text)
 }
+
+export {
+  DEFAULT_AI_DASHBOARD_SUMMARY_PREVIEW_PROMPT,
+  DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT,
+  DEFAULT_AI_SUBSCRIPTION_PROMPT,
+  SUPPORTED_APP_LOCALES,
+  detectLocaleFromAcceptLanguage,
+  getDefaultAiDashboardSummaryPreviewPrompt,
+  getDefaultAiDashboardSummaryPrompt,
+  getDefaultAiSubscriptionPrompt,
+  getMessage,
+  sharedMessages
+} from './i18n'
+export {
+  type AppLocale,
+  AppLocaleSchema,
+  DEFAULT_APP_LOCALE,
+  LOCALE_PREFERENCE_STORAGE_KEY,
+  normalizeAppLocale,
+  resolveAppLocaleFromAcceptLanguage
+} from './locale-core'
+export {
+  applyNotificationTemplate,
+  createEmptyNotificationTemplateConfig,
+  getDefaultNotificationTemplate,
+  NotificationTemplateConfigSchema,
+  NotificationTemplateEntrySchema,
+  NotificationTemplateGroupSchema,
+  NotificationTemplateSceneSchema,
+  NotificationTemplateSectionSchema,
+  NOTIFICATION_TEMPLATE_GROUPS,
+  NOTIFICATION_TEMPLATE_SCENES,
+  resolveNotificationTemplateConfig,
+  type NotificationTemplateConfigInput,
+  type NotificationTemplateEntryInput,
+  type NotificationTemplateGroup,
+  type NotificationTemplateScene,
+  type NotificationTemplateSectionInput
+} from './notification-templates'
 
 export const SubscriptionStatusSchema = z.enum(['active', 'paused', 'cancelled', 'expired'])
 export const BillingIntervalUnitSchema = z.enum(['day', 'week', 'month', 'quarter', 'year'])
@@ -124,7 +219,7 @@ export const TimeZoneSchema = z
   .string()
   .min(1)
   .max(100)
-  .refine((value) => isValidTimeZone(value), 'Invalid timezone')
+  .refine((value) => isValidTimeZone(value), 'validation.timezoneInvalid')
 
 export const TagSchema = z.object({
   id: z.string().cuid().optional(),
@@ -213,6 +308,36 @@ export const GotifyConfigSchema = z.object({
   ignoreSsl: z.boolean().default(false)
 })
 
+export const BarkConfigSchema = z.object({
+  serverUrl: z.string().trim().max(500).default(''),
+  deviceKey: z.string().max(200).default(''),
+  isArchive: z.boolean().default(false)
+})
+
+export const NotifyxConfigSchema = z.object({
+  apiKey: z.string().max(200).default(''),
+  team: z.string().max(32).default('')
+})
+
+export const AppriseSyncStatusSchema = z.enum(['idle', 'synced', 'failed'])
+
+export const AppriseTargetSchema = z.object({
+  id: z.string().min(1).max(100),
+  name: z.string().trim().min(1).max(100),
+  url: z.string().trim().min(1).max(1000),
+  enabled: z.boolean().default(true)
+})
+
+export const AppriseConfigSchema = z.object({
+  apiBaseUrl: z.string().trim().max(500).default(''),
+  key: z.string().trim().max(100).default(''),
+  ignoreSsl: z.boolean().default(false),
+  targets: z.array(AppriseTargetSchema).default([]),
+  lastSyncStatus: AppriseSyncStatusSchema.default('idle'),
+  lastSyncAt: z.string().max(100).nullable().default(null),
+  lastSyncError: z.string().max(2000).nullable().default(null)
+})
+
 export const AiProviderPresetSchema = z.enum(['custom', 'aliyun-bailian', 'tencent-hunyuan', 'volcengine-ark'])
 
 export const DEFAULT_AI_CAPABILITIES = {
@@ -273,6 +398,10 @@ export const StorageCapabilitiesSchema = z.object({
   wallosImportMode: z.enum(['json-only', 'json-db-zip']).default('json-db-zip')
 })
 
+export const SetAppLocaleSchema = z.object({
+  locale: AppLocaleSchema
+})
+
 export const SettingsSchema = z.object({
   baseCurrency: z.string().length(3).default('CNY').transform((v) => v.toUpperCase()),
   timezone: TimeZoneSchema.default(DEFAULT_TIMEZONE),
@@ -284,20 +413,29 @@ export const SettingsSchema = z.object({
   mergeMultiSubscriptionNotifications: z.boolean().default(true),
   monthlyBudgetBase: OptionalMoneySchema,
   yearlyBudgetBase: OptionalMoneySchema,
+  enableTagBudgets: z.boolean().default(false),
   overdueReminderDays: z.array(z.union([z.literal(1), z.literal(2), z.literal(3)])).default([1, 2, 3]),
   defaultOverdueReminderRules: z.string().max(500).default(DEFAULT_OVERDUE_REMINDER_RULES),
+  tagBudgets: z.record(z.string(), z.number().nonnegative()).default({}),
   emailNotificationsEnabled: z.boolean().default(false),
   emailProvider: EmailProviderSchema.default('smtp'),
   pushplusNotificationsEnabled: z.boolean().default(false),
   telegramNotificationsEnabled: z.boolean().default(false),
   serverchanNotificationsEnabled: z.boolean().default(false),
   gotifyNotificationsEnabled: z.boolean().default(false),
+  barkNotificationsEnabled: z.boolean().default(false),
+  notifyxNotificationsEnabled: z.boolean().default(false),
+  appriseNotificationsEnabled: z.boolean().default(false),
   smtpConfig: EmailConfigSchema.default({}),
   resendConfig: ResendConfigSchema.default({}),
   pushplusConfig: PushPlusConfigSchema.default({}),
   telegramConfig: TelegramConfigSchema.default({}),
   serverchanConfig: ServerchanConfigSchema.default({}),
   gotifyConfig: GotifyConfigSchema.default({}),
+  barkConfig: BarkConfigSchema.default({}),
+  notifyxConfig: NotifyxConfigSchema.default({}),
+  appriseConfig: AppriseConfigSchema.default({}),
+  notificationTemplateConfig: NotificationTemplateConfigSchema.default({}),
   aiConfig: AiConfigSchema.default({}),
   storageCapabilities: StorageCapabilitiesSchema.default({})
 })
@@ -325,7 +463,7 @@ export const ForgotPasswordResetSchema = z.object({
   code: z
     .string()
     .trim()
-    .regex(/^\d{6}$/, '验证码必须为 6 位数字'),
+    .regex(/^\d{6}$/, 'auth.validation.codeFormat'),
   newPassword: z.string().min(4).max(200)
 })
 
@@ -482,11 +620,17 @@ export type PushPlusConfigInput = z.infer<typeof PushPlusConfigSchema>
 export type TelegramConfigInput = z.infer<typeof TelegramConfigSchema>
 export type ServerchanConfigInput = z.infer<typeof ServerchanConfigSchema>
 export type GotifyConfigInput = z.infer<typeof GotifyConfigSchema>
+export type BarkConfigInput = z.infer<typeof BarkConfigSchema>
+export type NotifyxConfigInput = z.infer<typeof NotifyxConfigSchema>
+export type AppriseSyncStatus = z.infer<typeof AppriseSyncStatusSchema>
+export type AppriseTargetInput = z.infer<typeof AppriseTargetSchema>
+export type AppriseConfigInput = z.infer<typeof AppriseConfigSchema>
 export type NotificationWebhookSettingsInput = z.infer<typeof NotificationWebhookSettingsSchema>
 export type AiProviderPreset = z.infer<typeof AiProviderPresetSchema>
 export type AiCapabilitiesInput = z.infer<typeof AiCapabilitiesSchema>
 export type AiConfigInput = z.infer<typeof AiConfigSchema>
 export type StorageCapabilitiesInput = z.infer<typeof StorageCapabilitiesSchema>
+export type SetAppLocaleInput = z.infer<typeof SetAppLocaleSchema>
 export type LogoSearchInput = z.infer<typeof LogoSearchSchema>
 export type LogoUploadInput = z.infer<typeof LogoUploadSchema>
 export type AiRecognizeSubscriptionInput = z.infer<typeof AiRecognizeSubscriptionSchema>
@@ -510,6 +654,23 @@ export interface ExchangeRateSnapshotDto {
   provider: string
   providerUrl: string
   isStale: boolean
+}
+
+export interface ReleaseUpdateDto {
+  tagName: string
+  version: string
+  name: string
+  body: string
+  htmlUrl: string
+  publishedAt: string
+  isPrerelease: boolean
+}
+
+export interface VersionUpdateSummaryDto {
+  currentVersion: string
+  latestVersion: string | null
+  hasUpdate: boolean
+  releases: ReleaseUpdateDto[]
 }
 
 export interface LogoSearchResultDto {
@@ -552,6 +713,7 @@ export interface AiDashboardSummaryDto {
   errorMessage: string | null
   generatedAt: string | null
   updatedAt: string | null
+  generatedLocale?: AppLocale | null
   sourceDataHash: string | null
   fromCache: boolean
   isStale: boolean
@@ -559,21 +721,8 @@ export interface AiDashboardSummaryDto {
   needsGeneration: boolean
 }
 
-export interface ReleaseUpdateDto {
-  tagName: string
-  version: string
-  name: string
-  body: string
-  htmlUrl: string
-  publishedAt: string
-  isPrerelease: boolean
-}
-
-export interface VersionUpdateSummaryDto {
-  currentVersion: string
-  latestVersion: string | null
-  hasUpdate: boolean
-  releases: ReleaseUpdateDto[]
+export interface AppLocaleResponseDto {
+  locale: AppLocale
 }
 
 export interface DashboardOverview {
@@ -586,6 +735,12 @@ export interface DashboardOverview {
   yearlyBudgetBase?: number | null
   monthlyBudgetUsageRatio?: number | null
   yearlyBudgetUsageRatio?: number | null
+  tagSpend?: Array<{ name: string; value: number }>
+  monthlyTrend?: Array<{ month: string; amount: number }>
+  monthlyTrendMeta?: {
+    mode: 'projected'
+    months: number
+  }
   budgetSummary: {
     monthly: {
       spent: number
@@ -602,7 +757,34 @@ export interface DashboardOverview {
       status: 'normal' | 'warning' | 'over'
     }
   }
+  tagBudgetSummary?: {
+    configuredCount: number
+    warningCount: number
+    overBudgetCount: number
+    topTags: Array<{
+      tagId: string
+      name: string
+      budget: number
+      spent: number
+      ratio: number
+      remaining: number
+      overBudget: number
+      status: 'normal' | 'warning' | 'over'
+    }>
+  } | null
   statusDistribution: Array<{ status: SubscriptionStatus; count: number }>
+  renewalModeDistribution?: Array<{ autoRenew: boolean; count: number; amount: number }>
+  upcomingByDay?: Array<{ date: string; count: number; amount: number }>
+  tagBudgetUsage?: Array<{
+    tagId: string
+    name: string
+    budget: number
+    spent: number
+    ratio: number
+    remaining: number
+    overBudget: number
+    status: 'normal' | 'warning' | 'over'
+  }>
   currencyDistribution: Array<{ currency: string; amount: number }>
   topSubscriptionsByMonthlyCost: Array<{
     id: string
@@ -618,9 +800,16 @@ export interface DashboardOverview {
     nextRenewalDate: string
     amount: number
     currency: string
-      convertedAmount: number
-      status: SubscriptionStatus
-    }>
+    convertedAmount: number
+    status: SubscriptionStatus
+  }>
+}
+
+export interface BudgetStatisticsDto {
+  enabledTagBudgets: boolean
+  budgetSummary: DashboardOverview['budgetSummary']
+  tagBudgetSummary: DashboardOverview['tagBudgetSummary']
+  tagBudgetUsage: NonNullable<DashboardOverview['tagBudgetUsage']>
 }
 
 export interface CalendarEventDto {

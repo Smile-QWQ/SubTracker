@@ -20,6 +20,7 @@ import {
 } from '../services/reminder-rules.service'
 import { createSubtrackerBackupArchive } from '../services/subtracker-backup.service'
 import { setSettingLite } from '../services/worker-lite-repository.service'
+import { hasEnabledAppriseTargets } from '../services/apprise-config.service'
 
 const SETTINGS_CACHE_TTL_SECONDS = 5 * 60
 
@@ -87,6 +88,46 @@ function validateSettingsPayload(settings: Awaited<ReturnType<typeof getAppSetti
     }
 
     validateNotificationTargetUrl(settings.gotifyConfig.url.trim(), 'Gotify URL')
+  }
+
+  if (settings.barkNotificationsEnabled) {
+    if (!settings.barkConfig.serverUrl.trim()) {
+      throw new Error('启用 Bark 时必须填写 Server URL')
+    }
+
+    validateNotificationTargetUrl(settings.barkConfig.serverUrl.trim(), 'Bark Server URL')
+  }
+
+  if (settings.notifyxNotificationsEnabled && !settings.notifyxConfig.apiKey.trim()) {
+    throw new Error('启用 NotifyX 时必须填写 API Key')
+  }
+
+  if (settings.appriseNotificationsEnabled) {
+    const missingAppriseFields = [
+      ['Apprise API Base URL', settings.appriseConfig.apiBaseUrl],
+      ['Apprise Key', settings.appriseConfig.key]
+    ]
+      .filter(([, value]) => !String(value ?? '').trim())
+      .map(([label]) => label)
+
+    if (missingAppriseFields.length) {
+      throw new Error(`启用 Apprise 时必须填写：${missingAppriseFields.join('、')}`)
+    }
+
+    if (!settings.appriseConfig.targets.length) {
+      throw new Error('启用 Apprise 时必须至少配置一个目标')
+    }
+
+    const invalidTarget = settings.appriseConfig.targets.find((target) => !target.id || !target.name.trim() || !target.url.trim())
+    if (invalidTarget) {
+      throw new Error('Apprise 目标必须包含 ID、名称和 URL')
+    }
+
+    if (!hasEnabledAppriseTargets(settings.appriseConfig)) {
+      throw new Error('启用 Apprise 时必须至少启用一个目标')
+    }
+
+    validateNotificationTargetUrl(settings.appriseConfig.apiBaseUrl.trim(), 'Apprise API Base URL')
   }
 
   const missingAiFields = [
@@ -171,6 +212,8 @@ export async function settingsRoutes(app: FastifyInstance) {
       ...currentSettings,
       ...parsed.data,
       ...normalizedReminderSettings,
+      enableTagBudgets: parsed.data.enableTagBudgets ?? currentSettings.enableTagBudgets,
+      tagBudgets: parsed.data.tagBudgets ? { ...currentSettings.tagBudgets, ...parsed.data.tagBudgets } : currentSettings.tagBudgets,
       emailProvider: parsed.data.emailProvider ?? currentSettings.emailProvider,
       smtpConfig: parsed.data.smtpConfig ? { ...currentSettings.smtpConfig, ...parsed.data.smtpConfig } : currentSettings.smtpConfig,
       resendConfig: parsed.data.resendConfig ? { ...currentSettings.resendConfig, ...parsed.data.resendConfig } : currentSettings.resendConfig,
@@ -181,10 +224,29 @@ export async function settingsRoutes(app: FastifyInstance) {
         : currentSettings.telegramConfig,
       serverchanNotificationsEnabled: parsed.data.serverchanNotificationsEnabled ?? currentSettings.serverchanNotificationsEnabled,
       gotifyNotificationsEnabled: parsed.data.gotifyNotificationsEnabled ?? currentSettings.gotifyNotificationsEnabled,
+      barkNotificationsEnabled: parsed.data.barkNotificationsEnabled ?? currentSettings.barkNotificationsEnabled,
+      notifyxNotificationsEnabled: parsed.data.notifyxNotificationsEnabled ?? currentSettings.notifyxNotificationsEnabled,
+      appriseNotificationsEnabled: parsed.data.appriseNotificationsEnabled ?? currentSettings.appriseNotificationsEnabled,
       serverchanConfig: parsed.data.serverchanConfig
         ? { ...currentSettings.serverchanConfig, ...parsed.data.serverchanConfig }
         : currentSettings.serverchanConfig,
       gotifyConfig: parsed.data.gotifyConfig ? { ...currentSettings.gotifyConfig, ...parsed.data.gotifyConfig } : currentSettings.gotifyConfig,
+      barkConfig: parsed.data.barkConfig ? { ...currentSettings.barkConfig, ...parsed.data.barkConfig } : currentSettings.barkConfig,
+      notifyxConfig: parsed.data.notifyxConfig
+        ? { ...currentSettings.notifyxConfig, ...parsed.data.notifyxConfig }
+        : currentSettings.notifyxConfig,
+      appriseConfig: parsed.data.appriseConfig
+        ? {
+            ...currentSettings.appriseConfig,
+            ...parsed.data.appriseConfig,
+            targets: parsed.data.appriseConfig.targets
+              ? parsed.data.appriseConfig.targets.map((target) => ({ ...target }))
+              : currentSettings.appriseConfig.targets
+          }
+        : currentSettings.appriseConfig,
+      notificationTemplateConfig: parsed.data.notificationTemplateConfig
+        ? parsed.data.notificationTemplateConfig
+        : currentSettings.notificationTemplateConfig,
       aiConfig: parsed.data.aiConfig
         ? {
             ...currentSettings.aiConfig,

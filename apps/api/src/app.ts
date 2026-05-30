@@ -3,9 +3,12 @@ import cors from '@fastify/cors'
 import rateLimit from '@fastify/rate-limit'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { DEFAULT_APP_LOCALE } from '@subtracker/shared/locale-core'
 import { config } from './config'
 import { sendError } from './http'
+import { detectRequestLocale } from './i18n'
 import { authRoutes } from './routes/auth'
+import { appRoutes } from './routes/app'
 import { subscriptionRoutes } from './routes/subscriptions'
 import { statisticsRoutes } from './routes/statistics'
 import { calendarRoutes } from './routes/calendar'
@@ -63,16 +66,20 @@ export async function buildApp() {
       reply.header('Content-Type', mimeMap[ext] ?? 'application/octet-stream')
       return reply.send(file)
     } catch {
-      return sendError(reply, 404, 'not_found', 'Logo not found')
+      return sendError(reply, 404, 'not_found', 'api.errors.common.notFound', undefined, {
+        locale: request.locale ?? detectRequestLocale(request, DEFAULT_APP_LOCALE)
+      })
     }
   })
 
   app.addHook('onRequest', async (request, reply) => {
+    request.locale = detectRequestLocale(request, config.defaultAppLocale)
     const url = request.url.split('?')[0]
     if (
       request.method === 'OPTIONS' ||
       url === '/health' ||
       url.startsWith('/static/logos/') ||
+      (request.method === 'GET' && url === '/api/v1/app/locale') ||
       url === '/api/v1/auth/login' ||
       url === '/api/v1/auth/login-options' ||
       url === '/api/v1/auth/forgot-password/request' ||
@@ -87,7 +94,9 @@ export async function buildApp() {
     const user = await verifyToken(token)
 
     if (!user) {
-      return sendError(reply, 401, 'unauthorized', '请先登录')
+      return sendError(reply, 401, 'unauthorized', 'api.errors.auth.loginRequired', undefined, {
+        locale: request.locale
+      })
     }
 
     request.auth = user
@@ -95,6 +104,7 @@ export async function buildApp() {
 
   await app.register(
     async (router) => {
+      await appRoutes(router)
       await authRoutes(router)
       await tagRoutes(router)
       await subscriptionRoutes(router)
@@ -113,7 +123,9 @@ export async function buildApp() {
   app.setErrorHandler((error, _request, reply) => {
     app.log.error(error)
     const message = error instanceof Error ? error.message : 'Unknown server error'
-    return sendError(reply, 500, 'internal_error', message)
+    return sendError(reply, 500, 'internal_error', message, undefined, {
+      locale: reply.request.locale
+    })
   })
 
   return app

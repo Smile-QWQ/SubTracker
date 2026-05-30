@@ -1,6 +1,8 @@
+import { t } from '@/locales'
+
 export function validateLoginForm(username: string, password: string) {
-  if (!username.trim() && !password.trim()) return '请输入用户名和密码'
-  if (!username.trim()) return '请输入用户名'
-  if (!password.trim()) return '请输入密码'
+  if (!username.trim() && !password.trim()) return t('auth.validation.usernameAndPasswordRequired')
+  if (!username.trim()) return t('auth.validation.usernameRequired')
+  if (!password.trim()) return t('auth.validation.passwordRequired')
   return null
 }

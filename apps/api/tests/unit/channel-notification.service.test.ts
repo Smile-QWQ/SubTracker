@@ -38,6 +38,47 @@ const settingsState = vi.hoisted(() => ({
       url: '',
       token: '',
       ignoreSsl: false
+    },
+    barkNotificationsEnabled: false,
+    notifyxNotificationsEnabled: false,
+    appriseNotificationsEnabled: false,
+    barkConfig: {
+      serverUrl: '',
+      deviceKey: '',
+      isArchive: false
+    },
+    notifyxConfig: {
+      apiKey: '',
+      team: ''
+    },
+    appriseConfig: {
+      apiBaseUrl: '',
+      key: '',
+      ignoreSsl: false,
+      targets: [],
+      lastSyncStatus: 'idle',
+      lastSyncAt: null,
+      lastSyncError: null
+    },
+    notificationTemplateConfig: {
+      text: {
+        singleReminder: { titleTemplate: '', bodyTemplate: '' },
+        mergedReminder: { titleTemplate: '', bodyTemplate: '' },
+        testNotification: { titleTemplate: '', bodyTemplate: '' },
+        forgotPassword: { titleTemplate: '', bodyTemplate: '' }
+      },
+      markdown: {
+        singleReminder: { titleTemplate: '', bodyTemplate: '' },
+        mergedReminder: { titleTemplate: '', bodyTemplate: '' },
+        testNotification: { titleTemplate: '', bodyTemplate: '' },
+        forgotPassword: { titleTemplate: '', bodyTemplate: '' }
+      },
+      html: {
+        singleReminder: { titleTemplate: '', bodyTemplate: '' },
+        mergedReminder: { titleTemplate: '', bodyTemplate: '' },
+        testNotification: { titleTemplate: '', bodyTemplate: '' },
+        forgotPassword: { titleTemplate: '', bodyTemplate: '' }
+      }
     }
   }))
 }))
@@ -50,7 +91,8 @@ vi.mock('../../src/config', () => ({
 
 vi.mock('../../src/services/settings.service', () => ({
   getAppTimezone: vi.fn(async () => 'Asia/Shanghai'),
-  getNotificationChannelSettings: settingsState.getNotificationChannelSettingsMock
+  getNotificationChannelSettings: settingsState.getNotificationChannelSettingsMock,
+  getResolvedAppLocale: vi.fn(async () => 'zh-CN')
 }))
 
 vi.mock('../../src/services/webhook.service', () => ({

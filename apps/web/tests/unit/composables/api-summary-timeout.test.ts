@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const postMock = vi.fn()
-const getMock = vi.fn()
-const requestUseMock = vi.fn()
-const responseUseMock = vi.fn()
+const { postMock, getMock, requestUseMock, responseUseMock } = vi.hoisted(() => ({
+  postMock: vi.fn(),
+  getMock: vi.fn(),
+  requestUseMock: vi.fn(),
+  responseUseMock: vi.fn()
+}))
 
 vi.mock('axios', () => ({
   default: {
@@ -38,9 +40,10 @@ vi.mock('@/utils/api-error', () => ({
   normalizeApiErrorMessage: vi.fn((error: { message?: string }) => error.message || '请求失败')
 }))
 
+import { api } from '../../../src/composables/api'
+
 describe('api dashboard summary timeout', () => {
   beforeEach(() => {
-    vi.resetModules()
     postMock.mockReset()
     getMock.mockReset()
     requestUseMock.mockReset()
@@ -66,8 +69,6 @@ describe('api dashboard summary timeout', () => {
         }
       }
     })
-
-    const { api } = await import('../../../src/composables/api')
 
     await api.generateDashboardAiSummary()
 

@@ -3,6 +3,7 @@ import { VueQueryPlugin, QueryClient } from '@tanstack/vue-query'
 import { createPinia } from 'pinia'
 import { create, NConfigProvider, NMessageProvider } from 'naive-ui'
 import App from './App.vue'
+import { i18n } from './locales'
 import { router } from './router'
 import './style.css'
 
@@ -16,5 +17,6 @@ const queryClient = new QueryClient()
 app.use(createPinia())
 app.use(router)
 app.use(naive)
+app.use(i18n)
 app.use(VueQueryPlugin, { queryClient })
 app.mount('#app')

@@ -1,10 +1,14 @@
 import axios from 'axios'
 import type {
+  AppLocale,
+  AppLocaleResponse,
   AiDashboardSummary,
   AiRecognitionResult,
   AiTestResponse,
+  AppriseConfig,
   AuthResponse,
   AuthUserResponse,
+  BarkConfig,
   BatchActionResult,
   CalendarEvent,
   ChangeCredentialsPayload,
@@ -17,6 +21,7 @@ import type {
   LoginPayload,
   LogoSearchResult,
   NotificationWebhookSettings,
+  NotifyxConfig,
   PaymentRecord,
   ResendConfig,
   ServerchanConfig,
@@ -38,6 +43,7 @@ import type {
 import { clearAuthSession, getStoredToken } from '@/utils/auth-storage'
 import { getApiBaseUrl } from '@/utils/api-base'
 import { normalizeApiErrorMessage } from '@/utils/api-error'
+import { getAppLocale } from '@/locales'
 
 const client = axios.create({
   baseURL: getApiBaseUrl(import.meta.env.VITE_API_BASE_URL),
@@ -52,6 +58,7 @@ client.interceptors.request.use((request) => {
   if (token) {
     request.headers.Authorization = `Bearer ${token}`
   }
+  request.headers['X-SubTracker-Locale'] = getAppLocale()
   return request
 })
 
@@ -140,6 +147,14 @@ export const api = {
 
   async getLoginOptions() {
     return unwrap<LoginOptions>((await client.get('/auth/login-options')) as { data: Envelope<LoginOptions> })
+  },
+
+  async getAppLocale() {
+    return unwrap<AppLocaleResponse>((await client.get('/app/locale')) as { data: Envelope<AppLocaleResponse> })
+  },
+
+  async setAppLocale(locale: AppLocale) {
+    return putOnce<AppLocaleResponse>('/app/locale', { locale })
   },
 
   async requestForgotPasswordCode(payload: ForgotPasswordRequestPayload) {
@@ -349,6 +364,18 @@ export const api = {
 
   async testGotifyNotificationWithPayload(payload: GotifyConfig) {
     return postOnce<{ success: boolean }>('/notifications/test/gotify', payload)
+  },
+
+  async testBarkNotificationWithPayload(payload: BarkConfig) {
+    return postOnce<{ success: boolean }>('/notifications/test/bark', payload)
+  },
+
+  async testNotifyxNotificationWithPayload(payload: NotifyxConfig) {
+    return postOnce<{ success: boolean }>('/notifications/test/notifyx', payload)
+  },
+
+  async testAppriseNotificationWithPayload(payload: AppriseConfig & { targetId?: string }) {
+    return postOnce<{ success: boolean }>('/notifications/test/apprise', payload)
   },
 
   async getNotificationWebhook() {

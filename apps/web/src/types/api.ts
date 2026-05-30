@@ -1,3 +1,5 @@
+export type AppLocale = 'zh-CN' | 'en-US'
+
 export type SubscriptionStatus = 'active' | 'paused' | 'cancelled' | 'expired'
 
 export interface AuthUser {
@@ -178,6 +180,57 @@ export interface GotifyConfig {
   ignoreSsl: boolean
 }
 
+export interface BarkConfig {
+  serverUrl: string
+  deviceKey: string
+  isArchive: boolean
+}
+
+export interface NotifyxConfig {
+  apiKey: string
+  team: string
+}
+
+export type AppriseSyncStatus = 'idle' | 'synced' | 'failed'
+
+export interface AppriseTarget {
+  id: string
+  name: string
+  url: string
+  enabled: boolean
+}
+
+export interface AppriseConfig {
+  apiBaseUrl: string
+  key: string
+  ignoreSsl: boolean
+  targets: AppriseTarget[]
+  lastSyncStatus: AppriseSyncStatus
+  lastSyncAt: string | null
+  lastSyncError: string | null
+}
+
+export type NotificationTemplateGroup = 'text' | 'markdown' | 'html'
+export type NotificationTemplateScene = 'singleReminder' | 'mergedReminder' | 'testNotification' | 'forgotPassword'
+
+export interface NotificationTemplateEntry {
+  titleTemplate: string
+  bodyTemplate: string
+}
+
+export interface NotificationTemplateSection {
+  singleReminder: NotificationTemplateEntry
+  mergedReminder: NotificationTemplateEntry
+  testNotification: NotificationTemplateEntry
+  forgotPassword: NotificationTemplateEntry
+}
+
+export interface NotificationTemplateConfig {
+  text: NotificationTemplateSection
+  markdown: NotificationTemplateSection
+  html: NotificationTemplateSection
+}
+
 export type EmailProvider = 'smtp' | 'resend'
 export type AiProviderPreset = 'custom' | 'aliyun-bailian' | 'tencent-hunyuan' | 'volcengine-ark'
 
@@ -217,11 +270,16 @@ export interface AiDashboardSummary {
   errorMessage: string | null
   generatedAt: string | null
   updatedAt: string | null
+  generatedLocale?: AppLocale | null
   sourceDataHash: string | null
   fromCache: boolean
   isStale: boolean
   canGenerate: boolean
   needsGeneration: boolean
+}
+
+export interface AppLocaleResponse {
+  locale: AppLocale
 }
 
 export interface StorageCapabilities {
@@ -242,20 +300,29 @@ export interface Settings {
   mergeMultiSubscriptionNotifications: boolean
   monthlyBudgetBase?: number | null
   yearlyBudgetBase?: number | null
+  enableTagBudgets: boolean
   overdueReminderDays: Array<1 | 2 | 3>
   defaultOverdueReminderRules: string
+  tagBudgets: Record<string, number>
   emailNotificationsEnabled: boolean
   emailProvider: EmailProvider
   pushplusNotificationsEnabled: boolean
   telegramNotificationsEnabled: boolean
   serverchanNotificationsEnabled: boolean
   gotifyNotificationsEnabled: boolean
+  barkNotificationsEnabled: boolean
+  notifyxNotificationsEnabled: boolean
+  appriseNotificationsEnabled: boolean
   smtpConfig: EmailConfig
   resendConfig: ResendConfig
   pushplusConfig: PushplusConfig
   telegramConfig: TelegramConfig
   serverchanConfig: ServerchanConfig
   gotifyConfig: GotifyConfig
+  barkConfig: BarkConfig
+  notifyxConfig: NotifyxConfig
+  appriseConfig: AppriseConfig
+  notificationTemplateConfig: NotificationTemplateConfig
   aiConfig: AiConfig
   storageCapabilities: StorageCapabilities
 }

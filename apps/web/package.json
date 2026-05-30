@@ -27,6 +27,7 @@
     "sql.js": "^1.14.1",
     "vue": "^3.5.13",
     "vue-echarts": "^7.0.3",
+    "vue-i18n": "^11.4.2",
     "vue-router": "^4.5.0"
   },
   "devDependencies": {

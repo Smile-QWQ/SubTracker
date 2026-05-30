@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { DEFAULT_ADVANCE_REMINDER_RULES, DEFAULT_AI_CONFIG, DEFAULT_OVERDUE_REMINDER_RULES, DEFAULT_RESEND_API_URL } from '@subtracker/shared'
+import {
+  DEFAULT_ADVANCE_REMINDER_RULES,
+  DEFAULT_AI_CONFIG,
+  DEFAULT_OVERDUE_REMINDER_RULES,
+  DEFAULT_RESEND_API_URL,
+  createEmptyNotificationTemplateConfig
+} from '@subtracker/shared'
 import { api } from '@/composables/api'
 import type { Settings } from '@/types/api'
 
@@ -16,14 +22,19 @@ export const useAppStore = defineStore('app', () => {
     mergeMultiSubscriptionNotifications: true,
     monthlyBudgetBase: null,
     yearlyBudgetBase: null,
+    enableTagBudgets: false,
     overdueReminderDays: [1, 2, 3],
     defaultOverdueReminderRules: DEFAULT_OVERDUE_REMINDER_RULES,
+    tagBudgets: {},
     emailNotificationsEnabled: false,
-    emailProvider: 'smtp',
+    emailProvider: 'resend',
     pushplusNotificationsEnabled: false,
     telegramNotificationsEnabled: false,
     serverchanNotificationsEnabled: false,
     gotifyNotificationsEnabled: false,
+    barkNotificationsEnabled: false,
+    notifyxNotificationsEnabled: false,
+    appriseNotificationsEnabled: false,
     smtpConfig: {
       host: '',
       port: 587,
@@ -55,6 +66,25 @@ export const useAppStore = defineStore('app', () => {
       token: '',
       ignoreSsl: false
     },
+    barkConfig: {
+      serverUrl: '',
+      deviceKey: '',
+      isArchive: false
+    },
+    notifyxConfig: {
+      apiKey: '',
+      team: ''
+    },
+    appriseConfig: {
+      apiBaseUrl: '',
+      key: '',
+      ignoreSsl: false,
+      targets: [],
+      lastSyncStatus: 'idle',
+      lastSyncAt: null,
+      lastSyncError: null
+    },
+    notificationTemplateConfig: createEmptyNotificationTemplateConfig(),
     storageCapabilities: {
       runtime: 'worker-lite',
       r2Enabled: false,
