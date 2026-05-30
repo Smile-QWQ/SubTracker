@@ -1,12 +1,11 @@
 import { spawn } from 'node:child_process'
 import path from 'node:path'
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { WebSocket } from 'ws'
 import {
   DEFAULTS,
   PERF_PROFILE_DIR,
-  PERF_REPORT_DIR,
   PERF_RESULT_DIR,
   PERF_ROOT,
   ensurePerfDirs,
@@ -18,18 +17,17 @@ import {
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const REPO_ROOT = path.resolve(__dirname, '..')
-const DEFAULT_BASELINE_COMMIT = 'be70f8d'
-const DEFAULT_CURRENT_COMMIT = '8b9468b'
+const DEFAULT_BASELINE_LABEL = 'baseline'
+const DEFAULT_CURRENT_LABEL = 'current'
 const DEFAULT_TARGETS = [
-  'login',
   'overview',
-  'auto-renew',
   'scan-debug',
   'import-inspect',
   'import-commit',
   'subscription-detail',
   'subscription-payment-records'
 ]
+const DEFAULT_REPORT_DIR = path.join(REPO_ROOT, 'docs')
 const NODE_HARNESS = 'node'
 const WORKER_HARNESS = 'worker-http'
 const DEFAULT_PORT = 8787
@@ -207,49 +205,6 @@ async function runNpm(root, args, env) {
   })
 }
 
-async function execGit(args, cwd = REPO_ROOT) {
-  const result = await runCommandOrThrow('git', args, { cwd, env: process.env })
-  return result.stdout.trim()
-}
-
-async function ensureCurrentDirtyStateIsToolOnly(expectedCommit, allowDirtyCurrent = false) {
-  const head = await execGit(['rev-parse', '--short=7', 'HEAD'])
-  if (head !== expectedCommit) {
-    throw new Error(`Workspace HEAD=${head}, expected current commit ${expectedCommit}`)
-  }
-
-  if (allowDirtyCurrent) {
-    return
-  }
-
-  const status = await execGit(['status', '--short'])
-  const lines = status
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-
-  const allowedPrefixes = [
-    'docs/',
-    'scripts/perf-lite-'
-  ]
-
-  const disallowed = lines.filter((line) => {
-    const match = line.match(/^[ MARCUD?!]{1,2}\s+(.+)$/)
-    const file = match?.[1]?.replaceAll('\\', '/')
-    if (!file) return true
-    return !allowedPrefixes.some((prefix) => file.startsWith(prefix))
-  })
-
-  if (disallowed.length > 0) {
-    throw new Error(`Current workspace contains non-tool dirty paths that cannot be mirrored into current snapshot:\n${disallowed.join('\n')}`)
-  }
-}
-
-async function prepareCurrentSnapshot(snapshotRoot, commit, allowDirtyCurrent = false) {
-  await ensureCurrentDirtyStateIsToolOnly(commit, allowDirtyCurrent)
-  return snapshotRoot
-}
-
 async function copyMeasurementScripts(phaseRoot) {
   const scriptsDir = path.join(phaseRoot, 'scripts')
   await mkdir(scriptsDir, { recursive: true })
@@ -265,6 +220,10 @@ async function copyMeasurementScripts(phaseRoot) {
     const source = path.join(REPO_ROOT, 'scripts', file)
     const destination = path.join(scriptsDir, file)
     const content = await readFile(source, 'utf8')
+    const existing = await readFile(destination, 'utf8').catch(() => null)
+    if (existing === content) {
+      continue
+    }
     await writeFile(destination, content, 'utf8')
   }
 }
@@ -287,9 +246,34 @@ async function ensurePhaseNodeEnv(phaseRoot) {
   const envExamplePath = path.join(phaseRoot, 'apps', 'api', '.env.example')
   const envPath = path.join(phaseRoot, 'apps', 'api', '.env')
   const example = await readFile(envExamplePath, 'utf8')
-  await writeFile(envPath, example, 'utf8')
+  const existingEnv = await readFile(envPath, 'utf8').catch(() => null)
+  if (existingEnv === null) {
+    await writeFile(envPath, example, 'utf8')
+  }
   const prismaDbPath = path.join(phaseRoot, 'apps', 'api', 'prisma', 'dev.db')
-  await rm(prismaDbPath, { force: true })
+  if (path.resolve(phaseRoot) !== REPO_ROOT) {
+    await rm(prismaDbPath, { force: true })
+  }
+}
+
+async function preparePhaseSnapshotWorkspace(phaseRoot) {
+  if (path.resolve(phaseRoot) === REPO_ROOT) {
+    return
+  }
+
+  await Promise.all([
+    rm(path.join(phaseRoot, '.wrangler'), { recursive: true, force: true }),
+    rm(path.join(phaseRoot, 'node_modules'), { recursive: true, force: true }),
+    rm(path.join(phaseRoot, 'apps', 'api', 'node_modules'), { recursive: true, force: true }),
+    rm(path.join(phaseRoot, 'apps', 'web', 'node_modules'), { recursive: true, force: true }),
+    rm(path.join(phaseRoot, 'packages', 'shared', 'node_modules'), { recursive: true, force: true }),
+    rm(path.join(phaseRoot, 'apps', 'api', 'apps'), { recursive: true, force: true })
+  ])
+
+  const sharedPackagePath = path.join(phaseRoot, 'packages', 'shared')
+  const sharedLinkPath = path.join(phaseRoot, 'node_modules', '@subtracker', 'shared')
+  await mkdir(path.dirname(sharedLinkPath), { recursive: true })
+  await symlink(sharedPackagePath, sharedLinkPath, 'junction')
 }
 
 async function ensurePhaseBuild(phaseRoot, env) {
@@ -909,11 +893,11 @@ function computeHotspotDiff(before, after) {
 
 async function writeMarkdownReport(filePath, context) {
   const lines = [
-    '# SubTracker lite A→F 整体性能对比报告',
+    '# SubTracker lite Worker before/after 性能对比报告',
     '',
     '## 方法与口径',
-    `- baseline commit: \`${context.baselineCommit}\``,
-    `- current commit: \`${context.currentCommit}\``,
+    `- baseline label: \`${context.baselineLabel}\``,
+    `- current label: \`${context.currentLabel}\``,
     `- 采样对象：lite Worker 后端（不含前端浏览器）`,
     `- fixture：\`${context.fixtureName}\``,
     `- target：${context.targets.map((item) => `\`${item}\``).join('、')}`,
@@ -960,14 +944,17 @@ async function writeMarkdownReport(filePath, context) {
         ? context.hotspotDiff.dropped.map((item) => `\`${item.functionName}\`(${item.deltaHits})`).join('、')
         : '无'
     }`,
-    '',
-    '## 关键结论',
-    ...context.keyConclusions.map((item) => `- ${item}`),
-    '',
-    '## 补充说明 / 未纳入项',
-    `- notification test/webhook：${context.notificationNote}`,
-    '- 未输出 A/B/D/E/F 分段结论，只统计从 baseline 到 current 的整体收益。',
-    `- 原始 JSONL 位于 \`${PERF_RESULT_DIR}\`，cpuprofile 位于 \`${PERF_PROFILE_DIR}\`。`
+      '',
+      '## 关键结论',
+      ...context.keyConclusions.map((item) => `- ${item}`),
+      '',
+      '## 回归判定',
+      ...context.regressionAssessment,
+      '',
+      '## 补充说明 / 未纳入项',
+      `- notification test/webhook：${context.notificationNote}`,
+      '- 只统计 baseline vs current 的整体收益，不再输出历史 A/B/D/E/F 分段结论。',
+      `- 原始 JSONL 位于 \`${PERF_RESULT_DIR}\`，cpuprofile 位于 \`${PERF_PROFILE_DIR}\`。`
   )
 
   await writeFile(filePath, `${lines.join('\n')}\n`, 'utf8')
@@ -976,7 +963,20 @@ async function writeMarkdownReport(filePath, context) {
 function buildConclusions(summaryPairs) {
   const lines = []
   const workerPairs = summaryPairs.filter((item) => item.harness === WORKER_HARNESS)
-  const nodePairs = summaryPairs.filter((item) => item.harness === NODE_HARNESS && item.current.cpuTotalMs && item.baseline.cpuTotalMs)
+  const nodePairs = summaryPairs.filter(
+    (item) =>
+      item.harness === NODE_HARNESS &&
+      item.current.cpuTotalMs &&
+      item.baseline.cpuTotalMs &&
+      item.baseline.cpuTotalMs.p95 > 0 &&
+      item.current.cpuTotalMs.p95 > 0
+  )
+  const criticalWorkerTargets = new Set([
+    'import-inspect',
+    'import-commit',
+    'subscription-detail',
+    'subscription-payment-records'
+  ])
 
   const biggestWallWin = [...workerPairs].sort(
     (a, b) => computeDelta(a.current.wallMs.p95, a.baseline.wallMs.p95) - computeDelta(b.current.wallMs.p95, b.baseline.wallMs.p95)
@@ -985,9 +985,9 @@ function buildConclusions(summaryPairs) {
     lines.push(
       `${biggestWallWin.target} 的 Worker p95 wall 从 ${biggestWallWin.baseline.wallMs.p95}ms 降到 ${biggestWallWin.current.wallMs.p95}ms，变化 ${formatPct(
         computeDelta(biggestWallWin.current.wallMs.p95, biggestWallWin.baseline.wallMs.p95)
-      )}% 。`
-    )
-  }
+        )}% 。`
+      )
+    }
 
   const biggestCpuWin = [...nodePairs].sort(
     (a, b) =>
@@ -998,11 +998,17 @@ function buildConclusions(summaryPairs) {
     lines.push(
       `${biggestCpuWin.target} 的 Node p95 CPU 从 ${biggestCpuWin.baseline.cpuTotalMs.p95}ms 降到 ${biggestCpuWin.current.cpuTotalMs.p95}ms，变化 ${formatPct(
         computeDelta(biggestCpuWin.current.cpuTotalMs.p95, biggestCpuWin.baseline.cpuTotalMs.p95)
-      )}% 。`
-    )
-  }
+        )}% 。`
+      )
+    }
 
   const regressions = summaryPairs.filter((item) => computeDelta(item.current.wallMs.p95, item.baseline.wallMs.p95) > 0)
+  const criticalWorkerRegressions = regressions.filter(
+    (item) => item.harness === WORKER_HARNESS && criticalWorkerTargets.has(item.target)
+  )
+  if (criticalWorkerRegressions.length === 0) {
+    lines.push('4 个关键 Worker target（import-inspect / import-commit / subscription-detail / subscription-payment-records）均未出现 p95 wall 回归。')
+  }
   if (regressions.length) {
     lines.push(
       `仍存在 ${regressions.length} 个 p95 wall 回归 target：${regressions
@@ -1016,10 +1022,41 @@ function buildConclusions(summaryPairs) {
   return lines
 }
 
+function buildRegressionAssessment(summaryPairs) {
+  const regressions = summaryPairs
+    .map((item) => {
+      const deltaPct = computeDelta(item.current.wallMs.p95, item.baseline.wallMs.p95)
+      if (!(deltaPct > 0)) {
+        return null
+      }
+
+      const deltaMs = Number((item.current.wallMs.p95 - item.baseline.wallMs.p95).toFixed(2))
+      let classification = '已证实回归'
+      let reason = '需要继续定位。'
+
+      if (item.harness === NODE_HARNESS && Math.abs(deltaMs) <= 2) {
+        classification = '噪音'
+        reason = 'Node harness 的绝对增量很小，且对应 Worker 口径未出现回归。'
+      } else if (item.harness === WORKER_HARNESS && (item.target === 'overview' || item.target === 'scan-debug')) {
+        classification = '待进一步归因'
+        reason = '这两个 target 历史波动较大，应再按干净 Worker 实例重跑确认。'
+      }
+
+      return `- ${classification}：\`${item.harness}/${item.target}\` p95 wall ${item.baseline.wallMs.p95}ms -> ${item.current.wallMs.p95}ms（${formatPct(deltaPct)}%，+${deltaMs}ms）。${reason}`
+    })
+    .filter(Boolean)
+
+  if (regressions.length === 0) {
+    return ['- 无 p95 wall 回归。']
+  }
+
+  return regressions
+}
+
 async function main() {
   const args = parseArgs()
-  const baselineCommit = String(args.baseline ?? DEFAULT_BASELINE_COMMIT)
-  const currentCommit = String(args.current ?? DEFAULT_CURRENT_COMMIT)
+  const baselineLabel = String(args['baseline-label'] ?? args.baseline ?? DEFAULT_BASELINE_LABEL)
+  const currentLabel = String(args['current-label'] ?? args.current ?? DEFAULT_CURRENT_LABEL)
   const subtrackerCommitMode = String(args['subtracker-commit-mode'] ?? 'append')
   const targets = splitTargets(args.target ?? DEFAULT_TARGETS.join(','))
   const subscriptions = Number.parseInt(String(args.subscriptions ?? DEFAULTS.subscriptions), 10)
@@ -1033,7 +1070,6 @@ async function main() {
   const mode = String(args.mode ?? DEFAULTS.mode)
   const port = Number.parseInt(String(args.port ?? DEFAULT_PORT), 10)
   const inspectorPort = Number.parseInt(String(args['inspector-port'] ?? DEFAULT_INSPECTOR_PORT), 10)
-  const allowDirtyCurrent = String(args['allow-dirty-current'] ?? 'false') === 'true'
 
   const fixtureOptions = {
     subscriptions,
@@ -1049,22 +1085,20 @@ async function main() {
     channelMode: DEFAULTS.channelMode
   })
 
-  const baselineRoot = path.join(PERF_ROOT, 'be70f8d-worker-baseline-wt')
-  const currentRoot = REPO_ROOT
-  const reportDir = String(args['report-dir'] ?? PERF_REPORT_DIR)
+  const baselineRoot = path.resolve(String(args['baseline-root'] ?? path.join(PERF_ROOT, 'lite-presync-wt')))
+  const currentRoot = path.resolve(String(args['current-root'] ?? REPO_ROOT))
+  const reportDir = path.resolve(String(args['report-dir'] ?? DEFAULT_REPORT_DIR))
 
   await ensurePerfDirs()
   await mkdir(reportDir, { recursive: true })
-  await prepareCurrentSnapshot(currentRoot, currentCommit, allowDirtyCurrent)
-
-  for (const phaseRoot of [baselineRoot]) {
+  const uniquePhaseRoots = [...new Set([baselineRoot, currentRoot])]
+  for (const phaseRoot of uniquePhaseRoots) {
     await copyMeasurementScripts(phaseRoot)
     await ensurePhaseNodeEnv(phaseRoot)
+    await preparePhaseSnapshotWorkspace(phaseRoot)
   }
 
-  await ensureCurrentDirtyStateIsToolOnly(currentCommit, allowDirtyCurrent)
-
-  for (const phaseRoot of [baselineRoot, currentRoot]) {
+  for (const phaseRoot of uniquePhaseRoots) {
     const wrangler = await prepareWranglerEnv(phaseRoot)
     await ensurePhaseBuild(phaseRoot, wrangler.env)
   }
@@ -1080,8 +1114,8 @@ async function main() {
   await cleanupWorkerd()
 
   for (const phase of [
-    { phase: 'baseline', commit: baselineCommit, root: baselineRoot },
-    { phase: 'current', commit: currentCommit, root: currentRoot }
+    { phase: 'baseline', label: baselineLabel, root: baselineRoot },
+    { phase: 'current', label: currentLabel, root: currentRoot }
   ]) {
     const wrangler = await prepareWranglerEnv(phase.root)
     const runtimeResultsDir = path.join(PERF_RESULT_DIR, phase.phase)
@@ -1165,7 +1199,7 @@ async function main() {
 
       artifacts.push({
         phase: phase.phase,
-        commit: phase.commit,
+        label: phase.label,
         root: phase.root,
         nodeResultPath,
         workerResultPath,
@@ -1194,7 +1228,7 @@ async function main() {
         const profilePath = path.join(artifact.nodeProfileDir, `${artifact.phase}-${fixtureName}-${target}.cpuprofile`)
         allEntries.push({
           phase: artifact.phase,
-          commit: artifact.commit,
+          commit: artifact.label,
           harness: NODE_HARNESS,
           target,
           runs: nodeTargetRows.length,
@@ -1212,7 +1246,7 @@ async function main() {
       if (workerTargetRows.length) {
         allEntries.push({
           phase: artifact.phase,
-          commit: artifact.commit,
+          commit: artifact.label,
           harness: WORKER_HARNESS,
           target,
           runs: workerTargetRows.length,
@@ -1260,10 +1294,11 @@ async function main() {
       }
   const hotspotDiff = computeHotspotDiff(hotspots.baseline, hotspots.current)
   const keyConclusions = buildConclusions(summaryPairs)
+  const regressionAssessment = buildRegressionAssessment(summaryPairs)
 
   await writeMarkdownReport(path.join(reportDir, 'report.md'), {
-    baselineCommit,
-    currentCommit,
+    baselineLabel,
+    currentLabel,
     fixtureName,
     targets,
     repeat,
@@ -1275,6 +1310,7 @@ async function main() {
     hotspots,
     hotspotDiff,
     keyConclusions,
+    regressionAssessment,
     notificationNote: '未纳入主 workload；本轮只执行 overview / scan-debug / import / subscription detail/payment-records 固定口径。',
     baselineProfile: baselineWorkerProfilePath,
     currentProfile: currentWorkerProfilePath

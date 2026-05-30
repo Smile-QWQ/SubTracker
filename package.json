@@ -28,7 +28,8 @@
     "perf:lite:seed": "node scripts/perf-lite-seed.mjs",
     "perf:lite:measure": "node scripts/perf-lite-measure.mjs",
     "perf:lite:profile": "node scripts/perf-lite-measure.mjs --profile",
-    "perf:lite:worker": "node scripts/perf-lite-worker-http.mjs"
+    "perf:lite:worker": "node scripts/perf-lite-worker-http.mjs",
+    "perf:lite:report": "node scripts/perf-lite-before-after-report.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

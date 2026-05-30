@@ -79,6 +79,7 @@ type ImportCommitTraceStep = {
   step: string
   wallMs: number
   count?: number
+  noop?: boolean
 }
 
 type ImportCommitTrace = {
@@ -339,15 +340,53 @@ export async function createSubtrackerBackupArchive() {
 
 async function decodeBackupArchive(input: SubtrackerBackupInspectInput) {
   const manifest = parseBackupManifest(input.manifest as SubtrackerBackupManifestDto)
+  return {
+    manifest,
+    logoAssets: decodeProvidedLogoAssets(manifest, validateProvidedLogoAssets(manifest, input.logoAssets))
+  }
+}
+
+type ProvidedBackupLogoAsset = NonNullable<SubtrackerBackupInspectInput['logoAssets']>[number]
+type ExistingTagRow = { id: string; name: string }
+
+type AppendImportState = {
+  existingTagRows: ExistingTagRow[]
+  existingSubscriptionIds: Set<string>
+  existingPaymentRecordIds: Set<string>
+  noop: boolean
+  totalChecked: number
+}
+
+function mapProvidedLogoAssets(assets: SubtrackerBackupInspectInput['logoAssets']) {
+  return new Map<string, ProvidedBackupLogoAsset>((assets ?? []).map((asset) => [asset.path, asset]))
+}
+
+function requireProvidedLogoAsset(asset: SubtrackerBackupAssetLogoDto, provided: ProvidedBackupLogoAsset | undefined) {
+  if (!provided) {
+    throw new Error(`备份 ZIP 缺少 Logo 文件：${asset.path}`)
+  }
+  if (!String(provided.base64 ?? '').trim()) {
+    throw new Error(`备份 ZIP 中的 Logo 内容为空：${asset.path}`)
+  }
+  return provided
+}
+
+function validateProvidedLogoAssets(manifest: BackupManifest, assets: SubtrackerBackupInspectInput['logoAssets']) {
+  const providedAssets = mapProvidedLogoAssets(assets)
+  for (const asset of manifest.assets.logos) {
+    requireProvidedLogoAsset(asset, providedAssets.get(asset.path))
+  }
+  return providedAssets
+}
+
+function decodeProvidedLogoAssets(
+  manifest: BackupManifest,
+  providedAssets: Map<string, ProvidedBackupLogoAsset>
+) {
   const logoAssets: Record<string, { bytes: Uint8Array; contentType: string; filename: string }> = {}
 
-  const providedAssets = new Map((input.logoAssets ?? []).map((asset) => [asset.path, asset]))
-
   for (const asset of manifest.assets.logos) {
-    const provided = providedAssets.get(asset.path)
-    if (!provided) {
-      throw new Error(`备份 ZIP 缺少 Logo 文件：${asset.path}`)
-    }
+    const provided = requireProvidedLogoAsset(asset, providedAssets.get(asset.path))
     const bytes = Buffer.from(provided.base64, 'base64')
     if (!bytes.length) {
       throw new Error(`备份 ZIP 中的 Logo 内容为空：${asset.path}`)
@@ -359,7 +398,7 @@ async function decodeBackupArchive(input: SubtrackerBackupInspectInput) {
     }
   }
 
-  return { manifest, logoAssets }
+  return logoAssets
 }
 
 async function buildInspectConflicts(manifest: BackupManifest): Promise<SubtrackerBackupInspectConflictsDto> {
@@ -509,9 +548,9 @@ async function restoreWebhookFromBackup(notificationWebhook: BackupManifest['dat
   await setSetting('notificationWebhook', notificationWebhook)
 }
 
-async function buildTagRestoreMap(manifest: BackupManifest) {
+async function buildTagRestoreMap(manifest: BackupManifest, existingTagRows?: ExistingTagRow[]) {
   const existingByName = new Map(
-    (await findExistingTagRowsByNames(manifest.data.tags.map((tag) => tag.name))).map((tag) => [tag.name, tag])
+    (existingTagRows ?? (await findExistingTagRowsByNames(manifest.data.tags.map((tag) => tag.name)))).map((tag) => [tag.name, tag])
   )
 
   const idMap = new Map<string, string>()
@@ -543,6 +582,38 @@ async function buildTagRestoreMap(manifest: BackupManifest) {
     tagIdMap: idMap,
     importedTags,
     reusedTags
+  }
+}
+
+function hasAllTagNames(tags: SubtrackerBackupTagDto[], existingByName: Map<string, ExistingTagRow>) {
+  return tags.every((tag) => existingByName.has(tag.name))
+}
+
+function hasAllIds<T extends { id: string }>(items: T[], existingIds: Set<string>) {
+  return items.every((item) => existingIds.has(item.id))
+}
+
+async function buildAppendImportState(manifest: BackupManifest, restoreSettings: boolean): Promise<AppendImportState> {
+  const [existingTagRows, existingSubscriptionRows, existingPaymentRecordRows] = await Promise.all([
+    findExistingTagRowsByNames(manifest.data.tags.map((tag) => tag.name)),
+    findExistingIdsByTable('Subscription', manifest.data.subscriptions.map((item) => item.id)),
+    findExistingPaymentRecordIdsBySubscriptionIds(manifest.data.paymentRecords)
+  ])
+
+  const existingTagRowsByName = new Map(existingTagRows.map((row) => [row.name, row]))
+  const existingSubscriptionIds = new Set(existingSubscriptionRows.map((item) => item.id))
+  const existingPaymentRecordIds = new Set(existingPaymentRecordRows.map((item) => item.id))
+  const noop = !restoreSettings &&
+    hasAllTagNames(manifest.data.tags, existingTagRowsByName) &&
+    hasAllIds(manifest.data.subscriptions, existingSubscriptionIds) &&
+    hasAllIds(manifest.data.paymentRecords, existingPaymentRecordIds)
+
+  return {
+    existingTagRows,
+    existingSubscriptionIds,
+    existingPaymentRecordIds,
+    noop,
+    totalChecked: manifest.data.tags.length + manifest.data.subscriptions.length + manifest.data.paymentRecords.length
   }
 }
 
@@ -699,8 +770,8 @@ async function findExistingIdsByTable(
   return rows
 }
 
-async function findExistingPaymentRecordIds(records: PaymentRecordDto[], mode: SubtrackerBackupCommitInput['mode']) {
-  if (mode === 'replace' || records.length === 0) {
+async function findExistingPaymentRecordIdsBySubscriptionIds(records: PaymentRecordDto[]) {
+  if (records.length === 0) {
     return [] as Array<{ id: string }>
   }
 
@@ -737,14 +808,58 @@ export async function commitSubtrackerBackup(
   options?: CommitSubtrackerBackupOptions
 ): Promise<SubtrackerBackupCommitResultDto> {
   const trace = createImportCommitTrace(options?.traceEnabled)
-  const { manifest, logoAssets } = await traceImportCommitStep(trace, 'decode-backup-archive', () =>
-    decodeBackupArchive({
-      filename: 'commit-subtracker-backup.zip',
-      manifest: input.manifest,
-      logoAssets: input.logoAssets
-    })
-  )
+  const manifest = parseBackupManifest(input.manifest as SubtrackerBackupManifestDto)
   const previewWarnings = buildBackupWarnings(manifest, Boolean(getWorkerLogoBucket()))
+  let providedLogoAssets: Map<string, ProvidedBackupLogoAsset> | null = null
+  let appendImportState: AppendImportState | null = null
+
+  if (input.mode === 'append') {
+    providedLogoAssets = validateProvidedLogoAssets(manifest, input.logoAssets)
+    appendImportState = await traceImportCommitStep(
+      trace,
+      'detect-append-noop',
+      () => buildAppendImportState(manifest, input.restoreSettings),
+      (value) => ({
+        count: value.totalChecked,
+        noop: value.noop
+      })
+    )
+
+    if (appendImportState.noop) {
+      const result = {
+        mode: input.mode,
+        clearedExistingData: false,
+        restoredSettings: false,
+        importedTags: 0,
+        reusedTags: manifest.data.tags.length,
+        importedSubscriptions: 0,
+        skippedSubscriptions: manifest.data.subscriptions.length,
+        importedPaymentRecords: 0,
+        skippedPaymentRecords: manifest.data.paymentRecords.length,
+        importedLogos: 0,
+        warnings: previewWarnings
+      }
+
+      if (trace.enabled && trace.steps.length > 0) {
+        options?.onTrace?.(trace.steps)
+      }
+      emitImportCommitTrace(trace)
+      return result
+    }
+  }
+
+  const logoAssets = await traceImportCommitStep(trace, 'decode-backup-archive', () =>
+    Promise.resolve(
+      decodeProvidedLogoAssets(
+        manifest,
+        providedLogoAssets ?? validateProvidedLogoAssets(manifest, input.logoAssets)
+      )
+    )
+  )
+
+  if (input.mode === 'replace') {
+    await traceImportCommitStep(trace, 'clear-business-data', () => clearBusinessData())
+  }
 
   const appSettings = (() => {
     try {
@@ -754,36 +869,38 @@ export async function commitSubtrackerBackup(
     }
   })()
 
-  if (input.mode === 'replace') {
-    await traceImportCommitStep(trace, 'clear-business-data', () => clearBusinessData())
-  }
-
   const { tagIdMap, importedTags, reusedTags } = await traceImportCommitStep(
     trace,
     'build-tag-restore-map',
-    () => buildTagRestoreMap(manifest),
+    () => buildTagRestoreMap(manifest, appendImportState?.existingTagRows),
     (value) => ({ count: value.importedTags + value.reusedTags })
   )
-  const existingSubscriptionIds = new Set(
-    (
-      await traceImportCommitStep(
-        trace,
-        'lookup-existing-subscriptions',
-        () => findExistingIdsByTable('Subscription', manifest.data.subscriptions.map((item) => item.id)),
-        (rows) => ({ count: rows.length })
-      )
-    ).map((item) => item.id)
-  )
-  const existingPaymentRecordIds = new Set(
-    (
-      await traceImportCommitStep(
-        trace,
-        'lookup-existing-payment-records',
-        () => findExistingPaymentRecordIds(manifest.data.paymentRecords, input.mode),
-        (rows) => ({ count: rows.length })
-      )
-    ).map((item) => item.id)
-  )
+  const existingSubscriptionIds = input.mode === 'append'
+    ? (appendImportState?.existingSubscriptionIds ??
+        new Set(
+          (
+            await traceImportCommitStep(
+              trace,
+              'lookup-existing-subscriptions',
+              () => findExistingIdsByTable('Subscription', manifest.data.subscriptions.map((item) => item.id)),
+              (rows) => ({ count: rows.length })
+            )
+          ).map((item) => item.id)
+        ))
+    : new Set<string>()
+  const existingPaymentRecordIds = input.mode === 'append'
+    ? (appendImportState?.existingPaymentRecordIds ??
+        new Set(
+          (
+            await traceImportCommitStep(
+              trace,
+              'lookup-existing-payment-records',
+              () => findExistingPaymentRecordIdsBySubscriptionIds(manifest.data.paymentRecords),
+              (rows) => ({ count: rows.length })
+            )
+          ).map((item) => item.id)
+        ))
+    : new Set<string>()
 
   let importedSubscriptions = 0
   let skippedSubscriptions = 0

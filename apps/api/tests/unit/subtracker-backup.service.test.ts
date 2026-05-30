@@ -449,7 +449,7 @@ describe('subtracker backup service', () => {
     }
 
     mocks.getWorkerLogoBucketMock.mockReturnValue(null)
-    mocks.prismaMock.tag.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    mocks.prismaMock.tag.findMany.mockResolvedValueOnce([])
     mocks.prismaMock.subscription.findMany.mockResolvedValue([])
     mocks.prismaMock.paymentRecord.findMany.mockResolvedValue([])
     mocks.prismaMock.tag.create.mockResolvedValue({ id: 'tag_1' })
@@ -475,6 +475,7 @@ describe('subtracker backup service', () => {
     })
 
     expect(mocks.prismaMock.subscription.create).toHaveBeenCalledTimes(1)
+    expect(mocks.prismaMock.tag.findMany).toHaveBeenCalledTimes(1)
     expect(result).toMatchObject({
       mode: 'append',
       importedTags: 1,
@@ -602,7 +603,7 @@ describe('subtracker backup service', () => {
     }
 
     mocks.getWorkerLogoBucketMock.mockReturnValue(null)
-    mocks.prismaMock.tag.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    mocks.prismaMock.tag.findMany.mockResolvedValueOnce([])
     mocks.prismaMock.subscription.findMany.mockResolvedValue([])
     mocks.prismaMock.paymentRecord.findMany.mockResolvedValue([{ id: 'pay_existing' }])
     mocks.prismaMock.tag.create.mockResolvedValue({ id: 'tag_1' })
@@ -642,9 +643,10 @@ describe('subtracker backup service', () => {
       importedPaymentRecords: 1,
       skippedPaymentRecords: 1
     })
+    expect(mocks.prismaMock.tag.findMany).toHaveBeenCalledTimes(1)
   })
 
-  it('skips append followups when append commit imports nothing and restoreSettings is false', async () => {
+  it('returns append noop fast-path trace evidence and skips followups when append commit imports nothing', async () => {
     const manifest = {
       schemaVersion: 1,
       exportedAt: '2026-05-02T08:00:00.000Z',
@@ -748,15 +750,19 @@ describe('subtracker backup service', () => {
     }
 
     mocks.getWorkerLogoBucketMock.mockReturnValue(null)
-    mocks.prismaMock.tag.findMany.mockResolvedValueOnce([{ id: 'tag_1', name: '影音' }]).mockResolvedValueOnce([{ id: 'tag_1', name: '影音' }])
+    mocks.prismaMock.tag.findMany.mockResolvedValueOnce([{ id: 'tag_1', name: '影音' }])
     mocks.prismaMock.subscription.findMany.mockResolvedValue([{ id: 'sub_1' }])
     mocks.prismaMock.paymentRecord.findMany.mockResolvedValue([{ id: 'pay_existing' }])
+    const onTrace = vi.fn()
 
     const result = await commitSubtrackerBackup({
       manifest,
       logoAssets: [],
       mode: 'append',
       restoreSettings: false
+    }, {
+      traceEnabled: true,
+      onTrace
     })
 
     expect(result).toMatchObject({
@@ -766,8 +772,19 @@ describe('subtracker backup service', () => {
       skippedSubscriptions: 1,
       skippedPaymentRecords: 1
     })
+    expect(onTrace).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          step: 'detect-append-noop',
+          noop: true
+        })
+      ])
+    )
+    expect(mocks.prismaMock.tag.findMany).toHaveBeenCalledTimes(1)
     expect(mocks.getSubscriptionOrderMock).not.toHaveBeenCalled()
     expect(mocks.setSubscriptionOrderMock).not.toHaveBeenCalled()
     expect(mocks.setSettingMock).not.toHaveBeenCalled()
+    expect(mocks.prismaMock.subscription.create).not.toHaveBeenCalled()
+    expect(mocks.prismaMock.paymentRecord.createMany).not.toHaveBeenCalled()
   })
 })
