@@ -8,6 +8,7 @@ import {
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_OVERDUE_REMINDER_RULES,
   applyNotificationTemplate,
+  compactNotificationTemplateConfig,
   createEmptyNotificationTemplateConfig,
   formatAiSummaryPreviewText,
   getDefaultAiDashboardSummaryPreviewPrompt,
@@ -216,6 +217,30 @@ describe('shared schema', () => {
     expect(resolved.markdown.singleReminder.titleTemplate).toBe('## {{title}}')
     expect(resolved.markdown.singleReminder.bodyTemplate).toContain('{{detailsBlock}}')
     expect(resolved.text.forgotPassword.titleTemplate).toBe(getMessage('en-US', 'notifications.forgotPassword.title'))
+  })
+
+  it('treats stored locale defaults as fallback templates across locale switches', () => {
+    const storedEnglishDefaults = {
+      markdown: {
+        ...createEmptyNotificationTemplateConfig().markdown,
+        singleReminder: getDefaultNotificationTemplate('markdown', 'singleReminder', 'en-US')
+      }
+    }
+
+    const resolvedZh = resolveNotificationTemplateConfig(storedEnglishDefaults, 'zh-CN')
+    expect(resolvedZh.markdown.singleReminder.titleTemplate).toBe(
+      getDefaultNotificationTemplate('markdown', 'singleReminder', 'zh-CN').titleTemplate
+    )
+
+    const compacted = compactNotificationTemplateConfig({
+      markdown: {
+        ...createEmptyNotificationTemplateConfig().markdown,
+        singleReminder: getDefaultNotificationTemplate('markdown', 'singleReminder', 'zh-CN')
+      }
+    })
+
+    expect(compacted.markdown.singleReminder.titleTemplate).toBe('')
+    expect(compacted.markdown.singleReminder.bodyTemplate).toBe('')
   })
 
   it('applies notification templates with placeholder replacement and preserves unknown keys', () => {

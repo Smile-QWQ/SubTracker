@@ -160,6 +160,7 @@ export {
 } from './locale-core'
 export {
   applyNotificationTemplate,
+  compactNotificationTemplateConfig,
   createEmptyNotificationTemplateConfig,
   getDefaultNotificationTemplate,
   NotificationTemplateConfigSchema,
