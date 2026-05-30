@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { getMessage } from './i18n'
-import { DEFAULT_APP_LOCALE, type AppLocale } from './locale-core'
+import { AppLocaleSchema, DEFAULT_APP_LOCALE, type AppLocale } from './locale-core'
 
 export const NotificationTemplateGroupSchema = z.enum(['text', 'markdown', 'html'])
 export const NotificationTemplateSceneSchema = z.enum(['singleReminder', 'mergedReminder', 'testNotification', 'forgotPassword'])
@@ -34,6 +34,7 @@ export type NotificationTemplateConfigInput = z.infer<typeof NotificationTemplat
 
 export const NOTIFICATION_TEMPLATE_GROUPS = NotificationTemplateGroupSchema.options
 export const NOTIFICATION_TEMPLATE_SCENES = NotificationTemplateSceneSchema.options
+const NOTIFICATION_TEMPLATE_LOCALES = AppLocaleSchema.options
 
 function buildSingleTitleTemplate(locale: AppLocale) {
   return getMessage(locale, 'notifications.titles.single', {
@@ -113,6 +114,27 @@ export function createEmptyNotificationTemplateConfig(): NotificationTemplateCon
   return NotificationTemplateConfigSchema.parse({})
 }
 
+function normalizeTemplateContent(value: string) {
+  return String(value ?? '').replace(/\r\n/g, '\n').trim()
+}
+
+function matchesAnyLocaleDefault(
+  group: NotificationTemplateGroup,
+  scene: NotificationTemplateScene,
+  field: keyof NotificationTemplateEntryInput,
+  value: string
+) {
+  const normalized = normalizeTemplateContent(value)
+  if (!normalized) {
+    return true
+  }
+
+  return NOTIFICATION_TEMPLATE_LOCALES.some((locale) => {
+    const defaults = getDefaultNotificationTemplate(group, scene, locale)
+    return normalizeTemplateContent(defaults[field]) === normalized
+  })
+}
+
 export function resolveNotificationTemplateConfig(
   input: Partial<NotificationTemplateConfigInput> | null | undefined,
   locale: AppLocale = DEFAULT_APP_LOCALE
@@ -125,13 +147,40 @@ export function resolveNotificationTemplateConfig(
       const defaults = getDefaultNotificationTemplate(group, scene, locale)
       const current = parsed[group][scene]
       resolved[group][scene] = {
-        titleTemplate: current.titleTemplate.trim() || defaults.titleTemplate,
-        bodyTemplate: current.bodyTemplate.trim() || defaults.bodyTemplate
+        titleTemplate: matchesAnyLocaleDefault(group, scene, 'titleTemplate', current.titleTemplate)
+          ? defaults.titleTemplate
+          : current.titleTemplate.trim(),
+        bodyTemplate: matchesAnyLocaleDefault(group, scene, 'bodyTemplate', current.bodyTemplate)
+          ? defaults.bodyTemplate
+          : current.bodyTemplate.trim()
       }
     }
   }
 
   return resolved
+}
+
+export function compactNotificationTemplateConfig(
+  input: Partial<NotificationTemplateConfigInput> | null | undefined
+): NotificationTemplateConfigInput {
+  const parsed = NotificationTemplateConfigSchema.parse(input ?? {})
+  const compacted = createEmptyNotificationTemplateConfig()
+
+  for (const group of NOTIFICATION_TEMPLATE_GROUPS) {
+    for (const scene of NOTIFICATION_TEMPLATE_SCENES) {
+      const current = parsed[group][scene]
+      compacted[group][scene] = {
+        titleTemplate: matchesAnyLocaleDefault(group, scene, 'titleTemplate', current.titleTemplate)
+          ? ''
+          : current.titleTemplate.trim(),
+        bodyTemplate: matchesAnyLocaleDefault(group, scene, 'bodyTemplate', current.bodyTemplate)
+          ? ''
+          : current.bodyTemplate.trim()
+      }
+    }
+  }
+
+  return compacted
 }
 
 export function applyNotificationTemplate(template: string, values: Record<string, string>) {

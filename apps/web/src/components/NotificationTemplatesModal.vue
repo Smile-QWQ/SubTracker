@@ -111,6 +111,7 @@ import { computed, ref, watch } from 'vue'
 import DOMPurify from 'dompurify'
 import {
   applyNotificationTemplate,
+  compactNotificationTemplateConfig,
   getDefaultNotificationTemplate,
   resolveNotificationTemplateConfig,
   type NotificationTemplateConfigInput,
@@ -196,38 +197,123 @@ const placeholderOptions = computed(() => [
 
 const currentGroupChannels = computed(() => t(`settings.templates.supportedChannels.${activeGroup.value}`))
 
+function formatPreviewLine(label: string, value: string) {
+  const locale = getAppLocale()
+  return `${label}${locale === 'en-US' ? ': ' : '：'}${value}`
+}
+
+function buildPreviewSample() {
+  const locale = getAppLocale()
+  return {
+    primaryName: 'Netflix',
+    secondaryName: 'Spotify',
+    primaryDate: '2026-06-01',
+    secondaryDate: '2026-06-03',
+    primaryAmount: '69 CNY',
+    secondaryAmount: '15 CNY',
+    primaryTag: locale === 'en-US' ? 'Streaming' : '影音',
+    primaryNotes: locale === 'en-US' ? 'Family plan' : '家庭套餐',
+    username: 'admin',
+    code: '123456',
+    expiresInMinutes: '10'
+  }
+}
+
 function buildPreviewValues(group: NotificationTemplateGroup, scene: NotificationTemplateScene) {
+  const sample = buildPreviewSample()
   const phaseLabel = t('notifications.phases.upcoming')
   const detailsBlock =
     group === 'html'
-      ? '<ul><li><strong>名称</strong>：Netflix</li><li><strong>下次续订</strong>：2026-06-01</li><li><strong>金额</strong>：69 CNY</li><li><strong>标签</strong>：影音</li><li><strong>备注</strong>：家庭套餐</li></ul>'
+      ? [
+          '<ul>',
+          `<li><strong>${t('common.labels.name')}</strong>${getAppLocale() === 'en-US' ? ': ' : '：'}${sample.primaryName}</li>`,
+          `<li><strong>${t('common.labels.nextRenewal')}</strong>${getAppLocale() === 'en-US' ? ': ' : '：'}${sample.primaryDate}</li>`,
+          `<li><strong>${t('common.labels.amount')}</strong>${getAppLocale() === 'en-US' ? ': ' : '：'}${sample.primaryAmount}</li>`,
+          `<li><strong>${t('common.labels.tags')}</strong>${getAppLocale() === 'en-US' ? ': ' : '：'}${sample.primaryTag}</li>`,
+          `<li><strong>${t('common.labels.notes')}</strong>${getAppLocale() === 'en-US' ? ': ' : '：'}${sample.primaryNotes}</li>`,
+          '</ul>'
+        ].join('')
       : group === 'markdown'
-        ? '- **名称**：Netflix\n- **下次续订**：2026-06-01\n- **金额**：69 CNY\n- **标签**：影音\n- **备注**：家庭套餐'
-        : '订阅名称：Netflix\n下次续订：2026-06-01\n金额：69 CNY\n标签：影音\n备注：家庭套餐'
+        ? [
+            `- **${t('common.labels.name')}**${getAppLocale() === 'en-US' ? ': ' : '：'}${sample.primaryName}`,
+            `- **${t('common.labels.nextRenewal')}**${getAppLocale() === 'en-US' ? ': ' : '：'}${sample.primaryDate}`,
+            `- **${t('common.labels.amount')}**${getAppLocale() === 'en-US' ? ': ' : '：'}${sample.primaryAmount}`,
+            `- **${t('common.labels.tags')}**${getAppLocale() === 'en-US' ? ': ' : '：'}${sample.primaryTag}`,
+            `- **${t('common.labels.notes')}**${getAppLocale() === 'en-US' ? ': ' : '：'}${sample.primaryNotes}`
+          ].join('\n')
+        : [
+            formatPreviewLine(t('common.labels.name'), sample.primaryName),
+            formatPreviewLine(t('common.labels.nextRenewal'), sample.primaryDate),
+            formatPreviewLine(t('common.labels.amount'), sample.primaryAmount),
+            formatPreviewLine(t('common.labels.tags'), sample.primaryTag),
+            formatPreviewLine(t('common.labels.notes'), sample.primaryNotes)
+          ].join('\n')
   const summaryBlock =
     group === 'html'
-      ? '<p>提醒类型：订阅提醒汇总</p><p>订阅数量：2 项</p>'
+      ? `<p>${formatPreviewLine(t('notifications.labels.reminderType', { value: '' }).replace(/[:：]\s*$/, ''), t('notifications.phases.summary'))}</p><p>${t('notifications.labels.subscriptionCount', { count: 2 })}</p>`
       : group === 'markdown'
-        ? '> 提醒类型：订阅提醒汇总\n> 订阅数量：2 项'
-        : '提醒类型：订阅提醒汇总\n订阅数量：2 项'
+        ? `> ${t('notifications.labels.reminderType', { value: t('notifications.phases.summary') })}\n> ${t('notifications.labels.subscriptionCount', { count: 2 })}`
+        : `${t('notifications.labels.reminderType', { value: t('notifications.phases.summary') })}\n${t('notifications.labels.subscriptionCount', { count: 2 })}`
   const sectionsBlock =
     group === 'html'
-      ? '<section><h3>即将到期</h3><ol><li><strong>Netflix</strong><div>下次续订：2026-06-01</div><div>金额：69 CNY</div></li><li><strong>Spotify</strong><div>下次续订：2026-06-03</div><div>金额：15 CNY</div></li></ol></section>'
+      ? [
+          `<section><h3>${t('notifications.phases.upcoming')}</h3><ol>`,
+          `<li><strong>${sample.primaryName}</strong><div>${formatPreviewLine(t('common.labels.nextRenewal'), sample.primaryDate)}</div><div>${formatPreviewLine(t('common.labels.amount'), sample.primaryAmount)}</div></li>`,
+          `<li><strong>${sample.secondaryName}</strong><div>${formatPreviewLine(t('common.labels.nextRenewal'), sample.secondaryDate)}</div><div>${formatPreviewLine(t('common.labels.amount'), sample.secondaryAmount)}</div></li>`,
+          '</ol></section>'
+        ].join('')
       : group === 'markdown'
-        ? '### 即将到期\n\n1. **Netflix**\n   - 下次续订：2026-06-01\n   - 金额：69 CNY\n\n2. **Spotify**\n   - 下次续订：2026-06-03\n   - 金额：15 CNY'
-        : '【即将到期】\n1. Netflix\n   下次续订：2026-06-01\n   金额：69 CNY\n\n2. Spotify\n   下次续订：2026-06-03\n   金额：15 CNY'
+        ? [
+            `### ${t('notifications.phases.upcoming')}`,
+            '',
+            `1. **${sample.primaryName}**`,
+            `   - ${formatPreviewLine(t('common.labels.nextRenewal'), sample.primaryDate)}`,
+            `   - ${formatPreviewLine(t('common.labels.amount'), sample.primaryAmount)}`,
+            '',
+            `2. **${sample.secondaryName}**`,
+            `   - ${formatPreviewLine(t('common.labels.nextRenewal'), sample.secondaryDate)}`,
+            `   - ${formatPreviewLine(t('common.labels.amount'), sample.secondaryAmount)}`
+          ].join('\n')
+        : [
+            `【${t('notifications.phases.upcoming')}】`,
+            `1. ${sample.primaryName}`,
+            `   ${formatPreviewLine(t('common.labels.nextRenewal'), sample.primaryDate)}`,
+            `   ${formatPreviewLine(t('common.labels.amount'), sample.primaryAmount)}`,
+            '',
+            `2. ${sample.secondaryName}`,
+            `   ${formatPreviewLine(t('common.labels.nextRenewal'), sample.secondaryDate)}`,
+            `   ${formatPreviewLine(t('common.labels.amount'), sample.secondaryAmount)}`
+          ].join('\n')
   const forgotPasswordBlock =
     group === 'html'
-      ? '<ul><li><strong>用户名</strong>：admin</li><li><strong>验证码</strong>：123456</li><li>有效期：10 分钟</li></ul><p>如果这不是你的操作，请忽略本次通知。</p>'
+      ? [
+          '<ul>',
+          `<li><strong>${t('common.labels.username')}</strong>${getAppLocale() === 'en-US' ? ': ' : '：'}${sample.username}</li>`,
+          `<li><strong>${t('common.labels.code')}</strong>${getAppLocale() === 'en-US' ? ': ' : '：'}${sample.code}</li>`,
+          `<li>${t('notifications.forgotPassword.expiresInMinutes', { minutes: Number(sample.expiresInMinutes) })}</li>`,
+          '</ul>',
+          `<p>${t('notifications.forgotPassword.ignoreHint')}</p>`
+        ].join('')
       : group === 'markdown'
-        ? '- **用户名**：admin\n- **验证码**：123456\n- **有效期**：10 分钟\n\n如果这不是你的操作，请忽略本次通知。'
-        : '用户名：admin\n验证码：123456\n有效期：10 分钟\n如果这不是你的操作，请忽略本次通知。'
+        ? [
+            `- **${t('common.labels.username')}**${getAppLocale() === 'en-US' ? ': ' : '：'}${sample.username}`,
+            `- **${t('common.labels.code')}**${getAppLocale() === 'en-US' ? ': ' : '：'}${sample.code}`,
+            `- ${t('notifications.forgotPassword.expiresInMinutes', { minutes: Number(sample.expiresInMinutes) })}`,
+            '',
+            t('notifications.forgotPassword.ignoreHint')
+          ].join('\n')
+        : [
+            formatPreviewLine(t('common.labels.username'), sample.username),
+            formatPreviewLine(t('common.labels.code'), sample.code),
+            t('notifications.forgotPassword.expiresInMinutes', { minutes: Number(sample.expiresInMinutes) }),
+            t('notifications.forgotPassword.ignoreHint')
+          ].join('\n')
   const testIntroBlock =
     group === 'html'
-      ? '<p>这是一条测试通知，用于验证当前通知渠道和模板配置。</p>'
+      ? `<p>${t('notifications.tests.intro')}</p>`
       : group === 'markdown'
-        ? '> 这是一条测试通知，用于验证当前通知渠道和模板配置。'
-        : '这是一条测试通知，用于验证当前通知渠道和模板配置。'
+        ? `> ${t('notifications.tests.intro')}`
+        : t('notifications.tests.intro')
 
   return {
     appName: 'SubTracker',
@@ -239,19 +325,19 @@ function buildPreviewValues(group: NotificationTemplateGroup, scene: Notificatio
     sectionsBlock,
     testIntroBlock,
     forgotPasswordBlock,
-    'subscription.name': 'Netflix',
-    'subscription.nextRenewalDate': '2026-06-01',
+    'subscription.name': sample.primaryName,
+    'subscription.nextRenewalDate': sample.primaryDate,
     'subscription.amount': '69',
     'subscription.currency': 'CNY',
-    'subscription.amountWithCurrency': '69 CNY',
-    'subscription.tags': '影音',
+    'subscription.amountWithCurrency': sample.primaryAmount,
+    'subscription.tags': sample.primaryTag,
     'subscription.websiteUrl': 'https://example.com/netflix',
-    'subscription.notes': '家庭套餐',
+    'subscription.notes': sample.primaryNotes,
     'subscription.daysUntilRenewal': '3',
     'subscription.daysOverdue': '0',
-    username: 'admin',
-    code: '123456',
-    expiresInMinutes: '10'
+    username: sample.username,
+    code: sample.code,
+    expiresInMinutes: sample.expiresInMinutes
   }
 }
 
@@ -294,7 +380,12 @@ function restoreCurrentEntryDefault() {
 }
 
 function handleSave() {
-  emit('save', JSON.parse(JSON.stringify(draftConfig.value)) as NotificationTemplateConfig)
+  emit(
+    'save',
+    compactNotificationTemplateConfig(
+      JSON.parse(JSON.stringify(draftConfig.value)) as NotificationTemplateConfig
+    ) as NotificationTemplateConfig
+  )
 }
 
 function handleUpdateShow(value: boolean) {
