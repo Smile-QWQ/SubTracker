@@ -1,5 +1,7 @@
+import { getMessage } from '@subtracker/shared'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildPreparedSubtrackerBackupPayload } from '@/utils/subtracker-backup-client'
+import { getAppLocale } from '@/locales'
 
 const { unzipSyncMock } = vi.hoisted(() => ({
   unzipSyncMock: vi.fn<(bytes: Uint8Array) => Record<string, Uint8Array>>()
@@ -79,6 +81,8 @@ describe('buildPreparedSubtrackerBackupPayload', () => {
 
     const file = createFile('broken.zip')
 
-    await expect(buildPreparedSubtrackerBackupPayload(file)).rejects.toThrow('备份 ZIP 缺少 manifest.json')
+    await expect(buildPreparedSubtrackerBackupPayload(file)).rejects.toThrow(
+      getMessage(getAppLocale(), 'api.errors.imports.subtrackerBackupMissingManifest')
+    )
   })
 })

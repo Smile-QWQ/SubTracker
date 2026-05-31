@@ -1,3 +1,6 @@
+import { getMessage } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE } from '@subtracker/shared/locale-core'
+
 export function roundMoney(value: number): number {
   return Number(value.toFixed(2))
 }
@@ -24,7 +27,7 @@ export function convertAmount(
   const toRate = normalizedRates[to]
 
   if (!fromRate || !toRate) {
-    throw new Error(`Unsupported currency conversion: ${from} -> ${to}`)
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.exchangeRates.unsupportedCurrencyConversion', { from, to }))
   }
 
   const inBase = amount / fromRate

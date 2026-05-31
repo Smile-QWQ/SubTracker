@@ -1,20 +1,9 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
-import { getAppLocale, setAppLocale } from '../../../src/locales'
+import { describe, expect, it } from 'vitest'
 import {
   calculateNextRenewalDateTs,
   canRecalculateNextRenewal,
   validateSubscriptionForm
 } from '../../../src/utils/subscription-form'
-
-const originalLocale = getAppLocale()
-
-beforeEach(() => {
-  setAppLocale('zh-CN')
-})
-
-afterAll(() => {
-  setAppLocale(originalLocale)
-})
 
 describe('subscription form helpers', () => {
   it('normalizes websiteUrl without protocol before submit', () => {

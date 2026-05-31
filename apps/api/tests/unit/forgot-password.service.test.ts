@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { getMessage } from '@subtracker/shared'
 
 const state = vi.hoisted(() => ({
   store: new Map<string, unknown>(),
@@ -100,6 +101,7 @@ describe('forgot password service', () => {
     expect(result.ok).toBe(false)
     if (!result.ok) {
       expect(result.error.code).toBe('forgot_password_code_invalid')
+      expect(result.error.message).toBe(getMessage('zh-CN', 'api.errors.auth.forgotPasswordCodeInvalidWithAttempts', { attempts: 4 }))
     }
   })
 
@@ -118,5 +120,18 @@ describe('forgot password service', () => {
 
     expect(result.ok).toBe(true)
     expect(state.resetPasswordForStoredUsernameMock).toHaveBeenCalledWith('admin', 'new-password')
+  })
+
+  it('returns localized forgot password disabled errors', async () => {
+    const { requestForgotPasswordChallenge } = await import('../../src/services/forgot-password.service')
+    state.store.set('forgotPasswordEnabled', false)
+
+    const result = await requestForgotPasswordChallenge('admin', '203.0.113.1', 'en-US')
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.code).toBe('forgot_password_disabled')
+      expect(result.error.message).toBe(getMessage('en-US', 'api.errors.auth.forgotPasswordDisabled'))
+    }
   })
 })

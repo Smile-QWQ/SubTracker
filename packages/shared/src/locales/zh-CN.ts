@@ -1537,8 +1537,10 @@ export default {
         updateFetchFailed: '获取版本更新失败'
       },
       exchangeRates: {
+        providerRequestFailed: '汇率服务请求失败',
         refreshFailed: '刷新汇率失败',
-        payloadEmpty: '汇率数据内容为空'
+        payloadEmpty: '汇率数据内容为空',
+        unsupportedCurrencyConversion: '不支持的货币换算：{from} -> {to}'
       },
       subscriptions: {
         notFound: '订阅不存在',

@@ -1,3 +1,4 @@
+import { getMessage } from '@subtracker/shared'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const notificationState = vi.hoisted(() => ({
@@ -103,7 +104,11 @@ describe('scanRenewalNotifications merge behavior', () => {
     expect(payload.mergedCount).toBe(3)
     expect(payload.subscriptions).toHaveLength(3)
     expect(payload.mergedSections).toHaveLength(3)
-    expect(payload.mergedSections.map((section: { title: string }) => section.title)).toEqual(['即将到期', '今天到期', '已过期第 1 天'])
+    expect(payload.mergedSections.map((section: { title: string }) => section.title)).toEqual([
+      getMessage('zh-CN', 'notifications.merge.phaseUpcoming'),
+      getMessage('zh-CN', 'notifications.merge.phaseDueToday'),
+      getMessage('zh-CN', 'notifications.merge.phaseOverdueDay', { days: 1 })
+    ])
     expect(payload.subscriptions.map((item: { nextRenewalDate: string }) => item.nextRenewalDate)).toEqual([
       '2026-04-26',
       '2026-04-23',

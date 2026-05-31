@@ -1544,8 +1544,10 @@ Hard requirements:
         updateFetchFailed: 'Failed to fetch version updates'
       },
       exchangeRates: {
+        providerRequestFailed: 'The exchange-rate provider request failed',
         refreshFailed: 'Failed to refresh exchange rates',
-        payloadEmpty: 'The exchange-rate payload is empty'
+        payloadEmpty: 'The exchange-rate payload is empty',
+        unsupportedCurrencyConversion: 'Unsupported currency conversion: {from} -> {to}'
       },
       subscriptions: {
         notFound: 'Subscription not found',

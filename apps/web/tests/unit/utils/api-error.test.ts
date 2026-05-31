@@ -1,5 +1,7 @@
+import { getMessage } from '@subtracker/shared'
 import { describe, expect, it } from 'vitest'
 import { normalizeApiErrorMessage } from '@/utils/api-error'
+import { getAppLocale } from '@/locales'
 
 describe('normalizeApiErrorMessage', () => {
   it('converts worker cpu limit errors to a clearer Worker limit hint', () => {
@@ -10,7 +12,7 @@ describe('normalizeApiErrorMessage', () => {
           status: 503
         }
       })
-    ).toContain('Cloudflare Worker 免费版限制')
+    ).toContain(getMessage(getAppLocale(), 'common.errors.workerLimitHint'))
   })
 
   it('adds a Worker limit hint for generic 503 errors', () => {
@@ -21,7 +23,9 @@ describe('normalizeApiErrorMessage', () => {
           status: 503
         }
       })
-    ).toContain('服务暂时不可用')
+    ).toContain(getMessage(getAppLocale(), 'common.errors.serviceUnavailableWithWorkerHint', {
+      hint: getMessage(getAppLocale(), 'common.errors.workerLimitHint')
+    }).split('。')[0] ?? '')
   })
 
   it('keeps non-503 errors unchanged', () => {
@@ -46,13 +50,13 @@ describe('normalizeApiErrorMessage', () => {
               message: 'Invalid subscription payload',
               details: {
                 fieldErrors: {
-                  websiteUrl: ['请输入合法网址，例如 https://example.com']
+                  websiteUrl: [getMessage(getAppLocale(), 'validation.websiteUrlInvalid')]
                 }
               }
             }
           }
         }
       })
-    ).toBe('请输入合法网址，例如 https://example.com')
+    ).toBe(getMessage(getAppLocale(), 'validation.websiteUrlInvalid'))
   })
 })

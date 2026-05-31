@@ -1,6 +1,7 @@
 ﻿import Fastify, { type FastifyInstance } from 'fastify'
 import rateLimit from '@fastify/rate-limit'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { getMessage } from '@subtracker/shared'
 
 const authMocks = vi.hoisted(() => ({
   loginWithCredentialsMock: vi.fn(),
@@ -36,11 +37,11 @@ describe('auth routes', () => {
     app = Fastify()
     await app.register(rateLimit, {
       global: false,
-      errorResponseBuilder: (_request, context) => ({
+      errorResponseBuilder: (request, context) => ({
         statusCode: 429,
         error: {
           code: 'too_many_attempts',
-          message: '登录失败次数过多，请稍后再试',
+          message: getMessage(request.locale ?? 'zh-CN', 'api.errors.tooManyAttempts'),
           details: {
             retryAfterSeconds: Math.max(1, Math.ceil(context.ttl / 1000))
           }
@@ -86,7 +87,7 @@ describe('auth routes', () => {
     })
 
     expect(res.statusCode).toBe(422)
-    expect(res.json().error.message).toBe('请输入用户名和密码')
+    expect(res.json().error.message).toBe(getMessage('zh-CN', 'auth.validation.usernameAndPasswordRequired'))
   })
 
   it('returns mustChangePassword in login response', async () => {
@@ -187,7 +188,7 @@ describe('auth routes', () => {
     })
 
     expect(res.statusCode).toBe(200)
-    expect(authMocks.requestForgotPasswordChallengeMock).toHaveBeenCalledWith('admin', '203.0.113.10')
+    expect(authMocks.requestForgotPasswordChallengeMock).toHaveBeenCalledWith('admin', '203.0.113.10', undefined)
   })
 
   it('returns forgot password service errors', async () => {
@@ -196,7 +197,7 @@ describe('auth routes', () => {
       error: {
         status: 403,
         code: 'forgot_password_disabled',
-        message: '当前未开启忘记密码，或未配置可用通知渠道'
+        message: getMessage('zh-CN', 'api.errors.auth.forgotPasswordDisabled')
       }
     })
 
@@ -229,7 +230,8 @@ describe('auth routes', () => {
       username: 'admin',
       code: '123456',
       newPassword: 'new-password',
-      remoteAddress: '203.0.113.11'
+      remoteAddress: '203.0.113.11',
+      locale: undefined
     })
   })
 })

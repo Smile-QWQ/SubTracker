@@ -5,8 +5,8 @@ describe('subscription detail drawer value metrics', () => {
   it('shows current cycle and remaining value fields', () => {
     const source = readFileSync('src/components/SubscriptionDetailDrawer.vue', 'utf8')
 
-    expect(source).toContain('当前周期')
-    expect(source).toContain('剩余价值')
+    expect(source).toContain("t('subscriptions.labels.currentCycle')")
+    expect(source).toContain("t('subscriptions.labels.remainingValue')")
     expect(source).toContain('detail.currentCycleStartDate')
     expect(source).toContain('detail.currentCycleEndDate')
     expect(source).toContain('detail.remainingValue')

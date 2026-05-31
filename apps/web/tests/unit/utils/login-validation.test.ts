@@ -1,16 +1,5 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { validateLoginForm } from '../../../src/utils/login-validation'
-import { getAppLocale, setAppLocale } from '../../../src/locales'
-
-const originalLocale = getAppLocale()
-
-beforeEach(() => {
-  setAppLocale('zh-CN')
-})
-
-afterAll(() => {
-  setAppLocale(originalLocale)
-})
 
 describe('validateLoginForm', () => {
   it('requires both username and password', () => {

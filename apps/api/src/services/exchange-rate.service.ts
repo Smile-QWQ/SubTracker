@@ -1,4 +1,5 @@
 import dayjs from 'dayjs'
+import { DEFAULT_APP_LOCALE, getMessage } from '@subtracker/shared'
 import { prisma } from '../db'
 import { config } from '../config'
 import { convertAmount } from '../utils/money'
@@ -47,14 +48,14 @@ export async function refreshExchangeRates(baseCurrency?: string) {
   try {
     const response = await fetch(`${config.exchangeRateUrl}/${base}`)
     if (!response.ok) {
-      throw new Error(`Rate provider failed with status ${response.status}`)
+      throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.exchangeRates.providerRequestFailed'))
     }
 
     const payload = (await response.json()) as ProviderResponse
     const rates = payload.rates ?? {}
 
     if (!Object.keys(rates).length) {
-      throw new Error('Rate payload is empty')
+      throw new Error('api.errors.exchangeRates.payloadEmpty')
     }
 
     const snapshot = await prisma.exchangeRateSnapshot.upsert({

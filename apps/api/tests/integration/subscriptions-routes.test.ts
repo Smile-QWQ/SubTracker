@@ -1,3 +1,4 @@
+import { getMessage } from '@subtracker/shared'
 import Fastify from 'fastify'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -276,7 +277,7 @@ describe('subscription routes D1 compatibility', () => {
     })
 
     expect(response.statusCode).toBe(422)
-    expect(response.json().error.message).toBe('websiteUrl 格式无效，请填写合法网址')
+    expect(response.json().error.message).toBe(getMessage('zh-CN', 'api.errors.subscriptions.websiteUrlInvalid'))
 
     await app.close()
   })
@@ -435,7 +436,7 @@ describe('subscription routes D1 compatibility', () => {
     })
 
     expect(response.statusCode).toBe(422)
-    expect(response.json().error.message).toBe('Active subscriptions cannot be deleted directly')
+    expect(response.json().error.message).toBe(getMessage('zh-CN', 'api.errors.subscriptions.activeDeleteNotAllowed'))
 
     await app.close()
   })

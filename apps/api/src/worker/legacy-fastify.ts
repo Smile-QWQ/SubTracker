@@ -1,5 +1,7 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
+import { getMessage } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE } from '@subtracker/shared/locale-core'
 import { sendError } from '../http'
 import { verifyToken } from '../services/auth.service'
 import { getWorkerLogoBucket, getWorkerPublicConfig } from '../runtime'
@@ -134,12 +136,15 @@ async function buildLegacyRequest(c: Context) {
   const authorization = c.req.header('authorization')
   const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : undefined
   const pathname = url.pathname
-  const auth =
+  const isPublicRoute =
     pathname === '/api/v1/auth/login' ||
     pathname === '/api/v1/auth/login-options' ||
     pathname === '/api/v1/auth/forgot-password/request' ||
     pathname === '/api/v1/auth/forgot-password/reset' ||
-    pathname === '/health'
+    pathname === '/health' ||
+    (pathname === '/api/v1/app/locale' && c.req.method === 'GET')
+  const auth =
+    isPublicRoute
       ? undefined
       : await verifyToken(token)
 
@@ -190,12 +195,12 @@ export class LegacyFastifyApp {
       if (retryAfterSeconds) {
         return new Response(
           JSON.stringify({
-            error: {
-              code: 'too_many_attempts',
-              message: '登录失败次数过多，请稍后再试',
-              details: {
-                retryAfterSeconds
-              }
+              error: {
+                code: 'too_many_attempts',
+                message: getMessage(DEFAULT_APP_LOCALE, 'api.errors.tooManyAttempts'),
+                details: {
+                  retryAfterSeconds
+                }
             }
           }),
           {
@@ -214,10 +219,11 @@ export class LegacyFastifyApp {
         c.req.path !== '/api/v1/auth/login-options' &&
         c.req.path !== '/api/v1/auth/forgot-password/request' &&
         c.req.path !== '/api/v1/auth/forgot-password/reset' &&
+        !(c.req.path === '/api/v1/app/locale' && c.req.method === 'GET') &&
         !(request as { auth?: unknown }).auth
       ) {
         const reply = new LegacyReply()
-        return sendError(reply as never, 401, 'unauthorized', '请先登录')
+        return sendError(reply as never, 401, 'unauthorized', 'api.errors.auth.loginRequired')
       }
 
       const reply = new LegacyReply()
@@ -235,7 +241,7 @@ export class LegacyFastifyApp {
           JSON.stringify({
             error: {
               code: 'internal_error',
-              message: error instanceof Error ? error.message : 'Unknown server error'
+              message: error instanceof Error ? error.message : getMessage(DEFAULT_APP_LOCALE, 'api.errors.internal')
             }
           }),
           {

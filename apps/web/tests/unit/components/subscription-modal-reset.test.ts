@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { defineComponent, h, nextTick, ref } from 'vue'
 import { NMessageProvider } from 'naive-ui'
 import SubscriptionFormModal from '../../../src/components/SubscriptionFormModal.vue'
+import { i18n } from '../../../src/locales'
 
 vi.mock('@vueuse/core', () => ({
   useWindowSize: () => ({ width: { value: 1200 } })
@@ -72,7 +73,7 @@ describe('subscription modal reset behavior', () => {
       Host,
       {
         global: {
-          plugins: [[VueQueryPlugin, { queryClient }]],
+          plugins: [i18n, [VueQueryPlugin, { queryClient }]],
           stubs: {
             teleport: true,
             transition: false,
