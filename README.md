@@ -5,7 +5,7 @@
 <h1 align="center">SubTracker Lite</h1>
 
 <p align="center">
-  一个现代化的自托管订阅管理工具，用来统一管理多币种订阅、续订提醒、预算概览、Logo 资源，以及 Wallos 数据迁移
+  A self-hosted subscription manager for multi-currency subscriptions, renewal reminders, budget overviews, logo assets, and Wallos migrations on Cloudflare Workers.
 </p>
 
 <p align="center">
@@ -15,89 +15,91 @@
 </p>
 
 <p align="center">
-  <a href="#本地开发">本地开发</a> ·
-  <a href="#部署">部署</a> ·
-  <a href="./DEPLOYMENT.md">部署文档</a> ·
+  <a href="./README.zh-CN.md">简体中文</a> ·
+  <a href="#local-development">Local development</a> ·
+  <a href="#deployment">Deployment</a> ·
+  <a href="./DEPLOYMENT.md">Deployment guide</a> ·
   <a href="https://github.com/Smile-QWQ/SubTracker/releases">Releases</a>
 </p>
 
-> 当前 `lite` 分支仅保留 **Cloudflare Worker** 部署路线；如果你需要 **Docker / Docker Compose** 部署，请前往 [`main`](https://github.com/Smile-QWQ/SubTracker/tree/main) 分支，对应的部署说明、工作流与 Node/SQLite 适配实现都维护在该分支
+> The current `lite` branch targets **Cloudflare Workers only**. If you need **Docker / Docker Compose** deployment, use the [`main`](https://github.com/Smile-QWQ/SubTracker/tree/main) branch, where the Node/SQLite runtime, workflows, and deployment notes are maintained.
 
-## 界面预览
+## Screenshots
 
-### 仪表盘
+### Dashboard
 
-![仪表盘](./screenshot/仪表盘.png)
+![Dashboard](./screenshot/仪表盘.png)
 
-### 更多截图
+### More views
 
-| 订阅管理 | 费用统计 |
+| Subscriptions | Spending |
 | --- | --- |
-| ![订阅管理](./screenshot/订阅管理.png) | ![费用统计](./screenshot/费用统计.png) |
+| ![Subscriptions](./screenshot/订阅管理.png) | ![Spending](./screenshot/费用统计.png) |
 
-| AI 识别 | Wallos 导入 |
+| AI recognition | Wallos import |
 | --- | --- |
-| ![AI识别](./screenshot/AI识别.png) | ![导入Wallos](./screenshot/导入Wallos.png) |
+| ![AI recognition](./screenshot/AI识别.png) | ![Wallos import](./screenshot/导入Wallos.png) |
 
-## 功能亮点
+## Features
 
-- **订阅管理**：新增、编辑、续订、暂停、停用、记录查看、自定义排序
-- **提醒规则**：支持 `天数&时间;` 格式的灵活提醒规则，覆盖到期前、到期当天与过期提醒，并支持分钟级扫描
-- **标签系统**：多标签归类、筛选与自定义排序
-- **预算能力**：全局月预算、全局年预算与仪表盘预算使用率
-- **统计分析**：费用概览、状态分布、币种支出分布、月订阅支出 TOP10 与 AI 总结
-- **多币种支持**：基准货币换算、汇率快照、货币转换器
-- **通知能力**：Webhook、Resend 邮件、PushPlus、Telegram Bot
-- **Logo 能力**：上传（R2）、远程引用、网络搜索
-- **AI 识别**：支持文本 / 图片识别后自动填充订阅信息
-- **Wallos 导入**：支持 JSON、SQLite 数据库与 ZIP 备份导入；SQLite / ZIP 会在浏览器端解析，再交给 Worker 持久化
-- **登录体验**：支持“记住我”、可配置的登录保留时长、默认密码修改提醒，以及登录失败限流保护
+- **Subscription management**: create, edit, renew, pause, disable, review records, and reorder subscriptions.
+- **Reminder rules**: define flexible `days&time;` rules for upcoming, due-today, and overdue reminders, with minute-level scans.
+- **Tags**: classify subscriptions with multiple tags, filter by tags, and manage tag ordering.
+- **Budgets**: track global monthly and yearly budgets from the dashboard.
+- **Statistics**: review spending overview, status distribution, currency distribution, top subscriptions, and AI summaries.
+- **Multi-currency support**: maintain exchange-rate snapshots, normalize into a base currency, and use the built-in currency converter.
+- **Notifications**: send reminders through Webhook, SMTP / Resend email, PushPlus, Telegram Bot, ServerChan, Gotify, Bark, NotifyX, and Apprise.
+- **Logo handling**: upload logos to R2, reuse remote references, and search for logos online.
+- **AI recognition**: extract subscription details from text or images and fill the form automatically.
+- **Wallos import**: import Wallos JSON, SQLite, and ZIP backups; SQLite / ZIP files are parsed in the browser before being persisted by the Worker.
+- **Login experience**: support remember-me sessions, configurable session retention, default-password change reminders, and login rate limiting.
 
-## Lite 版说明
+## Lite Branch Notes
 
-这个分支面向 **Cloudflare Worker Free**，因此会做一些 Lite 化取舍：
+This branch is optimized for **Cloudflare Worker Free**, so a few features are intentionally trimmed or adapted:
 
-- 热点统计 / 日历接口会使用 D1 缓存来降低 Worker CPU 压力
-- **不使用 KV**
-- 不再提供标签月预算和独立预算页
-- 仪表盘保留轻量指标、全局预算和即将续订列表
-- 费用统计保留费用概览、状态分布、币种分布、TOP10 和 AI 总结
-- Wallos / SubTracker 备份导入、Logo 搜索、Cron、自动续费等能力都做了 Worker 适配
-- 遇到 `503` / CPU 超限时，前端会明确提示可能受 Worker 免费版限制影响
+- Hot statistics and calendar endpoints use D1-backed caching to reduce Worker CPU time.
+- **KV is not used**.
+- Email notifications support **SMTP / Resend**, but **SMTP port 25 is not supported**.
+- Tag-level monthly budgets and the dedicated budgets page are removed.
+- The dashboard keeps lightweight overview metrics, global budgets, and upcoming renewals.
+- Spending statistics keep overview charts, status distribution, currency distribution, TOP 10 subscriptions, and AI summaries.
+- Wallos / SubTracker backup import, logo search, cron jobs, and auto-renew flows are adapted for the Worker runtime.
+- When the free Worker tier hits `503` or CPU limits, the UI shows an explicit warning instead of a silent failure.
 
-更详细的部署、能力边界与性能说明见：
+See [`DEPLOYMENT.md`](./DEPLOYMENT.md) for deployment details, feature boundaries, and runtime notes.
 
-- [`DEPLOYMENT.md`](./DEPLOYMENT.md)
+## Tech Stack
 
-## 技术栈
+- **Frontend**: Vue 3, Vite, TypeScript, Naive UI, Pinia, TanStack Query, ECharts
+- **Backend**: Cloudflare Worker, Hono, Prisma D1 Adapter, D1, optional R2
 
-- **前端**：Vue 3、Vite、TypeScript、Naive UI、Pinia、TanStack Query、ECharts
-- **后端**：Cloudflare Worker、Hono、Prisma D1 Adapter、D1、可选 R2
+## Local Development
 
-## 本地开发
-
-### 1. 安装依赖
+### 1. Install dependencies
 
 ```bash
 npm install
 ```
 
-### 2. 启动本地 Worker
+### 2. Start the local Worker
 
 ```bash
 npm run dev:worker
 ```
 
-默认地址：`http://127.0.0.1:8787`
+Default address:
 
-默认账户：
+- `http://127.0.0.1:8787`
 
-- 用户名：`admin`
-- 密码：`admin`
+Default credentials:
 
-首次登录后建议立即修改默认密码；登录接口在连续失败过多时会触发限流保护。
+- Username: `admin`
+- Password: `admin`
 
-## 常用命令
+After the first login, changing the default password is strongly recommended. Repeated login failures trigger rate limiting.
+
+## Useful Commands
 
 ```bash
 npm run dev:worker
@@ -106,44 +108,44 @@ npm run lint
 npm test
 ```
 
-## 部署
+## Deployment
 
-当前推荐通过 **GitHub Actions + Cloudflare** 部署。
+The recommended path is **GitHub Actions + Cloudflare**.
 
-部署流程已经整理到：
+The full deployment flow is documented in:
 
 - [DEPLOYMENT.md](./DEPLOYMENT.md)
 
-大致流程：
+In short:
 
-1. fork 仓库
-2. 配置 Cloudflare Secrets / Variables
-3. fork 时记得不要勾选“只复制默认分支 / Copy the main branch only”，否则不会带上 `lite`
-4. 在 GitHub Actions 中运行 **Lite CI and Deploy**，并在 **Use workflow from** 里选择 **`lite`**
-5. 后续通过 **Sync fork** 自动更新
+1. Fork this repository.
+2. Configure the required Cloudflare Secrets / Variables.
+3. When forking, do not enable **Copy the main branch only**, or the `lite` branch will be missing.
+4. Run **Lite CI and Deploy** in GitHub Actions, and set **Use workflow from** to **`lite`**.
+5. Keep your fork updated with **Sync fork**.
 
-常用仓库 Variables：
+Common repository Variables:
 
 - `WORKER_NAME_PREFIX`
-- `ENABLE_R2`（默认关闭；开启后可持久化 ZIP 导入的 Logo）
+- `ENABLE_R2` (disabled by default; enable it if you want ZIP-imported logos to be persisted)
 
-## 工作流
+## Workflow
 
-- `Lite CI and Deploy`：同一个 workflow 里先跑 lint / test / build，验证通过后再部署到 Cloudflare
+- `Lite CI and Deploy`: runs lint / test / build first, then deploys to Cloudflare only if verification succeeds.
 
-## 许可证
+## License
 
-本项目采用 **GNU General Public License v3.0（GPLv3）** 许可证发布。
+This project is released under the **GNU General Public License v3.0 (GPLv3)**.
 
-## 致谢
+## Acknowledgements
 
-感谢以下项目和生态为 SubTracker 提供支持：
+Thanks to the following projects and ecosystems:
 
-- [Wallos](https://github.com/ellite/Wallos) —— 提供了导入兼容方向与迁移参考
-- [Vue 3](https://vuejs.org/) 与 [Vite](https://vitejs.dev/) —— 提供前端开发基础
-- [Naive UI](https://www.naiveui.com/) —— 提供界面组件支持
-- [Fastify](https://fastify.dev/) 与 [Prisma](https://www.prisma.io/) —— 提供后端与数据访问能力
-- [Pinia](https://pinia.vuejs.org/)、[TanStack Query](https://tanstack.com/query/latest) 与 [ECharts](https://echarts.apache.org/) —— 提供状态管理、数据请求与图表展示能力
+- [Wallos](https://github.com/ellite/Wallos) — migration reference and compatibility direction
+- [Vue 3](https://vuejs.org/) and [Vite](https://vitejs.dev/) — frontend foundation
+- [Naive UI](https://www.naiveui.com/) — UI components
+- [Hono](https://hono.dev/) and [Prisma](https://www.prisma.io/) — Worker backend and data access
+- [Pinia](https://pinia.vuejs.org/), [TanStack Query](https://tanstack.com/query/latest), and [ECharts](https://echarts.apache.org/) — state, data fetching, and charts
 
 ## Star History
 
