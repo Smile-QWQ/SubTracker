@@ -3,6 +3,7 @@ import cors from '@fastify/cors'
 import rateLimit from '@fastify/rate-limit'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { getMessage } from '@subtracker/shared'
 import { DEFAULT_APP_LOCALE } from '@subtracker/shared/locale-core'
 import { config } from './config'
 import { sendError } from './http'
@@ -34,11 +35,11 @@ export async function buildApp() {
 
   await app.register(rateLimit, {
     global: false,
-    errorResponseBuilder: (_request, context) => ({
+    errorResponseBuilder: (request, context) => ({
       statusCode: 429,
       error: {
         code: 'too_many_attempts',
-        message: '登录失败次数过多，请稍后再试',
+        message: getMessage(request.locale ?? config.defaultAppLocale, 'api.errors.tooManyAttempts'),
         details: {
           retryAfterSeconds: Math.max(1, Math.ceil(context.ttl / 1000))
         }
@@ -122,7 +123,7 @@ export async function buildApp() {
 
   app.setErrorHandler((error, _request, reply) => {
     app.log.error(error)
-    const message = error instanceof Error ? error.message : 'Unknown server error'
+    const message = error instanceof Error ? error.message : 'api.errors.internal'
     return sendError(reply, 500, 'internal_error', message, undefined, {
       locale: reply.request.locale
     })

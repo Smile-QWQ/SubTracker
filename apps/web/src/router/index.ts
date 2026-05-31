@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { getStoredToken } from '@/utils/auth-storage'
+import { t } from '@/locales'
 
 export const routes = [
   { path: '/', redirect: '/dashboard' },
@@ -7,37 +8,37 @@ export const routes = [
     path: '/login',
     name: 'login',
     component: () => import('@/pages/LoginPage.vue'),
-    meta: { public: true, label: '登录' }
+    meta: { public: true, label: t('app.nav.public.login') }
   },
   {
     path: '/dashboard',
     name: 'dashboard',
     component: () => import('@/pages/DashboardPage.vue'),
-    meta: { label: '仪表盘' }
+    meta: { label: t('app.nav.dashboard') }
   },
   {
     path: '/subscriptions',
     name: 'subscriptions',
     component: () => import('@/pages/SubscriptionsPage.vue'),
-    meta: { label: '订阅管理' }
+    meta: { label: t('app.nav.subscriptions') }
   },
   {
     path: '/calendar',
     name: 'calendar',
     component: () => import('@/pages/CalendarPage.vue'),
-    meta: { label: '订阅日历' }
+    meta: { label: t('app.nav.calendar') }
   },
   {
     path: '/statistics',
     name: 'statistics',
     component: () => import('@/pages/StatisticsPage.vue'),
-    meta: { label: '费用统计' }
+    meta: { label: t('app.nav.statistics') }
   },
   {
     path: '/settings',
     name: 'settings',
     component: () => import('@/pages/SettingsPage.vue'),
-    meta: { label: '系统设置' }
+    meta: { label: t('app.nav.settings') }
   }
 ]
 

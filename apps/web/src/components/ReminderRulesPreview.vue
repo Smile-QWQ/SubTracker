@@ -11,13 +11,13 @@
       <template #icon>
         <n-icon :component="eyeOutline" />
       </template>
-      {{ isPreviewVisible ? '收起提醒预览' : '预览提醒规则' }}
+      {{ isPreviewVisible ? t('subscriptions.form.actions.collapseReminderPreview') : t('subscriptions.form.actions.previewReminderRules') }}
     </n-button>
 
     <transition name="reminder-preview">
       <div v-if="isPreviewVisible && (advanceEvaluation || overdueEvaluation)" class="reminder-rules-preview__panel">
         <div class="reminder-rules-preview__section">
-          <div class="reminder-rules-preview__title">到期前提醒</div>
+          <div class="reminder-rules-preview__title">{{ t('subscriptions.labels.advanceReminders') }}</div>
           <div v-if="advanceEvaluation?.error" class="reminder-rules-preview__error">
             {{ advanceEvaluation.error }}
           </div>
@@ -26,11 +26,11 @@
               {{ entry.description }}
             </li>
           </ul>
-          <div v-else class="reminder-rules-preview__empty">暂无到期前提醒规则</div>
+          <div v-else class="reminder-rules-preview__empty">{{ t('validation.reminderRules.noAdvance') }}</div>
         </div>
 
         <div class="reminder-rules-preview__section">
-          <div class="reminder-rules-preview__title">过期提醒</div>
+          <div class="reminder-rules-preview__title">{{ t('subscriptions.labels.overdueReminders') }}</div>
           <div v-if="overdueEvaluation?.error" class="reminder-rules-preview__error">
             {{ overdueEvaluation.error }}
           </div>
@@ -39,7 +39,7 @@
               {{ entry.description }}
             </li>
           </ul>
-          <div v-else class="reminder-rules-preview__empty">暂无过期提醒规则</div>
+          <div v-else class="reminder-rules-preview__empty">{{ t('validation.reminderRules.noOverdue') }}</div>
         </div>
       </div>
     </transition>
@@ -50,6 +50,7 @@
 import { ref, watch } from 'vue'
 import { NButton, NIcon } from 'naive-ui'
 import { EyeOutline } from '@vicons/ionicons5'
+import { useI18n } from 'vue-i18n'
 import { evaluateReminderRules, type ReminderRulesEvaluation } from '@/utils/reminder-rules'
 
 const props = withDefaults(
@@ -73,6 +74,7 @@ const emit = defineEmits<{
 }>()
 
 const eyeOutline = EyeOutline
+const { t } = useI18n()
 const advanceEvaluation = ref<ReminderRulesEvaluation | null>(null)
 const overdueEvaluation = ref<ReminderRulesEvaluation | null>(null)
 const isPreviewVisible = ref(false)
@@ -94,14 +96,14 @@ function close() {
 function preview() {
   advanceEvaluation.value = evaluateReminderRules(props.advanceValue, 'advance', {
     fallbackValue: props.defaultAdvanceValue,
-    fallbackLabel: '系统默认到期前规则',
-    emptyTitle: '暂无到期前提醒规则'
+    fallbackLabel: t('validation.reminderRules.defaultAdvanceRulesLabel'),
+    emptyTitle: t('validation.reminderRules.noAdvance')
   })
 
   overdueEvaluation.value = evaluateReminderRules(props.overdueValue, 'overdue', {
     fallbackValue: props.defaultOverdueValue,
-    fallbackLabel: '系统默认过期规则',
-    emptyTitle: '暂无过期提醒规则'
+    fallbackLabel: t('validation.reminderRules.defaultOverdueRulesLabel'),
+    emptyTitle: t('validation.reminderRules.noOverdue')
   })
   isPreviewVisible.value = true
   emit('visibilityChange', true)

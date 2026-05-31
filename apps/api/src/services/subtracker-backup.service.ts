@@ -13,7 +13,8 @@ import type {
   SubtrackerBackupSubscriptionDto,
   SubtrackerBackupTagDto
 } from '@subtracker/shared'
-import { SettingsSchema } from '@subtracker/shared'
+import { SettingsSchema, getMessage } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE } from '@subtracker/shared/locale-core'
 import { zipSync } from 'fflate'
 import { prisma } from '../db'
 import { getRuntimeD1Database, getWorkerLogoBucket, getWorkerPublicConfig, isWorkerRuntime } from '../runtime'
@@ -127,21 +128,21 @@ function defaultWebhookSettings(): NotificationWebhookSettingsInput {
 
 function parseBackupManifest(raw: unknown): BackupManifest {
   if (!raw || typeof raw !== 'object') {
-    throw new Error('备份 manifest 格式无效')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.imports.subtrackerBackupManifestInvalid'))
   }
 
   const manifest = raw as BackupManifest
   if (manifest.app !== BACKUP_APP_NAME) {
-    throw new Error('不是合法的 SubTracker 备份文件')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.imports.subtrackerBackupInvalidFile'))
   }
   if (manifest.schemaVersion !== BACKUP_SCHEMA_VERSION) {
-    throw new Error(`不支持的备份版本：${manifest.schemaVersion}`)
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.imports.subtrackerBackupUnsupportedVersion', { version: manifest.schemaVersion }))
   }
   if (manifest.scope !== BACKUP_SCOPE) {
-    throw new Error(`不支持的备份范围：${manifest.scope}`)
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.imports.subtrackerBackupUnsupportedScope', { scope: manifest.scope }))
   }
   if (!manifest.data || !manifest.assets) {
-    throw new Error('备份 manifest 缺少关键数据')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.imports.subtrackerBackupManifestMissingData'))
   }
 
   return manifest
@@ -151,19 +152,19 @@ function buildBackupWarnings(manifest: BackupManifest, canUseR2: boolean) {
   const warnings: string[] = []
 
   if (manifest.assets.logos.length === 0) {
-    warnings.push('该备份不包含本地 Logo 文件')
+    warnings.push(getMessage(DEFAULT_APP_LOCALE, 'api.errors.subtrackerBackupWarnings.noLocalLogos'))
   }
 
   if (manifest.data.paymentRecords.length === 0) {
-    warnings.push('该备份不包含支付记录')
+    warnings.push(getMessage(DEFAULT_APP_LOCALE, 'api.errors.subtrackerBackupWarnings.noPaymentRecords'))
   }
 
   if (!canUseR2 && manifest.assets.logos.length > 0) {
-    warnings.push('当前 Worker 未启用 R2，恢复时会忽略 ZIP 中的本地 Logo')
+    warnings.push(getMessage(DEFAULT_APP_LOCALE, 'api.errors.subtrackerBackupWarnings.workerR2DisabledIgnoreLogos'))
   }
 
-  warnings.push('不会恢复登录凭据、会话密钥、Webhook 历史和汇率快照')
-  warnings.push('追加恢复时，订阅与支付记录按备份中的唯一标识（CUID）幂等跳过；同名标签会复用现有标签')
+  warnings.push(getMessage(DEFAULT_APP_LOCALE, 'api.errors.subtrackerBackupWarnings.excludedSecretsAndHistory'))
+  warnings.push(getMessage(DEFAULT_APP_LOCALE, 'api.errors.subtrackerBackupWarnings.appendModeDedup'))
 
   return warnings
 }
@@ -363,10 +364,10 @@ function mapProvidedLogoAssets(assets: SubtrackerBackupInspectInput['logoAssets'
 
 function requireProvidedLogoAsset(asset: SubtrackerBackupAssetLogoDto, provided: ProvidedBackupLogoAsset | undefined) {
   if (!provided) {
-    throw new Error(`备份 ZIP 缺少 Logo 文件：${asset.path}`)
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.imports.subtrackerBackupMissingLogo', { path: asset.path }))
   }
   if (!String(provided.base64 ?? '').trim()) {
-    throw new Error(`备份 ZIP 中的 Logo 内容为空：${asset.path}`)
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.imports.subtrackerBackupEmptyLogoContent', { path: asset.path }))
   }
   return provided
 }
@@ -389,7 +390,7 @@ function decodeProvidedLogoAssets(
     const provided = requireProvidedLogoAsset(asset, providedAssets.get(asset.path))
     const bytes = Buffer.from(provided.base64, 'base64')
     if (!bytes.length) {
-      throw new Error(`备份 ZIP 中的 Logo 内容为空：${asset.path}`)
+      throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.imports.subtrackerBackupEmptyLogoContent', { path: asset.path }))
     }
     logoAssets[asset.path] = {
       bytes,

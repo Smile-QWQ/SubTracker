@@ -1,4 +1,6 @@
+import { getMessage } from '@subtracker/shared'
 import type { StatisticsOverview } from '@/types/api'
+import { getAppLocale } from '@/locales'
 
 interface TopSubscriptionsThemeTokens {
   textColor?: string
@@ -29,7 +31,7 @@ export function buildTopSubscriptionsOption(
     grid: { left: 160, right: 24, top: 20, bottom: 20 },
     xAxis: {
       type: 'value',
-      name: `金额(${baseCurrency})`,
+      name: getMessage(getAppLocale(), 'statistics.labels.amountAxis', { currency: baseCurrency }),
       nameTextStyle: {
         color: theme?.secondaryTextColor
       },

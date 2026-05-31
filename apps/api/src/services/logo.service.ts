@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import { prisma } from '../db'
-import type { LogoSearchInput, LogoSearchResultDto, LogoUploadInput } from '@subtracker/shared'
+import { getMessage, type LogoSearchInput, type LogoSearchResultDto, type LogoUploadInput } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE } from '@subtracker/shared/locale-core'
 import { getWorkerLogoBucket } from '../runtime'
 
 const SEARCH_USER_AGENT =
@@ -217,11 +218,17 @@ async function fetchManifestCandidates(manifestUrl: string, websiteUrl: string) 
 
       const [width, height] = parseSizes(icon.sizes)
       const sizeLabel = icon.sizes ? ` (${icon.sizes})` : ''
-      makeCandidate(candidates, `Manifest 图标${sizeLabel}`, iconUrl, icon.purpose ? `manifest:${icon.purpose}` : 'manifest', {
-        websiteUrl,
-        width,
-        height
-      })
+      makeCandidate(
+        candidates,
+        getMessage(DEFAULT_APP_LOCALE, 'logos.search.manifestIcon', { sizeLabel }),
+        iconUrl,
+        icon.purpose ? `manifest:${icon.purpose}` : 'manifest',
+        {
+          websiteUrl,
+          width,
+          height
+        }
+      )
     }
   } catch {
     return candidates
@@ -250,11 +257,11 @@ async function fetchWebsiteCandidates(origin: string) {
       if (!href) continue
 
       if (link.rel.includes('apple-touch-icon')) {
-        makeCandidate(candidates, 'Apple Touch Icon', href, 'apple-touch-icon', { websiteUrl: origin })
+        makeCandidate(candidates, getMessage(DEFAULT_APP_LOCALE, 'logos.search.appleTouchIcon'), href, 'apple-touch-icon', { websiteUrl: origin })
       } else if (link.rel.includes('mask-icon')) {
-        makeCandidate(candidates, 'Mask Icon', href, 'mask-icon', { websiteUrl: origin })
+        makeCandidate(candidates, getMessage(DEFAULT_APP_LOCALE, 'logos.search.maskIcon'), href, 'mask-icon', { websiteUrl: origin })
       } else if (link.rel.includes('icon')) {
-        makeCandidate(candidates, '站点图标', href, 'html-icon', { websiteUrl: origin })
+        makeCandidate(candidates, getMessage(DEFAULT_APP_LOCALE, 'logos.search.siteIcon'), href, 'html-icon', { websiteUrl: origin })
       } else if (link.rel.includes('manifest')) {
         const manifestCandidates = await fetchManifestCandidates(href, origin)
         manifestCandidates.forEach((item) => makeCandidate(candidates, item.label, item.logoUrl, item.source, item))
@@ -264,7 +271,7 @@ async function fetchWebsiteCandidates(origin: string) {
     for (const image of extractMetaImageMatches(html)) {
       const imageUrl = resolveUrl(origin, image)
       if (imageUrl) {
-        makeCandidate(candidates, '站点分享图', imageUrl, 'og-image', { websiteUrl: origin })
+        makeCandidate(candidates, getMessage(DEFAULT_APP_LOCALE, 'logos.search.siteShareImage'), imageUrl, 'og-image', { websiteUrl: origin })
       }
     }
   } catch {
@@ -310,7 +317,7 @@ async function fetchDuckDuckGoCandidates(searchTerm: string) {
       const imageUrl = row.image || row.thumbnail || ''
       if (!imageUrl) continue
 
-      makeCandidate(candidates, `DuckDuckGo 候选 ${index + 1}`, imageUrl, 'duckduckgo', {
+      makeCandidate(candidates, getMessage(DEFAULT_APP_LOCALE, 'logos.search.duckduckgoCandidate', { index: index + 1 }), imageUrl, 'duckduckgo', {
         width: row.width,
         height: row.height
       })
@@ -534,13 +541,13 @@ export async function searchSubscriptionLogos(params: LogoSearchInput) {
       const hostname = new URL(guessedOrigin).hostname
       websiteCandidates.forEach((item) => makeCandidate(rawCandidates, item.label, item.logoUrl, item.source, item))
 
-      makeCandidate(rawCandidates, '站点 favicon', `${guessedOrigin}/favicon.ico`, 'favicon', {
+      makeCandidate(rawCandidates, getMessage(DEFAULT_APP_LOCALE, 'logos.search.siteFavicon'), `${guessedOrigin}/favicon.ico`, 'favicon', {
         websiteUrl: guessedOrigin,
         fallback: true
       })
       makeCandidate(
         rawCandidates,
-        'Google Favicon',
+        getMessage(DEFAULT_APP_LOCALE, 'logos.search.googleFavicon'),
         `https://www.google.com/s2/favicons?sz=256&domain_url=${encodeURIComponent(guessedOrigin)}`,
         'google-favicon',
         {
@@ -550,11 +557,11 @@ export async function searchSubscriptionLogos(params: LogoSearchInput) {
           height: 256
         }
       )
-      makeCandidate(rawCandidates, 'Icon Horse', `https://icon.horse/icon/${hostname}`, 'icon-horse', {
+      makeCandidate(rawCandidates, getMessage(DEFAULT_APP_LOCALE, 'logos.search.iconHorse'), `https://icon.horse/icon/${hostname}`, 'icon-horse', {
         websiteUrl: guessedOrigin,
         fallback: true
       })
-      makeCandidate(rawCandidates, 'Clearbit Logo', `https://logo.clearbit.com/${hostname}`, 'clearbit', {
+      makeCandidate(rawCandidates, getMessage(DEFAULT_APP_LOCALE, 'logos.search.clearbitLogo'), `https://logo.clearbit.com/${hostname}`, 'clearbit', {
         websiteUrl: guessedOrigin,
         fallback: true
       })
@@ -630,7 +637,7 @@ async function writeLogoBuffer(
 ) {
   const bucket = getWorkerLogoBucket()
   if (!bucket) {
-    throw new Error('对象存储未启用，无法保存 Logo 文件')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.subscriptions.logoStorageDisabledSave'))
   }
 
   const filename =
@@ -649,10 +656,10 @@ async function writeLogoBuffer(
 
 export async function saveImportedLogoBuffer(buffer: Buffer, contentType: string, logoSource = 'wallos-zip') {
   if (!allowedTypes.has(contentType)) {
-    throw new Error('不支持的 Logo 图片类型')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.subscriptions.logoUnsupportedImageType'))
   }
   if (!buffer.length) {
-    throw new Error('Logo 图片内容为空')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.subscriptions.logoBufferEmpty'))
   }
   return writeLogoBuffer(buffer, contentType, logoSource)
 }
@@ -664,13 +671,13 @@ export async function saveImportedLogoBufferToKey(
   logoSource = 'wallos-zip'
 ) {
   if (!allowedTypes.has(contentType)) {
-    throw new Error('不支持的 Logo 图片类型')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.subscriptions.logoUnsupportedImageType'))
   }
   if (!buffer.length) {
-    throw new Error('Logo 图片内容为空')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.subscriptions.logoBufferEmpty'))
   }
   if (!key.trim()) {
-    throw new Error('Logo 存储 key 不能为空')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.subscriptions.logoStorageKeyRequired'))
   }
   return writeLogoBuffer(buffer, contentType, logoSource, {
     key
@@ -679,12 +686,12 @@ export async function saveImportedLogoBufferToKey(
 
 export async function saveUploadedLogo(input: LogoUploadInput) {
   if (!allowedTypes.has(input.contentType)) {
-    throw new Error('仅支持 PNG、JPG、WEBP、SVG 图片')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.subscriptions.logoUploadTypeUnsupported'))
   }
 
   const buffer = decodeBase64(input.base64)
   if (!buffer.length) {
-    throw new Error('图片内容为空')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.subscriptions.imageBufferEmpty'))
   }
 
   return writeLogoBuffer(buffer, input.contentType, 'upload')
@@ -693,7 +700,7 @@ export async function saveUploadedLogo(input: LogoUploadInput) {
 export async function importRemoteLogo(input: { logoUrl: string; source?: string }) {
   const meta = await inspectRemoteImage(input.logoUrl)
   if (!meta) {
-    throw new Error('远程 Logo 下载失败或图片不可用')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.subscriptions.logoRemoteUnavailable'))
   }
 
   return writeLogoBuffer(meta.buffer, meta.contentType, input.source || 'remote')
@@ -799,7 +806,7 @@ export async function getLocalLogoLibrary() {
     const logoUrl = createLogoUrl(file.key)
     if (map.has(logoUrl)) continue
     map.set(logoUrl, {
-      label: '未使用 Logo',
+      label: getMessage(DEFAULT_APP_LOCALE, 'logos.library.unusedLogo'),
       logoUrl,
       source: 'local-file',
       isLocal: true,
@@ -820,12 +827,12 @@ export async function getLocalLogoLibrary() {
 export async function deleteLocalLogoFromLibrary(filename: string) {
   const bucket = getWorkerLogoBucket()
   if (!bucket) {
-    throw new Error('对象存储未启用，无法删除 Logo')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.subscriptions.logoStorageDeleteDisabled'))
   }
 
   const safeName = filename.trim()
   if (!safeName) {
-    throw new Error('无效的 Logo 文件名')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.subscriptions.logoFilenameInvalid'))
   }
 
   const logoUrl = createLogoUrl(safeName)
@@ -836,7 +843,7 @@ export async function deleteLocalLogoFromLibrary(filename: string) {
   })
 
   if (usageCount > 0) {
-    throw new Error('该 Logo 已被订阅使用，不能删除')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.subscriptions.logoInUseCannotDelete'))
   }
 
   await bucket.delete(safeName)

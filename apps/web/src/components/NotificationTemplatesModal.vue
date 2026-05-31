@@ -211,8 +211,8 @@ function buildPreviewSample() {
     secondaryDate: '2026-06-03',
     primaryAmount: '69 CNY',
     secondaryAmount: '15 CNY',
-    primaryTag: locale === 'en-US' ? 'Streaming' : '影音',
-    primaryNotes: locale === 'en-US' ? 'Family plan' : '家庭套餐',
+    primaryTag: t('notifications.preview.samplePrimaryTag'),
+    primaryNotes: t('notifications.preview.samplePrimaryNotes'),
     username: 'admin',
     code: '123456',
     expiresInMinutes: '10'

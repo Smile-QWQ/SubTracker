@@ -1,3 +1,5 @@
+import { getMessage } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE } from '@subtracker/shared/locale-core'
 import { config } from '../config'
 
 const COMMITS_API = 'https://api.github.com/repos/Smile-QWQ/SubTracker/commits?sha=lite&per_page=30'
@@ -21,14 +23,14 @@ function splitCommitMessage(message: string) {
   const normalized = String(message ?? '').replace(/\r\n/g, '\n').trim()
   if (!normalized) {
     return {
-      title: '更新提交',
+      title: getMessage(DEFAULT_APP_LOCALE, 'version.fallbackTitle'),
       body: ''
     }
   }
 
   const [title, ...rest] = normalized.split('\n')
   return {
-    title: title.trim() || '更新提交',
+    title: title.trim() || getMessage(DEFAULT_APP_LOCALE, 'version.fallbackTitle'),
     body: rest.join('\n').trim()
   }
 }
@@ -43,7 +45,7 @@ export async function getVersionUpdateSummary(currentVersion: string) {
   })
 
   if (!response.ok) {
-    throw new Error(`获取版本更新失败：HTTP ${response.status}`)
+    throw new Error(`${getMessage(DEFAULT_APP_LOCALE, 'api.errors.version.updateFetchFailed')}：HTTP ${response.status}`)
   }
 
   const commits = (await response.json()) as GitHubCommitItem[]

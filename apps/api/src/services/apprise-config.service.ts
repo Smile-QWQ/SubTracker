@@ -1,5 +1,7 @@
 import {
   AppriseConfigSchema,
+  DEFAULT_APP_LOCALE,
+  getMessage,
   type AppriseConfigInput,
   type AppriseSyncStatus,
   type AppriseTargetInput
@@ -101,7 +103,7 @@ export function buildFailedAppriseSyncState(error: unknown, now = new Date()) {
   return {
     lastSyncStatus: 'failed' as const,
     lastSyncAt: now.toISOString(),
-    lastSyncError: error instanceof Error ? error.message : String(error ?? 'unknown error')
+    lastSyncError: error instanceof Error ? error.message : getMessage(DEFAULT_APP_LOCALE, 'api.errors.common.unknown')
   }
 }
 

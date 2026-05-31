@@ -1,77 +1,77 @@
 <template>
-  <n-modal :show="show" preset="card" title="导入 Wallos 数据" style="width: min(1080px, calc(100vw - 24px))" @update:show="handleShowUpdate">
+  <n-modal :show="show" preset="card" :title="t('imports.wallos.title')" style="width: min(1080px, calc(100vw - 24px))" @update:show="handleShowUpdate">
     <n-space vertical :size="16" style="width: 100%">
       <n-alert type="info" :show-icon="false">
-        支持上传 Wallos 的 JSON、SQLite 数据库或 ZIP 包。SQLite / ZIP 会先在浏览器端解析，再提交给 Worker 持久化。当前只导入实际被订阅使用到的标签。
+        {{ t('imports.wallos.description') }}
       </n-alert>
 
       <n-space align="center" wrap>
         <input ref="fileInputRef" type="file" accept=".json,.db,.sqlite,.sqlite3,.zip,application/octet-stream,application/json,application/zip" class="hidden-input" @change="handleFileChange" />
-        <n-button @click="pickFile">选择文件</n-button>
-        <span class="file-name">{{ selectedFileName || '未选择文件' }}</span>
-        <n-button type="primary" :disabled="!selectedFile" :loading="inspecting" @click="inspectFile">生成预览</n-button>
+        <n-button @click="pickFile">{{ t('imports.wallos.pickFile') }}</n-button>
+        <span class="file-name">{{ selectedFileName || t('common.placeholders.noFileSelected') }}</span>
+        <n-button type="primary" :disabled="!selectedFile" :loading="inspecting" @click="inspectFile">{{ t('imports.wallos.preview') }}</n-button>
       </n-space>
 
       <n-space vertical :size="8" style="width: 100%">
-        <span class="advanced-label">Wallos 源时区（高级）</span>
+        <span class="advanced-label">{{ t('imports.wallos.sourceTimezoneLabel') }}</span>
         <n-select
           v-model:value="wallosSourceTimezone"
           :options="timeZoneOptions"
           filterable
           style="max-width: 360px"
-          placeholder="默认使用当前业务时区"
+          :placeholder="t('imports.wallos.sourceTimezonePlaceholder')"
         />
-        <span class="advanced-hint">仅在导出的 Wallos 实例使用了不同的 TZ 时需要调整，否则保持默认即可。</span>
+        <span class="advanced-hint">{{ t('imports.wallos.sourceTimezoneHint') }}</span>
       </n-space>
 
       <n-alert v-if="showJsonImportWarning" type="warning" :show-icon="false">
-        {{ JSON_IMPORT_WARNING_MESSAGE }}
+        {{ getWallosJsonImportWarningMessage() }}
       </n-alert>
 
       <template v-if="preview">
         <n-grid :cols="summaryCols" :x-gap="12" :y-gap="12">
           <n-grid-item>
             <n-card size="small">
-              <div class="summary-label">导入类型</div>
+              <div class="summary-label">{{ t('imports.wallos.importTypeLabel') }}</div>
               <div class="summary-value">{{ fileTypeText(preview.summary.fileType) }}</div>
             </n-card>
           </n-grid-item>
           <n-grid-item>
             <n-card size="small">
-              <div class="summary-label">可导入订阅</div>
+              <div class="summary-label">{{ t('imports.wallos.importableSubscriptionsLabel') }}</div>
               <div class="summary-value">{{ preview.summary.supportedSubscriptions }}</div>
             </n-card>
           </n-grid-item>
           <n-grid-item>
             <n-card size="small">
-              <div class="summary-label">实际导入标签</div>
+              <div class="summary-label">{{ t('imports.wallos.importedTagsLabel') }}</div>
               <div class="summary-value">{{ preview.summary.usedTagsTotal }}</div>
             </n-card>
           </n-grid-item>
           <n-grid-item>
             <n-card size="small">
-              <div class="summary-label">ZIP Logo 匹配</div>
+              <div class="summary-label">{{ t('imports.wallos.zipLogoLabel') }}</div>
               <div class="summary-value">{{ preview.summary.zipLogoMatched }}/{{ preview.summary.zipLogoMatched + preview.summary.zipLogoMissing }}</div>
             </n-card>
           </n-grid-item>
         </n-grid>
 
-        <n-card title="标签预览" size="small">
-          <n-empty v-if="preview.usedTags.length === 0" description="没有可导入的标签" />
+        <n-card :title="t('imports.wallos.tagPreviewTitle')" size="small">
+          <n-empty v-if="preview.usedTags.length === 0" :description="t('imports.wallos.noImportableTags')" />
           <n-data-table v-else :columns="tagColumns" :data="preview.usedTags" :pagination="{ pageSize: 6 }" />
         </n-card>
 
-        <n-card title="订阅预览" size="small">
+        <n-card :title="t('imports.wallos.subscriptionPreviewTitle')" size="small">
           <n-data-table :columns="subscriptionColumns" :data="preview.subscriptionsPreview" :pagination="{ pageSize: 8 }" />
         </n-card>
 
-        <n-card title="警告信息" size="small">
-          <n-empty v-if="previewWarnings.length === 0" description="没有额外警告" />
+        <n-card :title="t('imports.wallos.warningTitle')" size="small">
+          <n-empty v-if="previewWarnings.length === 0" :description="t('imports.wallos.noWarnings')" />
           <template v-else>
             <div class="warning-header">
-              <span>共 {{ previewWarnings.length }} 条警告</span>
+              <span>{{ t('imports.wallos.warningCount', { count: previewWarnings.length }) }}</span>
               <n-button text type="primary" @click="warningsExpanded = !warningsExpanded">
-                {{ warningsExpanded ? '收起' : '展开查看' }}
+                {{ warningsExpanded ? t('common.actions.collapse') : t('common.actions.expand') }}
               </n-button>
             </div>
             <ul v-if="warningsExpanded" class="warning-list">
@@ -82,8 +82,8 @@
       </template>
 
       <n-space justify="end">
-        <n-button @click="close">取消</n-button>
-        <n-button type="primary" :disabled="!preview" :loading="committing" @click="commitImport">确认导入</n-button>
+        <n-button @click="close">{{ t('common.actions.cancel') }}</n-button>
+        <n-button type="primary" :disabled="!preview" :loading="committing" @click="commitImport">{{ t('imports.wallos.confirmImport') }}</n-button>
       </n-space>
     </n-space>
   </n-modal>
@@ -93,12 +93,13 @@
 import { computed, h, ref } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { NAlert, NButton, NCard, NDataTable, NEmpty, NGrid, NGridItem, NModal, NSelect, NSpace, NTag, useMessage } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { api } from '@/composables/api'
 import { useSettingsQuery } from '@/composables/settings-query'
 import type { WallosImportInspectResult, WallosImportPreparedPayload, WallosImportSubscriptionPreview } from '@/types/api'
 import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils/subscription-status'
 import { buildPreparedWallosImportPayload } from '@/utils/wallos-import-client'
-import { JSON_IMPORT_WARNING_MESSAGE, shouldRecommendDbImport } from '@/utils/wallos-import'
+import { getWallosJsonImportWarningMessage, shouldRecommendDbImport } from '@/utils/wallos-import'
 import { buildTimeZoneOptions, formatDateInTimezone, normalizeAppTimezone } from '@/utils/timezone'
 
 const props = defineProps<{
@@ -115,6 +116,7 @@ const emit = defineEmits<{
 
 const { width } = useWindowSize()
 const message = useMessage()
+const { t } = useI18n()
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const { data: settings } = useSettingsQuery()
 const selectedFile = ref<File | null>(null)
@@ -137,52 +139,53 @@ const previewWarnings = computed(() => {
 })
 
 const tagColumns = [
-  { title: '来源 ID', key: 'sourceId' },
-  { title: '标签名', key: 'name' },
-  { title: '排序', key: 'sortOrder' }
+  { title: t('imports.wallos.sourceId'), key: 'sourceId' },
+  { title: t('imports.wallos.tagName'), key: 'name' },
+  { title: t('imports.wallos.order'), key: 'sortOrder' }
 ]
 
 const subscriptionColumns = [
-  { title: '名称', key: 'name' },
+  { title: t('imports.wallos.name'), key: 'name' },
   {
-    title: '金额',
+    title: t('imports.wallos.amount'),
     key: 'amount',
     render: (row: WallosImportSubscriptionPreview) => `${row.currency} ${row.amount.toFixed(2)}`
   },
   {
-    title: '频率',
+    title: t('imports.wallos.frequency'),
     key: 'billingInterval',
-    render: (row: WallosImportSubscriptionPreview) => `每 ${row.billingIntervalCount} ${unitText(row.billingIntervalUnit)}`
+    render: (row: WallosImportSubscriptionPreview) =>
+      t('subscriptions.values.interval', { count: row.billingIntervalCount, unit: unitText(row.billingIntervalUnit) })
   },
   {
-    title: '下次续订',
+    title: t('imports.wallos.nextRenewal'),
     key: 'nextRenewalDate',
     render: (row: WallosImportSubscriptionPreview) => formatDateInTimezone(row.nextRenewalDate, settings.value?.timezone)
   },
   {
-    title: '标签',
+    title: t('imports.wallos.tags'),
     key: 'tagNames',
-    render: (row: WallosImportSubscriptionPreview) => row.tagNames.join(' / ') || '未打标签'
+    render: (row: WallosImportSubscriptionPreview) => row.tagNames.join(' / ') || t('imports.wallos.noTags')
   },
   {
-    title: '自动续订',
+    title: t('imports.wallos.autoRenew'),
     key: 'autoRenew',
-    render: (row: WallosImportSubscriptionPreview) => (row.autoRenew ? '是' : '否')
+    render: (row: WallosImportSubscriptionPreview) => (row.autoRenew ? t('imports.wallos.yes') : t('imports.wallos.no'))
   },
   {
-    title: '状态',
+    title: t('imports.wallos.status'),
     key: 'status',
     render: (row: WallosImportSubscriptionPreview) =>
       h(NTag, { type: getSubscriptionStatusTagType(row.status) }, { default: () => getSubscriptionStatusText(row.status) })
   },
   {
-    title: 'Logo',
+    title: t('imports.wallos.logo'),
     key: 'logoImportStatus',
     render: (row: WallosImportSubscriptionPreview) =>
       ({
-        none: '无',
-        'pending-file-match': '待匹配',
-        'ready-from-zip': 'ZIP 可导入'
+        none: t('imports.wallos.logoNone'),
+        'pending-file-match': t('imports.wallos.logoPending'),
+        'ready-from-zip': t('imports.wallos.logoReady')
       })[row.logoImportStatus]
   }
 ]
@@ -213,11 +216,11 @@ async function inspectFile() {
     preparedPayload.value = prepared
     preview.value = await api.inspectWallosImport(prepared)
     warningsExpanded.value = false
-    message.success('已生成导入预览')
+    message.success(t('imports.wallos.previewGenerated'))
   } catch (error) {
     preview.value = null
     preparedPayload.value = null
-    message.error(error instanceof Error ? error.message : '预览生成失败')
+    message.error(error instanceof Error ? error.message : t('imports.wallos.previewFailed'))
   } finally {
     inspecting.value = false
   }
@@ -229,11 +232,17 @@ async function commitImport() {
   committing.value = true
   try {
     const result = await api.commitWallosImport(preparedPayload.value)
-    message.success(`导入完成：${result.importedSubscriptions} 条订阅，${result.importedTags} 个标签，${result.importedLogos} 个 Logo`)
+    message.success(
+      t('imports.wallos.importCompleted', {
+        subscriptions: result.importedSubscriptions,
+        tags: result.importedTags,
+        logos: result.importedLogos
+      })
+    )
     emit('imported')
     close()
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '导入失败')
+    message.error(error instanceof Error ? error.message : t('imports.wallos.importFailed'))
   } finally {
     committing.value = false
   }
@@ -255,19 +264,19 @@ function handleShowUpdate(value: boolean) {
 
 function unitText(unit: WallosImportSubscriptionPreview['billingIntervalUnit']) {
   return {
-    day: '天',
-    week: '周',
-    month: '月',
-    quarter: '季',
-    year: '年'
+    day: t('common.units.day'),
+    week: t('common.units.week'),
+    month: t('common.units.month'),
+    quarter: t('common.units.quarter'),
+    year: t('common.units.year')
   }[unit]
 }
 
 function fileTypeText(type: WallosImportInspectResult['summary']['fileType']) {
   return {
-    json: 'JSON',
-    db: 'SQLite',
-    zip: 'ZIP'
+    json: t('imports.wallos.fileTypes.json'),
+    db: t('imports.wallos.fileTypes.db'),
+    zip: t('imports.wallos.fileTypes.zip')
   }[type]
 }
 </script>

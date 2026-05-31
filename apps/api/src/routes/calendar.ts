@@ -26,7 +26,7 @@ export async function calendarRoutes(app: FastifyInstance) {
 
     const parsed = querySchema.safeParse(request.query)
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid query', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidQuery', parsed.error.flatten())
     }
 
     const timezone = await getAppTimezone()

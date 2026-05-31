@@ -1,5 +1,6 @@
 import dayjs from 'dayjs'
-import { DEFAULT_TIMEZONE } from '@subtracker/shared'
+import { DEFAULT_TIMEZONE, getMessage, type AppLocale } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE } from '@subtracker/shared/locale-core'
 import { toIsoDate } from '../utils/date'
 import { dispatchNotificationEvent, type NotificationChannelResult } from './channel-notification.service'
 import {
@@ -210,21 +211,27 @@ function getOverduePhase(daysOverdue: number): ReminderPhase {
   return `overdue_day_${daysOverdue}`
 }
 
-function buildReminderTitle(eventType: 'subscription.reminder_due' | 'subscription.overdue', days: number) {
+function buildReminderTitle(
+  eventType: 'subscription.reminder_due' | 'subscription.overdue',
+  days: number,
+  locale: AppLocale = DEFAULT_APP_LOCALE
+) {
   if (eventType === 'subscription.reminder_due') {
-    return days === 0 ? '今天到期' : `还有 ${days} 天到期`
+    return days === 0
+      ? getMessage(locale, 'notifications.phases.dueToday')
+      : getMessage(locale, 'notifications.phases.daysUntil', { days })
   }
 
-  return `已过期第 ${days} 天`
+  return getMessage(locale, 'notifications.phases.overdueDay', { days })
 }
 
-function getSummaryPhaseTitle(phase: ReminderPhase) {
-  if (phase === 'upcoming') return '即将到期'
-  if (phase === 'due_today') return '今天到期'
+function getSummaryPhaseTitle(phase: ReminderPhase, locale: AppLocale = DEFAULT_APP_LOCALE) {
+  if (phase === 'upcoming') return getMessage(locale, 'notifications.merge.phaseUpcoming')
+  if (phase === 'due_today') return getMessage(locale, 'notifications.merge.phaseDueToday')
 
   const overdueMatch = phase.match(/^overdue_day_(\d+)$/)
   if (overdueMatch) {
-    return `已过期第 ${overdueMatch[1]} 天`
+    return getMessage(locale, 'notifications.merge.phaseOverdueDay', { days: overdueMatch[1] })
   }
 
   return phase
@@ -415,7 +422,7 @@ function buildDispatchEntry(
   }
 }
 
-function buildMergedSummarySections(entries: ReminderDispatchEntry[]): ReminderSummarySection[] {
+function buildMergedSummarySections(entries: ReminderDispatchEntry[], locale: AppLocale = DEFAULT_APP_LOCALE): ReminderSummarySection[] {
   const groups = new Map<ReminderPhase, ReminderSummarySection>()
 
   for (const entry of entries) {
@@ -427,7 +434,7 @@ function buildMergedSummarySections(entries: ReminderDispatchEntry[]): ReminderS
 
     groups.set(entry.phase, {
       phase: entry.phase,
-      title: getSummaryPhaseTitle(entry.phase),
+      title: getSummaryPhaseTitle(entry.phase, locale),
       eventType: entry.eventType,
       subscriptions: [entry.payload]
     })
@@ -446,8 +453,8 @@ function buildMergedSummarySections(entries: ReminderDispatchEntry[]): ReminderS
   })
 }
 
-function buildMergedPayload(entries: ReminderDispatchEntry[]) {
-  const sections = buildMergedSummarySections(entries)
+function buildMergedPayload(entries: ReminderDispatchEntry[], locale: AppLocale = DEFAULT_APP_LOCALE) {
+  const sections = buildMergedSummarySections(entries, locale)
   const flattenedSubscriptions = sections.flatMap((section) => section.subscriptions)
   const hasOverdue = sections.some((section) => section.eventType === 'subscription.overdue')
 
@@ -455,7 +462,7 @@ function buildMergedPayload(entries: ReminderDispatchEntry[]) {
     merged: true,
     mergedCount: flattenedSubscriptions.length,
     mergedSections: sections,
-    name: `共 ${flattenedSubscriptions.length} 项订阅`,
+    name: getMessage(locale, 'notifications.merge.summaryName', { count: flattenedSubscriptions.length }),
     nextRenewalDate: flattenedSubscriptions[0]?.nextRenewalDate ?? '',
     notifyDaysBefore: 0,
     amount: flattenedSubscriptions.reduce((sum, item) => sum + item.amount, 0),
@@ -646,7 +653,7 @@ export async function scanRenewalNotifications(
     }
   }
 
-  const mergedPayload = buildMergedPayload(dispatchEntries)
+  const mergedPayload = buildMergedPayload(dispatchEntries, DEFAULT_APP_LOCALE)
   const mergedEventType = dispatchEntries.some((entry) => entry.eventType === 'subscription.overdue')
     ? 'subscription.overdue'
     : 'subscription.reminder_due'
@@ -667,7 +674,7 @@ export async function scanRenewalNotifications(
 
   notifications.push({
     subscriptionId: 'merged:summary',
-    subscriptionName: `共 ${dispatchEntries.length} 项订阅`,
+    subscriptionName: getMessage(DEFAULT_APP_LOCALE, 'notifications.merge.summaryName', { count: dispatchEntries.length }),
     phase: dispatchEntries[0].phase,
     eventType: mergedEventType,
     daysUntilRenewal: Math.min(...dispatchEntries.map((entry) => entry.payload.daysUntilRenewal)),

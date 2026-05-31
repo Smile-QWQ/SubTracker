@@ -2,9 +2,11 @@ import { Prisma } from '@prisma/client'
 import {
   DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
   NotificationWebhookSettingsSchema,
+  getMessage,
   type NotificationWebhookSettingsInput,
   type WebhookEventType
 } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE } from '@subtracker/shared/locale-core'
 import { prisma } from '../db'
 import { getSetting, setSetting } from './settings.service'
 import { validateNotificationTargetUrl } from './notification-url.service'
@@ -343,7 +345,7 @@ function buildTemplateValues(params: { eventType: WebhookEventType | 'test'; pay
     days_until: String(payload.daysUntilRenewal ?? 0),
     days_overdue: String(payload.daysOverdue ?? 0),
     subscription_id: String(payload.id ?? payload.subscriptionId ?? ''),
-    subscription_name: String(payload.name ?? '测试订阅'),
+    subscription_name: String(payload.name ?? getMessage(DEFAULT_APP_LOCALE, 'notifications.tests.subscriptionName')),
     subscription_amount: String(payload.amount ?? 0),
     subscription_currency: String(payload.currency ?? 'CNY'),
     subscription_next_renewal_date: String(payload.nextRenewalDate ?? new Date().toISOString()),
@@ -392,7 +394,7 @@ export async function upsertPrimaryWebhookEndpoint(input: PrimaryWebhookInput) {
 export async function sendTestWebhookNotification() {
   const endpoint = await getPrimaryWebhookEndpoint()
   if (!endpoint.url) {
-    throw new Error('Webhook 配置不完整，请先填写 URL')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.webhookConfigIncomplete'))
   }
 
   return sendTestWebhookNotificationWithConfig(endpoint)
@@ -401,20 +403,20 @@ export async function sendTestWebhookNotification() {
 export async function sendTestWebhookNotificationWithConfig(input: PrimaryWebhookInput): Promise<WebhookTestResult> {
   const normalized = normalizeWebhookSettings(input)
   if (!normalized.url) {
-    throw new Error('Webhook 配置不完整，请先填写 URL')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.webhookConfigIncomplete'))
   }
 
   const result = await sendWebhookRequest(normalized, {
     eventType: 'test',
     payload: {
       id: 'test-subscription',
-      name: '测试订阅',
+      name: getMessage(DEFAULT_APP_LOCALE, 'notifications.tests.subscriptionName'),
       amount: 10,
       currency: 'USD',
       nextRenewalDate: new Date().toISOString(),
-      tagNames: ['测试标签'],
+      tagNames: [getMessage(DEFAULT_APP_LOCALE, 'notifications.tests.tagName')],
       websiteUrl: 'https://example.com/test-subscription',
-      notes: '这是一条测试通知',
+      notes: getMessage(DEFAULT_APP_LOCALE, 'notifications.tests.note'),
       phase: 'upcoming',
       daysUntilRenewal: 5,
       daysOverdue: 0
@@ -422,7 +424,7 @@ export async function sendTestWebhookNotificationWithConfig(input: PrimaryWebhoo
   })
 
   if (result.statusCode >= 400) {
-    throw new Error(`Webhook 测试失败：HTTP ${result.statusCode} ${result.responseBody || ''}`.trim())
+    throw new Error(`${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.webhookTestFailed')}：HTTP ${result.statusCode} ${result.responseBody || ''}`.trim())
   }
 
   return {

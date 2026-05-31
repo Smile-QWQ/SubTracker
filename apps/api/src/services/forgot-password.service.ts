@@ -1,4 +1,5 @@
 import { createHash, randomInt } from 'node:crypto'
+import { DEFAULT_APP_LOCALE, getMessage, type AppLocale } from '@subtracker/shared'
 import { getNotificationChannelSettings, getSetting, setSetting } from './settings.service'
 import { getStoredCredentials, resetPasswordForStoredUsername } from './auth.service'
 import { sendForgotPasswordVerificationCode } from './channel-notification.service'
@@ -33,6 +34,10 @@ function hashVerificationCode(code: string) {
 
 function buildRateLimitKey(prefix: string, remoteAddress: string) {
   return `${prefix}:${remoteAddress || 'unknown'}`
+}
+
+function resolveForgotPasswordLocale(locale?: AppLocale) {
+  return locale ?? DEFAULT_APP_LOCALE
 }
 
 async function consumeRateLimit(prefix: string, remoteAddress: string, max: number, windowMs: number) {
@@ -95,14 +100,16 @@ export async function clearForgotPasswordChallenge() {
   await setSetting(FORGOT_PASSWORD_CHALLENGE_KEY, null)
 }
 
-export async function requestForgotPasswordChallenge(username: string, remoteAddress: string) {
+export async function requestForgotPasswordChallenge(username: string, remoteAddress: string, locale?: AppLocale) {
+  const resolvedLocale = resolveForgotPasswordLocale(locale)
+
   if (!(await isForgotPasswordEnabled())) {
     return {
       ok: false as const,
       error: {
         status: 403,
         code: 'forgot_password_disabled',
-        message: '当前未开启忘记密码，或未配置可用通知渠道'
+        message: getMessage(resolvedLocale, 'api.errors.auth.forgotPasswordDisabled')
       }
     }
   }
@@ -120,7 +127,7 @@ export async function requestForgotPasswordChallenge(username: string, remoteAdd
       error: {
         status: 429,
         code: 'forgot_password_request_rate_limited',
-        message: '验证码发送过于频繁，请稍后再试',
+        message: getMessage(resolvedLocale, 'api.errors.auth.forgotPasswordRequestRateLimited'),
         retryAfterSeconds
       }
     }
@@ -143,7 +150,7 @@ export async function requestForgotPasswordChallenge(username: string, remoteAdd
         error: {
           status: 429,
           code: 'forgot_password_request_cooldown',
-          message: '验证码刚刚发送过，请稍后再试',
+          message: getMessage(resolvedLocale, 'api.errors.auth.forgotPasswordRequestCooldown'),
           retryAfterSeconds: Math.max(1, Math.ceil(remainingCooldownMs / 1000))
         }
       }
@@ -163,7 +170,7 @@ export async function requestForgotPasswordChallenge(username: string, remoteAdd
       error: {
         status: 400,
         code: 'forgot_password_delivery_failed',
-        message: '验证码发送失败，请检查通知配置'
+        message: getMessage(resolvedLocale, 'api.errors.auth.forgotPasswordDeliveryFailed')
       }
     }
   }
@@ -187,14 +194,17 @@ export async function resetPasswordWithForgotPasswordCode(input: {
   code: string
   newPassword: string
   remoteAddress: string
+  locale?: AppLocale
 }) {
+  const resolvedLocale = resolveForgotPasswordLocale(input.locale)
+
   if (!(await isForgotPasswordEnabled())) {
     return {
       ok: false as const,
       error: {
         status: 403,
         code: 'forgot_password_disabled',
-        message: '当前未开启忘记密码，或未配置可用通知渠道'
+        message: getMessage(resolvedLocale, 'api.errors.auth.forgotPasswordDisabled')
       }
     }
   }
@@ -212,7 +222,7 @@ export async function resetPasswordWithForgotPasswordCode(input: {
       error: {
         status: 429,
         code: 'forgot_password_reset_rate_limited',
-        message: '验证失败次数过多，请稍后再试',
+        message: getMessage(resolvedLocale, 'api.errors.auth.forgotPasswordResetRateLimited'),
         retryAfterSeconds
       }
     }
@@ -227,7 +237,7 @@ export async function resetPasswordWithForgotPasswordCode(input: {
       error: {
         status: 400,
         code: 'forgot_password_challenge_not_found',
-        message: '验证码无效或已失效'
+        message: getMessage(resolvedLocale, 'api.errors.auth.forgotPasswordChallengeNotFound')
       }
     }
   }
@@ -239,7 +249,7 @@ export async function resetPasswordWithForgotPasswordCode(input: {
       error: {
         status: 400,
         code: 'forgot_password_attempts_exhausted',
-        message: '验证码尝试次数已用尽，请重新获取'
+        message: getMessage(resolvedLocale, 'api.errors.auth.forgotPasswordAttemptsExhausted')
       }
     }
   }
@@ -260,7 +270,10 @@ export async function resetPasswordWithForgotPasswordCode(input: {
       error: {
         status: 400,
         code: 'forgot_password_code_invalid',
-        message: nextAttempts > 0 ? `验证码错误，还可重试 ${nextAttempts} 次` : '验证码错误次数过多，请重新获取'
+        message:
+          nextAttempts > 0
+            ? getMessage(resolvedLocale, 'api.errors.auth.forgotPasswordCodeInvalidWithAttempts', { attempts: nextAttempts })
+            : getMessage(resolvedLocale, 'api.errors.auth.forgotPasswordCodeInvalid')
       }
     }
   }
@@ -272,7 +285,7 @@ export async function resetPasswordWithForgotPasswordCode(input: {
       error: {
         status: 400,
         code: 'forgot_password_reset_failed',
-        message: '密码重置失败'
+        message: getMessage(resolvedLocale, 'api.errors.auth.forgotPasswordResetFailed')
       }
     }
   }

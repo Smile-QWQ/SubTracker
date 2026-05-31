@@ -12,14 +12,14 @@ export async function versionRoutes(app: FastifyInstance) {
       .safeParse(request.query)
 
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid currentVersion query', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidCurrentVersionQuery', parsed.error.flatten())
     }
 
     try {
       const summary = await getVersionUpdateSummary(parsed.data.currentVersion)
       return sendOk(reply, summary)
     } catch (error) {
-      return sendError(reply, 502, 'version_update_fetch_failed', error instanceof Error ? error.message : 'Failed to fetch releases')
+      return sendError(reply, 502, 'version_update_fetch_failed', error instanceof Error ? error.message : 'api.errors.version.updateFetchFailed')
     }
   })
 }

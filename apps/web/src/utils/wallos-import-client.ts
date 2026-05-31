@@ -1,3 +1,4 @@
+import { getMessage } from '@subtracker/shared'
 import type { Database as SqlJsDatabase, SqlJsStatic } from 'sql.js'
 import { unzipSync } from 'fflate'
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
@@ -7,6 +8,7 @@ import type {
   WallosImportPreparedPayload,
   WallosImportSubscriptionPreview
 } from '@/types/api'
+import { getAppLocale } from '@/locales'
 import { addIntervalToBusinessDateString, currentBusinessDateString, normalizeAppTimezone } from './timezone'
 
 type BillingIntervalUnit = WallosImportSubscriptionPreview['billingIntervalUnit']
@@ -120,7 +122,7 @@ function mapWallosBillingInterval(days: number | null | undefined, frequency: nu
     return {
       billingIntervalCount: 1,
       billingIntervalUnit: 'month' as BillingIntervalUnit,
-      warning: 'cycle 缺失，已回退为每 1 月'
+      warning: getMessage(getAppLocale(), 'api.errors.wallosWarnings.cycleMissingFallback')
     }
   }
 
@@ -143,7 +145,10 @@ function mapWallosBillingInterval(days: number | null | undefined, frequency: nu
   return {
     billingIntervalCount: days * freq,
     billingIntervalUnit: 'day' as BillingIntervalUnit,
-    warning: `cycle.days=${days} 无法直接映射，已转为每 ${days * freq} 天`
+    warning: getMessage(getAppLocale(), 'api.errors.wallosWarnings.cycleDaysFallback', {
+      days,
+      mappedDays: days * freq
+    })
   }
 }
 
@@ -268,7 +273,7 @@ function extractZipImport(bytes: Uint8Array) {
     .sort((a, b) => scoreZipDatabasePath(b) - scoreZipDatabasePath(a))[0]
 
   if (!dbEntryName) {
-    throw new Error('ZIP 中未找到 db/wallos.db')
+    throw new Error(getMessage(getAppLocale(), 'api.errors.wallosZipMissingDatabase'))
   }
 
   const zipLogos = new Map<string, ZipLogoAsset>()
@@ -294,7 +299,11 @@ function extractZipImport(bytes: Uint8Array) {
 function parsePriceString(input: unknown) {
   const text = String(input ?? '').trim()
   if (!text) {
-    return { amount: 0, currency: 'CNY', warning: '价格为空，已回退为 0 CNY' }
+    return {
+      amount: 0,
+      currency: 'CNY',
+      warning: getMessage(getAppLocale(), 'api.errors.wallosWarnings.priceEmptyFallback')
+    }
   }
 
   const normalized = text.replace(/,/g, '')
@@ -310,13 +319,13 @@ function parsePriceString(input: unknown) {
 
   let warning: string | null = null
   if (!amountMatch) {
-    warning = `价格 "${text}" 无法完整解析，已回退为 0 ${currency}`
+    warning = getMessage(getAppLocale(), 'api.errors.wallosWarnings.priceParseFallback', { text, currency })
   } else if (/\$/.test(normalized) && !/usd|dollar/i.test(normalized)) {
-    warning = `价格 "${text}" 的币种符号存在歧义，已默认按 USD 导入`
+    warning = getMessage(getAppLocale(), 'api.errors.wallosWarnings.priceCurrencyAmbiguousUsd', { text })
   } else if (/¥/.test(normalized) && !/yuan|cny|rmb/i.test(normalized)) {
-    warning = `价格 "${text}" 的币种符号存在歧义，已默认按 CNY 导入`
+    warning = getMessage(getAppLocale(), 'api.errors.wallosWarnings.priceCurrencyAmbiguousCny', { text })
   } else if (!/[a-z￥¥€£$]/i.test(normalized)) {
-    warning = `价格 "${text}" 未包含明确币种，已默认按 CNY 导入`
+    warning = getMessage(getAppLocale(), 'api.errors.wallosWarnings.priceCurrencyMissing', { text })
   }
 
   return {
@@ -355,14 +364,14 @@ function normalizeWallosWebsiteUrl(input: unknown) {
     if (withHttps) {
       return {
         websiteUrl: withHttps,
-        warning: `网址 "${raw}" 缺少协议，已自动补全为 ${withHttps}`
+        warning: getMessage(getAppLocale(), 'api.errors.wallosWarnings.websiteMissingProtocol', { raw, withHttps })
       }
     }
   }
 
   return {
     websiteUrl: null,
-    warning: `网址 "${raw}" 无法识别为合法链接，已忽略`
+    warning: getMessage(getAppLocale(), 'api.errors.wallosWarnings.websiteInvalidIgnored', { raw })
   }
 }
 
@@ -412,7 +421,7 @@ function parsePaymentCycle(input: unknown) {
   return {
     billingIntervalCount: 1,
     billingIntervalUnit: 'month' as BillingIntervalUnit,
-    warning: `Payment Cycle "${text}" 无法完整解析，已回退为每 1 月`
+    warning: getMessage(getAppLocale(), 'api.errors.wallosWarnings.paymentCycleFallback', { text })
   }
 }
 
@@ -480,7 +489,7 @@ function pushRowWarning(warnings: string[], rowWarnings: string[], prefix: strin
 }
 
 function buildJsonStartDateWarning() {
-  return 'Wallos JSON 不包含 start_date，已使用 Next Payment 代填开始日期'
+  return getMessage(getAppLocale(), 'api.errors.wallosWarnings.jsonStartDateFallback')
 }
 
 function buildJsonDerivedWarnings(row: WallosJsonRow) {
@@ -511,7 +520,7 @@ function buildJsonPreview(rows: WallosJsonRow[], options: PreparedImportOptions)
     const nextPayment = parseDate(row['Next Payment'])
     if (!name || !nextPayment) {
       skippedSubscriptions += 1
-      warnings.push(`json#${index + 1} 缺少名称或下次支付时间，已跳过`)
+      warnings.push(getMessage(getAppLocale(), 'api.errors.wallosWarnings.jsonMissingRequiredSkipped', { index: index + 1 }))
       return
     }
 
@@ -606,6 +615,7 @@ function buildDbPreview(
   fileType: ImportFileType,
   zipLogos = new Map<string, ZipLogoAsset>()
 ) {
+  const locale = getAppLocale()
   const warnings: string[] = []
   const fallbackToday = currentBusinessDateString(normalizeAppTimezone(options.sourceTimezone), options.today ?? new Date())
   let skippedSubscriptions = 0
@@ -617,7 +627,7 @@ function buildDbPreview(
   for (const row of rows) {
     if (!row.name || row.price === null || row.price === undefined || !row.next_payment) {
       skippedSubscriptions += 1
-      warnings.push(`subscription#${row.id} 缺少关键字段，已跳过`)
+      warnings.push(getMessage(locale, 'api.errors.wallosWarnings.subscriptionMissingRequiredSkipped', { id: row.id }))
       continue
     }
 
@@ -663,8 +673,8 @@ function buildDbPreview(
       } else {
         logoImportStatus = 'pending-file-match'
         zipLogoMissing += 1
-        warnings.push(`subscription#${row.id} 存在 Logo 文件引用，当前包内未匹配到图片`)
-        rowWarnings.push('Logo 文件需后续通过目录或 zip 包补齐')
+        warnings.push(getMessage(locale, 'api.errors.wallosWarnings.subscriptionLogoMissing', { id: row.id }))
+        rowWarnings.push(getMessage(locale, 'api.errors.wallosWarnings.logoNeedsManualFill'))
       }
     }
 
@@ -724,7 +734,7 @@ async function buildDbPreviewFromBytes(
     const requiredTables = ['subscriptions', 'categories', 'currencies', 'cycles', 'frequencies']
     const missingTables = requiredTables.filter((table) => !tables.has(table))
     if (missingTables.length > 0) {
-      throw new Error(`缺少 Wallos 关键表：${missingTables.join(', ')}`)
+      throw new Error(getMessage(getAppLocale(), 'api.errors.wallosMissingTables', { tables: missingTables.join(', ') }))
     }
 
     const globalNotifyRow = queryRows<{ days: number | null }>(db, 'SELECT days FROM notification_settings LIMIT 1')[0]
@@ -789,7 +799,7 @@ function toBase64(bytes: Uint8Array) {
   if (typeof btoa !== 'function') {
     const bufferCtor = (globalThis as typeof globalThis & { Buffer?: typeof Buffer }).Buffer
     if (!bufferCtor) {
-      throw new Error('当前环境无法进行 base64 编码')
+      throw new Error(getMessage(getAppLocale(), 'api.errors.imports.base64EncodingUnavailable'))
     }
     return bufferCtor.from(bytes).toString('base64')
   }
@@ -807,10 +817,10 @@ async function parseJsonFile(bytes: Uint8Array, options: PreparedImportOptions) 
   try {
     parsed = JSON.parse(new TextDecoder().decode(bytes))
   } catch {
-    throw new Error('JSON 解析失败')
+    throw new Error(getMessage(getAppLocale(), 'api.errors.wallosJsonParseFailed'))
   }
   if (!Array.isArray(parsed)) {
-    throw new Error('Wallos JSON 导出内容必须是数组')
+    throw new Error(getMessage(getAppLocale(), 'api.errors.wallosJsonMustBeArray'))
   }
 
   return {
@@ -864,12 +874,12 @@ export async function buildPreparedWallosImportPayload(
       : await new Promise<ArrayBuffer>((resolve, reject) => {
           const reader = new FileReader()
           reader.onload = () => resolve(reader.result as ArrayBuffer)
-          reader.onerror = () => reject(reader.error ?? new Error('读取导入文件失败'))
+          reader.onerror = () => reject(reader.error ?? new Error(getMessage(getAppLocale(), 'api.errors.imports.fileReadFailed')))
           reader.readAsArrayBuffer(file)
         })
   )
   if (!bytes.length) {
-    throw new Error('导入文件内容为空')
+    throw new Error(getMessage(getAppLocale(), 'api.errors.imports.wallosDatabaseEmpty'))
   }
 
   const fileType = detectImportFileType(file, bytes)

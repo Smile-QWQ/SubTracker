@@ -8,6 +8,8 @@ import type {
   WallosImportSubscriptionPreviewDto,
   WallosImportTagDto
 } from '@subtracker/shared'
+import { getMessage } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE } from '@subtracker/shared/locale-core'
 import { prisma } from '../db'
 import { getRuntimeD1Database, getWorkerLogoBucket, isWorkerRuntime } from '../runtime'
 import { parseDateInTimezone } from '../utils/timezone'
@@ -105,7 +107,9 @@ async function uploadPreparedLogoManifest(
     if (preview.summary.zipLogoMatched > 0) {
       preview.warnings = ensureUniqueWarnings([
         ...preview.warnings,
-        `当前 Worker 未启用 R2，已忽略 ${preview.summary.zipLogoMatched} 个 ZIP Logo`
+        getMessage(DEFAULT_APP_LOCALE, 'api.errors.imports.wallosWorkerR2DisabledIgnoreZipLogos', {
+          count: preview.summary.zipLogoMatched
+        })
       ])
       preview.subscriptionsPreview = preview.subscriptionsPreview.map((item) =>
         item.logoImportStatus === 'ready-from-zip'
@@ -130,14 +134,17 @@ async function uploadPreparedLogoManifest(
   for (const logoRef of readyRefs) {
     const asset = assetByRef.get(logoRef)
     if (!asset) {
-      preview.warnings = ensureUniqueWarnings([...preview.warnings, `ZIP Logo ${logoRef} 缺少前端上传内容，已忽略`])
+      preview.warnings = ensureUniqueWarnings([
+        ...preview.warnings,
+        getMessage(DEFAULT_APP_LOCALE, 'api.errors.imports.wallosZipLogoMissingUpload', { logoRef })
+      ])
       preview.subscriptionsPreview = preview.subscriptionsPreview.map((item) =>
         item.logoRef && normalizeZipLogoName(item.logoRef) === logoRef
           ? {
               ...item,
               logoRef: null,
               logoImportStatus: 'none',
-              warnings: [...item.warnings, 'ZIP Logo 文件未随预览一起上传，已忽略']
+              warnings: [...item.warnings, getMessage(DEFAULT_APP_LOCALE, 'api.errors.imports.wallosZipLogoNotIncluded')]
             }
           : item
       )
@@ -194,7 +201,9 @@ export async function inspectWallosImportFile(input: WallosImportInspectInput): 
   if (!getWorkerLogoBucket() && preview.summary.fileType === 'zip' && preview.summary.zipLogoMatched > 0) {
     preview.warnings = ensureUniqueWarnings([
       ...preview.warnings,
-      `当前 Worker 未启用 R2，已忽略 ${preview.summary.zipLogoMatched} 个 ZIP Logo`
+      getMessage(DEFAULT_APP_LOCALE, 'api.errors.imports.wallosWorkerR2DisabledIgnoreZipLogos', {
+        count: preview.summary.zipLogoMatched
+      })
     ])
     preview.subscriptionsPreview = preview.subscriptionsPreview.map((item) =>
       item.logoImportStatus === 'ready-from-zip'
@@ -213,7 +222,7 @@ export async function inspectWallosImportFile(input: WallosImportInspectInput): 
       if (item.logoImportStatus === 'ready-from-zip' && item.logoRef && !availableRefs.has(normalizeZipLogoName(item.logoRef))) {
         item.logoRef = null
         item.logoImportStatus = 'none'
-        item.warnings = [...item.warnings, 'ZIP Logo 文件未随预览一起上传，已忽略']
+        item.warnings = [...item.warnings, getMessage(DEFAULT_APP_LOCALE, 'api.errors.imports.wallosZipLogoNotIncluded')]
       }
     }
   }

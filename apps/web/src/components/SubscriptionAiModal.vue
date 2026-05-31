@@ -2,7 +2,7 @@
   <n-modal
     :show="show"
     preset="card"
-    title="AI 识别订阅"
+    :title="t('subscriptions.aiModal.title')"
     style="width: min(720px, calc(100vw - 24px))"
     :mask-closable="!loading"
     :closable="!loading"
@@ -11,29 +11,29 @@
   >
     <n-space vertical>
       <n-alert type="info" :show-icon="false">
-        支持输入文本、上传图片或直接粘贴截图。若当前模型未启用视觉输入能力，请切换到支持图片识别的模型后再试。识别结果只会回填表单，不会自动保存。
+        {{ t('subscriptions.aiModal.description') }}
       </n-alert>
 
       <n-spin :show="loading" size="small">
         <template #description>
           <div class="ai-loading-copy">
             <div class="ai-loading-copy__primary">{{ loadingStatusText }}</div>
-            <div class="ai-loading-copy__secondary">完成后会自动展示识别结果，无需重复点击。</div>
+            <div class="ai-loading-copy__secondary">{{ t('subscriptions.aiModal.loadingHint') }}</div>
           </div>
         </template>
 
         <n-form label-placement="top">
-          <n-form-item label="文本内容">
+          <n-form-item :label="t('subscriptions.aiModal.textLabel')">
             <n-input
               v-model:value="text"
               type="textarea"
               :autosize="{ minRows: 4, maxRows: 8 }"
-              placeholder="粘贴订阅邮件、支付记录、订单文本等"
+              :placeholder="t('subscriptions.aiModal.textPlaceholder')"
               :disabled="loading"
             />
           </n-form-item>
 
-          <n-form-item label="图片">
+          <n-form-item :label="t('subscriptions.aiModal.imageLabel')">
             <div class="ai-upload-box" @paste="handlePaste">
               <input
                 ref="fileInputRef"
@@ -45,11 +45,11 @@
               />
               <n-space vertical>
                 <n-space>
-                  <n-button :disabled="loading" @click="pickFile">上传图片</n-button>
-                  <n-button quaternary :disabled="loading || !imagePreview" @click="clearImage">清空图片</n-button>
+                  <n-button :disabled="loading" @click="pickFile">{{ t('subscriptions.aiModal.uploadImage') }}</n-button>
+                  <n-button quaternary :disabled="loading || !imagePreview" @click="clearImage">{{ t('subscriptions.aiModal.clearImage') }}</n-button>
                 </n-space>
-                <div class="card-muted">也可以直接在此区域粘贴截图</div>
-                <img v-if="imagePreview" :src="imagePreview" alt="识别图片预览" class="ai-upload-box__preview" />
+                <div class="card-muted">{{ t('subscriptions.aiModal.pasteHint') }}</div>
+                <img v-if="imagePreview" :src="imagePreview" :alt="t('subscriptions.aiModal.imagePreviewAlt')" class="ai-upload-box__preview" />
               </n-space>
             </div>
           </n-form-item>
@@ -57,21 +57,23 @@
       </n-spin>
 
       <n-space justify="space-between">
-        <div v-if="result" class="card-muted">置信度：{{ ((result.confidence ?? 0) * 100).toFixed(0) }}%</div>
+        <div v-if="result" class="card-muted">
+          {{ t('subscriptions.aiModal.confidenceWithValue', { value: ((result.confidence ?? 0) * 100).toFixed(0) }) }}
+        </div>
         <n-space>
-          <n-button :disabled="loading" @click="emit('close')">关闭</n-button>
+          <n-button :disabled="loading" @click="emit('close')">{{ t('common.actions.close') }}</n-button>
           <n-button type="primary" :loading="loading" :disabled="loading" @click="recognize">
-            {{ loading ? '识别中…' : '开始识别' }}
+            {{ loading ? t('subscriptions.aiModal.recognizing') : t('subscriptions.aiModal.recognize') }}
           </n-button>
-          <n-button type="success" :disabled="!result || loading" @click="applyResult">应用结果</n-button>
+          <n-button type="success" :disabled="!result || loading" @click="applyResult">{{ t('subscriptions.aiModal.applyResult') }}</n-button>
         </n-space>
       </n-space>
 
-      <n-card v-if="result" size="small" embedded title="识别结果">
+      <n-card v-if="result" size="small" embedded :title="t('subscriptions.aiModal.resultTitle')">
         <n-data-table :columns="resultColumns" :data="resultRows" :pagination="false" size="small" />
 
         <div v-if="result.rawText" class="ai-raw-text">
-          <div class="ai-raw-text__title">原始提取文本</div>
+          <div class="ai-raw-text__title">{{ t('subscriptions.aiModal.rawTextTitle') }}</div>
           <pre class="ai-result">{{ result.rawText }}</pre>
         </div>
       </n-card>
@@ -82,6 +84,7 @@
 <script setup lang="ts">
 import { computed, h, onBeforeUnmount, ref } from 'vue'
 import { NAlert, NButton, NCard, NDataTable, NForm, NFormItem, NInput, NModal, NSpace, NSpin, useMessage } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { api } from '@/composables/api'
 import type { AiRecognitionResult } from '@/types/api'
 import { getAiRecognitionStatusText } from '@/utils/ai-recognition-status'
@@ -96,6 +99,7 @@ const emit = defineEmits<{
 }>()
 
 const message = useMessage()
+const { t } = useI18n()
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const text = ref('')
 const imageBase64 = ref('')
@@ -107,26 +111,12 @@ const result = ref<AiRecognitionResult | null>(null)
 const loadingElapsedMs = ref(0)
 let loadingTimer: ReturnType<typeof setInterval> | null = null
 
-const fieldLabels: Record<string, string> = {
-  name: '名称',
-  description: '描述',
-  amount: '金额',
-  currency: '币种',
-  billingIntervalCount: '频率',
-  billingIntervalUnit: '周期单位',
-  startDate: '开始日期',
-  nextRenewalDate: '下次续订',
-  notifyDaysBefore: '提醒天数',
-  websiteUrl: '官网 / 平台地址',
-  notes: '备注'
-}
-
 const intervalLabelMap: Record<string, string> = {
-  day: '天',
-  week: '周',
-  month: '月',
-  quarter: '季度',
-  year: '年'
+  day: 'common.units.day',
+  week: 'common.units.week',
+  month: 'common.units.month',
+  quarter: 'common.units.quarter',
+  year: 'common.units.year'
 }
 
 const resultRows = computed(() => {
@@ -146,31 +136,31 @@ const resultRows = computed(() => {
   push(
     'billingIntervalUnit',
     result.value.billingIntervalUnit
-      ? intervalLabelMap[result.value.billingIntervalUnit] ?? result.value.billingIntervalUnit
+      ? t(intervalLabelMap[result.value.billingIntervalUnit] ?? result.value.billingIntervalUnit)
       : undefined
   )
   push('startDate', result.value.startDate)
   push('nextRenewalDate', result.value.nextRenewalDate)
-  push('notifyDaysBefore', result.value.notifyDaysBefore !== undefined ? `${result.value.notifyDaysBefore} 天` : undefined)
+  push('notifyDaysBefore', result.value.notifyDaysBefore !== undefined ? `${result.value.notifyDaysBefore} ${t('common.units.day')}` : undefined)
   push('websiteUrl', result.value.websiteUrl)
   push('notes', result.value.notes)
 
   return rows
 })
 
-const resultColumns = [
+const resultColumns = computed(() => [
   {
-    title: '字段',
+    title: t('subscriptions.aiModal.field'),
     key: 'field',
     width: 150,
-    render: (row: { field: string }) => fieldLabels[row.field] ?? row.field
+    render: (row: { field: string }) => t(`subscriptions.aiModal.fields.${row.field}`)
   },
   {
-    title: '识别结果',
+    title: t('subscriptions.aiModal.recognizedResult'),
     key: 'value',
     render: (row: { value: string }) => h('span', { class: 'ai-result-value' }, row.value)
   }
-]
+])
 
 const loadingStatusText = computed(() =>
   getAiRecognitionStatusText({
@@ -243,7 +233,7 @@ async function handlePaste(event: ClipboardEvent) {
 
 async function recognize() {
   if (!text.value.trim() && !imageBase64.value) {
-    message.warning('请先输入文本或上传图片')
+    message.warning(t('subscriptions.aiModal.pleaseProvideInput'))
     return
   }
 
@@ -256,10 +246,10 @@ async function recognize() {
       filename: imageFilename.value || undefined,
       mimeType: imageMimeType.value || undefined
     })
-    message.success('识别完成')
+    message.success(t('subscriptions.aiModal.recognitionCompleted'))
   } catch (error) {
     result.value = null
-    message.error(error instanceof Error ? error.message : 'AI 识别失败')
+    message.error(error instanceof Error ? error.message : t('subscriptions.aiModal.recognitionFailed'))
   } finally {
     loading.value = false
     stopLoadingTimer()

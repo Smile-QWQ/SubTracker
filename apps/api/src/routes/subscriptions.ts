@@ -169,7 +169,7 @@ async function runBatchAction(
       failures: [
         {
           id: missingId ?? 'unknown',
-          message: 'Subscription not found'
+          message: 'api.errors.subscriptions.notFound'
         }
       ]
     }
@@ -197,7 +197,7 @@ async function runBatchAction(
     } catch (error) {
       failures.push({
         id,
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: error instanceof Error ? error.message : 'api.errors.internal'
       })
     }
   }
@@ -213,7 +213,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   app.post('/subscriptions/logo/search', async (request, reply) => {
     const parsed = LogoSearchSchema.safeParse(request.body)
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid logo search payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidLogoSearchPayload', parsed.error.flatten())
     }
 
     return sendOk(reply, await searchSubscriptionLogos(parsed.data))
@@ -226,26 +226,26 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   app.delete('/subscriptions/logo/library/:filename', async (request, reply) => {
     const parsed = z.object({ filename: z.string().min(1).max(255) }).safeParse(request.params)
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid logo filename', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidLogoFilename', parsed.error.flatten())
     }
 
     try {
       return sendOk(reply, await deleteLocalLogoFromLibrary(parsed.data.filename))
     } catch (error) {
-      return sendError(reply, 400, 'logo_delete_failed', error instanceof Error ? error.message : 'Logo delete failed')
+      return sendError(reply, 400, 'logo_delete_failed', error instanceof Error ? error.message : 'api.errors.subscriptions.logoDeleteFailed')
     }
   })
 
   app.post('/subscriptions/logo/upload', async (request, reply) => {
     const parsed = LogoUploadSchema.safeParse(request.body)
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid logo upload payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidLogoUploadPayload', parsed.error.flatten())
     }
 
     try {
       return sendOk(reply, await saveUploadedLogo(parsed.data))
     } catch (error) {
-      return sendError(reply, 400, 'logo_upload_failed', error instanceof Error ? error.message : 'Logo upload failed')
+      return sendError(reply, 400, 'logo_upload_failed', error instanceof Error ? error.message : 'api.errors.subscriptions.logoUploadFailed')
     }
   })
 
@@ -256,13 +256,13 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     }).safeParse(request.body)
 
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid logo import payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidLogoImportPayload', parsed.error.flatten())
     }
 
     try {
       return sendOk(reply, await importRemoteLogo(parsed.data))
     } catch (error) {
-      return sendError(reply, 400, 'logo_import_failed', error instanceof Error ? error.message : 'Logo import failed')
+      return sendError(reply, 400, 'logo_import_failed', error instanceof Error ? error.message : 'api.errors.subscriptions.logoImportFailed')
     }
   })
 
@@ -275,7 +275,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
 
     const parsed = querySchema.safeParse(request.query)
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid query', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidQuery', parsed.error.flatten())
     }
 
     const where: Record<string, unknown> = {}
@@ -347,7 +347,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     }).safeParse(request.body)
 
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid reorder payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidReorderPayload', parsed.error.flatten())
     }
 
     await setSubscriptionOrder(parsed.data.ids)
@@ -358,7 +358,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   app.post('/subscriptions/batch/renew', async (request, reply) => {
     const parsed = parseBatchIds(request.body)
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid batch renew payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidBatchRenewPayload', parsed.error.flatten())
     }
 
     const result = await runBatchAction(parsed.data.ids, async (id) => {
@@ -375,7 +375,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   app.post('/subscriptions/batch/status', async (request, reply) => {
     const parsed = parseBatchStatus(request.body)
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid batch status payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidBatchStatusPayload', parsed.error.flatten())
     }
 
     const result = await runBatchAction(parsed.data.ids, async (id) => {
@@ -391,7 +391,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   app.post('/subscriptions/batch/pause', async (request, reply) => {
     const parsed = parseBatchIds(request.body)
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid batch pause payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidBatchPausePayload', parsed.error.flatten())
     }
 
     const result = await runBatchAction(
@@ -404,7 +404,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       },
       {
         validate: (rows) =>
-          rows.some((row) => row.status !== 'active') ? 'Only active subscriptions can be paused in batch mode' : null
+          rows.some((row) => row.status !== 'active') ? 'api.errors.subscriptions.batchPauseOnlyActive' : null
       }
     )
     await Promise.all([
@@ -418,7 +418,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   app.post('/subscriptions/batch/cancel', async (request, reply) => {
     const parsed = parseBatchIds(request.body)
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid batch cancel payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidBatchCancelPayload', parsed.error.flatten())
     }
 
     const result = await runBatchAction(
@@ -431,7 +431,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       },
       {
         validate: (rows) =>
-          rows.some((row) => row.status !== 'active') ? 'Only active subscriptions can be cancelled in batch mode' : null
+          rows.some((row) => row.status !== 'active') ? 'api.errors.subscriptions.batchCancelOnlyActive' : null
       }
     )
     await Promise.all([
@@ -445,7 +445,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   app.post('/subscriptions/batch/delete', async (request, reply) => {
     const parsed = parseBatchIds(request.body)
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid batch delete payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidBatchDeletePayload', parsed.error.flatten())
     }
 
     const result = await runBatchAction(
@@ -458,12 +458,12 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       },
       {
         validate: (rows) =>
-          rows.some((row) => row.status === 'active') ? 'Active subscriptions cannot be deleted directly' : null
+          rows.some((row) => row.status === 'active') ? 'api.errors.subscriptions.activeDeleteBlocked' : null
       }
     )
 
     if (result.failureCount > 0 && result.successCount === 0) {
-      return sendError(reply, 422, 'batch_delete_not_allowed', result.failures[0]?.message ?? 'Batch delete failed', result)
+      return sendError(reply, 422, 'batch_delete_not_allowed', result.failures[0]?.message ?? 'api.errors.subscriptions.activeDeleteBlocked', result)
     }
 
     await Promise.all([
@@ -476,20 +476,20 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   app.get('/subscriptions/:id', async (request, reply) => {
     const params = z.object({ id: z.string() }).safeParse(request.params)
     if (!params.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid subscription id')
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidSubscriptionId')
     }
 
     try {
       return sendOk(reply, await buildSubscriptionDetail(params.data.id))
     } catch {
-      return sendError(reply, 404, 'not_found', 'Subscription not found')
+      return sendError(reply, 404, 'not_found', 'api.errors.subscriptions.notFound')
     }
   })
 
   app.get('/subscriptions/:id/payment-records', async (request, reply) => {
     const params = z.object({ id: z.string() }).safeParse(request.params)
     if (!params.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid subscription id')
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidSubscriptionId')
     }
 
     const records = await listSubscriptionPaymentRecordsLite(params.data.id)
@@ -500,7 +500,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   app.post('/subscriptions', async (request, reply) => {
     const normalizedPayload = normalizeSubscriptionPayloadWebsiteUrl((request.body ?? {}) as Record<string, unknown>)
     if (normalizedPayload.websiteUrlError) {
-      return sendError(reply, 422, 'validation_error', 'websiteUrl 格式无效，请填写合法网址', {
+      return sendError(reply, 422, 'validation_error', 'api.errors.subscriptions.websiteUrlInvalid', {
         fieldErrors: {
           websiteUrl: [normalizedPayload.websiteUrlError]
         }
@@ -509,7 +509,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
 
     const parsed = CreateSubscriptionSchema.safeParse(normalizedPayload.payload)
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid subscription payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidSubscriptionPayload', parsed.error.flatten())
     }
 
     let normalizedLogo
@@ -519,7 +519,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
         logoSource: parsed.data.logoSource ?? null
       })
     } catch (error) {
-      return sendError(reply, 400, 'logo_import_failed', error instanceof Error ? error.message : 'Logo import failed')
+      return sendError(reply, 400, 'logo_import_failed', error instanceof Error ? error.message : 'api.errors.subscriptions.logoImportFailed')
     }
 
     const tagIds = normalizeTagIds(parsed.data.tagIds)
@@ -528,7 +528,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     try {
       reminderFields = await resolveSubscriptionReminderFields(parsed.data)
     } catch (error) {
-      return sendError(reply, 422, 'validation_error', error instanceof Error ? error.message : 'Invalid reminder rules')
+      return sendError(reply, 422, 'validation_error', error instanceof Error ? error.message : 'api.errors.validation.invalidReminderRules')
     }
 
     const timezone = await getAppTimezone()
@@ -574,12 +574,12 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   app.patch('/subscriptions/:id', async (request, reply) => {
     const params = z.object({ id: z.string() }).safeParse(request.params)
     if (!params.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid subscription id')
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidSubscriptionId')
     }
 
     const normalizedPayload = normalizeSubscriptionPayloadWebsiteUrl((request.body ?? {}) as Record<string, unknown>)
     if (normalizedPayload.websiteUrlError) {
-      return sendError(reply, 422, 'validation_error', 'websiteUrl 格式无效，请填写合法网址', {
+      return sendError(reply, 422, 'validation_error', 'api.errors.subscriptions.websiteUrlInvalid', {
         fieldErrors: {
           websiteUrl: [normalizedPayload.websiteUrlError]
         }
@@ -588,7 +588,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
 
     const parsed = UpdateSubscriptionSchema.safeParse(normalizedPayload.payload)
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid update payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidUpdatePayload', parsed.error.flatten())
     }
 
     const payload = parsed.data
@@ -668,19 +668,19 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       if (error instanceof Error && error.message.includes('Logo')) {
         return sendError(reply, 400, 'logo_import_failed', error.message)
       }
-      return sendError(reply, 404, 'not_found', 'Subscription not found')
+      return sendError(reply, 404, 'not_found', 'api.errors.subscriptions.notFound')
     }
   })
 
   app.post('/subscriptions/:id/renew', async (request, reply) => {
     const params = z.object({ id: z.string() }).safeParse(request.params)
     if (!params.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid subscription id')
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidSubscriptionId')
     }
 
     const parsed = RenewSubscriptionSchema.safeParse(request.body ?? {})
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid renew payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidRenewPayload', parsed.error.flatten())
     }
 
     try {
@@ -698,14 +698,14 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       ])
       return sendOk(reply, result)
     } catch (error) {
-      return sendError(reply, 404, 'not_found', error instanceof Error ? error.message : 'Renew failed')
+      return sendError(reply, 404, 'not_found', error instanceof Error ? error.message : 'api.errors.subscriptions.renewFailed')
     }
   })
 
   app.post('/subscriptions/:id/pause', async (request, reply) => {
     const params = z.object({ id: z.string() }).safeParse(request.params)
     if (!params.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid subscription id')
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidSubscriptionId')
     }
 
     const updated = await prisma.subscription.update({
@@ -723,7 +723,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   app.post('/subscriptions/:id/cancel', async (request, reply) => {
     const params = z.object({ id: z.string() }).safeParse(request.params)
     if (!params.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid subscription id')
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidSubscriptionId')
     }
 
     const updated = await prisma.subscription.update({
@@ -741,7 +741,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   app.delete('/subscriptions/:id', async (request, reply) => {
     const params = z.object({ id: z.string() }).safeParse(request.params)
     if (!params.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid subscription id')
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidSubscriptionId')
     }
 
     try {
@@ -751,11 +751,11 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       })
 
       if (!existing) {
-        return sendError(reply, 404, 'not_found', 'Subscription not found')
+        return sendError(reply, 404, 'not_found', 'api.errors.subscriptions.notFound')
       }
 
       if (existing.status === 'active') {
-        return sendError(reply, 422, 'delete_not_allowed', 'Active subscriptions cannot be deleted directly')
+        return sendError(reply, 422, 'delete_not_allowed', 'api.errors.subscriptions.activeDeleteNotAllowed')
       }
 
       await prisma.subscription.delete({
@@ -769,7 +769,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       ])
       return sendOk(reply, { id: params.data.id, deleted: true })
     } catch {
-      return sendError(reply, 404, 'not_found', 'Subscription not found')
+      return sendError(reply, 404, 'not_found', 'api.errors.subscriptions.notFound')
     }
   })
 }

@@ -1,14 +1,14 @@
 <template>
   <div>
-    <page-header title="费用统计" subtitle="用轻量概览、分布和排行快速查看订阅支出" :icon="barChartOutline" icon-background="linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%)" />
+    <page-header :title="t('statistics.page.title')" :subtitle="t('statistics.page.subtitle')" :icon="barChartOutline" icon-background="linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%)" />
 
     <n-grid v-if="showAiSummaryCard" :cols="1" :x-gap="12" :y-gap="12">
       <n-grid-item>
-        <n-card title="AI 总结">
+        <n-card :title="t('statistics.ai.title')">
           <template #header-extra>
             <div class="ai-summary-header-actions">
               <span v-if="dashboardAiSummary?.generatedAt" class="card-muted ai-summary-generated-at">
-                最近生成：{{ summaryGeneratedAtText(dashboardAiSummary.generatedAt) }}
+                {{ t('statistics.ai.generatedAtPrefix') }}{{ summaryGeneratedAtText(dashboardAiSummary.generatedAt) }}
               </span>
               <n-button
                 quaternary
@@ -16,20 +16,20 @@
                 class="ai-summary-toggle"
                 @click="summaryExpanded = !summaryExpanded"
               >
-                {{ summaryExpanded ? '收起详情' : '查看详情' }}
+                {{ summaryExpanded ? t('statistics.ai.collapseDetails') : t('statistics.ai.viewDetails') }}
               </n-button>
               <n-button size="small" :loading="generatingSummary" :disabled="generatingSummary" @click="regenerateSummary">
-                重新生成总结
+                {{ t('statistics.ai.regenerate') }}
               </n-button>
             </div>
           </template>
 
           <n-space vertical :size="12" style="width: 100%">
-            <div v-if="summaryExpanded" class="card-muted">基于当前统计自动生成，不会修改订阅数据</div>
+            <div v-if="summaryExpanded" class="card-muted">{{ t('statistics.ai.expandedHint') }}</div>
 
             <div v-if="summaryLoadingVisible" class="ai-summary-loading">
               <n-spin size="small" />
-              <div class="card-muted">正在基于当前统计生成 AI 总结，请稍候…</div>
+              <div class="card-muted">{{ t('statistics.ai.generatingHint') }}</div>
             </div>
 
             <template v-else-if="dashboardAiSummary">
@@ -38,7 +38,7 @@
                 type="warning"
                 :show-icon="false"
               >
-                请先前往系统设置启用 AI 能力与 AI 总结，之后统计页面会自动生成总结。
+                {{ t('statistics.ai.unconfiguredHint') }}
               </n-alert>
 
               <n-alert
@@ -46,17 +46,17 @@
                 type="error"
                 :show-icon="false"
               >
-                {{ dashboardAiSummary.errorMessage || 'AI 总结生成失败，请稍后重试。' }}
+                {{ dashboardAiSummary.errorMessage || t('statistics.ai.failedFallback') }}
               </n-alert>
 
               <n-empty
                 v-else-if="!dashboardAiSummary.content"
-                description="暂无 AI 总结"
+                :description="t('statistics.ai.noSummary')"
               />
 
               <template v-else>
                 <div v-if="!summaryExpanded" class="ai-summary-preview">
-                  <div class="ai-summary-preview__label">摘要</div>
+                  <div class="ai-summary-preview__label">{{ t('statistics.ai.previewLabel') }}</div>
                   <div class="ai-summary-preview__text">{{ dashboardSummaryPreviewText }}</div>
                 </div>
                 <n-collapse-transition :show="summaryExpanded">
@@ -71,7 +71,7 @@
 
             <n-empty
               v-else-if="!dashboardAiSummaryQuery.isLoading.value"
-              description="暂无 AI 总结"
+              :description="t('statistics.ai.noSummary')"
             />
           </n-space>
         </n-card>
@@ -80,34 +80,34 @@
 
     <n-grid :cols="1" :x-gap="12" :y-gap="12" style="margin-top: 12px">
       <n-grid-item>
-        <n-card title="费用概览">
+        <n-card :title="t('statistics.sections.overview')">
           <div class="summary-grid">
             <div class="summary-item">
-              <span class="summary-item__label">活跃订阅</span>
+              <span class="summary-item__label">{{ t('statistics.summary.activeSubscriptions') }}</span>
               <strong>{{ overview?.activeSubscriptions ?? 0 }}</strong>
             </div>
             <div class="summary-item">
-              <span class="summary-item__label">7 天内续订</span>
+              <span class="summary-item__label">{{ t('statistics.summary.renewalsIn7Days') }}</span>
               <strong>{{ overview?.upcoming7Days ?? 0 }}</strong>
             </div>
             <div class="summary-item">
-              <span class="summary-item__label">30 天内续订</span>
+              <span class="summary-item__label">{{ t('statistics.summary.renewalsIn30Days') }}</span>
               <strong>{{ overview?.upcoming30Days ?? 0 }}</strong>
             </div>
             <div class="summary-item">
-              <span class="summary-item__label">本月预计支出</span>
+              <span class="summary-item__label">{{ t('statistics.summary.estimatedMonthlySpend') }}</span>
               <strong>{{ overview ? formatMoney(overview.monthlyEstimatedBase, baseCurrency) : '--' }}</strong>
             </div>
             <div class="summary-item">
-              <span class="summary-item__label">年度预计支出</span>
+              <span class="summary-item__label">{{ t('statistics.summary.estimatedYearlySpend') }}</span>
               <strong>{{ overview ? formatMoney(overview.yearlyEstimatedBase, baseCurrency) : '--' }}</strong>
             </div>
             <div class="summary-item">
-              <span class="summary-item__label">月预算使用率</span>
+              <span class="summary-item__label">{{ t('statistics.summary.monthlyBudgetUsage') }}</span>
               <strong>{{ formatBudgetRatio(overview?.budgetSummary.monthly.ratio) }}</strong>
             </div>
             <div class="summary-item">
-              <span class="summary-item__label">年预算使用率</span>
+              <span class="summary-item__label">{{ t('statistics.summary.yearlyBudgetUsage') }}</span>
               <strong>{{ formatBudgetRatio(overview?.budgetSummary.yearly.ratio) }}</strong>
             </div>
           </div>
@@ -117,24 +117,24 @@
 
     <n-grid :cols="gridCols" :x-gap="12" :y-gap="12" style="margin-top: 12px">
       <n-grid-item>
-        <n-card title="状态分布">
+        <n-card :title="t('statistics.sections.statusDistribution')">
           <chart-view v-if="statusOption" :option="statusOption" />
-          <n-empty v-else description="暂无数据" />
+          <n-empty v-else :description="t('statistics.empty.noData')" />
         </n-card>
       </n-grid-item>
       <n-grid-item>
-        <n-card title="订阅币种分布">
+        <n-card :title="t('statistics.sections.currencyDistribution')">
           <chart-view v-if="currencyOption" :option="currencyOption" />
-          <n-empty v-else description="暂无数据" />
+          <n-empty v-else :description="t('statistics.empty.noData')" />
         </n-card>
       </n-grid-item>
     </n-grid>
 
     <n-grid :cols="1" :x-gap="12" :y-gap="12" style="margin-top: 12px">
       <n-grid-item>
-        <n-card title="月订阅支出 TOP10">
+        <n-card :title="t('statistics.sections.top10')">
           <chart-view v-if="topSubscriptionsOption" :option="topSubscriptionsOption" />
-          <n-empty v-else description="暂无数据" />
+          <n-empty v-else :description="t('statistics.empty.noData')" />
         </n-card>
       </n-grid-item>
     </n-grid>
@@ -148,6 +148,7 @@ import { useWindowSize } from '@vueuse/core'
 import { useQueryClient } from '@tanstack/vue-query'
 import { NAlert, NButton, NCard, NCollapseTransition, NEmpty, NGrid, NGridItem, NSpace, NSpin, useMessage, useThemeVars } from 'naive-ui'
 import { BarChartOutline } from '@vicons/ionicons5'
+import { useI18n } from 'vue-i18n'
 import { api } from '@/composables/api'
 import { DASHBOARD_AI_SUMMARY_QUERY_KEY, useDashboardAiSummaryQuery } from '@/composables/dashboard-ai-summary-query'
 import { useSettingsQuery } from '@/composables/settings-query'
@@ -165,6 +166,7 @@ const barChartOutline = BarChartOutline
 const queryClient = useQueryClient()
 const message = useMessage()
 const themeVars = useThemeVars()
+const { t } = useI18n()
 
 const { data: overview } = useStatisticsOverviewQuery()
 const { data: settings } = useSettingsQuery()
@@ -194,10 +196,10 @@ const dashboardSummaryPreviewText = computed(() =>
 )
 
 const statusLabelMap: Record<SubscriptionStatus, string> = {
-  active: '正常',
-  paused: '暂停',
-  cancelled: '停用',
-  expired: '过期'
+  active: t('statistics.status.active'),
+  paused: t('statistics.status.paused'),
+  cancelled: t('statistics.status.cancelled'),
+  expired: t('statistics.status.expired')
 }
 
 const statusColorMap: Record<SubscriptionStatus, string> = {
@@ -294,7 +296,7 @@ function formatMoney(amount: number, currency: string) {
 
 function formatBudgetRatio(ratio?: number | null) {
   if (ratio === null || ratio === undefined) {
-    return '未设置预算'
+    return t('statistics.summary.noBudgetSet')
   }
 
   return `${(ratio * 100).toFixed(2)}%`
@@ -306,9 +308,9 @@ async function regenerateSummary() {
   try {
     await api.generateDashboardAiSummary()
     await queryClient.invalidateQueries({ queryKey: DASHBOARD_AI_SUMMARY_QUERY_KEY })
-    message.success('AI 总结已更新')
+    message.success(t('statistics.ai.updated'))
   } catch (error) {
-    message.error(error instanceof Error ? error.message : 'AI 总结生成失败')
+    message.error(error instanceof Error ? error.message : t('statistics.ai.failed'))
   } finally {
     generatingSummary.value = false
   }

@@ -3,9 +3,11 @@ import {
   DEFAULT_AI_DASHBOARD_SUMMARY_PREVIEW_PROMPT,
   DEFAULT_AI_DASHBOARD_SUMMARY_PROMPT,
   formatAiSummaryPreviewText,
+  getMessage,
   type AiDashboardSummaryDto,
   type DashboardOverview
 } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE } from '@subtracker/shared/locale-core'
 import { ensureAiSummaryConfig } from './ai.service'
 import { createComputedCache, deleteComputedCache, getComputedCache, setComputedCache } from './computed-cache-store.service'
 import { getOverviewStatistics } from './statistics.service'
@@ -182,9 +184,9 @@ async function releaseDashboardSummaryGenerationLock(ownerId: string) {
 }
 
 function inferUnconfiguredMessage(aiConfig: Awaited<ReturnType<typeof getAiConfig>>) {
-  if (!aiConfig.dashboardSummaryEnabled) return 'AI 总结未启用'
-  if (!aiConfig.enabled) return 'AI 能力未启用'
-  return 'AI 总结配置不完整'
+  if (!aiConfig.dashboardSummaryEnabled) return getMessage(DEFAULT_APP_LOCALE, 'api.errors.ai.summaryDisabled')
+  if (!aiConfig.enabled) return getMessage(DEFAULT_APP_LOCALE, 'api.errors.ai.disabled')
+  return getMessage(DEFAULT_APP_LOCALE, 'api.errors.ai.summaryConfigIncomplete')
 }
 
 function resolveDashboardSummaryPrompt(promptTemplate?: string | null) {
@@ -321,7 +323,9 @@ async function requestDashboardSummaryPreviewMarkdown(params: {
           },
           {
             role: 'user',
-            content: `以下是已经生成好的完整 AI 总结，请提炼一个默认折叠展示用的超简短摘要：\n\n${params.summaryMarkdown}`
+            content: getMessage(DEFAULT_APP_LOCALE, 'ai.prompts.dashboard.previewUser.request', {
+              payload: params.summaryMarkdown
+            })
           }
         ]
       }),
@@ -330,14 +334,14 @@ async function requestDashboardSummaryPreviewMarkdown(params: {
 
     if (!response.ok) {
       const errorText = await response.text()
-      throw new Error(`AI 摘要提炼失败：${response.status}${errorText ? ` - ${errorText}` : ''}`)
+      throw new Error(`${getMessage(DEFAULT_APP_LOCALE, 'api.errors.ai.summaryPreviewRequestFailed')}：${response.status}${errorText ? ` - ${errorText}` : ''}`)
     }
 
     const payload = (await response.json()) as ChatCompletionPayload
     const previewMarkdown = extractChatCompletionText(payload)
 
     if (!previewMarkdown.trim()) {
-      throw new Error('AI 摘要提炼返回空内容')
+      throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.ai.summaryPreviewEmpty'))
     }
 
     return previewMarkdown
@@ -374,7 +378,9 @@ async function requestDashboardSummaryMarkdown(params: {
           },
           {
             role: 'user',
-            content: `以下是当前订阅统计数据，请输出 Markdown 总结：\n\n${JSON.stringify(params.input, null, 2)}`
+            content: getMessage(DEFAULT_APP_LOCALE, 'ai.prompts.dashboard.user.request', {
+              payload: JSON.stringify(params.input, null, 2)
+            })
           }
         ]
       }),
@@ -383,14 +389,14 @@ async function requestDashboardSummaryMarkdown(params: {
 
     if (!response.ok) {
       const errorText = await response.text()
-      throw new Error(`AI 接口请求失败：${response.status}${errorText ? ` - ${errorText}` : ''}`)
+      throw new Error(`${getMessage(DEFAULT_APP_LOCALE, 'api.errors.ai.summaryRequestFailed')}：${response.status}${errorText ? ` - ${errorText}` : ''}`)
     }
 
     const payload = (await response.json()) as ChatCompletionPayload
     const markdown = extractChatCompletionText(payload)
 
     if (!markdown.trim()) {
-      throw new Error('AI 总结返回空内容')
+      throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.ai.summaryEmpty'))
     }
 
     return markdown
@@ -532,7 +538,7 @@ export async function generateDashboardAiSummary(): Promise<AiDashboardSummaryDt
         status: 'failed',
         content: null,
         previewContent: null,
-        errorMessage: error instanceof Error ? error.message : 'AI 总结生成失败',
+        errorMessage: error instanceof Error ? error.message : getMessage(DEFAULT_APP_LOCALE, 'api.errors.ai.summaryGenerateFailed'),
         generatedAt: null,
         updatedAt: new Date().toISOString(),
         sourceDataHash: currentHash

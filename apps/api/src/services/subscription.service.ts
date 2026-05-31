@@ -93,7 +93,7 @@ export async function renewSubscription(
 ) {
   const subscription = await prisma.subscription.findUnique({ where: { id: subscriptionId } })
   if (!subscription) {
-    throw new Error('Subscription not found')
+    throw new Error('api.errors.subscriptions.notFound')
   }
 
   const context: RenewExecutionContext = {

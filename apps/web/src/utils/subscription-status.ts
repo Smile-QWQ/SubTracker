@@ -1,15 +1,18 @@
+import { getMessage } from '@subtracker/shared'
 import type { SubscriptionStatus } from '@/types/api'
+import { getAppLocale } from '@/locales'
 
 export function getSubscriptionStatusText(status: SubscriptionStatus | string) {
+  const locale = getAppLocale()
   switch (status) {
     case 'active':
-      return '正常'
+      return getMessage(locale, 'common.status.active')
     case 'paused':
-      return '暂停'
+      return getMessage(locale, 'common.status.paused')
     case 'cancelled':
-      return '停用'
+      return getMessage(locale, 'common.status.cancelled')
     case 'expired':
-      return '过期'
+      return getMessage(locale, 'common.status.expired')
     default:
       return status
   }

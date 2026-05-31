@@ -1,4 +1,5 @@
-import { AiRecognizeSubscriptionSchema, DEFAULT_AI_SUBSCRIPTION_PROMPT } from '@subtracker/shared'
+import { AiRecognizeSubscriptionSchema, DEFAULT_AI_SUBSCRIPTION_PROMPT, getMessage } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE, type AppLocale } from '@subtracker/shared/locale-core'
 import type { AiRecognitionResultDto } from '@subtracker/shared'
 import { getAiConfig } from './settings.service'
 
@@ -19,24 +20,45 @@ type ChatCompletionPayload = {
 
 const visionTestImageBase64 =
   'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAKUlEQVR4nO3OIQEAAAACIP+f1hkWWEB6FgEBAQEBAQEBAQEBAQEBgXdgl/rw4unIZ5cAAAAASUVORK5CYII='
-const jsonOnlySuffix = '必须只返回合法 JSON 对象，不要返回 Markdown、代码块或额外解释。'
+const jsonOnlySuffix = getMessage(DEFAULT_APP_LOCALE, 'ai.prompts.common.jsonOnlySuffix')
 
-export function ensureAiConfig(aiConfig: AiSettings, options?: { requireEnabled?: boolean; featureLabel?: string }) {
+function resolveAiLocale(locale?: AppLocale) {
+  return locale ?? DEFAULT_APP_LOCALE
+}
+
+export function ensureAiConfig(
+  aiConfig: AiSettings,
+  options?: { requireEnabled?: boolean; featureLabel?: string; locale?: AppLocale }
+) {
+  const locale = resolveAiLocale(options?.locale)
   if (options?.requireEnabled !== false && !aiConfig.enabled) {
-    throw new Error(`${options?.featureLabel ?? 'AI 功能'}未启用`)
+    throw new Error(
+      options?.featureLabel === getMessage(locale, 'statistics.ai.title')
+        ? getMessage(locale, 'api.errors.ai.summaryDisabled')
+        : getMessage(locale, 'api.errors.ai.disabled')
+    )
   }
 
   if (!aiConfig.baseUrl || !aiConfig.apiKey || !aiConfig.model) {
-    throw new Error(`${options?.featureLabel ?? 'AI'}配置不完整`)
+    throw new Error(
+      options?.featureLabel === getMessage(locale, 'statistics.ai.title')
+        ? getMessage(locale, 'api.errors.ai.summaryConfigIncomplete')
+        : getMessage(locale, 'api.errors.ai.configIncomplete')
+    )
   }
 }
 
-export function ensureAiSummaryConfig(aiConfig: AiSettings) {
+export function ensureAiSummaryConfig(aiConfig: AiSettings, locale?: AppLocale) {
+  const resolvedLocale = resolveAiLocale(locale)
   if (!aiConfig.dashboardSummaryEnabled) {
-    throw new Error('AI 总结未启用')
+    throw new Error(getMessage(resolvedLocale, 'api.errors.ai.summaryDisabled'))
   }
 
-  ensureAiConfig(aiConfig, { requireEnabled: false, featureLabel: 'AI 总结' })
+  ensureAiConfig(aiConfig, {
+    requireEnabled: false,
+    featureLabel: getMessage(resolvedLocale, 'statistics.ai.title'),
+    locale: resolvedLocale
+  })
 }
 
 export function looksLikeImageFormatUnsupported(errorText: string) {
@@ -86,7 +108,7 @@ export function extractChatCompletionText(payload: ChatCompletionPayload) {
     }
   }
 
-  throw new Error('AI 未返回有效内容')
+  throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.ai.noValidContent'))
 }
 
 function buildRecognitionSystemPrompt(aiConfig: AiSettings, forceJsonPromptOnly = false) {
@@ -128,7 +150,7 @@ async function requestAiChatCompletion(params: {
 
     if (!response.ok) {
       const errorText = await response.text()
-      throw new Error(`AI 接口请求失败：${response.status}${errorText ? ` - ${errorText}` : ''}`)
+      throw new Error(`${getMessage(DEFAULT_APP_LOCALE, 'api.errors.ai.requestFailed')}：${response.status}${errorText ? ` - ${errorText}` : ''}`)
     }
 
     const payload = (await response.json()) as ChatCompletionPayload
@@ -219,7 +241,7 @@ async function recognizeByVision(params: {
 export async function recognizeSubscriptionByAi(input: unknown): Promise<AiRecognitionResultDto> {
   const parsed = AiRecognizeSubscriptionSchema.safeParse(input)
   if (!parsed.success) {
-    throw new Error('AI 识别输入不合法')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.ai.invalidRecognitionInput'))
   }
 
   const aiConfig = await getAiConfig()
@@ -227,7 +249,7 @@ export async function recognizeSubscriptionByAi(input: unknown): Promise<AiRecog
   const imageBase64 = parsed.data.imageBase64?.trim()
 
   if (!text && !imageBase64) {
-    throw new Error('请至少提供文本或图片')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.ai.textOrImageRequired'))
   }
 
   if (imageBase64) {
@@ -239,7 +261,7 @@ export async function recognizeSubscriptionByAi(input: unknown): Promise<AiRecog
         })
       }
 
-      throw new Error('当前模型未开启视觉输入，Cloudflare Worker 版本已移除本地 OCR')
+      throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.ai.visionNoOcr'))
     }
 
     try {
@@ -262,7 +284,7 @@ export async function recognizeSubscriptionByAi(input: unknown): Promise<AiRecog
         })
       }
 
-      throw new Error('当前模型不支持视觉输入，且 Cloudflare Worker 版本不提供本地 OCR 回退')
+      throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.ai.visionUnsupportedNoOcrFallback'))
     }
   }
 
@@ -280,7 +302,7 @@ export async function testAiConnection(overrideConfig?: AiSettings) {
     messages: [
       {
         role: 'system',
-        content: '请只返回 OK'
+        content: getMessage(DEFAULT_APP_LOCALE, 'ai.prompts.common.returnOkOnly')
       },
       {
         role: 'user',
@@ -300,7 +322,7 @@ export async function testAiConnection(overrideConfig?: AiSettings) {
 export async function testAiVisionConnection(overrideConfig?: AiSettings) {
   const aiConfig = overrideConfig ?? (await getAiConfig())
   if (!aiConfig.capabilities.vision) {
-    throw new Error('当前 Provider 未启用视觉输入能力')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.ai.visionCapabilityDisabled'))
   }
 
   const raw = await requestAiChatCompletion({
@@ -309,14 +331,14 @@ export async function testAiVisionConnection(overrideConfig?: AiSettings) {
     messages: [
       {
         role: 'system',
-        content: '请根据用户发送的图片进行响应，只返回一句简短确认。'
+        content: getMessage(DEFAULT_APP_LOCALE, 'ai.prompts.common.visionConfirmSystem')
       },
       {
         role: 'user',
         content: [
           {
             type: 'text',
-            text: '请确认你已成功接收到这张测试图片。'
+            text: getMessage(DEFAULT_APP_LOCALE, 'ai.prompts.common.visionConfirmUser')
           },
           {
             type: 'image_url',

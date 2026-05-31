@@ -1,3 +1,6 @@
+import { getMessage } from '@subtracker/shared'
+import { getAppLocale } from '@/locales'
+
 type ApiErrorLike = {
   message?: string
   response?: {
@@ -13,9 +16,9 @@ type ApiErrorLike = {
   }
 }
 
-const WORKER_LIMIT_HINT = '当前请求可能触发了 Cloudflare Worker 免费版限制，请稍后重试，并避免连续重复点击。'
-
 export function normalizeApiErrorMessage(error: ApiErrorLike) {
+  const locale = getAppLocale()
+  const workerLimitHint = getMessage(locale, 'common.errors.workerLimitHint')
   const responseMessage = error.response?.data?.error?.message?.trim()
   const fieldErrors = error.response?.data?.error?.details?.fieldErrors
   const firstFieldError = fieldErrors
@@ -23,14 +26,18 @@ export function normalizeApiErrorMessage(error: ApiErrorLike) {
     : null
   const fallbackMessage = error.message?.trim()
   const status = error.response?.status
-  const rawMessage = firstFieldError || responseMessage || fallbackMessage || '请求失败'
+  const rawMessage = firstFieldError || responseMessage || fallbackMessage || getMessage(locale, 'common.errors.requestFailed')
 
   if (/Worker exceeded CPU time limit/i.test(rawMessage)) {
-    return `请求失败：Worker 执行超出 CPU 限制。${WORKER_LIMIT_HINT}`
+    return getMessage(locale, 'common.errors.workerCpuLimitExceeded', {
+      hint: workerLimitHint
+    })
   }
 
   if (status === 503) {
-    return `请求失败：服务暂时不可用。${WORKER_LIMIT_HINT}`
+    return getMessage(locale, 'common.errors.serviceUnavailableWithWorkerHint', {
+      hint: workerLimitHint
+    })
   }
 
   return rawMessage

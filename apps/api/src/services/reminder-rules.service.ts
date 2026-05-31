@@ -1,8 +1,10 @@
 import {
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_OVERDUE_REMINDER_RULES,
-  DEFAULT_REMINDER_RULE_TIME
+  DEFAULT_REMINDER_RULE_TIME,
+  getMessage
 } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE } from '@subtracker/shared/locale-core'
 
 export type ReminderRuleKind = 'advance' | 'overdue'
 
@@ -18,29 +20,29 @@ const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/
 function parseRuleSegment(segment: string, kind: ReminderRuleKind): ReminderRule {
   const [rawDays, rawTime, ...rest] = segment.split('&').map((item) => item.trim())
   if (!rawDays || !rawTime || rest.length > 0) {
-    throw new Error(`规则 "${segment}" 格式无效，应为 天数&HH:mm`)
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'validation.reminderRules.invalidSegmentFormat', { segment }))
   }
 
   if (!/^\d+$/.test(rawDays)) {
-    throw new Error(`规则 "${segment}" 中的天数必须为整数`)
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'validation.reminderRules.invalidDaysInteger', { segment }))
   }
 
   const days = Number(rawDays)
   if (!Number.isInteger(days)) {
-    throw new Error(`规则 "${segment}" 中的天数必须为整数`)
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'validation.reminderRules.invalidDaysInteger', { segment }))
   }
 
   if (kind === 'advance' && days < 0) {
-    throw new Error(`规则 "${segment}" 中的天数不能小于 0`)
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'validation.reminderRules.invalidAdvanceDays', { segment }))
   }
 
   if (kind === 'overdue' && days < 1) {
-    throw new Error(`规则 "${segment}" 中的天数必须大于等于 1`)
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'validation.reminderRules.invalidOverdueDays', { segment }))
   }
 
   const timeMatch = rawTime.match(TIME_PATTERN)
   if (!timeMatch) {
-    throw new Error(`规则 "${segment}" 中的时间必须为 HH:mm`)
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'validation.reminderRules.invalidTime', { segment }))
   }
 
   return {

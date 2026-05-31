@@ -263,7 +263,7 @@ export async function createTagLite(input: { name: string; color: string; icon: 
 
   const existing = await d1First<{ id: string }>('SELECT id FROM Tag WHERE name = ? LIMIT 1', [input.name])
   if (existing) {
-    throw new Error('Tag name already exists')
+    throw new Error('api.errors.tags.nameExists')
   }
 
   const id = createCuidLike()
@@ -290,7 +290,7 @@ export async function updateTagLite(
 
   const existing = await d1First<{ id: string }>('SELECT id FROM Tag WHERE id = ? LIMIT 1', [id])
   if (!existing) {
-    throw new Error('Tag not found')
+    throw new Error('api.errors.tags.notFound')
   }
 
   if (payload.name) {
@@ -299,7 +299,7 @@ export async function updateTagLite(
       id
     ])
     if (duplicate) {
-      throw new Error('Tag name already exists')
+      throw new Error('api.errors.tags.nameExists')
     }
   }
 
@@ -341,7 +341,7 @@ export async function deleteTagLite(id: string) {
 
   const existing = await d1First<{ id: string }>('SELECT id FROM Tag WHERE id = ? LIMIT 1', [id])
   if (!existing) {
-    throw new Error('Tag not found')
+    throw new Error('api.errors.tags.notFound')
   }
 
   await d1Run('DELETE FROM SubscriptionTag WHERE tagId = ?', [id])
@@ -569,7 +569,7 @@ export async function getSubscriptionWithTagsLite(id: string) {
 
   const row = rows[0]
   if (!row) {
-    throw new Error('Subscription not found')
+    throw new Error('api.errors.subscriptions.notFound')
   }
 
   const tagRows = await d1All<SubscriptionTagJoinRow>(
