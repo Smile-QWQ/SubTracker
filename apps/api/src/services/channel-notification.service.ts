@@ -3,6 +3,7 @@ import {
   DEFAULT_APP_LOCALE,
   DEFAULT_RESEND_API_URL,
   getMessage,
+  isWorkerLiteBlockedSmtpPort,
   type AppLocale,
   type AppriseConfigInput,
   type BarkConfigInput,
@@ -89,6 +90,11 @@ type ForgotPasswordNotificationPayload = {
   expiresInMinutes: number
 }
 
+type SmtpMailbox = {
+  name?: string
+  email: string
+}
+
 export type PushplusSendResult = {
   accepted: boolean
   code: number
@@ -124,6 +130,12 @@ const CHANNEL_TEMPLATE_GROUPS: Record<
 
 const NOTIFICATION_DEDUP_KEY_PREFIX = 'notification:'
 export const NOTIFICATION_DEDUP_RETENTION_DAYS = 30
+
+function getNotificationFallbackMessage(locale: AppLocale, key: 'emptyResponse' | 'unknown') {
+  return key === 'emptyResponse'
+    ? getMessage(locale, 'common.fallbacks.emptyResponse')
+    : getMessage(locale, 'common.fallbacks.unknown')
+}
 
 export async function cleanupLegacyNotificationDedupSettings(
   now = new Date(),
@@ -226,26 +238,45 @@ async function withDeliveryClaim(
   }
 }
 
-function buildForgotPasswordTitle() {
-  return 'SubTracker 密码重置验证码'
-}
-
-function buildForgotPasswordBody(payload: ForgotPasswordNotificationPayload) {
-  return [
-    `用户名：${payload.username}`,
-    `验证码：${payload.code}`,
-    `有效期：${payload.expiresInMinutes} 分钟`,
-    '如果这不是你的操作，请忽略本次通知。'
-  ].join('\n')
-}
-
-function buildForgotPasswordMessage(payload: ForgotPasswordNotificationPayload): DirectNotificationMessage {
-  const text = buildForgotPasswordBody(payload)
-  return {
-    title: buildForgotPasswordTitle(),
-    text,
-    html: `<pre>${text}</pre>`
+function assertSupportedSmtpPort(port: number, locale: AppLocale) {
+  if (isWorkerLiteBlockedSmtpPort(port)) {
+    throw new Error(getMessage(locale, 'api.errors.notifications.smtpPort25Blocked'))
   }
+}
+
+function parseSmtpMailbox(value: string, fieldLabel: string, locale: AppLocale): SmtpMailbox {
+  const raw = value.trim()
+  if (!raw) {
+    throw new Error(getMessage(locale, 'api.errors.notifications.smtpFieldRequired', { field: fieldLabel }))
+  }
+
+  const bracketMatch = raw.match(/^(.*)<([^<>]+)>$/)
+  const mailbox = bracketMatch
+    ? {
+        name: bracketMatch[1]?.trim().replace(/^"(.*)"$/, '$1') || undefined,
+        email: bracketMatch[2]?.trim() ?? ''
+      }
+    : { email: raw }
+
+  if (!/^[^\s@<>]+@[^\s@<>]+$/.test(mailbox.email)) {
+    throw new Error(getMessage(locale, 'api.errors.notifications.smtpAddressInvalid', { field: fieldLabel, value: raw }))
+  }
+
+  return mailbox.name ? mailbox : { email: mailbox.email }
+}
+
+function parseSmtpRecipientList(value: string, locale: AppLocale): SmtpMailbox[] {
+  const recipients = value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  if (!recipients.length) {
+    throw new Error(getMessage(locale, 'api.errors.notifications.smtpFieldRequired', { field: getMessage(locale, 'common.labels.to') }))
+  }
+
+  const recipientLabel = getMessage(locale, 'common.labels.to')
+  return recipients.map((item, index) => parseSmtpMailbox(item, `${recipientLabel} #${index + 1}`, locale))
 }
 
 async function sendResendEmailWithConfig(message: DirectNotificationMessage, config: ResendConfigInput) {
@@ -255,7 +286,7 @@ async function sendResendEmailWithConfig(message: DirectNotificationMessage, con
   const to = config.to?.trim()
 
   if (!apiBaseUrl || !apiKey || !from || !to) {
-    throw new Error('邮箱通知未启用或配置不完整')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.emailDisabledOrIncomplete'))
   }
 
   const response = await fetch(apiBaseUrl, {
@@ -277,18 +308,63 @@ async function sendResendEmailWithConfig(message: DirectNotificationMessage, con
 
   const rawText = await response.text()
   if (!response.ok) {
-    throw new Error(`Resend 请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.resendRequestFailed')}：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim()
+    )
   }
+}
+
+async function sendSmtpEmailWithConfig(
+  message: DirectNotificationMessage,
+  config: EmailConfigInput,
+  locale: AppLocale
+) {
+  const host = config.host?.trim()
+  const port = Number(config.port ?? 0)
+  const username = config.username?.trim()
+  const password = config.password?.trim()
+  const from = config.from?.trim()
+  const to = config.to?.trim()
+
+  if (!host || !Number.isInteger(port) || port <= 0 || !username || !password || !from || !to) {
+    throw new Error(getMessage(locale, 'api.errors.notifications.emailDisabledOrIncomplete'))
+  }
+
+  assertSupportedSmtpPort(port, locale)
+
+  const { WorkerMailer, LogLevel } = await import('worker-mailer')
+  await WorkerMailer.send(
+    {
+      host,
+      port,
+      secure: Boolean(config.secure),
+      credentials: {
+        username,
+        password
+      },
+      authType: ['plain', 'login', 'cram-md5'],
+      logLevel: LogLevel.NONE
+    },
+    {
+      from: parseSmtpMailbox(from, getMessage(locale, 'common.labels.from'), locale),
+      to: parseSmtpRecipientList(to, locale),
+      subject: message.title,
+      text: message.text,
+      html: message.html
+    }
+  )
 }
 
 async function sendEmailWithProvider(
   message: DirectNotificationMessage,
   provider: 'smtp' | 'resend',
-  _smtpConfig: EmailConfigInput,
-  resendConfig: ResendConfigInput
+  smtpConfig: EmailConfigInput,
+  resendConfig: ResendConfigInput,
+  locale: AppLocale = DEFAULT_APP_LOCALE
 ) {
   if (provider === 'smtp') {
-    throw new Error('Cloudflare Worker 运行时暂不支持 SMTP，请改用 Resend')
+    await sendSmtpEmailWithConfig(message, smtpConfig, locale)
+    return
   }
 
   await sendResendEmailWithConfig(message, resendConfig)
@@ -439,7 +515,7 @@ async function sendEmailNotification(
     enabled: settings.emailNotificationsEnabled,
     disabledMessage: 'email_disabled',
     alreadySentMessage: 'email_already_sent',
-    send: (message) => sendEmailWithProvider(message, settings.emailProvider, settings.smtpConfig, settings.resendConfig)
+    send: (message) => sendEmailWithProvider(message, settings.emailProvider, settings.smtpConfig, settings.resendConfig, locale)
   }, locale)
 }
 
@@ -468,7 +544,7 @@ async function sendPushplusWithConfig(
 ): Promise<PushplusSendResult> {
   const { token, topic } = config
   if (!token) {
-    throw new Error('PushPlus 通知未启用或配置不完整')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.pushplusDisabledOrIncomplete'))
   }
 
   const response = await fetch('https://www.pushplus.plus/send', {
@@ -487,24 +563,30 @@ async function sendPushplusWithConfig(
 
   const rawText = await response.text()
   if (!response.ok) {
-    throw new Error(`PushPlus 请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.pushplusRequestFailed')}：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim()
+    )
   }
 
   let parsed: PushplusApiResponse | null = null
   try {
     parsed = rawText ? (JSON.parse(rawText) as PushplusApiResponse) : null
   } catch {
-    throw new Error(`PushPlus 返回了无法解析的响应：${rawText || 'empty response'}`)
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.pushplusInvalidResponse')}：${rawText || getNotificationFallbackMessage(DEFAULT_APP_LOCALE, 'emptyResponse')}`
+    )
   }
 
   if (!parsed || parsed.code !== 200) {
-    throw new Error(`PushPlus 请求被拒绝：${parsed?.msg || rawText || 'unknown error'}`)
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.pushplusRejected')}：${parsed?.msg || rawText || getNotificationFallbackMessage(DEFAULT_APP_LOCALE, 'unknown')}`
+    )
   }
 
   return {
     accepted: true,
     code: parsed.code,
-    message: parsed.msg || '请求已提交',
+    message: parsed.msg || getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.pushplusSubmitted'),
     shortCode: extractPushplusShortCode(parsed.data)
   }
 }
@@ -528,7 +610,7 @@ async function sendPushplusNotification(
 async function sendTelegramWithConfig(message: DirectNotificationMessage, config: TelegramConfigInput) {
   const { botToken, chatId } = config
   if (!botToken || !chatId) {
-    throw new Error('Telegram 通知未启用或配置不完整')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.telegramDisabledOrIncomplete'))
   }
 
   const titleMarkdown = buildTelegramMarkdownV2FromMarkdown(`**${message.title}**`)
@@ -548,18 +630,24 @@ async function sendTelegramWithConfig(message: DirectNotificationMessage, config
 
   const rawText = await response.text()
   if (!response.ok) {
-    throw new Error(`Telegram 请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.telegramRequestFailed')}：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim()
+    )
   }
 
   let parsed: TelegramApiResponse | null = null
   try {
     parsed = rawText ? (JSON.parse(rawText) as TelegramApiResponse) : null
   } catch {
-    throw new Error(`Telegram 返回了无法解析的响应：${rawText || 'empty response'}`)
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.telegramInvalidResponse')}：${rawText || getNotificationFallbackMessage(DEFAULT_APP_LOCALE, 'emptyResponse')}`
+    )
   }
 
   if (!parsed?.ok) {
-    throw new Error(`Telegram 请求被拒绝：${parsed?.description || rawText || 'unknown error'}`)
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.telegramRejected')}：${parsed?.description || rawText || getNotificationFallbackMessage(DEFAULT_APP_LOCALE, 'unknown')}`
+    )
   }
 }
 
@@ -582,7 +670,7 @@ async function sendTelegramNotification(
 function resolveServerchanUrl(sendkey: string) {
   const trimmed = sendkey.trim()
   if (!trimmed) {
-    throw new Error('Server 酱通知未启用或配置不完整')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.serverchanDisabledOrIncomplete'))
   }
 
   if (trimmed.startsWith('sctp')) {
@@ -613,18 +701,24 @@ async function sendServerchanWithConfig(message: DirectNotificationMessage, conf
 
   const rawText = await response.text()
   if (!response.ok) {
-    throw new Error(`Server 酱请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.serverchanRequestFailed')}：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim()
+    )
   }
 
   let parsed: { code?: number; message?: string } | null = null
   try {
     parsed = rawText ? (JSON.parse(rawText) as { code?: number; message?: string }) : null
   } catch {
-    throw new Error(`Server 酱返回了无法解析的响应：${rawText || 'empty response'}`)
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.serverchanInvalidResponse')}：${rawText || getNotificationFallbackMessage(DEFAULT_APP_LOCALE, 'emptyResponse')}`
+    )
   }
 
   if (!parsed || parsed.code !== 0) {
-    throw new Error(`Server 酱请求被拒绝：${parsed?.message || rawText || 'unknown error'}`)
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.serverchanRejected')}：${parsed?.message || rawText || getNotificationFallbackMessage(DEFAULT_APP_LOCALE, 'unknown')}`
+    )
   }
 }
 
@@ -648,7 +742,7 @@ async function sendGotifyWithConfig(message: DirectNotificationMessage, config: 
   const target = validateNotificationTargetUrl(config.url.trim(), 'Gotify URL')
   const token = config.token?.trim()
   if (!token) {
-    throw new Error('Gotify 通知未启用或配置不完整')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.gotifyDisabledOrIncomplete'))
   }
 
   const response = await fetch(new URL(`/message?token=${encodeURIComponent(token)}`, target.toString()), {
@@ -672,7 +766,9 @@ async function sendGotifyWithConfig(message: DirectNotificationMessage, config: 
 
   const rawText = await response.text()
   if (!response.ok) {
-    throw new Error(`Gotify 请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.gotifyRequestFailed')}：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim()
+    )
   }
 }
 
@@ -700,7 +796,7 @@ async function sendBarkWithConfig(message: DirectNotificationMessage, config: Ba
   const serverUrl = config.serverUrl?.trim()
   const deviceKey = config.deviceKey?.trim()
   if (!serverUrl) {
-    throw new Error('Bark 通知未启用或配置不完整')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.barkDisabledOrIncomplete'))
   }
 
   const target = validateNotificationTargetUrl(serverUrl, 'Bark Server URL')
@@ -719,7 +815,7 @@ async function sendBarkWithConfig(message: DirectNotificationMessage, config: Ba
   const includeDeviceKey = !isBarkCustomServerUrl(target)
   if (includeDeviceKey) {
     if (!deviceKey) {
-      throw new Error('Bark 通知未启用或配置不完整')
+      throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.barkDisabledOrIncomplete'))
     }
     target.pathname = '/push'
     target.search = ''
@@ -739,18 +835,24 @@ async function sendBarkWithConfig(message: DirectNotificationMessage, config: Ba
 
   const rawText = await response.text()
   if (!response.ok) {
-    throw new Error(`Bark 请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.barkRequestFailed')}：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim()
+    )
   }
 
   let parsed: BarkApiResponse | null = null
   try {
     parsed = rawText ? (JSON.parse(rawText) as BarkApiResponse) : null
   } catch {
-    throw new Error(`Bark 返回了无法解析的响应：${rawText || 'empty response'}`)
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.barkInvalidResponse')}：${rawText || getNotificationFallbackMessage(DEFAULT_APP_LOCALE, 'emptyResponse')}`
+    )
   }
 
   if (!parsed || parsed.code !== 200) {
-    throw new Error(`Bark 请求被拒绝：${parsed?.message || rawText || 'unknown error'}`)
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.barkRejected')}：${parsed?.message || rawText || getNotificationFallbackMessage(DEFAULT_APP_LOCALE, 'unknown')}`
+    )
   }
 }
 
@@ -785,7 +887,7 @@ function buildNotifyxDescription(title: string) {
 async function sendNotifyxWithConfig(message: DirectNotificationMessage, config: NotifyxConfigInput) {
   const apiKey = config.apiKey?.trim()
   if (!apiKey) {
-    throw new Error('NotifyX 通知未启用或配置不完整')
+    throw new Error(getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.notifyxDisabledOrIncomplete'))
   }
 
   const response = await fetch(`https://www.notifyx.cn/api/v1/send/${encodeURIComponent(apiKey)}`, {
@@ -803,18 +905,24 @@ async function sendNotifyxWithConfig(message: DirectNotificationMessage, config:
 
   const rawText = await response.text()
   if (!response.ok) {
-    throw new Error(`NotifyX 请求失败：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim())
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.notifyxRequestFailed')}：HTTP ${response.status}${rawText ? ` ${rawText}` : ''}`.trim()
+    )
   }
 
   let parsed: NotifyxApiResponse | null = null
   try {
     parsed = rawText ? (JSON.parse(rawText) as NotifyxApiResponse) : null
   } catch {
-    throw new Error(`NotifyX 返回了无法解析的响应：${rawText || 'empty response'}`)
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.notifyxInvalidResponse')}：${rawText || getNotificationFallbackMessage(DEFAULT_APP_LOCALE, 'emptyResponse')}`
+    )
   }
 
   if (!parsed || parsed.status !== 'queued') {
-    throw new Error(`NotifyX 请求被拒绝：${parsed?.message || rawText || 'unknown error'}`)
+    throw new Error(
+      `${getMessage(DEFAULT_APP_LOCALE, 'api.errors.notifications.notifyxRejected')}：${parsed?.message || rawText || getNotificationFallbackMessage(DEFAULT_APP_LOCALE, 'unknown')}`
+    )
   }
 }
 
@@ -934,15 +1042,31 @@ export async function dispatchNotificationEvent(
   const skipped = results.filter((result) => result.status === 'skipped')
   const details = results
     .map((result) => `${result.channel}:${result.status}${result.message ? `(${result.message})` : ''}`)
-    .join('；')
+    .join(getMessage(locale, 'common.separators.notificationDetail'))
   const name = String(params.payload.name ?? params.resourceKey).trim() || params.resourceKey
 
   if (failed.length > 0) {
-    console.warn(`[notification] ${name}：通知渠道 ${successCount} 个成功，${failed.length} 个失败，${skipped.length} 个跳过。${details}`)
+    console.warn(
+      getMessage(locale, 'api.runtime.notificationDispatchSummary', {
+        name,
+        success: successCount,
+        failed: failed.length,
+        skipped: skipped.length,
+        details
+      })
+    )
   } else if (successCount > 0) {
-    console.log(`[notification] ${name}：通知渠道 ${successCount} 个成功，${failed.length} 个失败，${skipped.length} 个跳过。${details}`)
+    console.log(
+      getMessage(locale, 'api.runtime.notificationDispatchSummary', {
+        name,
+        success: successCount,
+        failed: failed.length,
+        skipped: skipped.length,
+        details
+      })
+    )
   } else {
-    console.log(`[notification] ${name}：所有通知渠道均已跳过。${details}`)
+    console.log(getMessage(locale, 'api.runtime.notificationDispatchAllSkipped', { name, details }))
   }
 
   return results
@@ -1002,7 +1126,13 @@ export async function sendTestEmailNotification(context: NotificationLocaleConte
   }
 
   const locale = await resolveNotificationLocale(context.locale)
-  await sendEmailWithProvider(await buildStoredTestMessage(settings, 'email', locale), settings.emailProvider, settings.smtpConfig, settings.resendConfig)
+  await sendEmailWithProvider(
+    await buildStoredTestMessage(settings, 'email', locale),
+    settings.emailProvider,
+    settings.smtpConfig,
+    settings.resendConfig,
+    locale
+  )
 }
 
 export async function sendForgotPasswordVerificationCode(
@@ -1020,7 +1150,7 @@ export async function sendForgotPasswordVerificationCode(
 
   if (settings.emailNotificationsEnabled) {
     try {
-      await sendEmailWithProvider(buildChannelMessage('email'), settings.emailProvider, settings.smtpConfig, settings.resendConfig)
+      await sendEmailWithProvider(buildChannelMessage('email'), settings.emailProvider, settings.smtpConfig, settings.resendConfig, locale)
       results.push({ channel: 'email', status: 'success' })
     } catch (error) {
       results.push({
@@ -1155,7 +1285,8 @@ export async function sendTestEmailNotificationWithConfig(config: {
     await buildTestReminderMessage(locale, CHANNEL_TEMPLATE_GROUPS.email, settings.notificationTemplateConfig),
     config.emailProvider,
     config.smtpConfig,
-    config.resendConfig
+    config.resendConfig,
+    locale
   )
 }
 

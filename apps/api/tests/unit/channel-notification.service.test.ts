@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { getMessage } from '@subtracker/shared'
 
 const settingsState = vi.hoisted(() => ({
   getNotificationChannelSettingsMock: vi.fn(async () => ({
@@ -83,6 +84,10 @@ const settingsState = vi.hoisted(() => ({
   }))
 }))
 
+const workerMailerState = vi.hoisted(() => ({
+  sendMock: vi.fn(async () => undefined)
+}))
+
 vi.mock('../../src/config', () => ({
   config: {
     resendApiUrl: 'https://api.resend.com/emails'
@@ -111,6 +116,15 @@ vi.mock('../../src/services/worker-lite-state.service', () => ({
   deleteImportPreview: vi.fn()
 }))
 
+vi.mock('worker-mailer', () => ({
+  WorkerMailer: {
+    send: workerMailerState.sendMock
+  },
+  LogLevel: {
+    NONE: 4
+  }
+}))
+
 import {
   formatNotificationDate,
   sendForgotPasswordVerificationCode,
@@ -130,6 +144,7 @@ describe('channel notification service', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     settingsState.getNotificationChannelSettingsMock.mockClear()
+    workerMailerState.sendMock.mockClear()
   })
 
   it('reads notification channel settings only once per dispatch', async () => {
@@ -196,8 +211,90 @@ describe('channel notification service', () => {
       from: 'SubTracker Lite <noreply@example.com>',
       to: ['user@example.com'],
       subject: expect.any(String),
-      text: expect.stringContaining('测试订阅')
+      text: expect.stringContaining(getMessage('zh-CN', 'notifications.tests.subscriptionName'))
     })
+  })
+
+  it('sends smtp email requests through worker-mailer with parsed addresses', async () => {
+    await sendTestEmailNotificationWithConfig({
+      emailProvider: 'smtp',
+      smtpConfig: {
+        host: 'smtp.example.com',
+        port: 587,
+        secure: false,
+        username: 'mailer',
+        password: 'secret',
+        from: 'SubTracker Lite <noreply@example.com>',
+        to: 'Alice <alice@example.com>,bob@example.com'
+      },
+      resendConfig: {
+        apiBaseUrl: 'https://api.resend.com/emails',
+        apiKey: '',
+        from: '',
+        to: ''
+      }
+    })
+
+    expect(workerMailerState.sendMock).toHaveBeenCalledTimes(1)
+    const [smtpOptions, emailOptions] = workerMailerState.sendMock.mock.calls[0] as unknown as [
+      Record<string, unknown>,
+      Record<string, unknown>
+    ]
+
+    expect(smtpOptions).toMatchObject({
+      host: 'smtp.example.com',
+      port: 587,
+      secure: false,
+      credentials: {
+        username: 'mailer',
+        password: 'secret'
+      },
+      authType: ['plain', 'login', 'cram-md5'],
+      logLevel: 4
+    })
+    expect(emailOptions).toMatchObject({
+      from: {
+        name: 'SubTracker Lite',
+        email: 'noreply@example.com'
+      },
+      to: [
+        {
+          name: 'Alice',
+          email: 'alice@example.com'
+        },
+        {
+          email: 'bob@example.com'
+        }
+      ],
+      subject: expect.any(String),
+      text: expect.stringContaining(getMessage('zh-CN', 'notifications.tests.subscriptionName')),
+      html: expect.stringContaining('<')
+    })
+  })
+
+  it('rejects smtp port 25 before connecting to worker-mailer', async () => {
+    await expect(
+      sendTestEmailNotificationWithConfig({
+        emailProvider: 'smtp',
+        smtpConfig: {
+          host: 'smtp.example.com',
+          port: 25,
+          secure: false,
+          username: 'mailer',
+          password: 'secret',
+          from: 'SubTracker Lite <noreply@example.com>',
+          to: 'alice@example.com'
+        },
+        resendConfig: {
+          apiBaseUrl: 'https://api.resend.com/emails',
+          apiKey: '',
+          from: '',
+          to: ''
+        }
+      })
+    ).rejects.toThrow('25')
+
+    expect(workerMailerState.sendMock).not.toHaveBeenCalled()
   })
 
   it('formats ISO date strings to date-only output', () => {
@@ -218,7 +315,7 @@ describe('channel notification service', () => {
     const [url, init] = (fetchMock.mock.calls[0] as unknown) as [string, RequestInit]
     const payload = JSON.parse(String(init.body))
     expect(url).toBe('https://api.resend.com/emails')
-    expect(payload.subject).toContain('密码重置验证码')
-    expect(payload.text).toContain('验证码：123456')
+    expect(payload.subject).toContain(getMessage('zh-CN', 'notifications.forgotPassword.title'))
+    expect(payload.text).toContain(getMessage('zh-CN', 'notifications.forgotPassword.code', { code: '123456' }))
   })
 })

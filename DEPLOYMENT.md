@@ -173,9 +173,35 @@
 
 ## 七、邮件通知
 
-当前分支默认使用：
+当前分支支持两种邮件方式：
 
+- **SMTP**
 - **Resend**
+
+默认行为：
+
+- **新安装 / 空白配置**：默认使用 `SMTP`
+- **历史上已经在用 Resend 的用户**：会继续保持 `Resend`，不会在升级后被强制切换
+
+### SMTP
+
+你需要在系统设置里填写：
+
+- `SMTP Host`
+- `端口`
+- `Secure`
+- `用户名`
+- `密码`
+- `发件人`
+- `收件人`
+
+Cloudflare Worker 下的 SMTP 限制：
+
+- **不支持 25 端口**
+- 推荐使用 **587**（通常配合 STARTTLS / `secure=false`）
+- 或使用 **465**（通常配合隐式 TLS / `secure=true`）
+
+### Resend
 
 你需要在系统设置里填写：
 
@@ -205,6 +231,7 @@ https://api.resend.com/emails
 - Webhook
 - PushPlus
 - Telegram
+- SMTP 邮件
 - Resend 邮件
 - AI 文本 / 图片识别
 - Wallos JSON / SQLite / ZIP 导入
@@ -213,7 +240,6 @@ https://api.resend.com/emails
 ### 不支持
 
 - 本地 OCR
-- 原生 SMTP
 - 标签月预算
 - 独立预算统计页
 - 仪表盘趋势图 / 标签预算图

@@ -1,14 +1,17 @@
 import { FastifyInstance } from 'fastify'
 import {
+  type AppLocale,
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_OVERDUE_REMINDER_RULES,
+  getMessage,
+  isWorkerLiteBlockedSmtpPort,
   SettingsSchema
 } from '@subtracker/shared'
 import { sendError, sendOk } from '../http'
 import { bumpCacheVersions, getCacheVersion } from '../services/cache-version.service'
 import { invalidateWorkerLiteCache } from '../services/worker-lite-cache.service'
 import { withWorkerTieredCache } from '../services/worker-tiered-cache.service'
-import { getAppSettings } from '../services/settings.service'
+import { getAppSettings, getResolvedAppLocale } from '../services/settings.service'
 import { validateNotificationTargetUrl } from '../services/notification-url.service'
 import {
   buildAdvanceReminderRulesFromLegacy,
@@ -24,27 +27,25 @@ import { hasEnabledAppriseTargets } from '../services/apprise-config.service'
 
 const SETTINGS_CACHE_TTL_SECONDS = 5 * 60
 
-function validateSettingsPayload(settings: Awaited<ReturnType<typeof getAppSettings>>) {
-  if (settings.emailNotificationsEnabled) {
-    if (settings.emailProvider === 'smtp') {
-      throw new Error('Cloudflare Worker 运行时暂不支持 SMTP，请改用 Resend')
-    }
+function validateSettingsPayload(settings: Awaited<ReturnType<typeof getAppSettings>>, locale: AppLocale) {
+  const joinFieldLabels = (labels: string[]) => labels.join(getMessage(locale, 'common.separators.fieldList'))
 
-    const missingEmailFields =
+  if (settings.emailNotificationsEnabled) {
+    const missingEmailFields: Array<[string, unknown]> =
       settings.emailProvider === 'resend'
         ? [
-            ['Resend API URL', settings.resendConfig.apiBaseUrl],
-            ['Resend API Key', settings.resendConfig.apiKey],
-            ['发件人', settings.resendConfig.from],
-            ['收件人', settings.resendConfig.to]
+            [getMessage(locale, 'settings.labels.resendApiUrl'), settings.resendConfig.apiBaseUrl],
+            [getMessage(locale, 'settings.labels.resendApiKey'), settings.resendConfig.apiKey],
+            [getMessage(locale, 'common.labels.from'), settings.resendConfig.from],
+            [getMessage(locale, 'common.labels.to'), settings.resendConfig.to]
           ]
         : [
-            ['SMTP Host', settings.smtpConfig.host],
-            ['端口', settings.smtpConfig.port],
-            ['用户名', settings.smtpConfig.username],
-            ['密码', settings.smtpConfig.password],
-            ['发件人', settings.smtpConfig.from],
-            ['收件人', settings.smtpConfig.to]
+            [getMessage(locale, 'common.labels.host'), settings.smtpConfig.host],
+            [getMessage(locale, 'common.labels.port'), settings.smtpConfig.port],
+            [getMessage(locale, 'common.labels.username'), settings.smtpConfig.username],
+            [getMessage(locale, 'common.labels.password'), settings.smtpConfig.password],
+            [getMessage(locale, 'common.labels.from'), settings.smtpConfig.from],
+            [getMessage(locale, 'common.labels.to'), settings.smtpConfig.to]
           ]
 
     const missingEmailLabels = missingEmailFields
@@ -52,95 +53,95 @@ function validateSettingsPayload(settings: Awaited<ReturnType<typeof getAppSetti
       .map(([label]) => label)
 
     if (missingEmailLabels.length) {
-      throw new Error(`启用邮箱通知时必须填写：${missingEmailLabels.join('、')}`)
+      throw new Error(getMessage(locale, 'api.errors.settings.emailFieldsRequired', { fields: joinFieldLabels(missingEmailLabels) }))
     }
   }
 
   if (settings.pushplusNotificationsEnabled && !settings.pushplusConfig.token.trim()) {
-    throw new Error('启用 PushPlus 时必须填写 Token')
+    throw new Error(getMessage(locale, 'api.errors.settings.pushplusTokenRequired'))
   }
 
-  const missingTelegramFields = [
-    ['Bot Token', settings.telegramConfig.botToken],
-    ['Chat ID', settings.telegramConfig.chatId]
-  ]
+  const missingTelegramFields = ([
+    [getMessage(locale, 'common.labels.botToken'), settings.telegramConfig.botToken],
+    [getMessage(locale, 'common.labels.chatId'), settings.telegramConfig.chatId]
+  ] as Array<[string, unknown]>)
     .filter(([, value]) => !String(value ?? '').trim())
     .map(([label]) => label)
 
   if (settings.telegramNotificationsEnabled && missingTelegramFields.length) {
-    throw new Error(`启用 Telegram 通知时必须填写：${missingTelegramFields.join('、')}`)
+    throw new Error(getMessage(locale, 'api.errors.settings.telegramFieldsRequired', { fields: joinFieldLabels(missingTelegramFields) }))
   }
 
   if (settings.serverchanNotificationsEnabled && !settings.serverchanConfig.sendkey.trim()) {
-    throw new Error('启用 Server 酱时必须填写 SendKey')
+    throw new Error(getMessage(locale, 'api.errors.settings.serverchanSendKeyRequired'))
   }
 
   if (settings.gotifyNotificationsEnabled) {
-    const missingGotifyFields = [
-      ['URL', settings.gotifyConfig.url],
-      ['Token', settings.gotifyConfig.token]
-    ]
+    const missingGotifyFields = ([
+      [getMessage(locale, 'common.labels.url'), settings.gotifyConfig.url],
+      [getMessage(locale, 'common.labels.token'), settings.gotifyConfig.token]
+    ] as Array<[string, unknown]>)
       .filter(([, value]) => !String(value ?? '').trim())
       .map(([label]) => label)
 
     if (missingGotifyFields.length) {
-      throw new Error(`启用 Gotify 时必须填写：${missingGotifyFields.join('、')}`)
+      throw new Error(getMessage(locale, 'api.errors.settings.gotifyFieldsRequired', { fields: joinFieldLabels(missingGotifyFields) }))
     }
 
-    validateNotificationTargetUrl(settings.gotifyConfig.url.trim(), 'Gotify URL')
+    validateNotificationTargetUrl(settings.gotifyConfig.url.trim(), getMessage(locale, 'settings.labels.gotifyTargetUrl'))
   }
 
   if (settings.barkNotificationsEnabled) {
     if (!settings.barkConfig.serverUrl.trim()) {
-      throw new Error('启用 Bark 时必须填写 Server URL')
+      throw new Error(getMessage(locale, 'api.errors.settings.barkFieldsRequired', { fields: getMessage(locale, 'common.labels.serverUrl') }))
     }
 
-    validateNotificationTargetUrl(settings.barkConfig.serverUrl.trim(), 'Bark Server URL')
+    validateNotificationTargetUrl(settings.barkConfig.serverUrl.trim(), getMessage(locale, 'settings.labels.barkServerUrl'))
   }
 
   if (settings.notifyxNotificationsEnabled && !settings.notifyxConfig.apiKey.trim()) {
-    throw new Error('启用 NotifyX 时必须填写 API Key')
+    throw new Error(getMessage(locale, 'api.errors.settings.notifyxFieldsRequired', { fields: getMessage(locale, 'common.labels.apiKey') }))
   }
 
   if (settings.appriseNotificationsEnabled) {
-    const missingAppriseFields = [
-      ['Apprise API Base URL', settings.appriseConfig.apiBaseUrl],
-      ['Apprise Key', settings.appriseConfig.key]
-    ]
+    const missingAppriseFields = ([
+      [getMessage(locale, 'settings.labels.appriseApiBaseUrl'), settings.appriseConfig.apiBaseUrl],
+      [getMessage(locale, 'settings.labels.appriseKey'), settings.appriseConfig.key]
+    ] as Array<[string, unknown]>)
       .filter(([, value]) => !String(value ?? '').trim())
       .map(([label]) => label)
 
     if (missingAppriseFields.length) {
-      throw new Error(`启用 Apprise 时必须填写：${missingAppriseFields.join('、')}`)
+      throw new Error(getMessage(locale, 'api.errors.settings.appriseFieldsRequired', { fields: joinFieldLabels(missingAppriseFields) }))
     }
 
     if (!settings.appriseConfig.targets.length) {
-      throw new Error('启用 Apprise 时必须至少配置一个目标')
+      throw new Error(getMessage(locale, 'api.errors.settings.appriseTargetsRequired'))
     }
 
     const invalidTarget = settings.appriseConfig.targets.find((target) => !target.id || !target.name.trim() || !target.url.trim())
     if (invalidTarget) {
-      throw new Error('Apprise 目标必须包含 ID、名称和 URL')
+      throw new Error(getMessage(locale, 'api.errors.settings.appriseTargetFieldsRequired'))
     }
 
     if (!hasEnabledAppriseTargets(settings.appriseConfig)) {
-      throw new Error('启用 Apprise 时必须至少启用一个目标')
+      throw new Error(getMessage(locale, 'api.errors.settings.appriseEnabledTargetsRequired'))
     }
 
-    validateNotificationTargetUrl(settings.appriseConfig.apiBaseUrl.trim(), 'Apprise API Base URL')
+    validateNotificationTargetUrl(settings.appriseConfig.apiBaseUrl.trim(), getMessage(locale, 'settings.labels.appriseApiBaseUrl'))
   }
 
-  const missingAiFields = [
-    ['Provider 名称', settings.aiConfig.providerName],
-    ['Model', settings.aiConfig.model],
-    ['API Base URL', settings.aiConfig.baseUrl],
-    ['API Key', settings.aiConfig.apiKey]
-  ]
+  const missingAiFields = ([
+    [getMessage(locale, 'settings.labels.providerName'), settings.aiConfig.providerName],
+    [getMessage(locale, 'common.labels.model'), settings.aiConfig.model],
+    [getMessage(locale, 'common.labels.apiBaseUrl'), settings.aiConfig.baseUrl],
+    [getMessage(locale, 'common.labels.apiKey'), settings.aiConfig.apiKey]
+  ] as Array<[string, unknown]>)
     .filter(([, value]) => !String(value ?? '').trim())
     .map(([label]) => label)
 
   if ((settings.aiConfig.enabled || settings.aiConfig.dashboardSummaryEnabled) && missingAiFields.length) {
-    throw new Error(`启用 AI 能力时必须填写：${missingAiFields.join('、')}`)
+    throw new Error(getMessage(locale, 'api.errors.settings.aiFieldsRequired', { fields: joinFieldLabels(missingAiFields) }))
   }
 }
 
@@ -196,7 +197,7 @@ export async function settingsRoutes(app: FastifyInstance) {
   app.patch('/settings', async (request, reply) => {
     const parsed = SettingsSchema.partial().safeParse(request.body)
     if (!parsed.success) {
-      return sendError(reply, 422, 'validation_error', 'Invalid settings payload', parsed.error.flatten())
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidSettingsPayload', parsed.error.flatten())
     }
 
     const currentSettings = await getAppSettings()
@@ -205,7 +206,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     try {
       normalizedReminderSettings = normalizeReminderSettingsPayload(parsed.data, currentSettings)
     } catch (error) {
-      return sendError(reply, 422, 'validation_error', error instanceof Error ? error.message : 'Invalid reminder rules')
+      return sendError(reply, 422, 'validation_error', error instanceof Error ? error.message : 'api.errors.validation.invalidReminderRules')
     }
 
     const nextSettings = {
@@ -259,10 +260,22 @@ export async function settingsRoutes(app: FastifyInstance) {
         : currentSettings.aiConfig
     }
 
+    const locale = await getResolvedAppLocale()
+
+    const emailSettingsTouched =
+      parsed.data.emailProvider !== undefined ||
+      parsed.data.emailNotificationsEnabled !== undefined ||
+      parsed.data.smtpConfig !== undefined ||
+      parsed.data.resendConfig !== undefined
+
+    if (emailSettingsTouched && nextSettings.emailProvider === 'smtp' && isWorkerLiteBlockedSmtpPort(nextSettings.smtpConfig.port)) {
+      return sendError(reply, 422, 'validation_error', getMessage(locale, 'api.errors.settings.smtpPort25Blocked'))
+    }
+
     try {
-      validateSettingsPayload(nextSettings)
+      validateSettingsPayload(nextSettings, locale)
     } catch (error) {
-      return sendError(reply, 422, 'validation_error', error instanceof Error ? error.message : 'Invalid settings payload')
+      return sendError(reply, 422, 'validation_error', error instanceof Error ? error.message : 'api.errors.validation.invalidSettingsPayload')
     }
 
     const settingsToPersist: Array<[string, unknown]> = Object.entries(parsed.data).filter(([, value]) => value !== undefined)

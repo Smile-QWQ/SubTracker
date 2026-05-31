@@ -86,10 +86,18 @@ export default {
       noTags: 'No tags'
     },
     errors: {
-      requestFailed: 'Request failed'
+      requestFailed: 'Request failed',
+      workerLimitHint:
+        'This request may have hit the Cloudflare Workers free-plan limits. Please try again later and avoid repeated rapid clicks.',
+      workerCpuLimitExceeded: 'Request failed: the Worker exceeded the CPU limit. {hint}',
+      serviceUnavailableWithWorkerHint: 'Request failed: the service is temporarily unavailable. {hint}'
     },
     placeholders: {
       noFileSelected: 'No file selected'
+    },
+    fallbacks: {
+      emptyResponse: 'empty response',
+      unknown: 'unknown error'
     },
     separators: {
       list: ', ',
@@ -271,7 +279,9 @@ export default {
       notificationSettings:
         'Manage Email, PushPlus, Telegram, ServerChan, Gotify, Bark, NotifyX, Apprise, and Webhook in one place. Save and test each channel independently.',
       notificationSettingsWorkerLite:
-        'Cloudflare Worker runtime only supports Resend for email, and ignore-SSL is unavailable for Webhook and Gotify.',
+        'Cloudflare Worker runtime now supports both SMTP and Resend for email. SMTP on port 25 is unavailable, and ignore-SSL is unavailable for Webhook and Gotify.',
+      smtpPortWorkerLite:
+        'Cloudflare Workers do not support SMTP on port 25. Use 587 (usually with STARTTLS) or 465 (usually with secure enabled).',
       aiSettings: 'The main AI switch controls recognition and connection tests. AI summaries can be turned on or off separately.',
       forgotPasswordChannelRequired: 'Enable at least one direct notification channel first',
       structuredOutput:
@@ -425,6 +435,7 @@ export default {
     },
     validation: {
       emailMissingFields: 'Email notification is missing required fields: {fields}',
+      smtpPort25Blocked: 'Cloudflare Workers do not support SMTP on port 25. Use 465 or 587 instead.',
       pushplusMissingFields: 'PushPlus is missing required fields: {fields}',
       telegramMissingFields: 'Telegram is missing required fields: {fields}',
       serverchanMissingFields: 'ServerChan is missing required fields: {fields}',
@@ -659,6 +670,7 @@ export default {
       failed: 'Failed to generate AI summary'
     },
     sections: {
+      overview: 'Spending overview',
       monthlyTrend: 'Projected monthly spend (next 12 months)',
       tagSpend: 'Spending share by tag',
       statusDistribution: 'Status distribution',
@@ -667,9 +679,22 @@ export default {
       upcoming30: 'Renewal distribution over the next 30 days',
       top10: 'Top 10 subscriptions by monthly spend'
     },
+    summary: {
+      activeSubscriptions: 'Active subscriptions',
+      renewalsIn7Days: 'Renewals in the next 7 days',
+      renewalsIn30Days: 'Renewals in the next 30 days',
+      estimatedMonthlySpend: 'Estimated monthly spend',
+      estimatedYearlySpend: 'Estimated yearly spend',
+      monthlyBudgetUsage: 'Monthly budget usage',
+      yearlyBudgetUsage: 'Yearly budget usage',
+      noBudgetSet: 'Budget not set'
+    },
     empty: {
       noData: 'No data',
       noUpcoming30: 'No renewals in the next 30 days'
+    },
+    fallback: {
+      unknown: 'Unknown'
     },
     series: {
       trend: 'Projected spend',
@@ -888,7 +913,7 @@ export default {
     aiModal: {
       title: 'AI subscription recognition',
       description:
-        'Enter text, upload an image, or paste a screenshot. If the current model does not support image recognition, the app uses local OCR first and then sends the extracted text to the model. Results only fill the form and are not saved automatically.',
+        'Enter text, upload an image, or paste a screenshot. If the current model does not support image input, switch to a model with vision enabled and try again. Results only fill the form and are not saved automatically.',
       loading: 'Recognizing...',
       loadingHint: 'The result will appear automatically when it is ready. No need to click again.',
       textInput: 'Text input',
@@ -974,7 +999,8 @@ export default {
   imports: {
     wallos: {
       title: 'Import Wallos data',
-      description: 'Upload a Wallos JSON file, SQLite database, or ZIP backup. Only tags actually used by imported subscriptions are kept.',
+      description:
+        'Upload a Wallos JSON file, SQLite database, or ZIP backup. SQLite and ZIP files are parsed in the browser first and then submitted to the Worker for persistence. Only tags actually used by imported subscriptions are kept.',
       pickFile: 'Choose a file',
       preview: 'Generate preview',
       confirmImport: 'Confirm import',
@@ -1080,6 +1106,10 @@ export default {
       subscriptionName: 'Test subscription',
       tagName: 'Test tag',
       note: 'This is a test notification.'
+    },
+    preview: {
+      samplePrimaryTag: 'Streaming',
+      samplePrimaryNotes: 'Family plan'
     },
     merge: {
       phaseUpcoming: 'Upcoming renewals',
@@ -1285,15 +1315,25 @@ Hard requirements:
       unusedLogo: 'Unused logo'
     }
   },
+  version: {
+    fallbackTitle: 'Update commit'
+  },
   api: {
     runtime: {
       initialExchangeRateRefreshFailed: '[api] Initial exchange rate refresh failed. Falling back to the existing exchange-rate data.',
-      started: '[api] Started: http://{host}:{port}'
+      started: '[api] Started: http://{host}:{port}',
+      notificationDispatchSummary:
+        '[notification] {name}: {success} channels succeeded, {failed} failed, {skipped} skipped. {details}',
+      notificationDispatchAllSkipped: '[notification] {name}: all notification channels were skipped. {details}'
     },
     errors: {
       unauthorized: 'Please sign in first',
       tooManyAttempts: 'Too many failed sign-in attempts. Please try again later.',
       internal: 'Unexpected server error',
+      common: {
+        notFound: 'Resource not found',
+        unknown: 'unknown error'
+      },
       logoNotFound: 'Logo not found',
       conflict: 'Resource conflict',
       validation: {
@@ -1339,6 +1379,7 @@ Hard requirements:
         invalidWebhookUrlRequired: 'URL is required when Webhook is enabled'
       },
       auth: {
+        loginRequired: 'Please sign in first',
         invalidCredentials: 'Incorrect username or password',
         currentCredentialsInvalid: 'Incorrect current username or password',
         defaultPasswordChangeNotAllowed: 'Default password change is not allowed right now',
@@ -1356,6 +1397,7 @@ Hard requirements:
       },
       settings: {
         emailFieldsRequired: 'To enable email notifications, fill in: {fields}',
+        smtpPort25Blocked: 'Cloudflare Workers do not support SMTP on port 25. Use 465 or 587 instead.',
         pushplusTokenRequired: 'To enable PushPlus, fill in Token',
         telegramFieldsRequired: 'To enable Telegram notifications, fill in: {fields}',
         serverchanSendKeyRequired: 'To enable ServerChan, fill in SendKey',
@@ -1375,10 +1417,16 @@ Hard requirements:
         summaryDisabled: 'AI summary is disabled',
         summaryConfigIncomplete: 'AI summary settings are incomplete',
         invalidRecognitionInput: 'Invalid AI recognition input',
+        requestFailed: 'AI request failed',
         noValidContent: 'AI did not return valid content',
         noRecognizableText: 'No text content is available for recognition',
         ocrNoValidText: 'OCR did not extract valid text from the image. Enter the text manually instead.',
         visionCapabilityDisabled: 'The current provider does not support image input.',
+        textOrImageRequired: 'Provide text or an image first',
+        visionNoOcr:
+          'The current model does not support image input, and the Cloudflare Worker version no longer includes local OCR.',
+        visionUnsupportedNoOcrFallback:
+          'The current model does not support image input, and the Cloudflare Worker version does not provide a local OCR fallback.',
         connectionTestFailed: 'AI connection test failed',
         visionTestFailed: 'AI vision test failed',
         recognitionFailed: 'AI recognition failed',
@@ -1391,6 +1439,9 @@ Hard requirements:
       },
       notifications: {
         emailDisabledOrIncomplete: 'Email notifications are disabled or incomplete',
+        smtpFieldRequired: '{field} is required',
+        smtpAddressInvalid: '{field} is invalid: {value}',
+        smtpPort25Blocked: 'Cloudflare Workers do not support SMTP on port 25. Use 465 or 587 instead.',
         pushplusDisabledOrIncomplete: 'PushPlus notifications are disabled or incomplete',
         telegramDisabledOrIncomplete: 'Telegram notifications are disabled or incomplete',
         serverchanDisabledOrIncomplete: 'ServerChan notifications are disabled or incomplete',
@@ -1436,6 +1487,8 @@ Hard requirements:
         wallosCommitFailed: 'Wallos import failed',
         subtrackerBackupInspectFailed: 'SubTracker backup inspect failed',
         subtrackerBackupCommitFailed: 'SubTracker backup restore failed',
+        fileReadFailed: 'Failed to read the file',
+        base64EncodingUnavailable: 'Base64 encoding is unavailable in the current environment',
         subtrackerBackupManifestInvalid: 'The backup manifest is invalid',
         subtrackerBackupInvalidFile: 'This is not a valid SubTracker backup file',
         subtrackerBackupUnsupportedVersion: 'Unsupported backup version: {version}',
@@ -1444,8 +1497,12 @@ Hard requirements:
         subtrackerBackupFileEmpty: 'The backup file is empty',
         subtrackerBackupMissingManifest: 'The backup ZIP is missing manifest.json',
         subtrackerBackupMissingLogo: 'The backup ZIP is missing logo file: {path}',
+        subtrackerBackupEmptyLogoContent: 'The backup ZIP contains an empty logo file: {path}',
         importTokenInvalid: 'The import token is missing or expired. Generate a new preview first.',
-        wallosDatabaseEmpty: 'The database file is empty'
+        wallosDatabaseEmpty: 'The database file is empty',
+        wallosWorkerR2DisabledIgnoreZipLogos: 'R2 is disabled in the current Worker, so {count} ZIP logos were ignored.',
+        wallosZipLogoMissingUpload: 'ZIP logo {logoRef} is missing uploaded content from the client and was ignored.',
+        wallosZipLogoNotIncluded: 'The ZIP logo file was not uploaded together with the preview and was ignored.'
       },
       wallosWarnings: {
         cycleMissingFallback: 'cycle is missing. Falling back to every 1 month.',
@@ -1469,6 +1526,7 @@ Hard requirements:
       subtrackerBackupWarnings: {
         noLocalLogos: 'This backup does not include local logo files.',
         noPaymentRecords: 'This backup does not include payment records.',
+        workerR2DisabledIgnoreLogos: 'R2 is disabled in the current Worker, so local logos inside the ZIP will be ignored during restore.',
         excludedSecretsAndHistory: 'Login credentials, session secrets, webhook history, and exchange-rate data will not be restored.',
         appendModeDedup:
           'In append mode, subscriptions and payment records are skipped idempotently by their backup CUIDs, and tags with the same name are reused.'
@@ -1494,6 +1552,9 @@ Hard requirements:
         logoDeleteFailed: 'Failed to delete logo',
         logoUploadFailed: 'Failed to upload logo',
         logoImportFailed: 'Failed to import logo',
+        logoStorageDisabledSave: 'Logo storage is disabled, so the logo file cannot be saved.',
+        logoStorageDeleteDisabled: 'Logo storage is disabled, so the logo cannot be deleted.',
+        logoStorageKeyRequired: 'The logo storage key cannot be empty.',
         logoUnsupportedImageType: 'Unsupported logo image type',
         logoBufferEmpty: 'The logo image content is empty',
         logoUploadTypeUnsupported: 'Only PNG, JPG, WEBP, and SVG images are supported',

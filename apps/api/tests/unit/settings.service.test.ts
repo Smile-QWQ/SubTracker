@@ -125,4 +125,80 @@ describe('settings service', () => {
 
     expect(result.forgotPasswordEnabled).toBe(true)
   })
+
+  it('defaults new installations to smtp when no historical resend config exists', async () => {
+    const { getAppSettings } = await import('../../src/services/settings.service')
+
+    const result = await getAppSettings()
+
+    expect(result.emailProvider).toBe('smtp')
+  })
+
+  it('keeps explicit resend provider for existing users', async () => {
+    listSettingsLiteMock.mockResolvedValue(
+      new Map<string, unknown>([
+        ['emailProvider', 'resend'],
+        [
+          'resendConfig',
+          {
+            apiBaseUrl: 'https://api.resend.com',
+            apiKey: 're_test',
+            from: 'noreply@example.com',
+            to: 'user@example.com'
+          }
+        ]
+      ])
+    )
+
+    const { getAppSettings } = await import('../../src/services/settings.service')
+    const result = await getAppSettings()
+
+    expect(result.emailProvider).toBe('resend')
+  })
+
+  it('infers resend provider from stored resend config when provider is missing', async () => {
+    listSettingsLiteMock.mockResolvedValue(
+      new Map<string, unknown>([
+        [
+          'resendConfig',
+          {
+            apiBaseUrl: 'https://api.resend.com',
+            apiKey: '',
+            from: 'noreply@example.com',
+            to: 'user@example.com'
+          }
+        ]
+      ])
+    )
+
+    const { getAppSettings, getNotificationChannelSettings } = await import('../../src/services/settings.service')
+    const appSettings = await getAppSettings()
+    const notificationSettings = await getNotificationChannelSettings()
+
+    expect(appSettings.emailProvider).toBe('resend')
+    expect(notificationSettings.emailProvider).toBe('resend')
+  })
+
+  it('infers resend provider from legacy emailConfig when provider is missing', async () => {
+    listSettingsLiteMock.mockResolvedValue(
+      new Map<string, unknown>([
+        [
+          'emailConfig',
+          {
+            apiBaseUrl: 'https://api.resend.com',
+            apiKey: 'legacy-token',
+            from: 'legacy@example.com',
+            to: 'user@example.com'
+          }
+        ]
+      ])
+    )
+
+    const { getAppSettings } = await import('../../src/services/settings.service')
+    const result = await getAppSettings()
+
+    expect(result.emailProvider).toBe('resend')
+    expect(result.resendConfig.apiKey).toBe('legacy-token')
+    expect(result.resendConfig.from).toBe('legacy@example.com')
+  })
 })

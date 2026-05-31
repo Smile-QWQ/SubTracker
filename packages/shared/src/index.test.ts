@@ -23,6 +23,11 @@ import {
   SettingsSchema,
   SubtrackerBackupCommitSchema,
   SubtrackerBackupInspectSchema,
+  DEFAULT_SMTP_PORT,
+  WORKER_LITE_BLOCKED_SMTP_PORT,
+  hasConfiguredResendConfig,
+  isWorkerLiteBlockedSmtpPort,
+  resolveDefaultEmailProvider,
   WallosImportInspectSchema
 } from '../src/index'
 
@@ -76,6 +81,8 @@ describe('shared schema', () => {
       botToken: '',
       chatId: ''
     })
+    expect(parsed.emailProvider).toBe('smtp')
+    expect(parsed.smtpConfig.port).toBe(DEFAULT_SMTP_PORT)
   })
 
   it('normalizes website urls without protocol', () => {
@@ -178,6 +185,32 @@ describe('shared schema', () => {
     expect(getDefaultAiDashboardSummaryPreviewPrompt('en-US')).toContain('summary compression assistant')
   })
 
+  it('resolves default email provider without overriding historical resend users', () => {
+    expect(resolveDefaultEmailProvider({ storedProvider: 'resend' })).toBe('resend')
+    expect(
+      resolveDefaultEmailProvider({
+        resendConfig: {
+          apiKey: 're_test',
+          from: '',
+          to: ''
+        }
+      })
+    ).toBe('resend')
+    expect(
+      resolveDefaultEmailProvider({
+        resendConfig: {
+          apiKey: '',
+          from: '',
+          to: ''
+        }
+      })
+    ).toBe('smtp')
+    expect(hasConfiguredResendConfig({ apiKey: '', from: 'noreply@example.com', to: '' })).toBe(true)
+    expect(hasConfiguredResendConfig({ apiKey: '', from: '', to: '' })).toBe(false)
+    expect(isWorkerLiteBlockedSmtpPort(WORKER_LITE_BLOCKED_SMTP_PORT)).toBe(true)
+    expect(isWorkerLiteBlockedSmtpPort(587)).toBe(false)
+  })
+
   it('provides locale-aware shared messages with fallback and interpolation', () => {
     expect(getMessage('en-US', 'validation.reminderRules.fallback')).toBe('Use the system default')
     expect(getMessage('en-US', 'api.errors.ai.disabled')).toBe('AI is disabled')
@@ -217,7 +250,10 @@ describe('shared schema', () => {
     expect(getMessage('en-US', 'settings.placeholders.customHeaders')).toContain('X-App: SubTracker Lite')
     expect(getMessage('zh-CN', 'settings.helps.workerRuntime')).toBe('当前运行环境为 Cloudflare Worker + D1')
     expect(getMessage('en-US', 'settings.helps.workerRuntimeR2Disabled')).toContain('remote logo references')
-    expect(getMessage('zh-CN', 'settings.helps.notificationSettingsWorkerLite')).toContain('仅支持 Resend')
+    expect(getMessage('zh-CN', 'settings.helps.notificationSettingsWorkerLite')).toContain('SMTP 与 Resend')
+    expect(getMessage('zh-CN', 'settings.helps.smtpPortWorkerLite')).toContain('25 端口')
+    expect(getMessage('en-US', 'settings.validation.smtpPort25Blocked')).toContain('port 25')
+    expect(getMessage('zh-CN', 'api.errors.notifications.smtpPort25Blocked')).toContain('465 或 587')
     expect(getMessage('en-US', 'settings.about.liteBranch')).toBe('Lite Branch')
     expect(getMessage('en-US', 'nonexistent.message.key')).toBe('nonexistent.message.key')
   })

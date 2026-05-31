@@ -148,6 +148,45 @@ describe('notification routes', () => {
     })
   })
 
+  it('tests smtp email notification with payload', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/notifications/test/email',
+      payload: {
+        emailProvider: 'smtp',
+        smtpConfig: {
+          host: 'smtp.example.com',
+          port: 587,
+          secure: false,
+          username: 'mailer',
+          password: 'secret',
+          from: 'SubTracker <noreply@example.com>',
+          to: 'user@example.com'
+        }
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(notificationMocks.sendTestEmailNotificationWithConfigMock).toHaveBeenCalledWith({
+      emailProvider: 'smtp',
+      smtpConfig: {
+        host: 'smtp.example.com',
+        port: 587,
+        secure: false,
+        username: 'mailer',
+        password: 'secret',
+        from: 'SubTracker <noreply@example.com>',
+        to: 'user@example.com'
+      },
+      resendConfig: {
+        apiBaseUrl: 'https://api.resend.com/emails',
+        apiKey: '',
+        from: '',
+        to: ''
+      }
+    })
+  })
+
   it('tests serverchan notification with stored config', async () => {
     const res = await app.inject({
       method: 'POST',

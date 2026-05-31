@@ -86,10 +86,17 @@ export default {
       noTags: '未打标签'
     },
     errors: {
-      requestFailed: '请求失败'
+      requestFailed: '请求失败',
+      workerLimitHint: '当前请求可能触发了 Cloudflare Worker 免费版限制，请稍后重试，并避免连续重复点击。',
+      workerCpuLimitExceeded: '请求失败：Worker 执行超出 CPU 限制。{hint}',
+      serviceUnavailableWithWorkerHint: '请求失败：服务暂时不可用。{hint}'
     },
     placeholders: {
       noFileSelected: '未选择文件'
+    },
+    fallbacks: {
+      emptyResponse: '空响应',
+      unknown: '未知错误'
     },
     separators: {
       list: '、',
@@ -271,7 +278,8 @@ export default {
       notificationSettings:
         '统一管理邮箱、PushPlus、Telegram、Server 酱、Gotify、Bark、NotifyX、Apprise 与 Webhook。每个渠道都可以单独保存并单独测试。',
       notificationSettingsWorkerLite:
-        'Cloudflare Worker 运行时仅支持 Resend 邮件，Webhook / Gotify 的忽略 SSL 校验不可用。',
+        'Cloudflare Worker 运行时现已支持 SMTP 与 Resend 邮件；SMTP 不支持 25 端口，Webhook / Gotify 的忽略 SSL 校验不可用。',
+      smtpPortWorkerLite: 'Cloudflare Worker 不支持 SMTP 25 端口，推荐使用 587（通常配合 STARTTLS）或 465（通常开启 secure）。',
       aiSettings: 'AI 能力总开关控制识别与连接测试；AI 总结可单独开启或关闭。',
       forgotPasswordChannelRequired: '需先启用至少一个直达通知渠道',
       structuredOutput:
@@ -426,6 +434,7 @@ export default {
     },
     validation: {
       emailMissingFields: '邮箱通知缺少必填项：{fields}',
+      smtpPort25Blocked: 'Cloudflare Worker 不支持 SMTP 25 端口，请改用 465 或 587',
       pushplusMissingFields: 'PushPlus 缺少必填项：{fields}',
       telegramMissingFields: 'Telegram 缺少必填项：{fields}',
       serverchanMissingFields: 'Server 酱缺少必填项：{fields}',
@@ -660,6 +669,7 @@ export default {
       failed: 'AI 总结生成失败'
     },
     sections: {
+      overview: '费用概览',
       monthlyTrend: '月支付趋势（未来12个月）',
       tagSpend: '标签月度支出占比',
       statusDistribution: '状态分布',
@@ -668,9 +678,22 @@ export default {
       upcoming30: '未来30天续订分布',
       top10: '月订阅支出 TOP10'
     },
+    summary: {
+      activeSubscriptions: '活跃订阅',
+      renewalsIn7Days: '7 天内续订',
+      renewalsIn30Days: '30 天内续订',
+      estimatedMonthlySpend: '本月预计支出',
+      estimatedYearlySpend: '年度预计支出',
+      monthlyBudgetUsage: '月预算使用率',
+      yearlyBudgetUsage: '年预算使用率',
+      noBudgetSet: '未设置预算'
+    },
     empty: {
       noData: '暂无数据',
       noUpcoming30: '未来30天暂无续订'
+    },
+    fallback: {
+      unknown: '未知'
     },
     series: {
       trend: '预测金额',
@@ -887,7 +910,7 @@ export default {
     aiModal: {
       title: 'AI 识别订阅',
       description:
-        '支持输入文本、上传图片或直接粘贴截图。若当前模型不支持图片识别，将自动回退到本地 OCR 提取文本后再交给模型清洗。识别结果只会回填表单，不会自动保存。',
+        '支持输入文本、上传图片或直接粘贴截图。若当前模型未启用视觉输入能力，请切换到支持图片识别的模型后再试。识别结果只会回填表单，不会自动保存。',
       loading: '识别中，请稍候...',
       loadingHint: '完成后会自动展示识别结果，无需重复点击。',
       textInput: '文本输入',
@@ -973,7 +996,8 @@ export default {
   imports: {
     wallos: {
       title: '导入 Wallos 数据',
-      description: '支持上传 Wallos 的 JSON、SQLite 数据库或 ZIP 包。当前只导入实际被订阅使用到的标签。',
+      description:
+        '支持上传 Wallos 的 JSON、SQLite 数据库或 ZIP 包。SQLite / ZIP 会先在浏览器端解析，再提交给 Worker 持久化。当前只导入实际被订阅使用到的标签。',
       pickFile: '选择文件',
       preview: '生成预览',
       confirmImport: '确认导入',
@@ -1079,6 +1103,10 @@ export default {
       subscriptionName: '测试订阅',
       tagName: '测试标签',
       note: '这是一条测试通知'
+    },
+    preview: {
+      samplePrimaryTag: '影音',
+      samplePrimaryNotes: '家庭套餐'
     },
     merge: {
       phaseUpcoming: '即将到期',
@@ -1283,15 +1311,25 @@ export default {
       unusedLogo: '未使用 Logo'
     }
   },
+  version: {
+    fallbackTitle: '更新提交'
+  },
   api: {
     runtime: {
       initialExchangeRateRefreshFailed: '[api] 初始汇率刷新失败，将回退到已有汇率数据。',
-      started: '[api] 已启动: http://{host}:{port}'
+      started: '[api] 已启动: http://{host}:{port}',
+      notificationDispatchSummary:
+        '[notification] {name}：通知渠道 {success} 个成功，{failed} 个失败，{skipped} 个跳过。{details}',
+      notificationDispatchAllSkipped: '[notification] {name}：所有通知渠道均已跳过。{details}'
     },
     errors: {
       unauthorized: '请先登录',
       tooManyAttempts: '登录失败次数过多，请稍后再试',
       internal: '未知服务端错误',
+      common: {
+        notFound: '资源不存在',
+        unknown: '未知错误'
+      },
       logoNotFound: 'Logo 不存在',
       conflict: '资源冲突',
       validation: {
@@ -1337,6 +1375,7 @@ export default {
         invalidWebhookUrlRequired: '启用 Webhook 时必须填写 URL'
       },
       auth: {
+        loginRequired: '请先登录',
         invalidCredentials: '用户名或密码错误',
         currentCredentialsInvalid: '原用户名或原密码错误',
         defaultPasswordChangeNotAllowed: '默认密码修改当前不可用',
@@ -1354,6 +1393,7 @@ export default {
       },
       settings: {
         emailFieldsRequired: '启用邮箱通知时必须填写：{fields}',
+        smtpPort25Blocked: 'Cloudflare Worker 不支持 SMTP 25 端口，请改用 465 或 587',
         pushplusTokenRequired: '启用 PushPlus 时必须填写 Token',
         telegramFieldsRequired: '启用 Telegram 通知时必须填写：{fields}',
         serverchanSendKeyRequired: '启用 Server 酱时必须填写 SendKey',
@@ -1373,10 +1413,14 @@ export default {
         summaryDisabled: 'AI 总结未启用',
         summaryConfigIncomplete: 'AI 总结配置不完整',
         invalidRecognitionInput: 'AI 识别输入不合法',
+        requestFailed: 'AI 接口请求失败',
         noValidContent: 'AI 未返回有效内容',
         noRecognizableText: '未获取到可用于识别的文本内容',
         ocrNoValidText: '图片 OCR 未识别出有效文本，请改为手动输入文本内容',
         visionCapabilityDisabled: '当前 Provider 未启用视觉输入能力',
+        textOrImageRequired: '请至少提供文本或图片',
+        visionNoOcr: '当前模型未开启视觉输入，Cloudflare Worker 版本已移除本地 OCR',
+        visionUnsupportedNoOcrFallback: '当前模型不支持视觉输入，且 Cloudflare Worker 版本不提供本地 OCR 回退',
         connectionTestFailed: 'AI 连接测试失败',
         visionTestFailed: 'AI 视觉测试失败',
         recognitionFailed: 'AI 识别失败',
@@ -1389,6 +1433,9 @@ export default {
       },
       notifications: {
         emailDisabledOrIncomplete: '邮箱通知未启用或配置不完整',
+        smtpFieldRequired: '{field}不能为空',
+        smtpAddressInvalid: '{field}格式不合法：{value}',
+        smtpPort25Blocked: 'Cloudflare Worker 不支持 SMTP 25 端口，请改用 465 或 587',
         pushplusDisabledOrIncomplete: 'PushPlus 通知未启用或配置不完整',
         telegramDisabledOrIncomplete: 'Telegram 通知未启用或配置不完整',
         serverchanDisabledOrIncomplete: 'Server 酱通知未启用或配置不完整',
@@ -1434,6 +1481,8 @@ export default {
         wallosCommitFailed: 'Wallos 导入失败',
         subtrackerBackupInspectFailed: 'SubTracker 备份预览失败',
         subtrackerBackupCommitFailed: 'SubTracker 备份恢复失败',
+        fileReadFailed: '读取文件失败',
+        base64EncodingUnavailable: '当前环境无法进行 base64 编码',
         subtrackerBackupManifestInvalid: '备份 manifest 格式无效',
         subtrackerBackupInvalidFile: '不是合法的 SubTracker 备份文件',
         subtrackerBackupUnsupportedVersion: '不支持的备份版本：{version}',
@@ -1442,8 +1491,12 @@ export default {
         subtrackerBackupFileEmpty: '备份文件内容为空',
         subtrackerBackupMissingManifest: '备份 ZIP 缺少 manifest.json',
         subtrackerBackupMissingLogo: '备份 ZIP 缺少 Logo 文件：{path}',
+        subtrackerBackupEmptyLogoContent: '备份 ZIP 中的 Logo 内容为空：{path}',
         importTokenInvalid: '导入令牌不存在或已失效，请重新生成预览',
-        wallosDatabaseEmpty: '数据库文件内容为空'
+        wallosDatabaseEmpty: '数据库文件内容为空',
+        wallosWorkerR2DisabledIgnoreZipLogos: '当前 Worker 未启用 R2，已忽略 {count} 个 ZIP Logo',
+        wallosZipLogoMissingUpload: 'ZIP Logo {logoRef} 缺少前端上传内容，已忽略',
+        wallosZipLogoNotIncluded: 'ZIP Logo 文件未随预览一起上传，已忽略'
       },
       wallosWarnings: {
         cycleMissingFallback: 'cycle 缺失，已回退为每 1 月',
@@ -1467,6 +1520,7 @@ export default {
       subtrackerBackupWarnings: {
         noLocalLogos: '该备份不包含本地 Logo 文件',
         noPaymentRecords: '该备份不包含支付记录',
+        workerR2DisabledIgnoreLogos: '当前 Worker 未启用 R2，恢复时会忽略 ZIP 中的本地 Logo',
         excludedSecretsAndHistory: '不会恢复登录凭据、会话密钥、Webhook 历史和汇率数据',
         appendModeDedup: '追加导入时，订阅与支付记录按备份中的唯一标识（CUID）幂等跳过；同名标签会复用现有标签'
       },
@@ -1491,6 +1545,9 @@ export default {
         logoDeleteFailed: 'Logo 删除失败',
         logoUploadFailed: 'Logo 上传失败',
         logoImportFailed: 'Logo 导入失败',
+        logoStorageDisabledSave: '对象存储未启用，无法保存 Logo 文件',
+        logoStorageDeleteDisabled: '对象存储未启用，无法删除 Logo',
+        logoStorageKeyRequired: 'Logo 存储 key 不能为空',
         logoUnsupportedImageType: '不支持的 Logo 图片类型',
         logoBufferEmpty: 'Logo 图片内容为空',
         logoUploadTypeUnsupported: '仅支持 PNG、JPG、WEBP、SVG 图片',

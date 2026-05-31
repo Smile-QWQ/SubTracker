@@ -3,8 +3,11 @@ import {
   AiConfigSchema,
   DEFAULT_AI_CONFIG,
   DEFAULT_RESEND_API_URL,
+  DEFAULT_SMTP_PORT,
   DEFAULT_TIMEZONE,
   createEmptyNotificationTemplateConfig,
+  hasConfiguredResendConfig,
+  resolveDefaultEmailProvider,
   SettingsSchema,
   type AppLocale,
   type NotificationWebhookSettingsInput,
@@ -27,7 +30,7 @@ import { buildIdleAppriseSyncState, hasEnabledAppriseTargets } from './apprise-c
 
 const DEFAULT_SMTP_CONFIG: SettingsInput['smtpConfig'] = {
   host: '',
-  port: 587,
+  port: DEFAULT_SMTP_PORT,
   secure: false,
   username: '',
   password: '',
@@ -125,6 +128,35 @@ function readLegacyResendConfig(settingsMap: Map<string, unknown>) {
   } satisfies SettingsInput['resendConfig']
 }
 
+function readStoredResendConfig(settingsMap: Map<string, unknown>): SettingsInput['resendConfig'] {
+  const legacyResendConfig = readLegacyResendConfig(settingsMap)
+  const storedResendConfig = readSettingsValue<SettingsInput['resendConfig'] | null>(settingsMap, 'resendConfig', null)
+
+  if (storedResendConfig && hasConfiguredResendConfig(storedResendConfig)) {
+    return storedResendConfig
+  }
+
+  if (legacyResendConfig) {
+    return legacyResendConfig
+  }
+
+  return storedResendConfig ?? DEFAULT_RESEND_CONFIG
+}
+
+function resolveStoredEmailProvider(
+  settingsMap: Map<string, unknown>,
+  resendConfig: SettingsInput['resendConfig']
+): SettingsInput['emailProvider'] {
+  const storedProvider = settingsMap.has('emailProvider')
+    ? readSettingsValue<SettingsInput['emailProvider'] | null>(settingsMap, 'emailProvider', null)
+    : null
+
+  return resolveDefaultEmailProvider({
+    storedProvider,
+    resendConfig
+  })
+}
+
 function readPrimaryWebhookEnabled(settingsMap: Map<string, unknown>) {
   const raw = readSettingsValue<NotificationWebhookSettingsInput | Record<string, unknown> | null>(
     settingsMap,
@@ -218,7 +250,8 @@ export async function getAppSettings(): Promise<SettingsInput> {
       const overdueReminderDays = deriveOverdueReminderDaysFromRules(defaultOverdueReminderRules)
       const tagBudgets = readSettingsValue<Record<string, number>>(settingsMap, 'tagBudgets', {})
       const emailNotificationsEnabled = readSettingsValue(settingsMap, 'emailNotificationsEnabled', false)
-      const emailProvider = readSettingsValue<SettingsInput['emailProvider']>(settingsMap, 'emailProvider', 'resend')
+      const resendConfig = readStoredResendConfig(settingsMap)
+      const emailProvider = resolveStoredEmailProvider(settingsMap, resendConfig)
       const pushplusNotificationsEnabled = readSettingsValue(settingsMap, 'pushplusNotificationsEnabled', false)
       const telegramNotificationsEnabled = readSettingsValue(settingsMap, 'telegramNotificationsEnabled', false)
       const serverchanNotificationsEnabled = readSettingsValue(settingsMap, 'serverchanNotificationsEnabled', false)
@@ -227,11 +260,6 @@ export async function getAppSettings(): Promise<SettingsInput> {
       const notifyxNotificationsEnabled = readSettingsValue(settingsMap, 'notifyxNotificationsEnabled', false)
       const appriseNotificationsEnabled = readSettingsValue(settingsMap, 'appriseNotificationsEnabled', false)
       const smtpConfig = readSettingsValue<SettingsInput['smtpConfig']>(settingsMap, 'smtpConfig', DEFAULT_SMTP_CONFIG)
-      const resendConfig = readSettingsValue<SettingsInput['resendConfig']>(
-        settingsMap,
-        'resendConfig',
-        readLegacyResendConfig(settingsMap) ?? DEFAULT_RESEND_CONFIG
-      )
       const pushplusConfig = readSettingsValue<SettingsInput['pushplusConfig']>(settingsMap, 'pushplusConfig', {
         token: '',
         topic: ''
@@ -335,74 +363,28 @@ export async function getDefaultAdvanceReminderRulesSetting() {
 }
 
 export async function getNotificationChannelSettings() {
-  const [
-    emailNotificationsEnabled,
-    emailProvider,
-    pushplusNotificationsEnabled,
-    telegramNotificationsEnabled,
-    serverchanNotificationsEnabled,
-    gotifyNotificationsEnabled,
-    barkNotificationsEnabled,
-    notifyxNotificationsEnabled,
-    appriseNotificationsEnabled,
-    smtpConfig,
-    resendConfig,
-    pushplusConfig,
-    telegramConfig,
-    serverchanConfig,
-    gotifyConfig,
-    barkConfig,
-    notifyxConfig,
-    appriseConfig,
-    notificationTemplateConfig
-  ] = await Promise.all([
-    getSetting('emailNotificationsEnabled', false),
-    getSetting<SettingsInput['emailProvider']>('emailProvider', 'resend'),
-    getSetting('pushplusNotificationsEnabled', false),
-    getSetting('telegramNotificationsEnabled', false),
-    getSetting('serverchanNotificationsEnabled', false),
-    getSetting('gotifyNotificationsEnabled', false),
-    getSetting('barkNotificationsEnabled', false),
-    getSetting('notifyxNotificationsEnabled', false),
-    getSetting('appriseNotificationsEnabled', false),
-    getSetting<SettingsInput['smtpConfig']>('smtpConfig', DEFAULT_SMTP_CONFIG),
-    getSetting<SettingsInput['resendConfig']>('resendConfig', DEFAULT_RESEND_CONFIG),
-    getSetting<SettingsInput['pushplusConfig']>('pushplusConfig', {
-      token: '',
-      topic: ''
-    }),
-    getSetting<SettingsInput['telegramConfig']>('telegramConfig', {
-      botToken: '',
-      chatId: ''
-    }),
-    getSetting<SettingsInput['serverchanConfig']>('serverchanConfig', DEFAULT_SERVERCHAN_CONFIG),
-    getSetting<SettingsInput['gotifyConfig']>('gotifyConfig', DEFAULT_GOTIFY_CONFIG),
-    getSetting<SettingsInput['barkConfig']>('barkConfig', DEFAULT_BARK_CONFIG),
-    getSetting<SettingsInput['notifyxConfig']>('notifyxConfig', DEFAULT_NOTIFYX_CONFIG),
-    getSetting<SettingsInput['appriseConfig']>('appriseConfig', DEFAULT_APPRISE_CONFIG),
-    getSetting<SettingsInput['notificationTemplateConfig']>('notificationTemplateConfig', DEFAULT_NOTIFICATION_TEMPLATE_CONFIG)
-  ])
+  const settings = await getAppSettings()
 
   return {
-    emailNotificationsEnabled,
-    emailProvider,
-    pushplusNotificationsEnabled,
-    telegramNotificationsEnabled,
-    serverchanNotificationsEnabled,
-    gotifyNotificationsEnabled,
-    barkNotificationsEnabled,
-    notifyxNotificationsEnabled,
-    appriseNotificationsEnabled,
-    smtpConfig,
-    resendConfig,
-    pushplusConfig,
-    telegramConfig,
-    serverchanConfig,
-    gotifyConfig,
-    barkConfig,
-    notifyxConfig,
-    appriseConfig: AppriseConfigSchema.parse(appriseConfig),
-    notificationTemplateConfig
+    emailNotificationsEnabled: settings.emailNotificationsEnabled,
+    emailProvider: settings.emailProvider,
+    pushplusNotificationsEnabled: settings.pushplusNotificationsEnabled,
+    telegramNotificationsEnabled: settings.telegramNotificationsEnabled,
+    serverchanNotificationsEnabled: settings.serverchanNotificationsEnabled,
+    gotifyNotificationsEnabled: settings.gotifyNotificationsEnabled,
+    barkNotificationsEnabled: settings.barkNotificationsEnabled,
+    notifyxNotificationsEnabled: settings.notifyxNotificationsEnabled,
+    appriseNotificationsEnabled: settings.appriseNotificationsEnabled,
+    smtpConfig: settings.smtpConfig,
+    resendConfig: settings.resendConfig,
+    pushplusConfig: settings.pushplusConfig,
+    telegramConfig: settings.telegramConfig,
+    serverchanConfig: settings.serverchanConfig,
+    gotifyConfig: settings.gotifyConfig,
+    barkConfig: settings.barkConfig,
+    notifyxConfig: settings.notifyxConfig,
+    appriseConfig: AppriseConfigSchema.parse(settings.appriseConfig),
+    notificationTemplateConfig: settings.notificationTemplateConfig
   }
 }
 

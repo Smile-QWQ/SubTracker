@@ -251,7 +251,6 @@
                         <n-select
                           v-model:value="settingsForm.emailProvider"
                           :options="emailProviderOptions"
-                          :disabled="isWorkerLiteRuntime"
                         />
                       </n-form-item>
                     </n-grid-item>
@@ -280,7 +279,18 @@
                       </n-form-item>
                       <n-grid :cols="formCols" :x-gap="8">
                         <n-grid-item>
-                          <n-form-item :label="t('common.labels.port')">
+                          <n-form-item>
+                            <template #label>
+                              <span class="label-with-tip">
+                                <span>{{ t('common.labels.port') }}</span>
+                                <n-tooltip trigger="hover">
+                                  <template #trigger>
+                                    <n-icon class="label-with-tip__icon" :component="helpCircleOutline" />
+                                  </template>
+                                  <span>{{ t('settings.helps.smtpPortWorkerLite') }}</span>
+                                </n-tooltip>
+                              </span>
+                            </template>
                             <n-input-number v-model:value="settingsForm.smtpConfig.port" :min="1" :max="65535" style="width: 100%" />
                           </n-form-item>
                         </n-grid-item>
@@ -797,7 +807,9 @@ import {
   DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
   DEFAULT_OVERDUE_REMINDER_RULES,
   DEFAULT_RESEND_API_URL,
-  createEmptyNotificationTemplateConfig
+  DEFAULT_SMTP_PORT,
+  createEmptyNotificationTemplateConfig,
+  isWorkerLiteBlockedSmtpPort
 } from '@subtracker/shared'
 import {
   NAlert,
@@ -931,7 +943,7 @@ const settingsForm = reactive<SettingsPageForm>({
   defaultOverdueReminderRules: DEFAULT_OVERDUE_REMINDER_RULES,
   tagBudgets: {},
   emailNotificationsEnabled: false,
-  emailProvider: 'resend',
+  emailProvider: 'smtp',
   pushplusNotificationsEnabled: false,
   telegramNotificationsEnabled: false,
   serverchanNotificationsEnabled: false,
@@ -941,7 +953,7 @@ const settingsForm = reactive<SettingsPageForm>({
   appriseNotificationsEnabled: false,
   smtpConfig: {
     host: '',
-    port: 587,
+    port: DEFAULT_SMTP_PORT,
     secure: false,
     username: '',
     password: '',
@@ -1069,16 +1081,12 @@ const aiProviderPresetOptions = computed(() => [
   { label: t('settings.options.aiProviderPreset.tencentHunyuan'), value: 'tencent-hunyuan' },
   { label: t('settings.options.aiProviderPreset.volcengineArk'), value: 'volcengine-ark' }
 ] satisfies Array<{ label: string; value: AiProviderPreset }>)
-const emailProviderOptions = computed(() =>
-  isWorkerLiteRuntime.value
-    ? ([{ label: t('settings.options.emailProvider.resend'), value: 'resend' }] satisfies Array<{
-        label: string
-        value: 'smtp' | 'resend'
-      }>)
-    : ([
-        { label: t('settings.options.emailProvider.smtp'), value: 'smtp' },
-        { label: t('settings.options.emailProvider.resend'), value: 'resend' }
-      ] satisfies Array<{ label: string; value: 'smtp' | 'resend' }>)
+const emailProviderOptions = computed(
+  () =>
+    [
+      { label: t('settings.options.emailProvider.smtp'), value: 'smtp' },
+      { label: t('settings.options.emailProvider.resend'), value: 'resend' }
+    ] satisfies Array<{ label: string; value: 'smtp' | 'resend' }>
 )
 const forgotPasswordToggleUnlocked = computed(
   () =>
@@ -1179,10 +1187,6 @@ function normalizeWorkerEmailProvider() {
     return
   }
 
-  if (settingsForm.emailProvider !== 'resend') {
-    settingsForm.emailProvider = 'resend'
-  }
-
   settingsForm.gotifyConfig.ignoreSsl = false
   webhookForm.ignoreSsl = false
 }
@@ -1203,6 +1207,11 @@ function joinFieldLabels(fields: string[]) {
 function validateEmailSettings(action: 'save' | 'test') {
   if (action === 'save' && !settingsForm.emailNotificationsEnabled) {
     return true
+  }
+
+  if (settingsForm.emailProvider === 'smtp' && isWorkerLiteBlockedSmtpPort(settingsForm.smtpConfig.port)) {
+    message.error(t('settings.validation.smtpPort25Blocked'))
+    return false
   }
 
   const missing =

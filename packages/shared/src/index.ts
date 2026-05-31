@@ -269,12 +269,14 @@ export const RenewSubscriptionSchema = z.object({
 })
 
 export const DEFAULT_RESEND_API_URL = 'https://api.resend.com/emails'
+export const DEFAULT_SMTP_PORT = 587
+export const WORKER_LITE_BLOCKED_SMTP_PORT = 25
 
 export const EmailProviderSchema = z.enum(['smtp', 'resend'])
 
 export const EmailConfigSchema = z.object({
   host: z.string().max(200).default(''),
-  port: z.number().int().min(1).max(65535).default(587),
+  port: z.number().int().min(1).max(65535).default(DEFAULT_SMTP_PORT),
   secure: z.boolean().default(false),
   username: z.string().max(200).default(''),
   password: z.string().max(500).default(''),
@@ -288,6 +290,35 @@ export const ResendConfigSchema = z.object({
   from: z.string().max(200).default(''),
   to: z.string().max(500).default('')
 })
+
+export function hasConfiguredResendConfig(
+  config: Pick<z.infer<typeof ResendConfigSchema>, 'apiKey' | 'from' | 'to'> | null | undefined
+) {
+  if (!config) {
+    return false
+  }
+
+  return [config.apiKey, config.from, config.to].some((value) => String(value ?? '').trim().length > 0)
+}
+
+export function resolveDefaultEmailProvider(options: {
+  storedProvider?: z.infer<typeof EmailProviderSchema> | null | undefined
+  resendConfig?: Pick<z.infer<typeof ResendConfigSchema>, 'apiKey' | 'from' | 'to'> | null | undefined
+}) {
+  if (options.storedProvider) {
+    return options.storedProvider
+  }
+
+  if (hasConfiguredResendConfig(options.resendConfig)) {
+    return 'resend' as const
+  }
+
+  return 'smtp' as const
+}
+
+export function isWorkerLiteBlockedSmtpPort(port: number | null | undefined) {
+  return port === WORKER_LITE_BLOCKED_SMTP_PORT
+}
 
 export const PushPlusConfigSchema = z.object({
   token: z.string().max(200).default(''),

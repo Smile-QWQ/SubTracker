@@ -1,11 +1,30 @@
 import Fastify, { type FastifyInstance } from 'fastify'
-import { DEFAULT_RESEND_API_URL } from '@subtracker/shared'
+import { DEFAULT_RESEND_API_URL, DEFAULT_SMTP_PORT } from '@subtracker/shared'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const store = new Map<string, unknown>()
 
 const prismaMock = vi.hoisted(() => ({}))
 const createSubtrackerBackupArchiveMock = vi.hoisted(() => vi.fn())
+
+function resolveStoredEmailProvider() {
+  const storedProvider = store.get('emailProvider') as 'smtp' | 'resend' | undefined
+  if (storedProvider) {
+    return storedProvider
+  }
+
+  const resendConfig = {
+    apiBaseUrl: DEFAULT_RESEND_API_URL,
+    apiKey: '',
+    from: '',
+    to: '',
+    ...(store.get('resendConfig') as Record<string, unknown> | undefined)
+  }
+
+  return [resendConfig.apiKey, resendConfig.from, resendConfig.to].some((value) => String(value ?? '').trim())
+    ? 'resend'
+    : 'smtp'
+}
 
 vi.mock('../../src/db', () => ({
   prisma: prismaMock
@@ -27,14 +46,14 @@ vi.mock('../../src/services/settings.service', () => ({
     defaultOverdueReminderRules: '1&09:30;2&09:30;3&09:30;',
     tagBudgets: {},
     emailNotificationsEnabled: (store.get('emailNotificationsEnabled') as boolean) ?? false,
-    emailProvider: (store.get('emailProvider') as 'smtp' | 'resend' | undefined) ?? 'resend',
+    emailProvider: resolveStoredEmailProvider(),
     pushplusNotificationsEnabled: (store.get('pushplusNotificationsEnabled') as boolean) ?? false,
     telegramNotificationsEnabled: (store.get('telegramNotificationsEnabled') as boolean) ?? false,
     serverchanNotificationsEnabled: (store.get('serverchanNotificationsEnabled') as boolean) ?? false,
     gotifyNotificationsEnabled: (store.get('gotifyNotificationsEnabled') as boolean) ?? false,
     smtpConfig: {
       host: '',
-      port: 587,
+      port: DEFAULT_SMTP_PORT,
       secure: false,
       username: '',
       password: '',
@@ -87,6 +106,7 @@ vi.mock('../../src/services/settings.service', () => ({
       ...(store.get('aiConfig') as Record<string, unknown> | undefined)
     }
   })),
+  getResolvedAppLocale: vi.fn(async () => 'zh-CN'),
   setSetting: vi.fn(async (key: string, value: unknown) => {
     store.set(key, value)
   })
@@ -175,7 +195,7 @@ describe('settings routes validation', () => {
     expect(res.json().data.aiConfig.dashboardSummaryPromptTemplate).toBe('你是一个统计摘要助手。')
   })
 
-  it('rejects smtp email notifications in worker runtime', async () => {
+  it('accepts smtp email notifications with a supported port', async () => {
     const res = await app.inject({
       method: 'PATCH',
       url: '/settings',
@@ -183,19 +203,42 @@ describe('settings routes validation', () => {
         emailNotificationsEnabled: true,
         emailProvider: 'smtp',
         smtpConfig: {
-          host: '',
+          host: 'smtp.example.com',
           port: 587,
           secure: false,
-          username: '',
-          password: '',
-          from: '',
-          to: ''
+          username: 'mailer',
+          password: 'secret',
+          from: 'SubTracker <noreply@example.com>',
+          to: 'user@example.com'
+        }
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data.emailProvider).toBe('smtp')
+  })
+
+  it('rejects smtp port 25 for worker runtime', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      payload: {
+        emailNotificationsEnabled: true,
+        emailProvider: 'smtp',
+        smtpConfig: {
+          host: 'smtp.example.com',
+          port: 25,
+          secure: false,
+          username: 'mailer',
+          password: 'secret',
+          from: 'SubTracker <noreply@example.com>',
+          to: 'user@example.com'
         }
       }
     })
 
     expect(res.statusCode).toBe(422)
-    expect(res.json().error.message).toContain('暂不支持 SMTP')
+    expect(res.json().error.message).toContain('25 端口')
   })
 
   it('rejects incomplete resend config when enabling email notifications with resend', async () => {
@@ -294,5 +337,25 @@ describe('settings routes validation', () => {
     expect(res.statusCode).toBe(200)
     expect(res.json().data.forgotPasswordEnabled).toBe(true)
     expect(store.get('forgotPasswordEnabled')).toBe(true)
+  })
+
+  it('keeps resend for historical users when provider is missing but resend config exists', async () => {
+    store.set('resendConfig', {
+      apiBaseUrl: DEFAULT_RESEND_API_URL,
+      apiKey: 're_test',
+      from: 'SubTracker <noreply@example.com>',
+      to: 'user@example.com'
+    })
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      payload: {
+        mergeMultiSubscriptionNotifications: false
+      }
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data.emailProvider).toBe('resend')
   })
 })
