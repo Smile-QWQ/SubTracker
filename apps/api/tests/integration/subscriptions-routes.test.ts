@@ -328,6 +328,9 @@ describe('subscription routes', () => {
   })
 
   it('returns remaining value fields in subscription detail', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-05-16T00:00:00.000Z'))
+
     routeMocks.prismaMock.subscription.findUnique.mockResolvedValue({
       id: 'sub_1',
       name: 'Pro',
@@ -366,25 +369,44 @@ describe('subscription routes', () => {
         periodStart: new Date('2026-05-01T00:00:00.000Z'),
         periodEnd: new Date('2026-06-01T00:00:00.000Z'),
         createdAt: new Date('2026-05-01T01:00:00.000Z')
+      },
+      {
+        id: 'pay_2',
+        subscriptionId: 'sub_1',
+        amount: 30,
+        currency: 'USD',
+        baseCurrency: 'CNY',
+        convertedAmount: 200,
+        exchangeRate: 6.66,
+        paidAt: new Date('2026-05-20T01:00:00.000Z'),
+        periodStart: new Date('2026-06-01T00:00:00.000Z'),
+        periodEnd: new Date('2026-07-01T00:00:00.000Z'),
+        createdAt: new Date('2026-05-20T01:00:00.000Z')
       }
     ])
 
-    const res = await app.inject({
-      method: 'GET',
-      url: '/subscriptions/sub_1'
-    })
-
-    expect(res.statusCode).toBe(200)
-    expect(res.json().data).toEqual(
-      expect.objectContaining({
-        currentCycleStartDate: expect.any(String),
-        currentCycleEndDate: expect.any(String),
-        remainingDays: expect.any(Number),
-        remainingRatio: expect.any(Number),
-        remainingValue: expect.any(Number),
-        remainingValueCurrency: 'CNY'
+    try {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/subscriptions/sub_1'
       })
-    )
+
+      expect(res.statusCode).toBe(200)
+      expect(res.json().data).toEqual(
+        expect.objectContaining({
+          currentCycleStartDate: expect.any(String),
+          currentCycleEndDate: expect.any(String),
+          remainingDays: 16,
+          remainingRatio: expect.any(Number),
+          remainingValue: expect.any(Number),
+          remainingValueCurrency: 'CNY'
+        })
+      )
+      expect(res.json().data.remainingRatio).toBe(0.5)
+      expect(res.json().data.remainingValue).toBe(107.14)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('restores expired subscriptions to active when nextRenewalDate is moved to the future', async () => {

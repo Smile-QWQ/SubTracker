@@ -12,6 +12,7 @@ services:
       CRON_SCAN: "${CRON_SCAN:-* * * * *}"
       CRON_REFRESH_RATES: "${CRON_REFRESH_RATES:-0 2 * * *}"
       LOG_LEVEL: ${LOG_LEVEL:-warn}
+      DEFAULT_APP_LOCALE: ${DEFAULT_APP_LOCALE:-zh-CN}
       TZ: ${TZ:-Asia/Shanghai}
     volumes:
       - ./data:/app/data

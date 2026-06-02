@@ -8,7 +8,11 @@ services:
       HOST: ${HOST:-0.0.0.0}
       DATABASE_URL: ${DATABASE_URL:-file:/app/data/subtracker.db}
       WEB_ORIGIN: ${WEB_ORIGIN:-https://subtracker.example.com}
+      BASE_CURRENCY: ${BASE_CURRENCY:-CNY}
+      CRON_SCAN: "${CRON_SCAN:-* * * * *}"
+      CRON_REFRESH_RATES: "${CRON_REFRESH_RATES:-0 2 * * *}"
       LOG_LEVEL: ${LOG_LEVEL:-warn}
+      DEFAULT_APP_LOCALE: ${DEFAULT_APP_LOCALE:-zh-CN}
       TZ: ${TZ:-Asia/Shanghai}
     volumes:
       - ./data:/app/data
