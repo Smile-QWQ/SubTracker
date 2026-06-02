@@ -28,10 +28,6 @@ export type SubscriptionRemainingValueSummary = {
   remainingValueCurrency: string
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max)
-}
-
 function selectAlignedPaymentRecord(subscription: SubscriptionLike, paymentRecords: PaymentRecordLike[]) {
   const targetTime = subscription.nextRenewalDate.getTime()
 
@@ -95,24 +91,32 @@ export function calculateSubscriptionRemainingValue(
   )
 
   const cycleStartDay = startOfDayDateInTimezone(currentCycleStart, timezone)
-  const cycleEndDay = endOfDayDateInTimezone(currentCycleEnd, timezone)
+  const nominalCycleEnd = addInterval(currentCycleStart, subscription.billingIntervalCount, subscription.billingIntervalUnit, timezone)
+  const packageEndDay = endOfDayDateInTimezone(nominalCycleEnd, timezone)
+  const actualCycleEndDay = endOfDayDateInTimezone(currentCycleEnd, timezone)
   const totalCycleDays = Math.max(
-    toTimezonedDayjs(cycleEndDay, timezone).diff(toTimezonedDayjs(cycleStartDay, timezone), 'day') + 1,
+    toTimezonedDayjs(packageEndDay, timezone).diff(toTimezonedDayjs(cycleStartDay, timezone), 'day') + 1,
     1
   )
 
   let remainingDays = 0
-  if (!toTimezonedDayjs(now, timezone).isAfter(toTimezonedDayjs(cycleEndDay, timezone))) {
+  const localNow = toTimezonedDayjs(now, timezone)
+  const remainingDaysAnchor = localNow.add(1, 'day')
+
+  if (!localNow.isAfter(toTimezonedDayjs(actualCycleEndDay, timezone))) {
     remainingDays = Math.max(
-      toTimezonedDayjs(cycleEndDay, timezone).diff(toTimezonedDayjs(startOfDayDateInTimezone(now, timezone), timezone), 'day') + 1,
+      toTimezonedDayjs(actualCycleEndDay, timezone).diff(
+        toTimezonedDayjs(startOfDayDateInTimezone(remainingDaysAnchor.toDate(), timezone), timezone),
+        'day'
+      ) + 1,
       0
     )
   }
 
-  const normalizedRemainingDays = clamp(remainingDays, 0, totalCycleDays)
+  const normalizedRemainingDays = Math.max(remainingDays, 0)
   const remainingRatio = Number((normalizedRemainingDays / totalCycleDays).toFixed(4))
-  const rawRemainingValue = Number(clamp(cycleAmount * remainingRatio, 0, cycleAmount).toFixed(2))
   const remainingValueCurrency = options?.baseCurrency?.toUpperCase() || cycleCurrency
+  const rawRemainingValue = Number(Math.max(cycleAmount * remainingRatio, 0).toFixed(2))
   const remainingValue =
     options?.baseCurrency && options.exchangeRatesBaseCurrency && options.exchangeRates
       ? convertAmount(

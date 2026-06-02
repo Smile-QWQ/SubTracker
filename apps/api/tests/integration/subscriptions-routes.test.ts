@@ -28,7 +28,7 @@ const routeMocks = vi.hoisted(() => ({
   getLatestSnapshot: vi.fn(async () => ({
     baseCurrency: 'CNY',
     rates: {
-      USD: 7.2,
+      USD: 0.14,
       CNY: 1
     }
   })),
@@ -446,6 +446,9 @@ describe('subscription routes D1 compatibility', () => {
     const app = Fastify()
     await subscriptionRoutes(app)
 
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-05-16T00:00:00.000Z'))
+
     routeMocks.getSubscriptionWithTagsLite.mockResolvedValue({
       id: 'sub_1',
       name: 'Netflix',
@@ -455,7 +458,7 @@ describe('subscription routes D1 compatibility', () => {
       logoSource: null,
       logoFetchedAt: null,
       status: 'active',
-      amount: 10,
+      amount: 30,
       currency: 'USD',
       billingIntervalCount: 1,
       billingIntervalUnit: 'month',
@@ -471,30 +474,60 @@ describe('subscription routes D1 compatibility', () => {
       updatedAt: new Date('2026-05-01T00:00:00.000Z'),
       tags: []
     })
-    routeMocks.listSubscriptionPaymentRecordsLite.mockResolvedValue([])
+    routeMocks.listSubscriptionPaymentRecordsLite.mockResolvedValue([
+      {
+        id: 'pay_1',
+        subscriptionId: 'sub_1',
+        amount: 30,
+        currency: 'USD',
+        baseCurrency: 'CNY',
+        convertedAmount: 214.29,
+        exchangeRate: 0.14,
+        paidAt: new Date('2026-05-01T01:00:00.000Z'),
+        periodStart: new Date('2026-05-01T00:00:00.000Z'),
+        periodEnd: new Date('2026-06-01T00:00:00.000Z'),
+        createdAt: new Date('2026-05-01T01:00:00.000Z')
+      },
+      {
+        id: 'pay_2',
+        subscriptionId: 'sub_1',
+        amount: 30,
+        currency: 'USD',
+        baseCurrency: 'CNY',
+        convertedAmount: 214.29,
+        exchangeRate: 0.14,
+        paidAt: new Date('2026-05-20T01:00:00.000Z'),
+        periodStart: new Date('2026-06-01T00:00:00.000Z'),
+        periodEnd: new Date('2026-07-01T00:00:00.000Z'),
+        createdAt: new Date('2026-05-20T01:00:00.000Z')
+      }
+    ])
 
-    const response = await app.inject({
-      method: 'GET',
-      url: '/subscriptions/sub_1'
-    })
-
-    expect(response.statusCode).toBe(200)
-    expect(response.json().data).toEqual(
-      expect.objectContaining({
-        currentCycleStartDate: expect.any(String),
-        currentCycleEndDate: expect.any(String),
-        remainingDays: expect.any(Number),
-        remainingRatio: expect.any(Number),
-        remainingValue: expect.any(Number),
-        remainingValueCurrency: 'CNY'
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/subscriptions/sub_1'
       })
-    )
-    expect(routeMocks.getSubscriptionWithTagsLite).toHaveBeenCalledWith('sub_1')
-    expect(routeMocks.listSubscriptionPaymentRecordsLite).toHaveBeenCalledWith('sub_1')
-    expect(routeMocks.prisma.subscription.findUniqueOrThrow).not.toHaveBeenCalled()
-    expect(routeMocks.prisma.paymentRecord.findMany).not.toHaveBeenCalled()
 
-    await app.close()
+      expect(response.statusCode).toBe(200)
+      expect(response.json().data).toEqual(
+        expect.objectContaining({
+          currentCycleStartDate: '2026-05-01',
+          currentCycleEndDate: '2026-06-01',
+          remainingDays: 16,
+          remainingRatio: 0.5,
+          remainingValue: 107.14,
+          remainingValueCurrency: 'CNY'
+        })
+      )
+      expect(routeMocks.getSubscriptionWithTagsLite).toHaveBeenCalledWith('sub_1')
+      expect(routeMocks.listSubscriptionPaymentRecordsLite).toHaveBeenCalledWith('sub_1')
+      expect(routeMocks.prisma.subscription.findUniqueOrThrow).not.toHaveBeenCalled()
+      expect(routeMocks.prisma.paymentRecord.findMany).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+      await app.close()
+    }
   })
 
   it('returns payment records via worker-lite repository helper', async () => {

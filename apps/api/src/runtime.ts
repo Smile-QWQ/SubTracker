@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { PrismaClient } from '@prisma/client'
+import { DEFAULT_APP_LOCALE, normalizeAppLocale } from '@subtracker/shared/locale-core'
 import type { D1Database, Fetcher, R2Bucket } from './worker/types'
 
 export interface WorkerBindings {
@@ -17,6 +18,7 @@ export interface WorkerBindings {
   CRON_RECONCILE_EXPIRED?: string
   CRON_REFRESH_RATES?: string
   RESEND_API_URL?: string
+  DEFAULT_APP_LOCALE?: string
 }
 
 type RuntimeContext = {
@@ -125,6 +127,7 @@ export function getWorkerPublicConfig() {
     cronAutoRenew: getBindingOrEnv('CRON_AUTO_RENEW', '2 * * * *'),
     cronReconcileExpired: getBindingOrEnv('CRON_RECONCILE_EXPIRED', '10 * * * *'),
     cronRefreshRates: getBindingOrEnv('CRON_REFRESH_RATES', '0 * * * *'),
-    resendApiUrl
+    resendApiUrl,
+    defaultAppLocale: normalizeAppLocale(getBindingOrEnv('DEFAULT_APP_LOCALE', DEFAULT_APP_LOCALE), DEFAULT_APP_LOCALE)
   }
 }

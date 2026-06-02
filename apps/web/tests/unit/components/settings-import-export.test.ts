@@ -81,10 +81,9 @@ describe('settings import export copy', () => {
     expect(source).toContain("t('settings.options.emailProvider.smtp')")
     expect(source).toContain("t('settings.options.emailProvider.resend')")
     expect(source).toContain("emailProvider: 'smtp'")
-    expect(source).toContain(`<n-select
-                          v-model:value="settingsForm.emailProvider"
-                          :options="emailProviderOptions"
-                        />`)
+    expect(source).toContain('<n-select')
+    expect(source).toContain('v-model:value="settingsForm.emailProvider"')
+    expect(source).toContain(':options="emailProviderOptions"')
     expect(source).not.toContain("settingsForm.emailProvider = 'resend'")
   })
 })

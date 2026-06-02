@@ -1,4 +1,3 @@
-import { DEFAULT_APP_LOCALE, normalizeAppLocale } from '@subtracker/shared/locale-core'
 import { getWorkerPublicConfig } from './runtime'
 
 export const config = new Proxy(
@@ -19,7 +18,7 @@ export const config = new Proxy(
         cronScan: runtimeConfig.cronScan,
         cronRefreshRates: runtimeConfig.cronRefreshRates,
         resendApiUrl: runtimeConfig.resendApiUrl,
-        defaultAppLocale: normalizeAppLocale(process.env.DEFAULT_APP_LOCALE, DEFAULT_APP_LOCALE)
+        defaultAppLocale: runtimeConfig.defaultAppLocale
       } as const
 
       return baseConfig[property as keyof typeof baseConfig]
