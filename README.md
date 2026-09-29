@@ -75,13 +75,14 @@ Default credentials:
 
 ## Features
 
-- **Subscription management**: create, edit, renew, pause, disable, and restore subscriptions; review renewal history; and manage larger collections with tags, multi-tag filtering, custom ordering, search, bulk status updates, and bulk deletion.
+- **Subscription management**: create, duplicate, edit, renew, pause, disable, and restore subscriptions; review renewal history; and manage larger collections with tags, multi-tag filtering, custom ordering, search, bulk status updates, and bulk deletion.
+- **Lifetime purchases**: track lifetime licenses and one-time purchases separately, with a dedicated investment total and no renewal reminders or recurring spending projections.
 - **Reminder rules**: define reminders before renewal, on the renewal day, and after expiration with the `days&time;` format; override defaults per subscription; and preview the resulting trigger schedule before saving.
-- **Statistics and budgets**: normalize multi-currency subscriptions into a base currency, track spending totals and trends, inspect tag and status breakdowns, review the next 30 days of renewals, compare auto-renew ratios, and configure monthly, yearly, or per-tag budgets.
+- **Statistics and budgets**: normalize multi-currency subscriptions into a base currency, track spending totals and trends, inspect monthly/yearly tag spending and status breakdowns, review the next 30 days of renewals, compare auto-renew ratios, and configure monthly, yearly, or per-tag budgets.
 - **AI assistance**: extract subscription details from text or images into the form, and generate an AI summary on the statistics page.
-- **Calendar and overview**: view subscriptions in a calendar, track upcoming renewals from a dedicated list, and use the dashboard for a consolidated overview.
+- **Calendar and overview**: view subscriptions in a calendar, track upcoming renewals from the dashboard, and renew in place or jump to the matching subscription.
 - **Notifications**: send reminders through Webhook, SMTP / Resend email, PushPlus, Telegram Bot, ServerChan, Gotify, Bark, NotifyX, and Apprise.
-- **Logos and assets**: upload logos, reuse saved local logos, search online, and preserve or match logos during Wallos ZIP imports when possible.
+- **Logos and assets**: upload logos or import them from a URL, reuse saved local logos, search online, and preserve assets in ZIP backups. Supports common raster formats, SVG, and animated GIFs.
 - **Backup and migration**: import Wallos JSON, SQLite, and ZIP backups, and export, inspect, import, or restore native SubTracker ZIP backups.
 - **Multi-currency tools**: maintain exchange-rate data, convert values into the base currency, and use the built-in currency converter.
 - **Login and session controls**: support remember-me sessions, default-password change reminders, and rate limiting after repeated login failures.
