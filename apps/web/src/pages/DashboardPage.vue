@@ -2,7 +2,7 @@
   <div>
     <page-header :title="t('dashboard.page.title')" :subtitle="t('dashboard.page.subtitle')" :icon="gridOutline" />
 
-    <n-grid :cols="24" :x-gap="12" :y-gap="12">
+    <n-grid :cols="30" :x-gap="12" :y-gap="12">
       <n-grid-item v-for="item in summaryCards" :key="item.label" :span="summarySpan">
         <stat-card :label="item.label" :value="item.value" :icon="item.icon" />
       </n-grid-item>
@@ -59,7 +59,7 @@
         </n-card>
       </n-grid-item>
 
-      <n-grid-item v-if="showTagBudgetSummary" :span="24">
+      <n-grid-item v-if="showTagBudgetSummary" :span="30">
         <n-card :title="t('dashboard.sections.tagBudgetOverview')">
           <template v-if="overview?.tagBudgetSummary?.configuredCount">
             <div class="tag-budget-summary">
@@ -95,7 +95,13 @@
 
     <n-grid :cols="chartCols" :x-gap="12" :y-gap="12" style="margin-top: 12px">
       <n-grid-item>
-        <n-card :title="t('dashboard.sections.tagMonthlySpend')">
+        <n-card :title="t(tagSpendPeriod === 'yearly' ? 'dashboard.sections.tagYearlySpend' : 'dashboard.sections.tagMonthlySpend')">
+          <template #header-extra>
+            <n-radio-group v-model:value="tagSpendPeriod" size="small">
+              <n-radio-button value="monthly">{{ t('dashboard.sections.periodMonthly') }}</n-radio-button>
+              <n-radio-button value="yearly">{{ t('dashboard.sections.periodYearly') }}</n-radio-button>
+            </n-radio-group>
+          </template>
           <chart-view v-if="tagSpendOption" :option="tagSpendOption" />
           <n-empty v-else :description="t('dashboard.empty.noData')" />
         </n-card>
@@ -115,9 +121,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h } from 'vue'
+import { computed, h, ref } from 'vue'
 import { useWindowSize } from '@vueuse/core'
-import { NCard, NDataTable, NEmpty, NGrid, NGridItem, NProgress, NTag, useThemeVars } from 'naive-ui'
+import { NCard, NDataTable, NEmpty, NGrid, NGridItem, NProgress, NRadioButton, NRadioGroup, NTag, useThemeVars } from 'naive-ui'
 import { CashOutline, GridOutline, LayersOutline, NotificationsOutline, WalletOutline } from '@vicons/ionicons5'
 import { t } from '@/locales'
 import { useSettingsQuery } from '@/composables/settings-query'
@@ -132,6 +138,7 @@ import { formatDateInTimezone } from '@/utils/timezone'
 const { width } = useWindowSize()
 const gridOutline = GridOutline
 const themeVars = useThemeVars()
+const tagSpendPeriod = ref<'monthly' | 'yearly'>('monthly')
 
 const { data: overview } = useStatisticsOverviewQuery()
 
@@ -140,11 +147,11 @@ const { data: settings } = useSettingsQuery()
 const baseCurrency = computed(() => settings.value?.baseCurrency ?? 'CNY')
 const showTagBudgetSummary = computed(() => settings.value?.enableTagBudgets ?? false)
 const summarySpan = computed(() => {
-  if (width.value < 640) return 24
-  if (width.value < 1100) return 12
+  if (width.value < 640) return 30
+  if (width.value < 1100) return 15
   return 6
 })
-const halfSpan = computed(() => (width.value < 1100 ? 24 : 12))
+const halfSpan = computed(() => (width.value < 1100 ? 30 : 15))
 const chartCols = computed(() => (width.value < 1100 ? 1 : 2))
 
 const summaryCards = computed(() => [
@@ -159,11 +166,17 @@ const summaryCards = computed(() => [
     label: t('dashboard.cards.estimatedYearlySpend'),
     value: overview.value ? formatMoney(overview.value.yearlyEstimatedBase, baseCurrency.value) : '--',
     icon: CashOutline
+  },
+  {
+    label: t('dashboard.cards.lifetimeTotal'),
+    value: overview.value ? formatMoney(overview.value.lifetimeTotalBase ?? 0, baseCurrency.value) : '--',
+    icon: CashOutline
   }
 ])
 
 const tagSpendOption = computed(() => {
-  if (!overview.value?.tagSpend?.length) return null
+  const data = tagSpendPeriod.value === 'yearly' ? overview.value?.tagSpendYearly : overview.value?.tagSpend
+  if (!data?.length) return null
   return {
     tooltip: {
       trigger: 'item',
@@ -176,7 +189,7 @@ const tagSpendOption = computed(() => {
       {
         type: 'pie',
         radius: ['40%', '68%'],
-        data: overview.value.tagSpend
+        data
       }
     ]
   }

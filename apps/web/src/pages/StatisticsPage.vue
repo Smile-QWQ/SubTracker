@@ -91,7 +91,13 @@
         </n-card>
       </n-grid-item>
       <n-grid-item>
-        <n-card :title="t('statistics.sections.tagSpend')">
+        <n-card :title="t(tagSpendPeriod === 'yearly' ? 'dashboard.sections.tagYearlySpend' : 'dashboard.sections.tagMonthlySpend')">
+          <template #header-extra>
+            <n-radio-group v-model:value="tagSpendPeriod" size="small">
+              <n-radio-button value="monthly">{{ t('dashboard.sections.periodMonthly') }}</n-radio-button>
+              <n-radio-button value="yearly">{{ t('dashboard.sections.periodYearly') }}</n-radio-button>
+            </n-radio-group>
+          </template>
           <chart-view v-if="tagSpendOption" :option="tagSpendOption" />
           <n-empty v-else :description="t('statistics.empty.noData')" />
         </n-card>
@@ -144,7 +150,7 @@
 import { computed, ref, watch } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { useQueryClient } from '@tanstack/vue-query'
-import { NAlert, NButton, NCard, NCollapseTransition, NEmpty, NGrid, NGridItem, NSpace, NSpin, useThemeVars } from 'naive-ui'
+import { NAlert, NButton, NCard, NCollapseTransition, NEmpty, NGrid, NGridItem, NRadioButton, NRadioGroup, NSpace, NSpin, useThemeVars } from 'naive-ui'
 import { BarChartOutline } from '@vicons/ionicons5'
 import { t, useAppLocale } from '@/locales'
 import { api } from '@/composables/api'
@@ -177,6 +183,7 @@ const dashboardAiSummary = computed(() => dashboardAiSummaryQuery.data.value)
 const generatingSummary = ref(false)
 const autoGenerateAttempted = ref(false)
 const summaryExpanded = ref(false)
+const tagSpendPeriod = ref<'monthly' | 'yearly'>('monthly')
 
 const baseCurrency = computed(() => settings.value?.baseCurrency ?? 'CNY')
 const gridCols = computed(() => (width.value < 1100 ? 1 : 2))
@@ -246,7 +253,8 @@ const trendOption = computed(() => {
 })
 
 const tagSpendOption = computed(() => {
-  if (!overview.value?.tagSpend.length) return null
+  const data = tagSpendPeriod.value === 'yearly' ? overview.value?.tagSpendYearly : overview.value?.tagSpend
+  if (!data?.length) return null
   return {
     tooltip: {
       trigger: 'item',
@@ -259,7 +267,7 @@ const tagSpendOption = computed(() => {
       {
         type: 'pie',
         radius: ['38%', '68%'],
-        data: overview.value.tagSpend
+        data
       }
     ]
   }

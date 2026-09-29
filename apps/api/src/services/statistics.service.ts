@@ -46,6 +46,7 @@ async function fetchStatisticsSubscriptions() {
       name: true,
       amount: true,
       currency: true,
+      billingType: true,
       billingIntervalCount: true,
       billingIntervalUnit: true,
       autoRenew: true,
@@ -194,9 +195,14 @@ async function buildStatisticsState() {
   }
 
   const activeSubscriptions = subscriptions.filter((item: StatisticsSubscription) => item.status === 'active')
-  const projectedSubscriptions = subscriptions.filter((item: StatisticsSubscription) => ['active', 'expired'].includes(item.status))
+  const recurringSubscriptions = activeSubscriptions.filter((item) => item.billingType !== 'lifetime')
+  const projectedSubscriptions = subscriptions.filter((item: StatisticsSubscription) => item.billingType !== 'lifetime' && ['active', 'expired'].includes(item.status))
+  // Purchase totals include paused/cancelled licenses: their one-time cost was already incurred.
+  const lifetimeTotalBase = subscriptions
+    .filter((item) => item.billingType === 'lifetime')
+    .reduce((total, item) => total + convertAmount(item.amount, item.currency, baseCurrency, rates.baseCurrency, rates.rates), 0)
 
-  for (const subscription of activeSubscriptions) {
+  for (const subscription of recurringSubscriptions) {
     const baseAmount = convertAmount(
       subscription.amount,
       subscription.currency,
@@ -328,6 +334,7 @@ async function buildStatisticsState() {
     baseCurrency,
     monthlyEstimatedBase: Number(monthlyEstimatedBase.toFixed(2)),
     yearlyEstimatedBase: Number(yearlyEstimatedBase.toFixed(2)),
+    lifetimeTotalBase: Number(lifetimeTotalBase.toFixed(2)),
     monthlyTrend,
     upcomingByDay,
     upcomingRenewals,
@@ -354,6 +361,10 @@ async function buildStatisticsState() {
       name,
       value: Number(value.toFixed(2))
     })),
+    tagSpendYearly: Array.from(tagSpendMap.entries()).map(([name, value]) => ({
+      name,
+      value: Number((value * 12).toFixed(2))
+    })),
     currencyDistribution: Array.from(currencyDistributionMap.entries()).map(([currency, amount]) => ({
       currency,
       amount: Number(amount.toFixed(2))
@@ -379,6 +390,7 @@ export async function getOverviewStatistics() {
     upcoming30Days: state.upcoming30DaysCount,
     monthlyEstimatedBase: state.monthlyEstimatedBase,
     yearlyEstimatedBase: state.yearlyEstimatedBase,
+    lifetimeTotalBase: state.lifetimeTotalBase,
     monthlyBudgetBase: state.appSettings.monthlyBudgetBase,
     yearlyBudgetBase: state.appSettings.yearlyBudgetBase,
     monthlyBudgetUsageRatio: state.budgetSummary.monthly.ratio,
@@ -386,6 +398,7 @@ export async function getOverviewStatistics() {
     budgetSummary: state.budgetSummary,
     tagBudgetSummary: state.appSettings.enableTagBudgets ? state.tagBudgetSummary : null,
     tagSpend: state.tagSpend,
+    tagSpendYearly: state.tagSpendYearly,
     monthlyTrend: state.monthlyTrend,
     monthlyTrendMeta: {
       mode: 'projected' as const,

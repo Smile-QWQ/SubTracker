@@ -188,6 +188,28 @@ describe('statistics service', () => {
     expect(result.topSubscriptionsByMonthlyCost.some((item) => item.id === 'paused')).toBe(false)
   })
 
+  it('excludes lifetime purchases from recurring spend and counts their total investment', async () => {
+    const nextRenewalDate = new Date(Date.now() + 86400000)
+    findManySubscriptionsMock.mockResolvedValue([
+      createSubscription('monthly', { amount: 10, nextRenewalDate }),
+      createSubscription('lifetime', { billingType: 'lifetime', amount: 200, nextRenewalDate }),
+      createSubscription('cancelled-lifetime', { billingType: 'lifetime', amount: 50, status: 'cancelled', nextRenewalDate })
+    ])
+
+    const result = await getOverviewStatistics()
+
+    expect(result.monthlyEstimatedBase).toBe(10)
+    expect(result.yearlyEstimatedBase).toBe(120)
+    expect(result.lifetimeTotalBase).toBe(250)
+    expect(result.activeSubscriptions).toBe(2)
+    expect(result.upcomingRenewals.map((item) => item.id)).toEqual(['monthly'])
+    expect(result.upcoming7Days).toBe(1)
+    expect(result.topSubscriptionsByMonthlyCost.map((item) => item.id)).toEqual(['monthly'])
+    expect(result.renewalModeDistribution.reduce((sum, item) => sum + item.count, 0)).toBe(1)
+    expect(result.tagSpend.map((item) => item.value)).toEqual([10])
+    expect(result.tagSpendYearly.map((item) => item.value)).toEqual([120])
+  })
+
   it('does not load tag budgets when tag budgets are disabled', async () => {
     findManySubscriptionsMock.mockResolvedValue([createSubscription('monthly')])
 

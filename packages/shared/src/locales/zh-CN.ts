@@ -518,13 +518,17 @@ export default {
       activeSubscriptions: '活跃订阅',
       renewalsIn7Days: '7 天内续订',
       estimatedMonthlySpend: '本月预计支出',
-      estimatedYearlySpend: '年度预计支出'
+      estimatedYearlySpend: '年度预计支出',
+      lifetimeTotal: '买断订阅总投入'
     },
     sections: {
       monthlyBudgetUsage: '月预算使用',
       yearlyBudgetUsage: '年预算使用',
       tagBudgetOverview: '标签预算概况',
       tagMonthlySpend: '标签月度支出',
+      tagYearlySpend: '标签年度支出',
+      periodMonthly: '月度',
+      periodYearly: '年度',
       monthlyTrend: '月支付趋势（未来12个月）',
       upcoming30: '即将续订（30天）'
     },

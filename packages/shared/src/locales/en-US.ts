@@ -517,13 +517,17 @@ export default {
       activeSubscriptions: 'Active subscriptions',
       renewalsIn7Days: 'Renewals in the next 7 days',
       estimatedMonthlySpend: 'Estimated monthly spend',
-      estimatedYearlySpend: 'Estimated yearly spend'
+      estimatedYearlySpend: 'Estimated yearly spend',
+      lifetimeTotal: 'Lifetime subscription investment'
     },
     sections: {
       monthlyBudgetUsage: 'Monthly budget usage',
       yearlyBudgetUsage: 'Yearly budget usage',
       tagBudgetOverview: 'Tag budget overview',
       tagMonthlySpend: 'Monthly spend by tag',
+      tagYearlySpend: 'Yearly spend by tag',
+      periodMonthly: 'Monthly',
+      periodYearly: 'Yearly',
       monthlyTrend: 'Projected monthly spend (next 12 months)',
       upcoming30: 'Renewals in the next 30 days'
     },

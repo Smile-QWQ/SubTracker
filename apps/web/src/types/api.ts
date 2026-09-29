@@ -132,11 +132,13 @@ export interface StatisticsOverview {
   upcoming30Days: number
   monthlyEstimatedBase: number
   yearlyEstimatedBase: number
+  lifetimeTotalBase?: number
   monthlyBudgetBase?: number | null
   yearlyBudgetBase?: number | null
   monthlyBudgetUsageRatio?: number | null
   yearlyBudgetUsageRatio?: number | null
   tagSpend: Array<{ name: string; value: number }>
+  tagSpendYearly?: Array<{ name: string; value: number }>
   monthlyTrend: Array<{ month: string; amount: number }>
   monthlyTrendMeta: {
     mode: 'projected'
