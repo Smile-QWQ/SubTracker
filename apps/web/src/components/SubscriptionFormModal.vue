@@ -146,6 +146,10 @@
         />
       </n-form-item>
 
+      <n-form-item :label="t('subscriptions.labels.billingType')">
+        <n-select v-model:value="form.billingType" :options="billingTypeOptions" />
+      </n-form-item>
+
       <n-grid :cols="moneyCols" :x-gap="16" :y-gap="8">
         <n-grid-item>
           <n-form-item :label="t('common.labels.amount')" :validation-status="validationStatusOf('amount')" :feedback="formErrors.amount">
@@ -154,10 +158,10 @@
         </n-grid-item>
         <n-grid-item>
           <n-form-item :label="t('common.labels.currency')" :validation-status="validationStatusOf('currency')" :feedback="formErrors.currency">
-            <n-select v-model:value="form.currency" :options="currencyOptions" filterable :placeholder="t('subscriptions.form.currencyPlaceholder')" />
+            <n-select v-model:value="form.currency" :options="currencyOptions" filterable :placeholder="t('subscriptions.form.currencyPlaceholder')" @update:value="currencyEdited = true" />
           </n-form-item>
         </n-grid-item>
-        <n-grid-item>
+        <n-grid-item v-if="!isLifetime">
           <n-form-item :label="t('common.labels.frequency')" :validation-status="validationStatusOf('billingIntervalCount')" :feedback="formErrors.billingIntervalCount">
             <n-select
               v-model:value="form.billingIntervalCount"
@@ -169,7 +173,7 @@
             />
           </n-form-item>
         </n-grid-item>
-        <n-grid-item>
+        <n-grid-item v-if="!isLifetime">
           <n-form-item :label="t('common.labels.unit')" :validation-status="validationStatusOf('billingIntervalUnit')" :feedback="formErrors.billingIntervalUnit">
             <n-select v-model:value="form.billingIntervalUnit" :options="intervalOptions" :placeholder="t('subscriptions.form.unitPlaceholder')" />
           </n-form-item>
@@ -188,7 +192,7 @@
             />
           </n-form-item>
         </n-grid-item>
-        <n-grid-item>
+        <n-grid-item v-if="!isLifetime">
           <n-form-item :validation-status="validationStatusOf('nextRenewalDateTs')" :feedback="formErrors.nextRenewalDateTs">
             <template #label>
               <span class="label-with-action">
@@ -221,7 +225,7 @@
             />
           </n-form-item>
         </n-grid-item>
-        <n-grid-item>
+        <n-grid-item v-if="!isLifetime">
           <n-form-item>
             <template #label>
               <span class="label-with-tip">
@@ -237,7 +241,7 @@
             <n-input v-model:value="form.advanceReminderRules" :placeholder="t('subscriptions.form.advanceReminderRulesPlaceholder')" />
           </n-form-item>
         </n-grid-item>
-        <n-grid-item>
+        <n-grid-item v-if="!isLifetime">
           <n-form-item>
             <template #label>
               <span class="label-with-tip">
@@ -256,6 +260,7 @@
       </n-grid>
 
       <reminder-rules-preview
+        v-if="!isLifetime"
         ref="subscriptionReminderPreviewRef"
         class="subscription-reminder-preview"
         :advance-value="form.advanceReminderRules"
@@ -277,7 +282,7 @@
       </n-form-item>
 
       <div class="form-footer">
-        <n-space class="form-footer__toggles" wrap>
+        <n-space v-if="!isLifetime" class="form-footer__toggles" wrap>
           <n-switch v-model:value="form.webhookEnabled" />
           <span>{{ t('subscriptions.form.notificationEnabledLabel') }}</span>
           <n-switch v-model:value="form.autoRenew" />
@@ -286,6 +291,7 @@
         <n-space class="form-footer__actions" wrap justify="end">
           <n-button :disabled="saving" @click="showAiModal = true">{{ t('subscriptions.form.actions.aiRecognize') }}</n-button>
           <n-button
+            v-if="!isLifetime"
             :disabled="saving"
             :type="subscriptionReminderPreviewVisible ? 'primary' : 'default'"
             :secondary="subscriptionReminderPreviewVisible"
@@ -343,6 +349,7 @@ import {
   canRecalculateNextRenewal,
   parseFrequencyOptionCreateInput,
   type SubscriptionFormErrors,
+  type SubscriptionFormInitialValues,
   validateSubscriptionForm
 } from '@/utils/subscription-form'
 import { useLocalizedMessage } from '@/utils/localized-message'
@@ -355,6 +362,7 @@ const LOGO_TAB_LIBRARY = 'library'
 const props = defineProps<{
   show: boolean
   model?: Subscription | null
+  initialValues?: SubscriptionFormInitialValues | null
   saving?: boolean
   tags: Tag[]
   currencies?: string[]
@@ -384,10 +392,17 @@ const localLogoSearchQuery = ref('')
 const logoFileInputRef = ref<HTMLInputElement | null>(null)
 const formErrors = reactive<SubscriptionFormErrors>({})
 const dateFieldMode = ref<'default' | 'model' | 'manual'>('default')
+const currencyEdited = ref(false)
+const formSource = computed(() => props.model ?? props.initialValues)
 
 const layoutCols = computed(() => (width.value < 700 ? 1 : 2))
-const moneyCols = computed(() => (width.value < 900 ? 2 : 4))
+const moneyCols = computed(() => (isLifetime.value || width.value < 900 ? 2 : 4))
 const dateCols = computed(() => (width.value < 900 ? 1 : 2))
+
+const billingTypeOptions = computed(() => [
+  { label: t('subscriptions.billingType.recurring'), value: 'recurring' },
+  { label: t('subscriptions.billingType.lifetime'), value: 'lifetime' }
+])
 
 const intervalOptions = computed(() => [
   { label: t('common.units.day'), value: 'day' },
@@ -407,7 +422,10 @@ const tagOptions = computed(() =>
 )
 
 const currencyOptions = computed(() =>
-  buildCurrencyOptions(props.currencies?.length ? props.currencies : ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'HKD'])
+  buildCurrencyOptions(Array.from(new Set([
+    ...(props.currencies?.length ? props.currencies : ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'HKD']),
+    form.currency
+  ])))
 )
 
 const filteredLocalLogoLibrary = computed(() =>
@@ -419,7 +437,8 @@ const form = reactive({
   tagIds: [] as string[],
   description: '',
   amount: null as number | null,
-  currency: 'CNY',
+  currency: settings.value?.baseCurrency ?? 'CNY',
+  billingType: 'recurring' as 'recurring' | 'lifetime',
   billingIntervalCount: 1,
   billingIntervalUnit: 'month' as Subscription['billingIntervalUnit'] | '',
   autoRenew: false,
@@ -434,8 +453,10 @@ const form = reactive({
   logoSource: ''
 })
 
+const isLifetime = computed(() => form.billingType === 'lifetime')
+
 const canCalculateNextRenewal = computed(() =>
-  canRecalculateNextRenewal({
+  !isLifetime.value && canRecalculateNextRenewal({
     startDateTs: form.startDateTs,
     billingIntervalCount: Number(form.billingIntervalCount),
     billingIntervalUnit: form.billingIntervalUnit as Subscription['billingIntervalUnit'] | ''
@@ -445,7 +466,7 @@ const canCalculateNextRenewal = computed(() =>
 const resolvedLogoUrl = computed(() => (form.logoUrl ? resolveLogoUrl(form.logoUrl) : ''))
 
 watch(
-  () => props.model,
+  formSource,
   (model) => {
     if (!model) {
       resetForm()
@@ -464,7 +485,7 @@ watch(
       searchingLogoCandidates.value = false
       localLogoLibrary.value = []
       localLogoSearchQuery.value = ''
-      if (!props.model) {
+      if (!formSource.value) {
         resetForm()
       }
       return
@@ -472,8 +493,8 @@ watch(
 
     if (dateFieldMode.value === 'default') {
       applyDefaultDateValues()
-    } else if (dateFieldMode.value === 'model' && props.model) {
-      applyModelDateValues(props.model)
+    } else if (dateFieldMode.value === 'model' && formSource.value) {
+      applyModelDateValues(formSource.value)
     }
   }
 )
@@ -488,8 +509,8 @@ watch(
       return
     }
 
-    if (dateFieldMode.value === 'model' && props.model) {
-      applyModelDateValues(props.model, timezone)
+    if (dateFieldMode.value === 'model' && formSource.value) {
+      applyModelDateValues(formSource.value, timezone)
       return
     }
 
@@ -503,12 +524,26 @@ watch(
   }
 )
 
+watch(
+  () => settings.value?.baseCurrency,
+  (baseCurrency) => {
+    if (baseCurrency && !formSource.value && !currencyEdited.value) {
+      form.currency = baseCurrency
+    }
+  }
+)
+
+watch(isLifetime, () => {
+  subscriptionReminderPreviewVisible.value = false
+  clearFormErrors()
+})
+
 function applyDefaultDateValues(timezone = settings.value?.timezone) {
   form.startDateTs = currentBusinessDatePickerTs(timezone)
   form.nextRenewalDateTs = calculateNextRenewalDateTs(form.startDateTs, 1, 'month')
 }
 
-function applyModelDateValues(model: Subscription, timezone = settings.value?.timezone) {
+function applyModelDateValues(model: SubscriptionFormInitialValues, timezone = settings.value?.timezone) {
   form.startDateTs = businessDateToPickerTs(model.startDate, timezone)
   form.nextRenewalDateTs = businessDateToPickerTs(model.nextRenewalDate, timezone)
 }
@@ -518,7 +553,9 @@ function resetForm() {
   form.tagIds = []
   form.description = ''
   form.amount = null
-  form.currency = 'CNY'
+  currencyEdited.value = false
+  form.currency = settings.value?.baseCurrency ?? 'CNY'
+  form.billingType = 'recurring'
   form.billingIntervalCount = 1
   form.billingIntervalUnit = 'month'
   form.autoRenew = false
@@ -537,12 +574,13 @@ function resetForm() {
   clearFormErrors()
 }
 
-function hydrateFromModel(model: Subscription) {
+function hydrateFromModel(model: SubscriptionFormInitialValues) {
   form.name = model.name
   form.tagIds = model.tags?.map((item) => item.id) ?? []
   form.description = model.description
   form.amount = model.amount
   form.currency = model.currency
+  form.billingType = model.billingType ?? 'recurring'
   form.billingIntervalCount = model.billingIntervalCount
   form.billingIntervalUnit = model.billingIntervalUnit
   form.autoRenew = model.autoRenew ?? false
@@ -562,8 +600,8 @@ function hydrateFromModel(model: Subscription) {
 }
 
 function handleReset() {
-  if (props.model) {
-    hydrateFromModel(props.model)
+  if (formSource.value) {
+    hydrateFromModel(formSource.value)
     message.success(t('subscriptions.messages.resetToCurrent'))
     return
   }
@@ -721,7 +759,10 @@ function applyAiResult(result: AiRecognitionResult) {
   if (result.name) form.name = result.name
   if (result.description) form.description = result.description
   if (result.amount !== undefined) form.amount = result.amount
-  if (result.currency) form.currency = result.currency
+  if (result.currency) {
+    form.currency = result.currency
+    currencyEdited.value = true
+  }
   if (result.billingIntervalCount) form.billingIntervalCount = result.billingIntervalCount
   if (result.billingIntervalUnit) form.billingIntervalUnit = result.billingIntervalUnit
   if (result.startDate) {
@@ -757,6 +798,7 @@ function validationStatusOf(field: keyof SubscriptionFormErrors) {
 
 function handleWebsiteUrlBlur() {
   const validation = validateSubscriptionForm({
+    billingType: form.billingType,
     name: form.name,
     description: form.description,
     amount: form.amount,
@@ -799,6 +841,7 @@ function handleNextRenewalDateUpdate(value: number | null) {
 
 function submit() {
   const validation = validateSubscriptionForm({
+    billingType: form.billingType,
     name: form.name,
     description: form.description,
     amount: form.amount,
@@ -824,7 +867,7 @@ function submit() {
 
   form.websiteUrl = validation.normalizedWebsiteUrl ?? ''
 
-  if (form.startDateTs === null || form.nextRenewalDateTs === null) {
+  if (form.startDateTs === null || (!isLifetime.value && form.nextRenewalDateTs === null)) {
     message.warning(t('subscriptions.messages.chooseRequiredDates'))
     return
   }
@@ -837,14 +880,15 @@ function submit() {
       description: form.description,
       amount: Number(form.amount ?? 0),
       currency: form.currency,
-      billingIntervalCount: Number(form.billingIntervalCount),
-      billingIntervalUnit: form.billingIntervalUnit,
-      autoRenew: form.autoRenew,
-      startDate: pickerTsToDateString(form.startDateTs!),
-      nextRenewalDate: pickerTsToDateString(form.nextRenewalDateTs!),
-      advanceReminderRules: form.advanceReminderRules.trim() || '',
-      overdueReminderRules: form.overdueReminderRules.trim() || '',
-      webhookEnabled: form.webhookEnabled,
+      billingType: form.billingType,
+      billingIntervalCount: isLifetime.value ? 1 : Number(form.billingIntervalCount),
+      billingIntervalUnit: isLifetime.value ? 'month' : form.billingIntervalUnit,
+      autoRenew: !isLifetime.value && form.autoRenew,
+      startDate: pickerTsToDateString(form.startDateTs),
+      nextRenewalDate: pickerTsToDateString(isLifetime.value ? form.startDateTs : form.nextRenewalDateTs!),
+      advanceReminderRules: isLifetime.value ? '' : form.advanceReminderRules.trim(),
+      overdueReminderRules: isLifetime.value ? '' : form.overdueReminderRules.trim(),
+      webhookEnabled: !isLifetime.value && form.webhookEnabled,
       notes: form.notes,
       websiteUrl: validation.normalizedWebsiteUrl,
       logoUrl: form.logoUrl || null,

@@ -768,7 +768,12 @@ export default {
       cancel: '取消',
       resume: '恢复'
     },
+    billingType: {
+      recurring: '周期订阅',
+      lifetime: '终身 / 买断'
+    },
     labels: {
+      billingType: '计费类型',
       nextRenewal: '下次续订',
       autoRenew: '自动续订',
       note: '备注：',

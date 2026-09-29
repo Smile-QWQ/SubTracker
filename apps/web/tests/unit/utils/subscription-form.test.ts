@@ -1,13 +1,53 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildFrequencyOptions,
+  buildSubscriptionCopyDraft,
   calculateNextRenewalDateTs,
   canRecalculateNextRenewal,
   parseFrequencyOptionCreateInput,
-  validateSubscriptionForm
+  validateSubscriptionForm,
+  type SubscriptionFormValidationInput
 } from '../../../src/utils/subscription-form'
 
 describe('subscription form helpers', () => {
+  it('copies only editable values and clones tags without identity or payment records', () => {
+    const source = {
+      id: 'original', name: 'Lifetime license', description: 'Desktop app', amount: 100, currency: 'USD',
+      billingType: 'lifetime' as const, billingIntervalCount: 1, billingIntervalUnit: 'month' as const,
+      autoRenew: false, startDate: '2026-01-01', nextRenewalDate: '2026-01-01',
+      webhookEnabled: false, notes: 'License key', websiteUrl: 'https://example.com', logoUrl: '/logo.png',
+      logoSource: 'upload', status: 'active' as const, notifyDaysBefore: 3,
+      tags: [{ id: 'tag-1', name: 'Tools', color: '#fff', icon: '', sortOrder: 0 }],
+      createdAt: '2026-01-01', updatedAt: '2026-01-01', paymentRecords: [{ id: 'payment-1' }]
+    }
+    const draft = buildSubscriptionCopyDraft(source)
+
+    expect(draft).toMatchObject({ name: source.name, currency: 'USD', billingType: 'lifetime', logoUrl: '/logo.png' })
+    for (const field of ['id', 'status', 'createdAt', 'updatedAt', 'paymentRecords', 'notifyDaysBefore']) {
+      expect(draft).not.toHaveProperty(field)
+    }
+    expect(draft.tags).toEqual(source.tags)
+    expect(draft.tags).not.toBe(source.tags)
+    expect(draft.tags?.[0]).not.toBe(source.tags[0])
+    expect(buildSubscriptionCopyDraft({ ...source, billingType: undefined }).billingType).toBe('recurring')
+  })
+
+  it('ignores renewal placeholders for lifetime but still validates the purchase date and amount', () => {
+    const input: SubscriptionFormValidationInput = {
+      billingType: 'lifetime', name: 'License', description: '', amount: 100, currency: 'USD',
+      billingIntervalCount: 0, billingIntervalUnit: '',
+      startDateTs: Date.parse('2026-01-01'), nextRenewalDateTs: null, websiteUrl: '', notes: ''
+    }
+    expect(validateSubscriptionForm(input).errors).toEqual({})
+    expect(validateSubscriptionForm({ ...input, nextRenewalDateTs: Date.parse('2020-01-01') }).errors).toEqual({})
+    expect(validateSubscriptionForm({ ...input, startDateTs: null, amount: -1 }).errors).toHaveProperty('startDateTs')
+    expect(validateSubscriptionForm({ ...input, amount: -1 }).errors).toHaveProperty('amount')
+    const recurringErrors = validateSubscriptionForm({ ...input, billingType: undefined }).errors
+    expect(recurringErrors).toHaveProperty('billingIntervalCount')
+    expect(recurringErrors).toHaveProperty('billingIntervalUnit')
+    expect(recurringErrors).toHaveProperty('nextRenewalDateTs')
+  })
+
   it('normalizes websiteUrl without protocol before submit', () => {
     const result = validateSubscriptionForm({
       name: 'GitHub Pro',

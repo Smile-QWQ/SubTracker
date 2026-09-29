@@ -1,7 +1,43 @@
 import { readFileSync } from 'node:fs'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { shallowMount } from '@vue/test-utils'
+import { NDescriptionsItem } from 'naive-ui'
+import SubscriptionDetailDrawer from '@/components/SubscriptionDetailDrawer.vue'
+import { t } from '@/locales'
+import type { SubscriptionDetail } from '@/types/api'
+
+vi.mock('@/composables/settings-query', () => ({ useSettingsQuery: () => ({ data: { value: { timezone: 'UTC' } } }) }))
 
 describe('subscription detail drawer remaining value', () => {
+  it('hides recurring metrics and reminder settings for lifetime records', async () => {
+    const detail: SubscriptionDetail = {
+      id: 'lifetime', name: 'License', description: '', notes: '', status: 'active',
+      billingType: 'lifetime', amount: 99, currency: 'USD', billingIntervalCount: 1, billingIntervalUnit: 'month',
+      autoRenew: false, webhookEnabled: false, notifyDaysBefore: 0,
+      startDate: '2026-01-01', nextRenewalDate: '2026-01-01', createdAt: '2026-01-01', updatedAt: '2026-01-01',
+      currentCycleStartDate: '2026-01-01', currentCycleEndDate: '2026-02-01', remainingDays: 0,
+      remainingRatio: 0, remainingValue: 0, remainingValueCurrency: 'USD'
+    }
+    const wrapper = shallowMount(SubscriptionDetailDrawer, {
+      props: { show: true, detail }, global: { renderStubDefaultSlot: true }
+    })
+    const recurringLabels = [
+      'common.labels.autoRenew', 'subscriptions.labels.interval', 'common.labels.nextRenewal',
+      'subscriptions.labels.currentCycle', 'subscriptions.labels.remainingValue',
+      'subscriptions.labels.advanceReminders', 'subscriptions.labels.overdueReminders', 'common.labels.notifications'
+    ].map((key) => t(key))
+    let labels = wrapper.findAllComponents(NDescriptionsItem).map((item) => item.props('label'))
+    for (const label of recurringLabels) expect(labels).not.toContain(label)
+    expect(wrapper.text()).toContain(t('subscriptions.billingType.lifetime'))
+    expect(labels).toContain(t('common.labels.startDate'))
+    expect(labels).toContain(t('subscriptions.labels.originalAmount'))
+
+    await wrapper.setProps({ detail: { ...detail, billingType: undefined } })
+    labels = wrapper.findAllComponents(NDescriptionsItem).map((item) => item.props('label'))
+    for (const label of recurringLabels) expect(labels).toContain(label)
+    wrapper.unmount()
+  })
+
   it('renders remaining value fields in detail drawer', () => {
     const source = readFileSync('src/components/SubscriptionDetailDrawer.vue', 'utf8')
 

@@ -62,6 +62,7 @@ export interface Subscription {
   logoUrl?: string | null
   logoSource?: string | null
   logoFetchedAt?: string | null
+  billingType?: 'recurring' | 'lifetime'
   status: SubscriptionStatus
   amount: number
   currency: string

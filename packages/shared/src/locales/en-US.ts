@@ -767,7 +767,12 @@ export default {
       cancel: 'Cancel',
       resume: 'Resume'
     },
+    billingType: {
+      recurring: 'Recurring',
+      lifetime: 'Lifetime / one-time'
+    },
     labels: {
+      billingType: 'Billing type',
       nextRenewal: 'Next renewal',
       autoRenew: 'Auto-renew',
       note: 'Notes:',

@@ -34,23 +34,27 @@
                 <span v-if="!(detail.tags?.length)">{{ t('common.empty.noTags') }}</span>
               </n-space>
             </n-descriptions-item>
-            <n-descriptions-item :label="t('common.labels.autoRenew')">
+            <n-descriptions-item :label="t('subscriptions.labels.billingType')">
+              {{ isLifetime ? t('subscriptions.billingType.lifetime') : t('subscriptions.billingType.recurring') }}
+            </n-descriptions-item>
+            <n-descriptions-item v-if="!isLifetime" :label="t('common.labels.autoRenew')">
               {{ detail.autoRenew ? t('common.status.enabled') : t('common.status.disabled') }}
             </n-descriptions-item>
-            <n-descriptions-item :label="t('subscriptions.labels.interval')">
+            <n-descriptions-item v-if="!isLifetime" :label="t('subscriptions.labels.interval')">
               {{ formatInterval(detail.billingIntervalCount, detail.billingIntervalUnit) }}
             </n-descriptions-item>
             <n-descriptions-item :label="t('common.labels.startDate')">{{ formatDate(detail.startDate) }}</n-descriptions-item>
-            <n-descriptions-item :label="t('common.labels.nextRenewal')">{{ formatDate(detail.nextRenewalDate) }}</n-descriptions-item>
+            <n-descriptions-item v-if="!isLifetime" :label="t('common.labels.nextRenewal')">{{ formatDate(detail.nextRenewalDate) }}</n-descriptions-item>
             <n-descriptions-item :label="t('subscriptions.labels.originalAmount')">{{ formatMoney(detail.amount, detail.currency) }}</n-descriptions-item>
             <n-descriptions-item
+              v-if="!isLifetime"
               :label="t('subscriptions.labels.currentCycle')"
               :label-style="middleAlignedCellStyle"
               :content-style="middleAlignedCellStyle"
             >
               {{ detail.currentCycleStartDate }} ~ {{ detail.currentCycleEndDate }}
             </n-descriptions-item>
-            <n-descriptions-item :label="t('subscriptions.labels.remainingValue')">
+            <n-descriptions-item v-if="!isLifetime" :label="t('subscriptions.labels.remainingValue')">
               <div class="detail-value-block">
                 <div class="detail-value-block__amount">
                   {{ formatMoney(detail.remainingValue, detail.remainingValueCurrency) }}
@@ -60,7 +64,7 @@
                 </div>
               </div>
             </n-descriptions-item>
-            <n-descriptions-item :label="t('subscriptions.labels.advanceReminders')">
+            <n-descriptions-item v-if="!isLifetime" :label="t('subscriptions.labels.advanceReminders')">
               <n-space v-if="advanceReminderRuleItems.length" vertical size="small">
                 <n-tag v-for="item in advanceReminderRuleItems" :key="item.key" size="small" type="info" :bordered="false">
                   {{ item.description }}
@@ -68,7 +72,7 @@
               </n-space>
               <span v-else>{{ formatReminderRulesText(detail.advanceReminderRules, 'advance', t('validation.reminderRules.fallback'), { i18n: reminderRulesI18n }) }}</span>
             </n-descriptions-item>
-            <n-descriptions-item :label="t('subscriptions.labels.overdueReminders')">
+            <n-descriptions-item v-if="!isLifetime" :label="t('subscriptions.labels.overdueReminders')">
               <n-space v-if="overdueReminderRuleItems.length" vertical size="small">
                 <n-tag v-for="item in overdueReminderRuleItems" :key="item.key" size="small" type="warning" :bordered="false">
                   {{ item.description }}
@@ -76,7 +80,7 @@
               </n-space>
               <span v-else>{{ formatReminderRulesText(detail.overdueReminderRules, 'overdue', t('validation.reminderRules.fallback'), { i18n: reminderRulesI18n }) }}</span>
             </n-descriptions-item>
-            <n-descriptions-item :label="t('common.labels.notifications')">
+            <n-descriptions-item v-if="!isLifetime" :label="t('common.labels.notifications')">
               {{ detail.webhookEnabled ? t('common.status.enabled') : t('common.status.disabled') }}
             </n-descriptions-item>
             <n-descriptions-item :label="t('common.labels.createdAt')">{{ formatDateTime(detail.createdAt) }}</n-descriptions-item>
@@ -118,6 +122,7 @@ const { width } = useWindowSize()
 const { data: settings } = useSettingsQuery()
 const drawerWidth = computed(() => (width.value < 760 ? '100%' : 720))
 const descriptionColumns = computed(() => (width.value < 760 ? 1 : 2))
+const isLifetime = computed(() => props.detail?.billingType === 'lifetime')
 const middleAlignedCellStyle = {
   verticalAlign: 'middle'
 } as const

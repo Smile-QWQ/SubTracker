@@ -3,8 +3,41 @@ import { getMessage, type BillingIntervalUnit } from '@subtracker/shared'
 import type { SelectOption } from 'naive-ui/es/select/src/interface'
 import { getAppLocale } from '@/locales'
 import { normalizeWebsiteUrlInput } from './website-url'
+import type { Subscription } from '@/types/api'
+
+export type SubscriptionFormInitialValues = Pick<Subscription,
+  | 'name' | 'tags' | 'description' | 'amount' | 'currency' | 'billingType'
+  | 'billingIntervalCount' | 'billingIntervalUnit' | 'autoRenew'
+  | 'startDate' | 'nextRenewalDate' | 'advanceReminderRules' | 'overdueReminderRules'
+  | 'webhookEnabled' | 'notes' | 'websiteUrl' | 'logoUrl' | 'logoSource'
+>
+
+// Only editable fields are copied; identity, status and payment history belong to the original.
+export function buildSubscriptionCopyDraft(source: Subscription): SubscriptionFormInitialValues {
+  return {
+    name: source.name,
+    tags: source.tags?.map((tag) => ({ ...tag })),
+    description: source.description,
+    amount: source.amount,
+    currency: source.currency,
+    billingType: source.billingType ?? 'recurring',
+    billingIntervalCount: source.billingIntervalCount,
+    billingIntervalUnit: source.billingIntervalUnit,
+    autoRenew: source.autoRenew,
+    startDate: source.startDate,
+    nextRenewalDate: source.nextRenewalDate,
+    advanceReminderRules: source.advanceReminderRules,
+    overdueReminderRules: source.overdueReminderRules,
+    webhookEnabled: source.webhookEnabled,
+    notes: source.notes,
+    websiteUrl: source.websiteUrl,
+    logoUrl: source.logoUrl,
+    logoSource: source.logoSource
+  }
+}
 
 export interface SubscriptionFormValidationInput {
+  billingType?: 'recurring' | 'lifetime'
   name: string
   description: string
   amount: number | null
@@ -118,11 +151,13 @@ export function validateSubscriptionForm(input: SubscriptionFormValidationInput)
     errors.currency = getMessage(locale, 'validation.subscriptionForm.currencyInvalid')
   }
 
-  if (!Number.isInteger(Number(input.billingIntervalCount)) || Number(input.billingIntervalCount) <= 0) {
+  const isLifetime = input.billingType === 'lifetime'
+
+  if (!isLifetime && (!Number.isInteger(Number(input.billingIntervalCount)) || Number(input.billingIntervalCount) <= 0)) {
     errors.billingIntervalCount = getMessage(locale, 'validation.subscriptionForm.billingIntervalCountInvalid')
   }
 
-  if (!input.billingIntervalUnit) {
+  if (!isLifetime && !input.billingIntervalUnit) {
     errors.billingIntervalUnit = getMessage(locale, 'validation.subscriptionForm.billingIntervalUnitRequired')
   }
 
@@ -130,11 +165,12 @@ export function validateSubscriptionForm(input: SubscriptionFormValidationInput)
     errors.startDateTs = getMessage(locale, 'validation.subscriptionForm.startDateRequired')
   }
 
-  if (input.nextRenewalDateTs === null || !Number.isFinite(input.nextRenewalDateTs)) {
+  if (!isLifetime && (input.nextRenewalDateTs === null || !Number.isFinite(input.nextRenewalDateTs))) {
     errors.nextRenewalDateTs = getMessage(locale, 'validation.subscriptionForm.nextRenewalDateRequired')
   }
 
   if (
+    !isLifetime &&
     input.startDateTs !== null &&
     Number.isFinite(input.startDateTs) &&
     input.nextRenewalDateTs !== null &&
