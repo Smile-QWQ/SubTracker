@@ -6,8 +6,14 @@ import { sendCreated, sendError, sendOk } from '../http'
 
 export async function tagRoutes(app: FastifyInstance) {
   app.get('/tags', async (_request, reply) => {
-    const tags = await prisma.tag.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] })
-    return sendOk(reply, tags)
+    const tags = await prisma.tag.findMany({
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      include: { _count: { select: { subscriptionTags: true } } }
+    })
+    return sendOk(reply, tags.map(({ _count, ...tag }) => ({
+      ...tag,
+      subscriptionCount: _count.subscriptionTags
+    })))
   })
 
   app.post('/tags', async (request, reply) => {

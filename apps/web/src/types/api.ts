@@ -46,6 +46,7 @@ export interface ForgotPasswordResetPayload {
 }
 
 export interface Tag {
+  subscriptionCount?: number
   id: string
   name: string
   color: string

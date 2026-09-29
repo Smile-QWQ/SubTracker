@@ -57,7 +57,7 @@
             :color="tagColor(tagId)"
             @close="removeFilterTag(tagId)"
           >
-            {{ tagName(tagId) }}
+            {{ tagName(tagId) }} ({{ tagSubscriptionCounts[tagId] ?? 0 }})
           </n-tag>
         </n-space>
 
@@ -72,7 +72,7 @@
                 :color="filters.tagIds.includes(item.id) ? { color: item.color, textColor: '#fff' } : undefined"
                 @click="toggleTagFilter(item.id)"
               >
-                {{ item.name }}
+                {{ item.name }} ({{ tagSubscriptionCounts[item.id] ?? 0 }})
               </n-tag>
             </n-space>
           </div>
@@ -434,15 +434,9 @@ const sortOptions = computed(() => [
   { label: t('subscriptions.sort.name'), value: 'name' }
 ])
 
-const tagSubscriptionCounts = computed<Record<string, number>>(() => {
-  const counts: Record<string, number> = {}
-  for (const subscription of subscriptions.value) {
-    for (const tag of subscription.tags ?? []) {
-      counts[tag.id] = (counts[tag.id] ?? 0) + 1
-    }
-  }
-  return counts
-})
+const tagSubscriptionCounts = computed<Record<string, number>>(() =>
+  Object.fromEntries(tags.value.map((tag) => [tag.id, tag.subscriptionCount ?? 0]))
+)
 
 const hasActiveFilters = computed(() => Boolean(filters.q || filters.status || filters.tagIds.length))
 const canDragReorder = computed(
@@ -910,7 +904,10 @@ watch(
 )
 
 async function refetchCurrentSubscriptions() {
-  await queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['subscriptions'] }),
+    queryClient.invalidateQueries({ queryKey: TAGS_QUERY_KEY })
+  ])
   await subscriptionsQuery.refetch()
 }
 

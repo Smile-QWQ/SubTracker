@@ -8,10 +8,11 @@ import SubscriptionsPage from '@/pages/SubscriptionsPage.vue'
 import SubscriptionFormModal from '@/components/SubscriptionFormModal.vue'
 import { api } from '@/composables/api'
 import { t } from '@/locales'
-import type { Subscription } from '@/types/api'
+import type { Subscription, Tag } from '@/types/api'
 
 const width = ref(600)
 const records = ref<Subscription[]>()
+const tagRecords = ref<Tag[]>([])
 const isFetching = ref(false)
 const route = reactive({ query: {} as Record<string, string | string[]> })
 const scrollIntoView = vi.fn()
@@ -26,7 +27,7 @@ vi.mock('@tanstack/vue-query', () => ({
   useQueryClient: () => ({ invalidateQueries })
 }))
 vi.mock('@/composables/settings-query', () => ({ useSettingsQuery: () => ({ data: ref({ baseCurrency: 'EUR', timezone: 'UTC' }) }) }))
-vi.mock('@/composables/tags-query', () => ({ TAGS_QUERY_KEY: ['tags'], useTagsQuery: () => ({ data: ref([]) }) }))
+vi.mock('@/composables/tags-query', () => ({ TAGS_QUERY_KEY: ['tags'], useTagsQuery: () => ({ data: tagRecords }) }))
 vi.mock('@/composables/exchange-rate-query', () => ({ useExchangeRateSnapshotQuery: () => ({ data: ref(undefined) }) }))
 vi.mock('@/utils/localized-message', () => ({ useLocalizedMessage: () => messages }))
 vi.mock('@/composables/api', () => ({ api: {
@@ -62,6 +63,7 @@ function findButton(wrapper: VueWrapper, text: string) {
 
 beforeEach(() => {
   width.value = 600
+  tagRecords.value = []
   records.value = [{ ...legacy }, { ...lifetime }]
   route.query = {}
   isFetching.value = false
@@ -90,6 +92,7 @@ describe('SubscriptionsPage copy and renewal actions', () => {
     await flushPromises()
     expect(api.createSubscription).toHaveBeenCalledWith(payload)
     expect(api.updateSubscription).not.toHaveBeenCalled()
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['tags'] })
     expect(form.props('show')).toBe(false)
     expect(form.props('initialValues')).toBeNull()
     await findButton(wrapper, t('subscriptions.actions.create')).trigger('click')
@@ -157,6 +160,27 @@ describe('SubscriptionsPage copy and renewal actions', () => {
     expect(source).toContain('border: 0;')
     expect(source).toContain('object-fit: contain;')
     expect(source).not.toContain('logoImageStyle')
+  })
+})
+
+describe('SubscriptionsPage tag counts', () => {
+  it.each([600, 1200])('shows individual counts including zero, independent of filtering at width %i', async (viewportWidth) => {
+    width.value = viewportWidth
+    tagRecords.value = [
+      { id: 'tools', name: 'Tools', color: '#333', icon: '', sortOrder: 0, subscriptionCount: 5 },
+      { id: 'cloud', name: 'Cloud', color: '#333', icon: '', sortOrder: 1, subscriptionCount: 2 },
+      { id: 'empty', name: 'Empty', color: '#333', icon: '', sortOrder: 2, subscriptionCount: 0 }
+    ]
+    const wrapper = mountPage()
+    const labels = () => wrapper.findAll('.filter-tag').map(item => item.text())
+    expect(labels()).toEqual(['Tools (5)', 'Cloud (2)', 'Empty (0)'])
+    await wrapper.findAll('.filter-tag')[0].trigger('click')
+    records.value = [{ ...legacy, tags: [tagRecords.value[0], tagRecords.value[1]] }]
+    await nextTick()
+    expect(labels()).toEqual(['Tools (5)', 'Cloud (2)', 'Empty (0)'])
+    tagRecords.value = tagRecords.value.map(tag => tag.id === 'tools' ? { ...tag, subscriptionCount: 6 } : tag)
+    await nextTick()
+    expect(labels()).toEqual(['Tools (6)', 'Cloud (2)', 'Empty (0)'])
   })
 })
 
