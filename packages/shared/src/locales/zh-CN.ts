@@ -525,12 +525,18 @@ export default {
       monthlyBudgetUsage: '月预算使用',
       yearlyBudgetUsage: '年预算使用',
       tagBudgetOverview: '标签预算概况',
+      tagSpend: '标签预计支出',
       tagMonthlySpend: '标签月度支出',
       tagYearlySpend: '标签年度支出',
       periodMonthly: '月度',
       periodYearly: '年度',
       monthlyTrend: '月支付趋势（未来12个月）',
       upcoming30: '即将续订（30天）'
+    },
+    tagSpend: {
+      monthly: '月均预估',
+      yearly: '年度预估',
+      share: '支出占比'
     },
     labels: {
       usedPrefix: '已使用',

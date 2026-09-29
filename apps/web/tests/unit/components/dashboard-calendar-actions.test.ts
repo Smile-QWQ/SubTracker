@@ -29,13 +29,15 @@ const global = { stubs: { Grid: slots, GridItem: slots, Card: slots, Tabs: slots
 describe('dashboard and calendar actions', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('switches tag chart between monthly and yearly amounts and displays lifetime investment', async () => {
+  it('shows both spending periods in one tooltip and displays lifetime investment', () => {
     const wrapper = shallowMount(DashboardPage, { global })
     const chart = wrapper.findComponent({ name: 'ChartView' })
     expect(chart.props('option').series[0].data).toEqual([{ name: 'Tools', value: 10 }])
-    wrapper.findComponent({ name: 'RadioGroup' }).vm.$emit('update:value', 'yearly')
-    await wrapper.vm.$nextTick()
-    expect(chart.props('option').series[0].data).toEqual([{ name: 'Tools', value: 120 }])
+    expect(wrapper.findComponent({ name: 'RadioGroup' }).exists()).toBe(false)
+    const tooltip = chart.props('option').tooltip.formatter({ dataIndex: 0 })
+    expect(tooltip.textContent).toContain('USD 10.00')
+    expect(tooltip.textContent).toContain('USD 120.00')
+    expect(tooltip.textContent).toContain('100.00%')
     expect(wrapper.findAllComponents({ name: 'StatCard' }).map((item) => item.props('value'))).toContain('USD 300.00')
     wrapper.unmount()
   })
@@ -94,9 +96,10 @@ describe('dashboard and calendar actions', () => {
     wrapper.unmount()
   })
 
-  it('also offers yearly tag spend on the statistics page', () => {
+  it('uses the same dual-period tooltip on the statistics page', () => {
     const source = readFileSync('src/pages/StatisticsPage.vue', 'utf8')
-    expect(source).toContain('v-model:value="tagSpendPeriod"')
+    expect(source).toContain('computed(() => buildTagSpendOption(')
+    expect(source).not.toContain('tagSpendPeriod')
     expect(source).toContain('overview.value?.tagSpendYearly')
   })
 })

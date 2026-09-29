@@ -95,13 +95,7 @@
 
     <n-grid :cols="chartCols" :x-gap="12" :y-gap="12" style="margin-top: 12px">
       <n-grid-item>
-        <n-card :title="t(tagSpendPeriod === 'yearly' ? 'dashboard.sections.tagYearlySpend' : 'dashboard.sections.tagMonthlySpend')">
-          <template #header-extra>
-            <n-radio-group v-model:value="tagSpendPeriod" size="small">
-              <n-radio-button value="monthly">{{ t('dashboard.sections.periodMonthly') }}</n-radio-button>
-              <n-radio-button value="yearly">{{ t('dashboard.sections.periodYearly') }}</n-radio-button>
-            </n-radio-group>
-          </template>
+        <n-card :title="t('dashboard.sections.tagSpend')">
           <chart-view v-if="tagSpendOption" :option="tagSpendOption" />
           <n-empty v-else :description="t('dashboard.empty.noData')" />
         </n-card>
@@ -121,9 +115,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, ref } from 'vue'
+import { computed, h } from 'vue'
 import { useWindowSize } from '@vueuse/core'
-import { NCard, NDataTable, NEmpty, NGrid, NGridItem, NProgress, NRadioButton, NRadioGroup, NTag, useThemeVars } from 'naive-ui'
+import { NCard, NDataTable, NEmpty, NGrid, NGridItem, NProgress, NTag, useThemeVars } from 'naive-ui'
 import { CashOutline, GridOutline, LayersOutline, NotificationsOutline, WalletOutline } from '@vicons/ionicons5'
 import { t } from '@/locales'
 import { useSubscriptionRenewal } from '@/composables/subscription-renewal'
@@ -136,12 +130,12 @@ import StatCard from '@/components/StatCard.vue'
 import type { StatisticsOverview } from '@/types/api'
 import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils/subscription-status'
 import { formatDateInTimezone } from '@/utils/timezone'
+import { buildTagSpendOption } from '@/utils/tag-spend-chart'
 
 const { width } = useWindowSize()
 const gridOutline = GridOutline
 const themeVars = useThemeVars()
 const { renewingIds, renew } = useSubscriptionRenewal()
-const tagSpendPeriod = ref<'monthly' | 'yearly'>('monthly')
 
 const { data: overview } = useStatisticsOverviewQuery()
 
@@ -177,26 +171,12 @@ const summaryCards = computed(() => [
   }
 ])
 
-const tagSpendOption = computed(() => {
-  const data = tagSpendPeriod.value === 'yearly' ? overview.value?.tagSpendYearly : overview.value?.tagSpend
-  if (!data?.length) return null
-  return {
-    tooltip: {
-      trigger: 'item',
-      backgroundColor: themeVars.value.cardColor,
-      borderColor: themeVars.value.borderColor,
-      textStyle: { color: themeVars.value.textColor2 }
-    },
-    legend: { bottom: 0, textStyle: { color: themeVars.value.textColor2 } },
-    series: [
-      {
-        type: 'pie',
-        radius: ['40%', '68%'],
-        data
-      }
-    ]
-  }
-})
+const tagSpendOption = computed(() => buildTagSpendOption(
+  overview.value?.tagSpend,
+  overview.value?.tagSpendYearly,
+  baseCurrency.value,
+  themeVars.value
+))
 
 const trendOption = computed(() => {
   if (!overview.value?.monthlyTrend?.length) return null

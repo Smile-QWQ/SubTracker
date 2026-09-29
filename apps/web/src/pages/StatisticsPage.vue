@@ -91,13 +91,7 @@
         </n-card>
       </n-grid-item>
       <n-grid-item>
-        <n-card :title="t(tagSpendPeriod === 'yearly' ? 'dashboard.sections.tagYearlySpend' : 'dashboard.sections.tagMonthlySpend')">
-          <template #header-extra>
-            <n-radio-group v-model:value="tagSpendPeriod" size="small">
-              <n-radio-button value="monthly">{{ t('dashboard.sections.periodMonthly') }}</n-radio-button>
-              <n-radio-button value="yearly">{{ t('dashboard.sections.periodYearly') }}</n-radio-button>
-            </n-radio-group>
-          </template>
+        <n-card :title="t('dashboard.sections.tagSpend')">
           <chart-view v-if="tagSpendOption" :option="tagSpendOption" />
           <n-empty v-else :description="t('statistics.empty.noData')" />
         </n-card>
@@ -150,7 +144,7 @@
 import { computed, ref, watch } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { useQueryClient } from '@tanstack/vue-query'
-import { NAlert, NButton, NCard, NCollapseTransition, NEmpty, NGrid, NGridItem, NRadioButton, NRadioGroup, NSpace, NSpin, useThemeVars } from 'naive-ui'
+import { NAlert, NButton, NCard, NCollapseTransition, NEmpty, NGrid, NGridItem, NSpace, NSpin, useThemeVars } from 'naive-ui'
 import { BarChartOutline } from '@vicons/ionicons5'
 import { t, useAppLocale } from '@/locales'
 import { api } from '@/composables/api'
@@ -165,6 +159,7 @@ import { renderMarkdownToHtml } from '@/utils/simple-markdown'
 import { formatDateInTimezone } from '@/utils/timezone'
 import { formatDateTimeInTimezone } from '@/utils/timezone'
 import { buildTopSubscriptionsOption } from '@/utils/statistics-top-subscriptions'
+import { buildTagSpendOption } from '@/utils/tag-spend-chart'
 import { useLocalizedMessage } from '@/utils/localized-message'
 
 const { width } = useWindowSize()
@@ -183,7 +178,6 @@ const dashboardAiSummary = computed(() => dashboardAiSummaryQuery.data.value)
 const generatingSummary = ref(false)
 const autoGenerateAttempted = ref(false)
 const summaryExpanded = ref(false)
-const tagSpendPeriod = ref<'monthly' | 'yearly'>('monthly')
 
 const baseCurrency = computed(() => settings.value?.baseCurrency ?? 'CNY')
 const gridCols = computed(() => (width.value < 1100 ? 1 : 2))
@@ -252,26 +246,12 @@ const trendOption = computed(() => {
   }
 })
 
-const tagSpendOption = computed(() => {
-  const data = tagSpendPeriod.value === 'yearly' ? overview.value?.tagSpendYearly : overview.value?.tagSpend
-  if (!data?.length) return null
-  return {
-    tooltip: {
-      trigger: 'item',
-      backgroundColor: themeVars.value.cardColor,
-      borderColor: themeVars.value.borderColor,
-      textStyle: { color: themeVars.value.textColor2 }
-    },
-    legend: { bottom: 0, textStyle: { color: themeVars.value.textColor2 } },
-    series: [
-      {
-        type: 'pie',
-        radius: ['38%', '68%'],
-        data
-      }
-    ]
-  }
-})
+const tagSpendOption = computed(() => buildTagSpendOption(
+  overview.value?.tagSpend,
+  overview.value?.tagSpendYearly,
+  baseCurrency.value,
+  themeVars.value
+))
 
 const statusOption = computed(() => {
   const data = overview.value?.statusDistribution.filter((item) => item.count > 0) ?? []

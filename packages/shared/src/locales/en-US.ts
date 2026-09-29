@@ -524,12 +524,18 @@ export default {
       monthlyBudgetUsage: 'Monthly budget usage',
       yearlyBudgetUsage: 'Yearly budget usage',
       tagBudgetOverview: 'Tag budget overview',
+      tagSpend: 'Estimated spend by tag',
       tagMonthlySpend: 'Monthly spend by tag',
       tagYearlySpend: 'Yearly spend by tag',
       periodMonthly: 'Monthly',
       periodYearly: 'Yearly',
       monthlyTrend: 'Projected monthly spend (next 12 months)',
       upcoming30: 'Renewals in the next 30 days'
+    },
+    tagSpend: {
+      monthly: 'Monthly estimate',
+      yearly: 'Yearly estimate',
+      share: 'Share of spending'
     },
     labels: {
       usedPrefix: 'Used',
