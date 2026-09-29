@@ -34,7 +34,7 @@ vi.mock('../../src/services/settings.service', () => ({
   getAppTimezone: subscriptionMocks.getAppTimezoneMock
 }))
 
-import { autoRenewDueSubscriptions, renewSubscription } from '../../src/services/subscription.service'
+import { autoRenewDueSubscriptions, reconcileExpiredSubscriptions, renewSubscription } from '../../src/services/subscription.service'
 
 const AUTO_RENEW_BATCH_LIMIT = 100
 const AUTO_RENEW_MAX_CYCLES_PER_SUBSCRIPTION = 24
@@ -80,6 +80,23 @@ describe('subscription service', () => {
         subscription: { update: subscriptionMocks.subscriptionUpdateMock }
       })
     )
+  })
+
+  it('rejects lifetime renewal before creating payment records', async () => {
+    subscriptionMocks.findUniqueMock.mockResolvedValue(createSubscription('lifetime', { billingType: 'lifetime' }))
+    await expect(renewSubscription('lifetime', undefined, undefined, undefined, undefined, 'en-US')).rejects.toThrow('Lifetime subscriptions do not need renewal')
+    expect(subscriptionMocks.transactionMock).not.toHaveBeenCalled()
+    expect(subscriptionMocks.ensureExchangeRatesMock).not.toHaveBeenCalled()
+  })
+
+  it('filters lifetime subscriptions from automatic renewal and expiry reconciliation', async () => {
+    subscriptionMocks.findManyMock.mockResolvedValue([createSubscription('lifetime', { billingType: 'lifetime' })])
+    expect(await autoRenewDueSubscriptions()).toBe(0)
+    expect(subscriptionMocks.transactionMock).not.toHaveBeenCalled()
+    expect(subscriptionMocks.findManyMock).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ billingType: 'recurring' }) }))
+    subscriptionMocks.findManyMock.mockResolvedValue([])
+    await reconcileExpiredSubscriptions()
+    expect(subscriptionMocks.findManyMock).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({ billingType: 'recurring' }) }))
   })
 
   it('renews a single subscription with fetched context', async () => {

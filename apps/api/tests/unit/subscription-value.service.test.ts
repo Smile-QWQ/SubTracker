@@ -4,6 +4,19 @@ import { calculateSubscriptionRemainingValue } from '../../src/services/subscrip
 describe('subscription remaining value', () => {
   const timezone = 'Asia/Shanghai'
 
+  it('does not derive a finite renewal cycle or residual value for lifetime purchases', () => {
+    const result = calculateSubscriptionRemainingValue({
+      billingType: 'lifetime', amount: 200, currency: 'USD',
+      billingIntervalCount: 1, billingIntervalUnit: 'month',
+      startDate: new Date('2026-05-01T00:00:00.000Z'),
+      nextRenewalDate: new Date('2026-05-01T00:00:00.000Z')
+    }, [], new Date('2026-05-16T00:00:00.000Z'), timezone, { baseCurrency: 'CNY' })
+    expect(result).toEqual({
+      currentCycleStartDate: '2026-05-01', currentCycleEndDate: '',
+      remainingDays: 0, remainingRatio: 0, remainingValue: 0, remainingValueCurrency: 'CNY'
+    })
+  })
+
   it('uses aligned payment record when available', () => {
     const result = calculateSubscriptionRemainingValue(
       {

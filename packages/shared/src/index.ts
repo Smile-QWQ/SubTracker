@@ -179,6 +179,8 @@ export {
 } from './notification-templates'
 
 export const SubscriptionStatusSchema = z.enum(['active', 'paused', 'cancelled', 'expired'])
+export const BillingTypeSchema = z.enum(['recurring', 'lifetime'])
+export type BillingType = z.infer<typeof BillingTypeSchema>
 export const BillingIntervalUnitSchema = z.enum(['day', 'week', 'month', 'quarter', 'year'])
 export const WebhookRequestMethodSchema = z.enum(['POST', 'PUT', 'PATCH', 'DELETE'])
 export const WebhookEventTypeSchema = z.enum([
@@ -238,18 +240,19 @@ export const SubscriptionLogoSchema = z.object({
   logoSource: z.string().max(100).nullable().optional()
 })
 
-export const CreateSubscriptionSchema = z
+const SubscriptionInputSchema = z
   .object({
     name: z.string().min(1).max(150),
     tagIds: z.array(z.string().cuid()).default([]),
     description: z.string().max(500).default(''),
     amount: z.number().nonnegative(),
     currency: z.string().length(3).transform((v) => v.toUpperCase()),
+    billingType: BillingTypeSchema.default('recurring'),
     billingIntervalCount: z.number().int().positive().default(1),
-    billingIntervalUnit: BillingIntervalUnitSchema,
+    billingIntervalUnit: BillingIntervalUnitSchema.optional(),
     autoRenew: z.boolean().default(false),
     startDate: z.string().date(),
-    nextRenewalDate: z.string().date(),
+    nextRenewalDate: z.string().date().optional(),
     notifyDaysBefore: z.number().int().min(0).max(365).default(3),
     advanceReminderRules: z.string().max(500).optional(),
     overdueReminderRules: z.string().max(500).optional(),
@@ -258,7 +261,25 @@ export const CreateSubscriptionSchema = z
   })
   .merge(SubscriptionLogoSchema)
 
-export const UpdateSubscriptionSchema = CreateSubscriptionSchema.partial().extend({
+export const CreateSubscriptionSchema = SubscriptionInputSchema.superRefine((input, context) => {
+  if (input.billingType === 'lifetime') return
+  if (!input.billingIntervalUnit) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['billingIntervalUnit'], message: 'Required' })
+  }
+  if (!input.nextRenewalDate) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['nextRenewalDate'], message: 'Required' })
+  }
+}).transform((input) => ({
+  ...input,
+  billingIntervalCount: input.billingType === 'lifetime' ? 1 : input.billingIntervalCount,
+  billingIntervalUnit: input.billingType === 'lifetime' ? 'month' as const : input.billingIntervalUnit!,
+  // Keep a storage placeholder for lifetime purchases; never project a renewal from it.
+  nextRenewalDate: input.billingType === 'lifetime' ? input.startDate : input.nextRenewalDate!,
+  autoRenew: input.billingType === 'lifetime' ? false : input.autoRenew,
+  webhookEnabled: input.billingType === 'lifetime' ? false : input.webhookEnabled
+}))
+
+export const UpdateSubscriptionSchema = SubscriptionInputSchema.partial().extend({
   status: SubscriptionStatusSchema.optional()
 })
 
@@ -823,6 +844,7 @@ export interface SubtrackerBackupSubscriptionDto {
   logoUrl: string | null
   logoSource: string | null
   logoFetchedAt: string | null
+  billingType?: BillingType
   status: SubscriptionStatus
   amount: number
   currency: string

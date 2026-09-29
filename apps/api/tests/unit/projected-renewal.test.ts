@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest'
 import { projectRenewalEvents } from '../../src/services/projected-renewal.service'
 
 describe('projectRenewalEvents', () => {
+  it('never projects lifetime purchase dates as renewal events', () => {
+    const events = projectRenewalEvents([{
+      id: 'lifetime', name: 'License', amount: 100, currency: 'CNY',
+      status: 'active', billingType: 'lifetime', billingIntervalCount: 1,
+      billingIntervalUnit: 'month', nextRenewalDate: new Date('2026-04-10T00:00:00.000Z')
+    }], { start: '2026-04-01', end: '2027-04-30' })
+    expect(events).toEqual([])
+  })
+
   it('should generate one event for a monthly subscription in a single month range', () => {
     const events = projectRenewalEvents(
       [

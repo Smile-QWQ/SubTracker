@@ -14,6 +14,11 @@ enum SubscriptionStatus {
   expired
 }
 
+enum BillingType {
+  recurring
+  lifetime
+}
+
 enum BillingIntervalUnit {
   day
   week
@@ -48,6 +53,7 @@ model Subscription {
   status               SubscriptionStatus @default(active)
   amount               Float
   currency             String
+  billingType          BillingType        @default(recurring)
   billingIntervalCount Int                @default(1)
   billingIntervalUnit  BillingIntervalUnit
   autoRenew            Boolean            @default(false)

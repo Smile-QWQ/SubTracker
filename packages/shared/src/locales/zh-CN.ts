@@ -1482,6 +1482,8 @@ export default {
       },
       subscriptions: {
         notFound: '订阅不存在',
+        lifetimeCannotRenew: '买断订阅无需续费',
+        recurringFieldsRequired: '切换为周期订阅时，请填写计费周期和下次续订日期',
         logoDeleteFailed: 'Logo 删除失败',
         logoUploadFailed: 'Logo 上传失败',
         logoImportFailed: 'Logo 导入失败',

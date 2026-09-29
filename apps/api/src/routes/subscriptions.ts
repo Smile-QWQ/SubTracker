@@ -362,7 +362,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     }
 
     const result = await runBatchAction(parsed.data.ids, async (id) => {
-      await renewSubscription(id)
+      await renewSubscription(id, undefined, undefined, undefined, undefined, request.locale)
     })
 
     return sendOk(reply, result)
@@ -592,6 +592,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
           description: parsed.data.description,
           amount: parsed.data.amount,
           currency: parsed.data.currency,
+          billingType: parsed.data.billingType,
           billingIntervalCount: parsed.data.billingIntervalCount,
           billingIntervalUnit: parsed.data.billingIntervalUnit,
           autoRenew: parsed.data.autoRenew,
@@ -673,13 +674,19 @@ export async function subscriptionRoutes(app: FastifyInstance) {
           throw new Error('api.errors.subscriptions.notFound')
         }
 
-        const normalizedNextRenewalDate =
-          payload.nextRenewalDate !== undefined ? parseDateInTimezone(payload.nextRenewalDate, timezone) : undefined
+        const billingType = payload.billingType ?? existing.billingType ?? 'recurring'
+        const isLifetime = billingType === 'lifetime'
+        if (existing.billingType === 'lifetime' && !isLifetime && (!payload.nextRenewalDate || !payload.billingIntervalUnit)) {
+          throw new Error('api.errors.subscriptions.recurringFieldsRequired')
+        }
+        const normalizedNextRenewalDate = isLifetime
+          ? payload.startDate ? parseDateInTimezone(payload.startDate, timezone) : existing.startDate
+          : payload.nextRenewalDate !== undefined ? parseDateInTimezone(payload.nextRenewalDate, timezone) : undefined
         const shouldRestoreActive =
           payload.status === undefined &&
           existing.status === 'expired' &&
-          normalizedNextRenewalDate !== undefined &&
-          normalizedNextRenewalDate.getTime() >= startOfDayDateInTimezone(new Date(), timezone).getTime()
+          (isLifetime || (normalizedNextRenewalDate !== undefined &&
+            normalizedNextRenewalDate.getTime() >= startOfDayDateInTimezone(new Date(), timezone).getTime()))
 
         const subscription = await tx.subscription.update({
           where: { id: params.data.id },
@@ -689,6 +696,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
             ...(payload.status !== undefined ? { status: payload.status } : shouldRestoreActive ? { status: 'active' } : {}),
             ...(payload.amount !== undefined ? { amount: payload.amount } : {}),
             ...(payload.currency !== undefined ? { currency: payload.currency } : {}),
+            billingType,
             ...(payload.billingIntervalCount !== undefined ? { billingIntervalCount: payload.billingIntervalCount } : {}),
             ...(payload.billingIntervalUnit !== undefined ? { billingIntervalUnit: payload.billingIntervalUnit } : {}),
             ...(payload.autoRenew !== undefined ? { autoRenew: payload.autoRenew } : {}),
@@ -702,6 +710,14 @@ export async function subscriptionRoutes(app: FastifyInstance) {
               ? { overdueReminderRules: reminderFields.overdueReminderRules }
               : {}),
             ...(payload.webhookEnabled !== undefined ? { webhookEnabled: payload.webhookEnabled } : {}),
+            ...(isLifetime ? {
+              autoRenew: false,
+              webhookEnabled: false,
+              billingIntervalCount: 1,
+              billingIntervalUnit: 'month',
+              advanceReminderRules: null,
+              overdueReminderRules: null
+            } : {}),
             ...(payload.notes !== undefined ? { notes: payload.notes } : {}),
             ...(payload.websiteUrl !== undefined ? { websiteUrl: payload.websiteUrl } : {}),
             ...(normalizedLogo
@@ -726,6 +742,9 @@ export async function subscriptionRoutes(app: FastifyInstance) {
 
       return sendOk(reply, flattenSubscriptionTags(updated))
     } catch (error) {
+      if (error instanceof Error && error.message === 'api.errors.subscriptions.recurringFieldsRequired') {
+        return sendError(reply, 422, 'validation_error', error.message, undefined, { locale: request.locale })
+      }
       if (error instanceof Error && error.message.includes('Logo')) {
         return sendError(reply, 400, 'logo_import_failed', error.message, undefined, {
           locale: request.locale
@@ -758,7 +777,9 @@ export async function subscriptionRoutes(app: FastifyInstance) {
         params.data.id,
         parsed.data.paidAt ? parseDateInTimezone(parsed.data.paidAt, timezone) : undefined,
         parsed.data.amount,
-        parsed.data.currency
+        parsed.data.currency,
+        timezone,
+        request.locale
       )
 
       return sendOk(reply, result)

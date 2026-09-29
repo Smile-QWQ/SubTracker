@@ -39,6 +39,7 @@ export async function calendarRoutes(app: FastifyInstance) {
     const subscriptions = await prisma.subscription.findMany({
       where: {
         status: { in: ['active', 'expired'] },
+        billingType: 'recurring',
         nextRenewalDate: {
           lte: end
         }
@@ -49,6 +50,7 @@ export async function calendarRoutes(app: FastifyInstance) {
         name: true,
         amount: true,
         currency: true,
+        billingType: true,
         billingIntervalCount: true,
         billingIntervalUnit: true,
         nextRenewalDate: true,
@@ -67,6 +69,7 @@ export async function calendarRoutes(app: FastifyInstance) {
 
     const events = projectedEvents.map((item) => ({
       id: item.id,
+      subscriptionId: item.subscriptionId,
       title: item.title,
       date: formatDateInTimezone(item.date, timezone),
       currency: item.currency,

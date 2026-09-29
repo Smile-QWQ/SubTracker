@@ -80,6 +80,10 @@ export async function renewSubscription(
     throw new Error(getMessage(locale, 'api.errors.subscriptions.notFound'))
   }
 
+  if (subscription.billingType === 'lifetime') {
+    throw new Error(getMessage(locale, 'api.errors.subscriptions.lifetimeCannotRenew'))
+  }
+
   const baseCurrency = await getBaseCurrency()
   const context: RenewExecutionContext = {
     timezone: timezone ?? (await getAppTimezone()),
@@ -95,6 +99,7 @@ export async function autoRenewDueSubscriptions(today = new Date()) {
   const dueSubscriptions = await prisma.subscription.findMany({
     where: {
       autoRenew: true,
+      billingType: 'recurring',
       status: { in: ['active', 'expired'] },
       nextRenewalDate: {
         lte: endOfDayDateInTimezone(today, timezone)
@@ -114,6 +119,7 @@ export async function autoRenewDueSubscriptions(today = new Date()) {
   const todayEnd = toTimezonedDayjs(today, timezone).endOf('day')
 
   for (const subscription of dueSubscriptions) {
+    if (subscription.billingType === 'lifetime') continue
     let currentSubscription = subscription
     let guard = 0
 
@@ -141,6 +147,7 @@ export async function reconcileExpiredSubscriptions(today = new Date()) {
   const rows = await prisma.subscription.findMany({
     where: {
       status: 'active',
+      billingType: 'recurring',
       nextRenewalDate: {
         lt: cutoff
       }

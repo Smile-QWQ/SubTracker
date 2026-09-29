@@ -150,7 +150,7 @@ describe('subtracker backup service', () => {
     mocks.rmMock.mockReset()
   })
 
-  it('batch inserts payment records and skips order rewrite for append no-op', async () => {
+  it.each([undefined, 'recurring', 'lifetime'] as const)('imports %s billing type and batch inserts payment records', async (billingType) => {
     const inspectZip = new AdmZip()
     inspectZip.addFile(
       'manifest.json',
@@ -227,6 +227,7 @@ describe('subtracker backup service', () => {
             subscriptions: [
               {
                 id: 'sub_new',
+                billingType,
                 name: 'Netflix',
                 description: '',
                 websiteUrl: 'https://netflix.com',
@@ -300,6 +301,14 @@ describe('subtracker backup service', () => {
     })
 
     expect(result.importedPaymentRecords).toBe(1)
+    expect(mocks.prismaMock.subscription.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        billingType: billingType ?? 'recurring',
+        autoRenew: billingType !== 'lifetime',
+        webhookEnabled: billingType !== 'lifetime',
+        nextRenewalDate: new Date(billingType === 'lifetime' ? '2026-03-31T16:00:00.000Z' : '2026-04-30T16:00:00.000Z')
+      })
+    })
     expect(mocks.prismaMock.paymentRecord.create).not.toHaveBeenCalled()
     expect(mocks.prismaMock.paymentRecord.createMany).toHaveBeenCalledWith({
       data: [
@@ -463,7 +472,7 @@ describe('subtracker backup service', () => {
     expect(mocks.prismaMock.paymentRecord.createMany).not.toHaveBeenCalled()
   })
 
-  it('exports a zip archive with manifest and referenced logos', async () => {
+  it.each(['recurring', 'lifetime'] as const)('exports %s billing type with manifest and referenced logos', async (billingType) => {
     mocks.getAppSettingsMock.mockResolvedValue({
       baseCurrency: 'CNY',
       timezone: 'Asia/Shanghai',
@@ -533,6 +542,7 @@ describe('subtracker backup service', () => {
     mocks.prismaMock.subscription.findMany.mockResolvedValue([
       {
         id: 'sub_1',
+        billingType,
         name: 'Netflix',
         description: 'Streaming',
         websiteUrl: 'https://netflix.com',
@@ -589,6 +599,7 @@ describe('subtracker backup service', () => {
       zip.getEntries().find((entry) => entry.entryName === 'manifest.json')!.getData().toString('utf8')
     )
     expect(manifest.data.subscriptions).toHaveLength(1)
+    expect(manifest.data.subscriptions[0].billingType).toBe(billingType)
     expect(manifest.assets.logos[0]).toMatchObject({
       path: 'logos/netflix.png',
       sourceLogoUrl: '/static/logos/netflix.png'

@@ -11,6 +11,7 @@ type PaymentRecordLike = {
 }
 
 type SubscriptionLike = {
+  billingType?: string
   amount: number
   currency: string
   billingIntervalCount: number
@@ -88,6 +89,16 @@ export function calculateSubscriptionRemainingValue(
     exchangeRates?: Record<string, number>
   }
 ): SubscriptionRemainingValueSummary {
+  if (subscription.billingType === 'lifetime') {
+    return {
+      currentCycleStartDate: toTimezonedDayjs(subscription.startDate, timezone).format('YYYY-MM-DD'),
+      currentCycleEndDate: '',
+      remainingDays: 0,
+      remainingRatio: 0,
+      remainingValue: 0,
+      remainingValueCurrency: options?.baseCurrency?.toUpperCase() || subscription.currency
+    }
+  }
   const { currentCycleStart, currentCycleEnd, cycleAmount, cycleCurrency } = resolveCycleBoundaries(
     subscription,
     paymentRecords,

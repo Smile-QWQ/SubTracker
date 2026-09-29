@@ -72,6 +72,7 @@ type BackupSubscriptionRow = {
   logoUrl: string | null
   logoSource: string | null
   logoFetchedAt: Date | null
+  billingType?: SubtrackerBackupSubscriptionDto['billingType']
   status: SubtrackerBackupSubscriptionDto['status']
   amount: number
   currency: string
@@ -203,6 +204,7 @@ async function buildBackupManifest(): Promise<{ manifest: BackupManifest; logoBu
     logoUrl: subscription.logoUrl ?? null,
     logoSource: subscription.logoSource ?? null,
     logoFetchedAt: subscription.logoFetchedAt ? subscription.logoFetchedAt.toISOString() : null,
+    billingType: subscription.billingType ?? 'recurring',
     status: subscription.status,
     amount: subscription.amount,
     currency: subscription.currency,
@@ -310,6 +312,10 @@ function parseBackupManifest(raw: unknown, locale: AppLocale = DEFAULT_APP_LOCAL
   }
   if (!manifest.data || !manifest.assets) {
     throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupManifestMissingData'))
+  }
+
+  if (manifest.data.subscriptions.some((item) => item.billingType !== undefined && item.billingType !== 'recurring' && item.billingType !== 'lifetime')) {
+    throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupManifestInvalid'))
   }
 
   return manifest
@@ -633,18 +639,19 @@ export async function commitSubtrackerBackup(
         logoUrl: importedLogo?.logoUrl ?? subscription.logoUrl,
         logoSource: importedLogo?.logoSource ?? subscription.logoSource,
         logoFetchedAt: importedLogo ? new Date() : subscription.logoFetchedAt ? new Date(subscription.logoFetchedAt) : null,
-        status: subscription.status,
+        billingType: subscription.billingType ?? 'recurring',
+        status: subscription.billingType === 'lifetime' && subscription.status === 'expired' ? 'active' : subscription.status,
         amount: subscription.amount,
         currency: subscription.currency,
         billingIntervalCount: subscription.billingIntervalCount,
         billingIntervalUnit: subscription.billingIntervalUnit,
-        autoRenew: subscription.autoRenew,
+        autoRenew: subscription.billingType === 'lifetime' ? false : subscription.autoRenew,
         startDate: parseDateInTimezone(subscription.startDate, appTimezone),
-        nextRenewalDate: parseDateInTimezone(subscription.nextRenewalDate, appTimezone),
+        nextRenewalDate: parseDateInTimezone(subscription.billingType === 'lifetime' ? subscription.startDate : subscription.nextRenewalDate, appTimezone),
         notifyDaysBefore: subscription.notifyDaysBefore,
         advanceReminderRules: subscription.advanceReminderRules,
         overdueReminderRules: subscription.overdueReminderRules,
-        webhookEnabled: subscription.webhookEnabled,
+        webhookEnabled: subscription.billingType === 'lifetime' ? false : subscription.webhookEnabled,
         notes: subscription.notes,
         createdAt: new Date(subscription.createdAt),
         updatedAt: new Date(subscription.updatedAt)

@@ -368,6 +368,7 @@ export async function scanRenewalNotifications(
   const subscriptions = await prisma.subscription.findMany({
     where: {
       status: { in: ['active', 'expired'] },
+      billingType: 'recurring',
       webhookEnabled: true,
       nextRenewalDate: {
         gte: queryStart,

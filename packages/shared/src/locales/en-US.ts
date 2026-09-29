@@ -1485,6 +1485,8 @@ Hard requirements:
       },
       subscriptions: {
         notFound: 'Subscription not found',
+        lifetimeCannotRenew: 'Lifetime subscriptions do not need renewal',
+        recurringFieldsRequired: 'Set a billing interval and next renewal date when switching to recurring billing',
         logoDeleteFailed: 'Failed to delete logo',
         logoUploadFailed: 'Failed to upload logo',
         logoImportFailed: 'Failed to import logo',

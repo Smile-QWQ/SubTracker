@@ -126,10 +126,19 @@ describe('subscription routes', () => {
     routeMocks.appendSubscriptionOrderMock.mockReset()
     routeMocks.replaceSubscriptionTagsMock.mockReset()
     routeMocks.normalizeLogoForStorageMock.mockClear()
+    routeMocks.renewSubscriptionMock.mockReset()
   })
 
   afterEach(async () => {
     await app.close()
+  })
+
+  it('passes the request locale and timezone through quick renewal', async () => {
+    app.addHook('onRequest', async (request) => { request.locale = 'en-US' })
+    routeMocks.renewSubscriptionMock.mockResolvedValue({ subscription: { id: 'sub_1' } })
+    const res = await app.inject({ method: 'POST', url: '/subscriptions/sub_1/renew', payload: {} })
+    expect(res.statusCode).toBe(200)
+    expect(routeMocks.renewSubscriptionMock).toHaveBeenCalledWith('sub_1', undefined, undefined, undefined, 'Asia/Shanghai', 'en-US')
   })
 
   it('accepts websiteUrl without protocol and normalizes it on create', async () => {
@@ -166,6 +175,43 @@ describe('subscription routes', () => {
         })
       })
     )
+  })
+
+  it('creates a lifetime purchase without renewal fields and disables renewal notifications', async () => {
+    routeMocks.tx.subscription.create.mockResolvedValue({ id: 'lifetime' })
+    routeMocks.tx.subscription.findUniqueOrThrow.mockResolvedValue({ id: 'lifetime', billingType: 'lifetime' })
+    const res = await app.inject({ method: 'POST', url: '/subscriptions', payload: {
+      name: 'License', amount: 150, currency: 'USD', billingType: 'lifetime', startDate: '2026-05-01', autoRenew: true, webhookEnabled: true
+    } })
+    expect(res.statusCode).toBe(201)
+    expect(routeMocks.tx.subscription.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      billingType: 'lifetime', autoRenew: false, webhookEnabled: false,
+      startDate: new Date('2026-04-30T16:00:00.000Z'), nextRenewalDate: new Date('2026-04-30T16:00:00.000Z')
+    }) }))
+  })
+
+  it('still requires renewal fields for recurring subscriptions', async () => {
+    const res = await app.inject({ method: 'POST', url: '/subscriptions', payload: {
+      name: 'Monthly', amount: 10, currency: 'USD', startDate: '2026-05-01'
+    } })
+    expect(res.statusCode).toBe(422)
+    expect(routeMocks.tx.subscription.create).not.toHaveBeenCalled()
+  })
+
+  it('keeps lifetime invariants on partial update and restores expired purchases', async () => {
+    routeMocks.tx.subscription.findUnique.mockResolvedValue({ id: 'lifetime', billingType: 'lifetime', status: 'expired', startDate: new Date('2026-05-01') })
+    routeMocks.tx.subscription.update.mockResolvedValue({ id: 'lifetime' })
+    routeMocks.tx.subscription.findUniqueOrThrow.mockResolvedValue({ id: 'lifetime' })
+    const res = await app.inject({ method: 'PATCH', url: '/subscriptions/lifetime', payload: { autoRenew: true, webhookEnabled: true } })
+    expect(res.statusCode).toBe(200)
+    expect(routeMocks.tx.subscription.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ billingType: 'lifetime', autoRenew: false, webhookEnabled: false, status: 'active' }) }))
+  })
+
+  it('requires a real renewal date when switching a purchase back to recurring', async () => {
+    routeMocks.tx.subscription.findUnique.mockResolvedValue({ id: 'lifetime', billingType: 'lifetime', startDate: new Date('2026-05-01') })
+    const res = await app.inject({ method: 'PATCH', url: '/subscriptions/lifetime', payload: { billingType: 'recurring' } })
+    expect(res.statusCode).toBe(422)
+    expect(routeMocks.tx.subscription.update).not.toHaveBeenCalled()
   })
 
   it('returns a specific 422 message for invalid websiteUrl', async () => {

@@ -9,6 +9,7 @@ type ProjectableSubscription = {
   amount: number
   currency: string
   status: SubscriptionStatus
+  billingType?: string
   billingIntervalCount: number
   billingIntervalUnit: BillingIntervalUnit
   nextRenewalDate: Date
@@ -50,7 +51,7 @@ export function projectRenewalEvents<T extends ProjectableSubscription>(
   const events: ProjectedRenewalEvent<T>[] = []
 
   for (const subscription of subscriptions) {
-    if (!allowedStatuses.has(subscription.status)) {
+    if (subscription.billingType === 'lifetime' || !allowedStatuses.has(subscription.status)) {
       continue
     }
 
