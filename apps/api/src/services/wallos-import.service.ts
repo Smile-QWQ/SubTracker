@@ -16,7 +16,7 @@ import type {
   WallosImportSubscriptionPreviewDto,
   WallosImportTagDto
 } from '@subtracker/shared'
-import { DEFAULT_APP_LOCALE, getMessage } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE, getMessage, LOGO_MIME_BY_EXTENSION } from '@subtracker/shared'
 import { prisma } from '../db'
 import { addInterval } from '../utils/date'
 import { formatDateInTimezone, normalizeAppTimezone, parseDateInTimezone } from '../utils/timezone'
@@ -338,12 +338,7 @@ function ensureUniqueWarnings(warnings: string[]) {
 }
 
 function inferContentTypeFromFilename(filename: string) {
-  const lower = filename.toLowerCase()
-  if (lower.endsWith('.png')) return 'image/png'
-  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
-  if (lower.endsWith('.webp')) return 'image/webp'
-  if (lower.endsWith('.svg')) return 'image/svg+xml'
-  return ''
+  return LOGO_MIME_BY_EXTENSION[path.extname(filename).toLowerCase()] ?? ''
 }
 
 function normalizeZipLogoName(filename: string) {

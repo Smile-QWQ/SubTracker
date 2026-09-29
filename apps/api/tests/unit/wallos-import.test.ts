@@ -1,6 +1,8 @@
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import initSqlJs from 'sql.js'
+import AdmZip from 'adm-zip'
+import { additionalLogos } from './logo-fixtures'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../src/db', () => ({
@@ -38,7 +40,7 @@ import {
 
 const require = createRequire(import.meta.url)
 
-async function createWallosFixtureBase64() {
+async function createWallosFixtureBase64(logoFilename = 'abc.png') {
   const SQL = await initSqlJs({
     locateFile: (file: string) => path.resolve(path.dirname(require.resolve('sql.js/dist/sql-wasm.wasm')), file)
   })
@@ -98,7 +100,7 @@ async function createWallosFixtureBase64() {
     INSERT INTO subscriptions
     (id, name, logo, price, currency_id, next_payment, cycle, frequency, notes, category_id, notify, url, inactive, notify_days_before, start_date, auto_renew)
     VALUES
-    (10, 'Test VPS', 'abc.png', 10, 2, '2026-06-01', 1, 1, 'note', 2, 1, 'https://example.com/a', 0, -1, NULL, 1),
+    (10, 'Test VPS', '${logoFilename}', 10, 2, '2026-06-01', 1, 1, 'note', 2, 1, 'https://example.com/a', 0, -1, NULL, 1),
     (11, 'No category sub', NULL, 5, 1, '2026-07-01', 2, 1, '', 1, 0, NULL, 0, NULL, NULL, 0);
   `)
 
@@ -115,6 +117,19 @@ describe('wallos import helpers', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it.each(additionalLogos)('recognizes $contentType assets in Wallos ZIP backups', async ({ buffer, extension }) => {
+    const filename = `abc${extension.toUpperCase()}`
+    const zip = new AdmZip()
+    zip.addFile('wallos.db', Buffer.from(await createWallosFixtureBase64(filename), 'base64'))
+    zip.addFile(`logos/${filename}`, buffer)
+    const preview = await previewWallosImportFromBase64ForTest({
+      filename: 'wallos.zip', contentType: 'application/zip', base64: zip.toBuffer().toString('base64')
+    })
+    expect(preview.summary.zipLogoMatched).toBe(1)
+    expect(preview.summary.zipLogoMissing).toBe(0)
+    expect(preview.subscriptionsPreview.find(item => item.name === 'Test VPS')).toMatchObject({ logoImportStatus: 'ready-from-zip' })
   })
 
   it('maps standard billing intervals', () => {

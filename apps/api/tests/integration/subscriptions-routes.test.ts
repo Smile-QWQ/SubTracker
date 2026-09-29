@@ -80,7 +80,7 @@ vi.mock('../../src/services/tag.service', () => ({
 vi.mock('../../src/services/logo.service', () => ({
   deleteLocalLogoFromLibrary: vi.fn(),
   getLocalLogoLibrary: vi.fn(async () => []),
-  importRemoteLogo: vi.fn(),
+  prepareRemoteLogoImport: vi.fn(),
   normalizeLogoForStorage: routeMocks.normalizeLogoForStorageMock,
   saveUploadedLogo: vi.fn(),
   searchSubscriptionLogos: vi.fn(async () => [])
@@ -103,6 +103,8 @@ vi.mock('../../src/services/exchange-rate.service', () => ({
 }))
 
 import { subscriptionRoutes } from '../../src/routes/subscriptions'
+import { prepareRemoteLogoImport, saveUploadedLogo } from '../../src/services/logo.service'
+import { REMOTE_IMAGE_MAX_BYTES } from '../../src/utils/remote-image'
 
 describe('subscription routes', () => {
   let app: FastifyInstance
@@ -127,10 +129,48 @@ describe('subscription routes', () => {
     routeMocks.replaceSubscriptionTagsMock.mockReset()
     routeMocks.normalizeLogoForStorageMock.mockClear()
     routeMocks.renewSubscriptionMock.mockReset()
+    vi.mocked(prepareRemoteLogoImport).mockReset()
+    vi.mocked(saveUploadedLogo).mockReset()
   })
 
   afterEach(async () => {
     await app.close()
+  })
+
+  it.each([
+    { logoUrl: '/static/logos/image.png', logoSource: 'url' },
+    { requiresSvgConfirmation: true as const, svgBase64: 'PHN2Zy8+', logoSource: 'url' }
+  ])('returns the detected image result from the import endpoint without a client MIME hint (%#)', async (result) => {
+    vi.mocked(prepareRemoteLogoImport).mockResolvedValueOnce(result)
+    const res = await app.inject({ method: 'POST', url: '/subscriptions/logo/import', payload: { logoUrl: 'https://example.com/download', source: 'url' } })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data).toEqual(result)
+    expect(prepareRemoteLogoImport).toHaveBeenCalledWith({ logoUrl: 'https://example.com/download', source: 'url' }, undefined)
+  })
+
+  it('accepts confirmed SVG data up to the remote download limit despite base64 expansion', async () => {
+    const base64 = Buffer.alloc(REMOTE_IMAGE_MAX_BYTES, 32).toString('base64')
+    const payload = { filename: 'logo.svg', contentType: 'image/svg+xml', base64 }
+    vi.mocked(saveUploadedLogo).mockResolvedValueOnce({ logoUrl: '/static/logos/image.svg', logoSource: 'upload' })
+    const res = await app.inject({ method: 'POST', url: '/subscriptions/logo/upload', payload })
+    expect(res.statusCode).toBe(200)
+    expect(saveUploadedLogo).toHaveBeenCalledWith(payload, undefined)
+  })
+
+  it('retains a bounded request body limit on confirmed image uploads', async () => {
+    const payload = { filename: 'logo.svg', contentType: 'image/svg+xml', base64: 'A'.repeat(8 * 1024 * 1024) }
+    const res = await app.inject({ method: 'POST', url: '/subscriptions/logo/upload', payload })
+    expect(res.statusCode).toBe(413)
+    expect(saveUploadedLogo).not.toHaveBeenCalled()
+  })
+
+  it('reports download failures as logo errors when updating, regardless of message language', async () => {
+    routeMocks.normalizeLogoForStorageMock.mockRejectedValueOnce(new Error('Remote SVG download timed out.'))
+    const res = await app.inject({ method: 'PATCH', url: '/subscriptions/sub_1', payload: { logoUrl: 'https://example.com/logo.svg' } })
+    expect(res.statusCode).toBe(400)
+    expect(res.json().error.code).toBe('logo_import_failed')
+    expect(res.json().error.message).toContain('SVG')
+    expect(routeMocks.tx.subscription.update).not.toHaveBeenCalled()
   })
 
   it('passes the request locale and timezone through quick renewal', async () => {

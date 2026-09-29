@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { prisma } from '../db'
 import { sendCreated, sendError, sendOk } from '../http'
 import type { AppLocale } from '@subtracker/shared'
+import { REMOTE_IMAGE_MAX_BYTES } from '../utils/remote-image'
 import {
   CreateSubscriptionSchema,
   LogoSearchSchema,
@@ -24,7 +25,7 @@ import { flattenSubscriptionTags, normalizeTagIds, replaceSubscriptionTags } fro
 import {
   deleteLocalLogoFromLibrary,
   getLocalLogoLibrary,
-  importRemoteLogo,
+  prepareRemoteLogoImport,
   normalizeLogoForStorage,
   saveUploadedLogo,
   searchSubscriptionLogos
@@ -249,7 +250,8 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     }
   })
 
-  app.post('/subscriptions/logo/upload', async (request, reply) => {
+  // Allow the base64 encoding of a maximum-size remote SVG after user confirmation.
+  app.post('/subscriptions/logo/upload', { bodyLimit: Math.ceil(REMOTE_IMAGE_MAX_BYTES / 3) * 4 + 4096 }, async (request, reply) => {
     const parsed = LogoUploadSchema.safeParse(request.body)
     if (!parsed.success) {
       return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidLogoUploadPayload', parsed.error.flatten(), {
@@ -279,7 +281,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     }
 
     try {
-      return sendOk(reply, await importRemoteLogo(parsed.data, request.locale))
+      return sendOk(reply, await prepareRemoteLogoImport(parsed.data, request.locale))
     } catch (error) {
       return sendError(reply, 400, 'logo_import_failed', error instanceof Error ? error.message : 'api.errors.subscriptions.logoImportFailed', undefined, {
         locale: request.locale
@@ -653,16 +655,22 @@ export async function subscriptionRoutes(app: FastifyInstance) {
 
     const payload = parsed.data
 
+    let normalizedLogo
+    try {
+      normalizedLogo = payload.logoUrl !== undefined || payload.logoSource !== undefined
+        ? await normalizeLogoForStorage({
+            logoUrl: payload.logoUrl ?? null,
+            logoSource: payload.logoSource ?? null
+          }, request.locale)
+        : null
+    } catch (error) {
+      return sendError(reply, 400, 'logo_import_failed', error instanceof Error ? error.message : 'api.errors.subscriptions.logoImportFailed', undefined, {
+        locale: request.locale
+      })
+    }
+
     try {
       const reminderFields = await resolveSubscriptionReminderFields(payload)
-      const normalizedLogo =
-        payload.logoUrl !== undefined || payload.logoSource !== undefined
-          ? await normalizeLogoForStorage({
-              logoUrl: payload.logoUrl ?? null,
-              logoSource: payload.logoSource ?? null
-            }, request.locale)
-          : null
-
       const timezone = await getAppTimezone()
       const updated = await prisma.$transaction(async (tx: any) => {
         const tagIds = payload.tagIds !== undefined ? normalizeTagIds(payload.tagIds) : null
@@ -744,11 +752,6 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     } catch (error) {
       if (error instanceof Error && error.message === 'api.errors.subscriptions.recurringFieldsRequired') {
         return sendError(reply, 422, 'validation_error', error.message, undefined, { locale: request.locale })
-      }
-      if (error instanceof Error && error.message.includes('Logo')) {
-        return sendError(reply, 400, 'logo_import_failed', error.message, undefined, {
-          locale: request.locale
-        })
       }
       return sendError(reply, 404, 'not_found', 'api.errors.subscriptions.notFound', undefined, {
         locale: request.locale

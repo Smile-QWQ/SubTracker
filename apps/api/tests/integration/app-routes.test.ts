@@ -1,10 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { config } from '../../src/config'
+import { additionalLogos } from '../unit/logo-fixtures'
 
 const appRouteMocks = vi.hoisted(() => ({
   verifyTokenMock: vi.fn(),
+  readLogoFileMock: vi.fn(),
   getResolvedAppLocaleMock: vi.fn(async () => 'en-US'),
   setAppLocaleMock: vi.fn(async (locale: 'zh-CN' | 'en-US') => locale)
+}))
+
+vi.mock('node:fs/promises', async (importOriginal) => ({
+  ...await importOriginal<typeof import('node:fs/promises')>(),
+  readFile: appRouteMocks.readLogoFileMock
 }))
 
 vi.mock('../../src/services/auth.service', () => ({
@@ -40,6 +47,14 @@ describe('app locale routes', () => {
 
   afterAll(async () => {
     await app.close()
+  })
+
+  it.each(additionalLogos)('serves $extension logos with canonical MIME and unchanged bytes', async ({ buffer, extension, contentType }) => {
+    appRouteMocks.readLogoFileMock.mockResolvedValueOnce(buffer)
+    const res = await app.inject({ method: 'GET', url: `/static/logos/fixture${extension.toUpperCase()}` })
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['content-type']).toBe(contentType)
+    expect(res.rawPayload).toEqual(buffer)
   })
 
   it('allows public GET /api/v1/app/locale', async () => {

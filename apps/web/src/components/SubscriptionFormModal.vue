@@ -46,6 +46,25 @@
               </button>
             </div>
 
+            <n-spin :show="importingLogo">
+            <div class="logo-panel__url">
+              <n-input
+                v-model:value="logoUrlInput"
+                :aria-label="t('subscriptions.form.logo.urlLabel')"
+                :placeholder="t('subscriptions.form.logo.urlPlaceholder')"
+                :disabled="importingLogo"
+                @keyup.enter="importLogoUrl"
+              />
+              <n-button
+                type="primary"
+                :loading="importingLogo"
+                :disabled="!logoUrlInput.trim() || importingLogo"
+                @click="importLogoUrl"
+              >
+                {{ t('subscriptions.form.logo.importUrl') }}
+              </n-button>
+            </div>
+
             <n-tabs v-model:value="logoPanelTab" type="segment" animated class="logo-panel__tabs">
               <n-tab-pane :name="LOGO_TAB_WEB" :tab="t('subscriptions.form.logo.webTab', { count: logoCandidates.length })">
                 <div v-if="searchingLogoCandidates" class="logo-panel__state">
@@ -119,6 +138,7 @@
                 />
               </n-tab-pane>
             </n-tabs>
+            </n-spin>
           </div>
         </div>
       </div>
@@ -309,6 +329,19 @@
 
     <subscription-ai-modal :show="showAiModal" @close="showAiModal = false" @apply="applyAiResult" />
   </n-modal>
+
+  <n-modal
+    :show="pendingLogoAction !== null"
+    preset="dialog"
+    type="warning"
+    :title="t('subscriptions.form.logo.svgRiskTitle')"
+    :content="t('subscriptions.form.logo.svgRiskDescription')"
+    :positive-text="t('subscriptions.form.logo.acceptRisk')"
+    :negative-text="t('common.actions.cancel')"
+    @positive-click="confirmLogoRisk"
+    @negative-click="pendingLogoAction = null"
+    @update:show="(value: boolean) => { if (!value) pendingLogoAction = null }"
+  />
 </template>
 
 <script setup lang="ts">
@@ -352,6 +385,7 @@ import {
   type SubscriptionFormInitialValues,
   validateSubscriptionForm
 } from '@/utils/subscription-form'
+import { detectLogoContentType, type LogoUploadInput } from '@subtracker/shared'
 import { useLocalizedMessage } from '@/utils/localized-message'
 import { filterLocalLogoLibrary } from '@/utils/logo-library'
 import type { AiRecognitionResult, LogoSearchResult, Subscription, Tag } from '@/types/api'
@@ -385,6 +419,14 @@ const showAiModal = ref(false)
 const showLogoPanel = ref(false)
 const logoPanelTab = ref<string>(LOGO_TAB_WEB)
 const searchingLogoCandidates = ref(false)
+const importingLogo = ref(false)
+const pendingLogoAction = ref<{
+  payload: LogoUploadInput
+  remoteItem?: LogoSearchResult
+  logoSource?: string
+} | null>(null)
+let logoActionVersion = 0
+const logoUrlInput = ref('')
 const loadingLocalLogoLibrary = ref(false)
 const logoCandidates = ref<LogoSearchResult[]>([])
 const localLogoLibrary = ref<LogoSearchResult[]>([])
@@ -468,6 +510,8 @@ const resolvedLogoUrl = computed(() => (form.logoUrl ? resolveLogoUrl(form.logoU
 watch(
   formSource,
   (model) => {
+    logoActionVersion++
+    pendingLogoAction.value = null
     if (!model) {
       resetForm()
       return
@@ -480,11 +524,14 @@ watch(
 watch(
   () => props.show,
   (value) => {
+    logoActionVersion++
     if (!value) {
+      pendingLogoAction.value = null
       showLogoPanel.value = false
       searchingLogoCandidates.value = false
       localLogoLibrary.value = []
       localLogoSearchQuery.value = ''
+      logoUrlInput.value = ''
       if (!formSource.value) {
         resetForm()
       }
@@ -568,6 +615,7 @@ function resetForm() {
   form.websiteUrl = ''
   form.logoUrl = ''
   form.logoSource = ''
+  logoUrlInput.value = ''
   logoCandidates.value = []
   localLogoSearchQuery.value = ''
   showLogoPanel.value = false
@@ -593,6 +641,7 @@ function hydrateFromModel(model: SubscriptionFormInitialValues) {
   form.websiteUrl = model.websiteUrl ?? ''
   form.logoUrl = model.logoUrl ?? ''
   form.logoSource = model.logoSource ?? ''
+  logoUrlInput.value = ''
   logoCandidates.value = []
   localLogoSearchQuery.value = ''
   showLogoPanel.value = false
@@ -668,25 +717,51 @@ function pickLogoFile() {
   logoFileInputRef.value?.click()
 }
 
+async function importLogoUrl() {
+  const logoUrl = logoUrlInput.value.trim()
+  if (!logoUrl) return
+  await applyRemoteLogoCandidate({ label: '', logoUrl, source: 'url' })
+}
+
 async function applyRemoteLogoCandidate(item: LogoSearchResult) {
+  if (importingLogo.value || pendingLogoAction.value) return
+  importingLogo.value = true
+  const version = logoActionVersion
   try {
-    const imported = await api.importSubscriptionLogo({
-      logoUrl: item.logoUrl,
-      source: item.source
-    })
-
-    form.logoUrl = imported.logoUrl
-    form.logoSource = imported.logoSource
-    if (item.websiteUrl && !form.websiteUrl) {
-      form.websiteUrl = item.websiteUrl
+    const imported = await api.importSubscriptionLogo({ logoUrl: item.logoUrl, source: item.source })
+    if (!props.show || version !== logoActionVersion) return
+    if ('requiresSvgConfirmation' in imported) {
+      pendingLogoAction.value = {
+        payload: { filename: 'logo.svg', contentType: 'image/svg+xml', base64: imported.svgBase64 },
+        remoteItem: { ...item },
+        logoSource: imported.logoSource
+      }
+      return
     }
-
-    showLogoPanel.value = false
-    await loadLocalLogoLibrary(true)
-    message.success(t('subscriptions.messages.logoSavedAndApplied'))
+    await applySavedLogo(imported, item)
   } catch (error) {
     message.error(error instanceof Error ? error.message : t('subscriptions.messages.logoImportFailed'))
+  } finally {
+    importingLogo.value = false
   }
+}
+
+async function confirmLogoRisk() {
+  const action = pendingLogoAction.value
+  pendingLogoAction.value = null
+  if (!action) return
+  await uploadLogoFile(action.payload, action.remoteItem, action.logoSource)
+}
+
+async function applySavedLogo(imported: { logoUrl: string; logoSource: string }, remoteItem?: LogoSearchResult) {
+  form.logoUrl = imported.logoUrl
+  form.logoSource = imported.logoSource
+  if (remoteItem) {
+    if (remoteItem.websiteUrl && !form.websiteUrl) form.websiteUrl = remoteItem.websiteUrl
+    showLogoPanel.value = false
+  }
+  await loadLocalLogoLibrary(true)
+  message.success(t(remoteItem ? 'subscriptions.messages.logoSavedAndApplied' : 'subscriptions.messages.logoUploadSuccess'))
 }
 
 function applyLocalLogoCandidate(item: LogoSearchResult) {
@@ -713,27 +788,41 @@ async function deleteLocalLogo(item: LogoSearchResult) {
 }
 
 async function handleLogoFileChange(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0]
-  if (!file) return
-
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || importingLogo.value || pendingLogoAction.value) return
+  importingLogo.value = true
+  const version = logoActionVersion
   try {
     const base64 = await readFileAsBase64(file)
-    const uploaded = await api.uploadSubscriptionLogo({
-      filename: file.name,
-      contentType: file.type,
-      base64
-    })
-
-    form.logoUrl = uploaded.logoUrl
-    form.logoSource = uploaded.logoSource
-    await loadLocalLogoLibrary(true)
-    message.success(t('subscriptions.messages.logoUploadSuccess'))
+    if (!props.show || version !== logoActionVersion) return
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))
+    const contentType = detectLogoContentType(bytes)
+    const payload = { filename: file.name, contentType: contentType ?? file.type, base64 }
+    if (contentType === 'image/svg+xml') {
+      pendingLogoAction.value = { payload }
+      return
+    }
+    await uploadLogoFile(payload)
   } catch (error) {
     message.error(error instanceof Error ? error.message : t('subscriptions.messages.logoUploadFailed'))
   } finally {
-    if (logoFileInputRef.value) {
-      logoFileInputRef.value.value = ''
-    }
+    importingLogo.value = false
+  }
+}
+
+async function uploadLogoFile(payload: LogoUploadInput, remoteItem?: LogoSearchResult, logoSource?: string) {
+  importingLogo.value = true
+  const version = logoActionVersion
+  try {
+    const uploaded = await api.uploadSubscriptionLogo(payload)
+    if (!props.show || version !== logoActionVersion) return
+    await applySavedLogo({ ...uploaded, logoSource: logoSource ?? uploaded.logoSource }, remoteItem)
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : t('subscriptions.messages.logoUploadFailed'))
+  } finally {
+    importingLogo.value = false
   }
 }
 
@@ -900,6 +989,8 @@ function submit() {
 
 function close() {
   if (props.saving) return
+  logoActionVersion++
+  pendingLogoAction.value = null
   emit('close')
 }
 
@@ -927,6 +1018,7 @@ function readFileAsBase64(file: File) {
 
 function formatLogoSource(source: string) {
   const map: Record<string, string> = {
+    url: t('subscriptions.form.logo.source.url'),
     upload: t('subscriptions.form.logo.source.upload'),
     remote: t('subscriptions.form.logo.source.remote'),
     'wallos-zip': 'Wallos ZIP',
@@ -1031,7 +1123,7 @@ function formatLogoSource(source: string) {
   top: 78px;
   right: 0;
   width: min(320px, calc(100vw - 48px));
-  max-height: 440px;
+  max-height: 500px;
   padding: 10px;
   border: 1px solid var(--app-border-soft);
   border-radius: 16px;
@@ -1061,6 +1153,12 @@ function formatLogoSource(source: string) {
   align-items: center;
   justify-content: center;
   padding: 2px;
+}
+
+.logo-panel__url {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .logo-panel__tabs {

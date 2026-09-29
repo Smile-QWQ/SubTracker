@@ -51,6 +51,14 @@ async function save(wrapper: VueWrapper) {
   await button(wrapper, t('common.actions.save')).trigger('click')
   return wrapper.emitted('submit')?.at(-1)
 }
+function riskDialog(wrapper: VueWrapper) {
+  return wrapper.findAllComponents(NModal).find(item => item.props('preset') === 'dialog')!
+}
+async function acceptLogoRisk(wrapper: VueWrapper) {
+  riskDialog(wrapper).vm.$emit('positive-click')
+  await nextTick()
+}
+
 beforeEach(() => {
   settings.value = undefined
   vi.clearAllMocks()
@@ -163,5 +171,183 @@ describe('SubscriptionFormModal create, copy and lifetime behavior', () => {
     await save(wrapper)
     expect(wrapper.emitted('submit')).toBeUndefined()
     expect(messages.warning).toHaveBeenCalled()
+  })
+})
+
+describe('SubscriptionFormModal logo URL import', () => {
+  const svg = '<svg onload="alert(1)"><script>alert(1)</script></svg>'
+  const svgResult = { requiresSvgConfirmation: true as const, svgBase64: btoa(svg), logoSource: 'url' }
+
+  async function openPanel(wrapper: VueWrapper, url: string) {
+    const openButton = wrapper.findAllComponents(NButton).find((item) => item.props('circle'))!
+    await openButton.trigger('click')
+    await flushPromises()
+    const input = wrapper.findAllComponents(NInput).find((item) => item.props('placeholder') === t('subscriptions.form.logo.urlPlaceholder'))!
+    input.vm.$emit('update:value', url)
+    await nextTick()
+    return button(wrapper, t('subscriptions.form.logo.importUrl'))
+  }
+
+  it('downloads a URL once, shows loading and applies only the returned local logo', async () => {
+    let resolveImport!: (value: { logoUrl: string; logoSource: string }) => void
+    vi.mocked(api.importSubscriptionLogo).mockImplementationOnce(() => new Promise((resolve) => { resolveImport = resolve }))
+    const wrapper = mountForm({ model: original })
+    const importButton = await openPanel(wrapper, '  https://example.com/remote.png  ')
+    await importButton.trigger('click')
+    expect(riskDialog(wrapper).props('show')).toBe(false)
+    expect(importButton.props('loading')).toBe(true)
+    await importButton.trigger('click')
+    expect(api.importSubscriptionLogo).toHaveBeenCalledTimes(1)
+    expect(api.importSubscriptionLogo).toHaveBeenCalledWith({ logoUrl: 'https://example.com/remote.png', source: 'url' })
+    resolveImport({ logoUrl: '/uploads/logos/downloaded.png', logoSource: 'url' })
+    await flushPromises()
+    expect(wrapper.find('.logo-panel').exists()).toBe(false)
+    expect(riskDialog(wrapper).props('show')).toBe(false)
+    expect(api.uploadSubscriptionLogo).not.toHaveBeenCalled()
+    const submission = await save(wrapper)
+    expect(submission?.[0]).toMatchObject({ logoUrl: '/uploads/logos/downloaded.png', logoSource: 'url' })
+    expect(api.getSubscriptionLogoLibrary).toHaveBeenCalledTimes(2)
+    expect(messages.success).toHaveBeenCalledWith(t('subscriptions.messages.logoSavedAndApplied'))
+  })
+
+  it('reports import failure, clears loading and leaves the prior logo intact for retry', async () => {
+    vi.mocked(api.importSubscriptionLogo).mockRejectedValueOnce(new Error('Invalid image URL'))
+    const wrapper = mountForm({ model: original })
+    const importButton = await openPanel(wrapper, 'https://example.com/broken.png')
+    await importButton.trigger('click')
+    await flushPromises()
+    expect(riskDialog(wrapper).props('show')).toBe(false)
+    expect(importButton.props('loading')).toBe(false)
+    expect(wrapper.find('.logo-panel').exists()).toBe(true)
+    expect(messages.error).toHaveBeenCalledWith('Invalid image URL')
+    expect((await save(wrapper))?.[0]).toMatchObject({ logoUrl: '/logo.png', logoSource: 'upload' })
+  })
+
+  it('asks only for detected SVG, then uploads the exact downloaded bytes without another URL request', async () => {
+    vi.mocked(api.importSubscriptionLogo).mockResolvedValueOnce(svgResult)
+    vi.mocked(api.uploadSubscriptionLogo).mockResolvedValueOnce({ logoUrl: '/static/logos/accepted.svg', logoSource: 'upload' })
+    const wrapper = mountForm({ model: original })
+    await (await openPanel(wrapper, 'https://example.com/looks-like-png.png')).trigger('click')
+    await flushPromises()
+    expect(riskDialog(wrapper).props('show')).toBe(true)
+    expect(riskDialog(wrapper).props('content')).toBe(t('subscriptions.form.logo.svgRiskDescription'))
+    expect(api.uploadSubscriptionLogo).not.toHaveBeenCalled()
+    expect((await save(wrapper))?.[0]).toMatchObject({ logoUrl: original.logoUrl })
+    await acceptLogoRisk(wrapper)
+    await flushPromises()
+    expect(api.uploadSubscriptionLogo).toHaveBeenCalledExactlyOnceWith({ filename: 'logo.svg', contentType: 'image/svg+xml', base64: btoa(svg) })
+    expect(api.importSubscriptionLogo).toHaveBeenCalledTimes(1)
+    expect((await save(wrapper))?.[0]).toMatchObject({ logoUrl: '/static/logos/accepted.svg', logoSource: 'url' })
+  })
+
+  it('does not warn for a raster image even when the URL ends in svg', async () => {
+    vi.mocked(api.importSubscriptionLogo).mockResolvedValueOnce({ logoUrl: '/static/logos/image.png', logoSource: 'url' })
+    const wrapper = mountForm({ model: original })
+    await (await openPanel(wrapper, 'https://example.com/logo.svg')).trigger('click')
+    await flushPromises()
+    expect(riskDialog(wrapper).props('show')).toBe(false)
+    expect((await save(wrapper))?.[0]).toMatchObject({ logoUrl: '/static/logos/image.png' })
+  })
+
+  it.each(['negative-click', 'update:show'])('discards detected SVG on cancellation without saving or changing the current logo (%s)', async (event) => {
+    vi.mocked(api.importSubscriptionLogo).mockResolvedValueOnce(svgResult)
+    const wrapper = mountForm({ model: original })
+    const importButton = await openPanel(wrapper, 'https://example.com/logo.svg')
+    await importButton.trigger('click')
+    await flushPromises()
+    expect(riskDialog(wrapper).props('show')).toBe(true)
+    riskDialog(wrapper).vm.$emit(event, false)
+    await nextTick()
+    await acceptLogoRisk(wrapper)
+    expect(riskDialog(wrapper).props('show')).toBe(false)
+    expect(api.importSubscriptionLogo).toHaveBeenCalledTimes(1)
+    expect(api.uploadSubscriptionLogo).not.toHaveBeenCalled()
+    expect((await save(wrapper))?.[0]).toMatchObject({ logoUrl: original.logoUrl })
+  })
+
+  it('clears pending consent when the subscription form closes', async () => {
+    vi.mocked(api.importSubscriptionLogo).mockResolvedValueOnce(svgResult)
+    const wrapper = mountForm({ model: original })
+    await (await openPanel(wrapper, 'https://example.com/logo.svg')).trigger('click')
+    await flushPromises()
+    await wrapper.setProps({ show: false })
+    await acceptLogoRisk(wrapper)
+    expect(riskDialog(wrapper).props('show')).toBe(false)
+    expect(api.uploadSubscriptionLogo).not.toHaveBeenCalled()
+  })
+
+  it('ignores a late SVG detection response after closing and reopening the form', async () => {
+    let resolveImport!: (value: typeof svgResult) => void
+    vi.mocked(api.importSubscriptionLogo).mockImplementationOnce(() => new Promise(resolve => { resolveImport = resolve }))
+    const wrapper = mountForm({ model: original })
+    await (await openPanel(wrapper, 'https://example.com/logo.svg')).trigger('click')
+    await wrapper.setProps({ show: false })
+    await wrapper.setProps({ show: true })
+    resolveImport(svgResult)
+    await flushPromises()
+    expect(riskDialog(wrapper).props('show')).toBe(false)
+    expect(api.uploadSubscriptionLogo).not.toHaveBeenCalled()
+    expect((await save(wrapper))?.[0]).toMatchObject({ logoUrl: original.logoUrl })
+  })
+})
+
+describe('SubscriptionFormModal SVG uploads', () => {
+  async function chooseFile(wrapper: VueWrapper, file: File) {
+    const input = wrapper.get('input[type="file"]')
+    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    await input.trigger('change')
+    await vi.waitFor(() => expect(riskDialog(wrapper).props('show') || vi.mocked(api.uploadSubscriptionLogo).mock.calls.length > 0).toBe(true))
+  }
+
+  it.each([
+    ['GIF89a', 'image/gif'], ['BM', 'image/bmp'],
+    ['\0\0\x01\0\x01\0', 'image/vnd.microsoft.icon'],
+    ['\0\0\0\x14ftypavif\0\0\0\0mif1', 'image/avif']
+  ])('uploads detected %s as %s without an SVG warning despite its filename and MIME', async (bytes, contentType) => {
+    const wrapper = mountForm({ model: original })
+    vi.mocked(api.uploadSubscriptionLogo).mockResolvedValueOnce({ logoUrl: '/static/logos/new-logo', logoSource: 'upload' })
+    await chooseFile(wrapper, new File([bytes], 'wrong.svg', { type: 'image/svg+xml' }))
+    expect(riskDialog(wrapper).props('show')).toBe(false)
+    expect(api.uploadSubscriptionLogo).toHaveBeenCalledExactlyOnceWith({ filename: 'wrong.svg', contentType, base64: btoa(bytes) })
+    await flushPromises()
+    expect((await save(wrapper))?.[0]).toMatchObject({ logoUrl: '/static/logos/new-logo' })
+  })
+
+  it.each([
+    ['logo.svg', 'image/svg+xml'], ['logo.svg', ''], ['logo.png', 'image/png']
+  ])('detects SVG bytes and uploads only after consent (%s, %s)', async (filename, type) => {
+    const wrapper = mountForm({ model: original })
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+    vi.mocked(api.uploadSubscriptionLogo).mockResolvedValueOnce({ logoUrl: '/static/logos/accepted.svg', logoSource: 'upload' })
+    await chooseFile(wrapper, new File([svg], filename, { type }))
+    expect(api.uploadSubscriptionLogo).not.toHaveBeenCalled()
+    expect(riskDialog(wrapper).props('show')).toBe(true)
+    await acceptLogoRisk(wrapper)
+    await vi.waitFor(() => expect(api.uploadSubscriptionLogo).toHaveBeenCalledWith({
+      filename, contentType: 'image/svg+xml', base64: btoa(svg)
+    }))
+    await flushPromises()
+    expect((await save(wrapper))?.[0]).toMatchObject({ logoUrl: '/static/logos/accepted.svg' })
+  })
+
+  it('allows cancelling an SVG upload without uploading or altering the previous logo', async () => {
+    const wrapper = mountForm({ model: original })
+    await chooseFile(wrapper, new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' }))
+    riskDialog(wrapper).vm.$emit('negative-click')
+    await nextTick()
+    await acceptLogoRisk(wrapper)
+    expect(api.uploadSubscriptionLogo).not.toHaveBeenCalled()
+    expect((await save(wrapper))?.[0]).toMatchObject({ logoUrl: original.logoUrl })
+  })
+
+  it.each([
+    ['logo.png', 'image/png'], ['logo.svg', 'image/svg+xml']
+  ])('keeps actual raster uploads free of SVG confirmation, regardless of name or MIME (%s)', async (filename, type) => {
+    const wrapper = mountForm({ model: original })
+    vi.mocked(api.uploadSubscriptionLogo).mockResolvedValueOnce({ logoUrl: '/static/logos/image.png', logoSource: 'upload' })
+    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    await chooseFile(wrapper, new File([bytes], filename, { type }))
+    expect(riskDialog(wrapper).props('show')).toBe(false)
+    expect(api.uploadSubscriptionLogo).toHaveBeenCalledWith({ filename, contentType: 'image/png', base64: btoa(String.fromCharCode(...bytes)) })
   })
 })

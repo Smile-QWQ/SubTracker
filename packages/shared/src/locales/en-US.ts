@@ -867,6 +867,12 @@ export default {
       notesPlaceholder: 'Optional: account, plan, or any special notes',
       notificationEnabledLabel: 'Enable reminders',
       logo: {
+        urlLabel: 'Image URL (PNG / JPG / WEBP / SVG / GIF / ICO / AVIF / BMP)',
+        svgRiskTitle: 'SVG security warning',
+        svgRiskDescription: 'This image was detected as SVG and may contain scripts or external resources. It will be stored unchanged after confirmation, without security checks or sanitization. Opening them directly may execute scripts, access external resources, or expose information. Use trusted sources only. Do you accept these risks and want to continue?',
+        acceptRisk: 'Accept risks and continue',
+        urlPlaceholder: 'https://example.com/logo.png',
+        importUrl: 'Download & apply',
         upload: 'Click to upload',
         placeholder: 'Logo',
         panelTitle: 'Choose a logo',
@@ -882,6 +888,7 @@ export default {
         source: {
           upload: 'Local upload',
           remote: 'Remote import',
+          url: 'Imported from URL',
           wallosZip: 'Wallos ZIP',
           local: 'Local library'
         }
@@ -1505,7 +1512,7 @@ Hard requirements:
         logoImportFailed: 'Failed to import logo',
         logoUnsupportedImageType: 'Unsupported logo image type',
         logoBufferEmpty: 'The logo image content is empty',
-        logoUploadTypeUnsupported: 'Only PNG, JPG, WEBP, and SVG images are supported',
+        logoUploadTypeUnsupported: 'Only PNG, JPG, WEBP, SVG, GIF, ICO, AVIF, and BMP images are supported',
         imageBufferEmpty: 'The image content is empty',
         logoRemoteUnavailable: 'Failed to download the remote logo or the image is unavailable',
         logoFilenameInvalid: 'Invalid logo filename',

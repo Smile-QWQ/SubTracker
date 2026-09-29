@@ -866,6 +866,12 @@ export default {
       notesPlaceholder: '可选，记录账号、套餐或特别说明',
       notificationEnabledLabel: '启用提醒通知',
       logo: {
+        urlLabel: '图片 URL（PNG / JPG / WEBP / SVG / GIF / ICO / AVIF / BMP）',
+        svgRiskTitle: 'SVG 安全风险提示',
+        svgRiskDescription: '检测到该图片为 SVG，可能包含脚本或外部资源。系统不会对 SVG 做安全检查或内容消毒，确认后将原样保存；直接打开这类文件可能执行脚本、访问外部资源或泄露信息。请仅使用可信来源，是否自行承担风险并继续？',
+        acceptRisk: '我了解风险，继续',
+        urlPlaceholder: 'https://example.com/logo.png',
+        importUrl: '下载并应用',
         upload: '点击上传',
         placeholder: 'Logo',
         panelTitle: '选择 Logo',
@@ -881,6 +887,7 @@ export default {
         source: {
           upload: '本地上传',
           remote: '远程导入',
+          url: 'URL 导入',
           wallosZip: 'Wallos ZIP',
           local: '本地库'
         }
@@ -1502,7 +1509,7 @@ export default {
         logoImportFailed: 'Logo 导入失败',
         logoUnsupportedImageType: '不支持的 Logo 图片类型',
         logoBufferEmpty: 'Logo 图片内容为空',
-        logoUploadTypeUnsupported: '仅支持 PNG、JPG、WEBP、SVG 图片',
+        logoUploadTypeUnsupported: '仅支持 PNG、JPG、WEBP、SVG、GIF、ICO、AVIF、BMP 图片',
         imageBufferEmpty: '图片内容为空',
         logoRemoteUnavailable: '远程 Logo 下载失败或图片不可用',
         logoFilenameInvalid: '无效的 Logo 文件名',

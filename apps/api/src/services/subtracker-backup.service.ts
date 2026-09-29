@@ -16,7 +16,7 @@ import type {
   SubtrackerBackupSubscriptionDto,
   SubtrackerBackupTagDto
 } from '@subtracker/shared'
-import { DEFAULT_APP_LOCALE, SettingsSchema, getMessage } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE, SettingsSchema, getMessage, LOGO_MIME_BY_EXTENSION } from '@subtracker/shared'
 import { prisma } from '../db'
 import { formatDateInTimezone, parseDateInTimezone, toTimezonedDayjs } from '../utils/timezone'
 import { getLocalLogoLibrary, getLogoStorageDir, saveImportedLogoBuffer } from './logo.service'
@@ -116,20 +116,7 @@ function cleanupExpiredImports() {
 }
 
 function fileTypeFromName(filename: string) {
-  const ext = path.extname(filename).toLowerCase()
-  switch (ext) {
-    case '.png':
-      return 'image/png'
-    case '.jpg':
-    case '.jpeg':
-      return 'image/jpeg'
-    case '.webp':
-      return 'image/webp'
-    case '.svg':
-      return 'image/svg+xml'
-    default:
-      return 'application/octet-stream'
-  }
+  return LOGO_MIME_BY_EXTENSION[path.extname(filename).toLowerCase()] ?? 'application/octet-stream'
 }
 
 function normalizeZipLogoPath(value: string) {

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { additionalLogos } from './logo-fixtures'
 
 const mocks = vi.hoisted(() => ({
   prismaMock: {
@@ -583,10 +584,12 @@ describe('subtracker backup service', () => {
       }
     ])
     mocks.getLocalLogoLibraryMock.mockResolvedValue([
-      { logoUrl: '/static/logos/netflix.png' }
+      { logoUrl: '/static/logos/netflix.png' },
+      ...additionalLogos.map(({ extension }) => ({ logoUrl: `/static/logos/extra${extension}` }))
     ])
     mocks.getLogoStorageDirMock.mockReturnValue('D:/fake/logos')
-    mocks.readFileMock.mockResolvedValue(Buffer.from('fake-image'))
+    mocks.readFileMock.mockImplementation(async (filename: string) =>
+      additionalLogos.find(({ extension }) => filename.endsWith(extension))?.buffer ?? Buffer.from('fake-image'))
 
     const result = await createSubtrackerBackupArchive()
 
@@ -604,6 +607,12 @@ describe('subtracker backup service', () => {
       path: 'logos/netflix.png',
       sourceLogoUrl: '/static/logos/netflix.png'
     })
+    for (const { extension, contentType, buffer } of additionalLogos) {
+      expect(manifest.assets.logos).toContainEqual(expect.objectContaining({
+        path: `logos/extra${extension}`, contentType, sourceLogoUrl: `/static/logos/extra${extension}`
+      }))
+      expect(zip.getEntries().find(entry => entry.entryName === `logos/extra${extension}`)!.getData()).toEqual(buffer)
+    }
     expect(manifest.data.notificationWebhook.url).toBe('https://example.com/hook')
   })
 

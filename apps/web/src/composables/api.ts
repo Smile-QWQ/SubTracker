@@ -1,4 +1,5 @@
 import axios from 'axios'
+import type { LogoImportResult } from '@subtracker/shared'
 import type {
   AppLocale,
   AppLocaleResponse,
@@ -225,7 +226,7 @@ export const api = {
   },
 
   async importSubscriptionLogo(payload: { logoUrl: string; source?: string }) {
-    return postOnce<{ logoUrl: string; logoSource: string }>('/subscriptions/logo/import', payload, { timeout: LOGO_REQUEST_TIMEOUT_MS })
+    return postOnce<LogoImportResult>('/subscriptions/logo/import', payload, { timeout: LOGO_REQUEST_TIMEOUT_MS })
   },
 
   async updateSubscription(id: string, payload: Record<string, unknown>) {

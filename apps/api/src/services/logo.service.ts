@@ -2,21 +2,15 @@ import { mkdir, readdir, stat, unlink, writeFile } from 'node:fs/promises'
 import crypto from 'node:crypto'
 import path from 'node:path'
 import { prisma } from '../db'
-import { DEFAULT_APP_LOCALE, getMessage, type AppLocale, type LogoSearchResultDto } from '@subtracker/shared'
+import { fetchRemoteBody, inspectDownloadedImage } from '../utils/remote-image'
+import { DEFAULT_APP_LOCALE, getMessage, LOGO_EXTENSION_BY_MIME, type AppLocale, type LogoImportResult, type LogoSearchResultDto } from '@subtracker/shared'
 
 const logoDir = path.resolve(process.cwd(), 'apps/api/storage/logos')
 const SEARCH_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36'
-const LOGO_REQUEST_TIMEOUT_MS = 20000
 const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000
-const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml'])
-const extensionMap: Record<string, string> = {
-  'image/png': '.png',
-  'image/jpeg': '.jpg',
-  'image/jpg': '.jpg',
-  'image/webp': '.webp',
-  'image/svg+xml': '.svg'
-}
+const extensionMap = LOGO_EXTENSION_BY_MIME
+const allowedTypes = new Set(Object.keys(extensionMap))
 
 type RawCandidate = LogoSearchResultDto & {
   scoreHint?: number
@@ -138,37 +132,12 @@ function makeCandidate(
 }
 
 async function fetchText(url: string, headers?: Record<string, string>) {
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': SEARCH_USER_AGENT,
-      ...headers
-    },
-    redirect: 'follow',
-    signal: AbortSignal.timeout(LOGO_REQUEST_TIMEOUT_MS)
-  })
-
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`)
-  }
-
-  return response.text()
+  const response = await fetchRemoteBody(url, { 'User-Agent': SEARCH_USER_AGENT, ...headers })
+  return response.buffer.toString('utf8')
 }
 
 async function fetchJson<T>(url: string, headers?: Record<string, string>) {
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': SEARCH_USER_AGENT,
-      ...headers
-    },
-    redirect: 'follow',
-    signal: AbortSignal.timeout(LOGO_REQUEST_TIMEOUT_MS)
-  })
-
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`)
-  }
-
-  return (await response.json()) as T
+  return JSON.parse(await fetchText(url, headers)) as T
 }
 
 function extractLinkMatches(html: string) {
@@ -341,107 +310,17 @@ async function fetchBraveCandidates(searchTerm: string, locale: AppLocale = DEFA
   return candidates
 }
 
-function inferContentTypeFromUrl(url: string) {
-  try {
-    const pathname = new URL(url).pathname.toLowerCase()
-    if (pathname.endsWith('.png')) return 'image/png'
-    if (pathname.endsWith('.jpg') || pathname.endsWith('.jpeg')) return 'image/jpeg'
-    if (pathname.endsWith('.webp')) return 'image/webp'
-    if (pathname.endsWith('.svg')) return 'image/svg+xml'
-  } catch {
-    return ''
-  }
-  return ''
-}
-
-function getImageDimensions(buffer: Buffer, contentType: string) {
-  if (contentType === 'image/png') {
-    if (buffer.length >= 24 && buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
-      return {
-        width: buffer.readUInt32BE(16),
-        height: buffer.readUInt32BE(20)
-      }
-    }
-  }
-
-  if (contentType === 'image/jpeg' || contentType === 'image/jpg') {
-    let offset = 2
-    while (offset < buffer.length) {
-      if (buffer[offset] !== 0xff) break
-      const marker = buffer[offset + 1]
-      const length = buffer.readUInt16BE(offset + 2)
-      if (marker >= 0xc0 && marker <= 0xc3) {
-        return {
-          height: buffer.readUInt16BE(offset + 5),
-          width: buffer.readUInt16BE(offset + 7)
-        }
-      }
-      offset += 2 + length
-    }
-  }
-
-  if (contentType === 'image/webp' && buffer.length >= 30) {
-    const chunk = buffer.toString('ascii', 12, 16)
-    if (chunk === 'VP8X') {
-      return {
-        width: 1 + buffer.readUIntLE(24, 3),
-        height: 1 + buffer.readUIntLE(27, 3)
-      }
-    }
-  }
-
-  if (contentType === 'image/svg+xml') {
-    const text = buffer.toString('utf8', 0, Math.min(buffer.length, 4096))
-    const widthMatch = text.match(/\bwidth=["']?([\d.]+)(?:px)?["']?/i)
-    const heightMatch = text.match(/\bheight=["']?([\d.]+)(?:px)?["']?/i)
-    if (widthMatch && heightMatch) {
-      return {
-        width: Number(widthMatch[1]),
-        height: Number(heightMatch[1])
-      }
-    }
-    const viewBoxMatch = text.match(/\bviewBox=["'][^"']*?(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)["']/i)
-    if (viewBoxMatch) {
-      return {
-        width: Number(viewBoxMatch[1]),
-        height: Number(viewBoxMatch[2])
-      }
-    }
-  }
-
-  return {}
+async function downloadRemoteImage(url: string): Promise<ImageMeta> {
+  const response = await fetchRemoteBody(url, {
+    'User-Agent': SEARCH_USER_AGENT,
+    Accept: Array.from(allowedTypes).join(',')
+  })
+  return { ...response, ...inspectDownloadedImage(response.buffer, response.contentType) }
 }
 
 async function inspectRemoteImage(url: string): Promise<ImageMeta | null> {
   try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': SEARCH_USER_AGENT,
-        Accept: 'image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.9,*/*;q=0.8'
-      },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(LOGO_REQUEST_TIMEOUT_MS)
-    })
-
-    if (!response.ok) return null
-
-    const headerType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase()
-    const contentType = headerType || inferContentTypeFromUrl(response.url || url)
-    if (!allowedTypes.has(contentType)) return null
-
-    const arrayBuffer = await response.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
-    if (!buffer.length) return null
-
-    const { width, height } = getImageDimensions(buffer, contentType)
-
-    return {
-      finalUrl: response.url || url,
-      contentType,
-      width,
-      height,
-      buffer
-    }
+    return await downloadRemoteImage(url)
   } catch {
     return null
   }
@@ -637,7 +516,7 @@ export async function saveImportedLogoBuffer(
 }
 
 function isLocalLogoUrl(url?: string | null) {
-  return Boolean(url && url.startsWith('/static/logos/'))
+  return Boolean(url && /^\/static\/logos\/[a-zA-Z0-9_-][a-zA-Z0-9._-]*$/.test(url))
 }
 
 export async function saveUploadedLogo(
@@ -656,15 +535,32 @@ export async function saveUploadedLogo(
   return writeLogoBuffer(buffer, input.contentType, 'upload')
 }
 
+async function downloadLogoForImport(logoUrl: string, locale: AppLocale) {
+  try {
+    return await downloadRemoteImage(logoUrl)
+  } catch {
+    throw new Error(getLogoMessage(locale, 'api.errors.subscriptions.logoRemoteUnavailable'))
+  }
+}
+
+export async function prepareRemoteLogoImport(
+  input: { logoUrl: string; source?: string },
+  locale: AppLocale = DEFAULT_APP_LOCALE
+): Promise<LogoImportResult> {
+  const meta = await downloadLogoForImport(input.logoUrl, locale)
+  const logoSource = input.source || 'remote'
+  if (meta.contentType === 'image/svg+xml') {
+    // Return inert data, not a publicly served file. Consent uploads these exact bytes without another download.
+    return { requiresSvgConfirmation: true, svgBase64: meta.buffer.toString('base64'), logoSource }
+  }
+  return writeLogoBuffer(meta.buffer, meta.contentType, logoSource)
+}
+
 export async function importRemoteLogo(
   input: { logoUrl: string; source?: string },
   locale: AppLocale = DEFAULT_APP_LOCALE
 ) {
-  const meta = await inspectRemoteImage(input.logoUrl)
-  if (!meta) {
-    throw new Error(getLogoMessage(locale, 'api.errors.subscriptions.logoRemoteUnavailable'))
-  }
-
+  const meta = await downloadLogoForImport(input.logoUrl, locale)
   return writeLogoBuffer(meta.buffer, meta.contentType, input.source || 'remote')
 }
 
@@ -701,11 +597,7 @@ export async function normalizeLogoForStorage(
     }
   }
 
-  return {
-    logoUrl: input.logoUrl,
-    logoSource: input.logoSource ?? null,
-    logoFetchedAt: new Date()
-  }
+  throw new Error(getLogoMessage(locale, 'api.errors.subscriptions.logoRemoteUnavailable'))
 }
 
 export async function getLocalLogoLibrary() {

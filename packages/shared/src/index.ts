@@ -9,6 +9,7 @@ import {
   type AppLocale
 } from './locale-core'
 import { NotificationTemplateConfigSchema } from './notification-templates'
+export { detectLogoContentType, LOGO_MIME_BY_EXTENSION, LOGO_EXTENSION_BY_MIME, type LogoContentType, type LogoImportResult } from './logo-image'
 
 const FQDN_LABEL_RE = /^[a-z_\u00a1-\uffff0-9-]+$/i
 const FQDN_TLD_RE = /^([a-z\u00A1-\u00A8\u00AA-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF]{2,}|xn[a-z0-9-]{2,})$/i

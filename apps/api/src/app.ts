@@ -3,7 +3,7 @@ import cors from '@fastify/cors'
 import rateLimit from '@fastify/rate-limit'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
-import { DEFAULT_APP_LOCALE } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE, LOGO_MIME_BY_EXTENSION } from '@subtracker/shared'
 import { getMessage } from '@subtracker/shared'
 import { config } from './config'
 import { sendError } from './http'
@@ -54,13 +54,7 @@ export async function buildApp() {
     const safeName = path.basename(filename)
     const filePath = path.resolve(process.cwd(), 'apps/api/storage/logos', safeName)
     const ext = path.extname(safeName).toLowerCase()
-    const mimeMap: Record<string, string> = {
-      '.png': 'image/png',
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.webp': 'image/webp',
-      '.svg': 'image/svg+xml'
-    }
+    const mimeMap = LOGO_MIME_BY_EXTENSION
 
     try {
       const file = await readFile(filePath)
