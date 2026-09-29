@@ -173,6 +173,7 @@ export interface StatisticsOverview {
 
 export interface CalendarEvent {
   id: string
+  subscriptionId: string
   title: string
   date: string
   currency: string

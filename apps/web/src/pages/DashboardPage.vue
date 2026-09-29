@@ -126,9 +126,11 @@ import { useWindowSize } from '@vueuse/core'
 import { NCard, NDataTable, NEmpty, NGrid, NGridItem, NProgress, NRadioButton, NRadioGroup, NTag, useThemeVars } from 'naive-ui'
 import { CashOutline, GridOutline, LayersOutline, NotificationsOutline, WalletOutline } from '@vicons/ionicons5'
 import { t } from '@/locales'
+import { useSubscriptionRenewal } from '@/composables/subscription-renewal'
 import { useSettingsQuery } from '@/composables/settings-query'
 import { useStatisticsOverviewQuery } from '@/composables/statistics-overview-query'
 import ChartView from '@/components/ChartView.vue'
+import UpcomingRenewalActions from '@/components/UpcomingRenewalActions.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
 import type { StatisticsOverview } from '@/types/api'
@@ -138,6 +140,7 @@ import { formatDateInTimezone } from '@/utils/timezone'
 const { width } = useWindowSize()
 const gridOutline = GridOutline
 const themeVars = useThemeVars()
+const { renewingIds, renew } = useSubscriptionRenewal()
 const tagSpendPeriod = ref<'monthly' | 'yearly'>('monthly')
 
 const { data: overview } = useStatisticsOverviewQuery()
@@ -248,6 +251,17 @@ const columns = computed(() => [
     key: 'status',
     render: (row: StatisticsOverview['upcomingRenewals'][number]) =>
       h(NTag, { type: getSubscriptionStatusTagType(row.status) }, { default: () => getSubscriptionStatusText(row.status) })
+  },
+  {
+    title: t('common.labels.actions'),
+    key: 'actions',
+    width: 150,
+    render: (row: StatisticsOverview['upcomingRenewals'][number]) => h(UpcomingRenewalActions, {
+      subscriptionId: row.id,
+      name: row.name,
+      renewing: renewingIds.value.has(row.id),
+      onRenew: renew
+    })
   }
 ])
 

@@ -74,6 +74,13 @@
                       {{ item.currency }} {{ item.amount.toFixed(2) }} / {{ t('calendar.detail.converted') }} {{ baseCurrency }}
                       {{ item.convertedAmount.toFixed(2) }}
                     </div>
+                    <upcoming-renewal-actions
+                      :subscription-id="item.subscriptionId"
+                      :name="item.title"
+                      :renewing="renewingIds.has(item.subscriptionId)"
+                      style="margin-top: 8px"
+                      @renew="renew"
+                    />
                   </div>
                 </n-space>
               </n-card>
@@ -90,9 +97,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, h, onMounted, ref, watch } from 'vue'
 import { useWindowSize } from '@vueuse/core'
-import { NCalendar, NCard, NDataTable, NEmpty, NGrid, NGridItem, NSpace, NTabPane, NTabs, NTag } from 'naive-ui'
+import { NButton, NCalendar, NCard, NDataTable, NEmpty, NGrid, NGridItem, NSpace, NTabPane, NTabs, NTag } from 'naive-ui'
 import {
   CalendarClearOutline,
   CalendarOutline,
@@ -102,8 +109,10 @@ import {
 } from '@vicons/ionicons5'
 import { t } from '@/locales'
 import { useCalendarEventsQuery } from '@/composables/calendar-events-query'
+import { useSubscriptionRenewal } from '@/composables/subscription-renewal'
 import { useSettingsQuery } from '@/composables/settings-query'
 import PageHeader from '@/components/PageHeader.vue'
+import UpcomingRenewalActions from '@/components/UpcomingRenewalActions.vue'
 import StatCard from '@/components/StatCard.vue'
 import type { CalendarEvent } from '@/types/api'
 import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils/subscription-status'
@@ -119,6 +128,7 @@ import {
 } from '@/utils/timezone'
 
 const { width } = useWindowSize()
+const { renewingIds, renew } = useSubscriptionRenewal()
 const calendarOutline = CalendarOutline
 const calendarClearOutline = CalendarClearOutline
 const notificationsOutline = NotificationsOutline
@@ -204,7 +214,7 @@ const selectedDateConvertedAmount = computed(() => selectedDateEvents.value.redu
 const monthEventCount = computed(() => events.value.length)
 const monthConvertedAmount = computed(() => events.value.reduce((sum, item) => sum + item.convertedAmount, 0))
 
-const columns = [
+const columns = computed(() => [
   { title: t('calendar.table.subscription'), key: 'title' },
   {
     title: t('calendar.table.date'),
@@ -225,8 +235,19 @@ const columns = [
     title: t('calendar.table.status'),
     key: 'status',
     render: (row: CalendarEvent) => getSubscriptionStatusText(row.status)
+  },
+  {
+    title: t('common.labels.actions'),
+    key: 'actions',
+    width: 150,
+    render: (row: CalendarEvent) => h(UpcomingRenewalActions, {
+      subscriptionId: row.subscriptionId,
+      name: row.title,
+      renewing: renewingIds.value.has(row.subscriptionId),
+      onRenew: renew
+    })
   }
-]
+])
 
 function handlePanelChange({ year, month }: { year: number; month: number }) {
   const targetMonthKey = `${year}-${String(month).padStart(2, '0')}`
