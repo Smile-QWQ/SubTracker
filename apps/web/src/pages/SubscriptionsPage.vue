@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div ref="listRoot">
     <n-space justify="space-between" align="start" class="page-top">
       <page-header :title="t('subscriptions.page.title')" :subtitle="t('subscriptions.page.subtitle')" :icon="layersOutline" />
       <n-space>
@@ -105,7 +105,7 @@
           </n-button>
         </n-space>
         <n-space wrap>
-          <n-button size="small" type="primary" ghost :disabled="selectedCount === 0" @click="runBatchRenew">
+          <n-button size="small" type="primary" ghost :disabled="batchRenewalSelection.ids.length === 0" @click="runBatchRenew">
             {{ t('subscriptions.actions.batchRenew') }}
           </n-button>
           <n-button size="small" :disabled="selectedCount === 0" @click="runBatchSetStatus('active')">
@@ -126,7 +126,15 @@
       <div v-if="isMobile" class="mobile-list">
         <n-empty v-if="orderedSubscriptions.length === 0" :description="t('subscriptions.page.noSubscriptions')" />
 
-        <n-card v-for="item in orderedSubscriptions" :key="item.id" size="small" class="mobile-subscription-card">
+        <n-card
+          v-for="item in orderedSubscriptions"
+          :key="item.id"
+          size="small"
+          class="mobile-subscription-card"
+          :class="{ 'mobile-subscription-card--focused': focusedSubscriptionId === item.id }"
+          :data-subscription-id="item.id"
+          :tabindex="focusedSubscriptionId === item.id ? -1 : undefined"
+        >
           <div class="mobile-subscription-card__header">
             <div class="mobile-subscription-card__title-wrap">
               <n-checkbox
@@ -143,7 +151,7 @@
                 <div class="mobile-subscription-card__title">{{ item.name }}</div>
                 <div class="mobile-subscription-card__meta">
                   {{ item.currency }} {{ Number(item.amount).toFixed(2) }} ·
-                  {{ formatInterval(item.billingIntervalCount, unitLabel(item.billingIntervalUnit)) }}
+                  {{ formatSubscriptionInterval(item) }}
                 </div>
               </div>
             </div>
@@ -170,7 +178,7 @@
             <span v-if="!(item.tags?.length)" class="muted-text">{{ t('common.empty.noTags') }}</span>
           </n-space>
 
-          <div class="mobile-subscription-card__rows">
+          <div v-if="item.billingType !== 'lifetime'" class="mobile-subscription-card__rows">
             <div class="mobile-subscription-card__row">
               <span>{{ t('common.labels.nextRenewal') }}</span>
               <span>{{ formatDate(item.nextRenewalDate) }}</span>
@@ -191,8 +199,9 @@
             <n-button size="small" @click="openDetail(item.id)">{{ t('subscriptions.actions.detail') }}</n-button>
             <n-button size="small" @click="openRecords(item.id)">{{ t('subscriptions.actions.records') }}</n-button>
             <n-button size="small" @click="openEdit(item)">{{ t('subscriptions.actions.edit') }}</n-button>
+            <n-button size="small" @click="openCopy(item)">{{ t('subscriptions.actions.copy') }}</n-button>
             <n-button
-              v-if="item.status === 'active' || item.status === 'expired'"
+              v-if="canRenewSubscription(item)"
               size="small"
               type="primary"
               ghost
@@ -270,6 +279,7 @@
     <subscription-form-modal
       :show="showModal"
       :model="editing"
+      :initial-values="copyDraft"
       :saving="savingSubscription"
       :tags="tags"
       :currencies="currencies"
@@ -296,7 +306,8 @@
 
 <script setup lang="ts">
 import dayjs from 'dayjs'
-import { computed, h, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, h, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useWindowSize } from '@vueuse/core'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import {
@@ -342,22 +353,27 @@ import {
   areAllVisibleSubscriptionsSelected,
   countBatchDeletableSubscriptions,
   getBatchStatusText,
+  getBatchRenewalSelection,
   getVisiblePageSubscriptionIds,
   mergeSelectedSubscriptionIds,
   type BatchSettableStatus
 } from '@/utils/subscription-batch'
 import {
-  DEFAULT_SUBSCRIPTION_PAGE_SIZE,
   SUBSCRIPTION_PAGE_SIZE_OPTIONS,
   getStoredSubscriptionPageSize,
   setStoredSubscriptionPageSize
 } from '@/utils/subscription-pagination'
-import { buildSubscriptionTableRows, paginateSubscriptions, type SubscriptionTableRow } from '@/utils/subscription-table'
+import { buildSubscriptionTableRows, canRenewSubscription, compareSubscriptionRenewalDates, paginateSubscriptions, type SubscriptionTableRow } from '@/utils/subscription-table'
+import { buildSubscriptionCopyDraft, type SubscriptionFormInitialValues } from '@/utils/subscription-form'
 import { useLocalizedMessage } from '@/utils/localized-message'
 
 type SortMode = 'custom' | 'renewal' | 'amount-desc' | 'name'
 
 const message = useLocalizedMessage()
+const route = useRoute()
+const listRoot = ref<HTMLElement | null>(null)
+const pendingFocusId = ref<string | null>(null)
+const focusedSubscriptionId = ref<string | null>(null)
 const { width } = useWindowSize()
 const queryClient = useQueryClient()
 const layersOutline = LayersOutline
@@ -392,6 +408,7 @@ const showDetailDrawer = ref(false)
 const showPaymentDrawer = ref(false)
 const showTagFilter = ref(false)
 const editing = ref<Subscription | null>(null)
+const copyDraft = ref<SubscriptionFormInitialValues | null>(null)
 const draggingId = ref<string | null>(null)
 const dragOverId = ref<string | null>(null)
 const armedDragId = ref<string | null>(null)
@@ -399,7 +416,7 @@ const savingOrder = ref(false)
 const savingSubscription = ref(false)
 const showDragHandles = ref(false)
 const currentPage = ref(1)
-const desktopPageSize = ref<number>(DEFAULT_SUBSCRIPTION_PAGE_SIZE)
+const desktopPageSize = ref<number>(getStoredSubscriptionPageSize())
 const batchMode = ref(false)
 const selectedSubscriptionIds = ref<string[]>([])
 
@@ -444,6 +461,7 @@ const selectedSubscriptions = computed(() =>
 )
 const selectedCount = computed(() => selectedSubscriptionIds.value.length)
 const batchDeleteSummary = computed(() => countBatchDeletableSubscriptions(selectedSubscriptions.value))
+const batchRenewalSelection = computed(() => getBatchRenewalSelection(selectedSubscriptions.value))
 const canBatchDelete = computed(() => batchDeleteSummary.value.deletableCount > 0)
 const visibleSelectionIds = computed(() =>
   getVisiblePageSubscriptionIds({
@@ -475,7 +493,7 @@ const orderedSubscriptions = computed(() => {
     case 'renewal':
       return rows.sort(
         (a, b) =>
-          formatDate(a.nextRenewalDate).localeCompare(formatDate(b.nextRenewalDate), 'zh-CN') ||
+          compareSubscriptionRenewalDates(a, b) ||
           dayjs(a.createdAt).valueOf() - dayjs(b.createdAt).valueOf()
       )
     case 'amount-desc':
@@ -525,30 +543,6 @@ const selectionColumn = {
       'onUpdate:checked': () => toggleSelectedSubscription(row.id)
     })
   }
-}
-
-const logoImageStyle = {
-  width: '28px',
-  height: '28px',
-  borderRadius: '8px',
-  objectFit: 'contain',
-  border: '1px solid var(--app-border-soft)',
-  background: 'var(--app-surface)',
-  flexShrink: '0'
-}
-
-const logoFallbackStyle = {
-  width: '28px',
-  height: '28px',
-  borderRadius: '8px',
-  background: 'var(--app-accent-soft)',
-  color: 'var(--app-accent)',
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  fontSize: '12px',
-  fontWeight: '700',
-  flexShrink: '0'
 }
 
 const noteContainerStyle = {
@@ -622,9 +616,9 @@ const mainColumns = computed(() => [
           ? h('img', {
               src: resolveLogoUrl(row.logoUrl),
               alt: row.name,
-              style: logoImageStyle
+              class: 'subscription-logo'
             })
-          : h('div', { style: logoFallbackStyle }, row.name.slice(0, 1).toUpperCase()),
+          : h('div', { class: 'subscription-logo subscription-logo--placeholder' }, row.name.slice(0, 1).toUpperCase()),
         h('div', { style: nameTitleStyle }, row.name)
       ])
     }
@@ -686,13 +680,13 @@ const mainColumns = computed(() => [
     title: t('subscriptions.labels.interval'),
     key: 'interval',
     colSpan: (row: SubscriptionTableRow) => (row.__rowType === 'note' ? 0 : 1),
-    render: (row: SubscriptionTableRow) => (row.__rowType === 'note' ? null : formatInterval(row.billingIntervalCount, unitLabel(row.billingIntervalUnit)))
+    render: (row: SubscriptionTableRow) => (row.__rowType === 'note' ? null : formatSubscriptionInterval(row))
   },
   {
     title: t('common.labels.nextRenewal'),
     key: 'nextRenewalDate',
     colSpan: (row: SubscriptionTableRow) => (row.__rowType === 'note' ? 0 : 1),
-    render: (row: SubscriptionTableRow) => (row.__rowType === 'note' ? null : formatDate(row.nextRenewalDate))
+    render: (row: SubscriptionTableRow) => (row.__rowType === 'note' ? null : row.billingType === 'lifetime' ? '—' : formatDate(row.nextRenewalDate))
   },
   {
     title: t('common.labels.status'),
@@ -762,7 +756,8 @@ const mainColumns = computed(() => [
           h(NButton, { size: 'small', onClick: () => void openDetail(row.id) }, { default: () => t('subscriptions.actions.detail') }),
           h(NButton, { size: 'small', onClick: () => void openRecords(row.id) }, { default: () => t('subscriptions.actions.records') }),
           h(NButton, { size: 'small', onClick: () => openEdit(row) }, { default: () => t('subscriptions.actions.edit') }),
-          ...(row.status === 'active' || row.status === 'expired'
+          h(NButton, { size: 'small', onClick: () => openCopy(row) }, { default: () => t('subscriptions.actions.copy') }),
+          ...(canRenewSubscription(row)
             ? [h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => void quickRenew(row) }, { default: () => t('subscriptions.actions.renew') })]
             : []),
           ...statusActions
@@ -784,8 +779,7 @@ const columns = computed(() => {
 })
 const tableRows = computed<SubscriptionTableRow[]>(() => buildSubscriptionTableRows(pagedSubscriptions.value))
 
-onMounted(async () => {
-  desktopPageSize.value = getStoredSubscriptionPageSize()
+onMounted(() => {
   window.addEventListener('mouseup', resetArmedDrag)
 })
 
@@ -838,6 +832,54 @@ watch(
     selectedSubscriptionIds.value = selectedSubscriptionIds.value.filter((id) => existingIds.has(id))
   },
   { immediate: true }
+)
+
+watch(focusedSubscriptionId, (id, _previousId, onCleanup) => {
+  if (!id) return
+  const timer = setTimeout(() => {
+    focusedSubscriptionId.value = null
+  }, 3000)
+  onCleanup(() => clearTimeout(timer))
+})
+
+watch(
+  () => route.query.subscriptionId,
+  (value) => {
+    pendingFocusId.value = typeof value === 'string' && value ? value : null
+    focusedSubscriptionId.value = null
+    if (!pendingFocusId.value) return
+    // Deep links must not leave the target hidden behind a previous search or batch mode.
+    Object.assign(filters, { q: '', status: null, tagIds: [] })
+    Object.assign(appliedFilters, { q: '', status: null, tagIds: [] })
+    batchMode.value = false
+    selectedSubscriptionIds.value = []
+    showDragHandles.value = false
+    resetDragState()
+  },
+  { immediate: true }
+)
+
+watch(
+  [pendingFocusId, orderedSubscriptions, () => subscriptionsQuery.isFetching.value, desktopPageSize],
+  async ([id, rows, fetching]) => {
+    if (!id || fetching || !subscriptionsQuery.data.value) return
+    const index = rows.findIndex((item) => item.id === id)
+    if (index < 0) {
+      pendingFocusId.value = null
+      message.warning(t('subscriptions.messages.locateNotFound'))
+      return
+    }
+    currentPage.value = Math.floor(index / desktopPageSize.value) + 1
+    focusedSubscriptionId.value = id
+    await nextTick()
+    if (pendingFocusId.value !== id) return
+    pendingFocusId.value = null
+    const target = Array.from(listRoot.value?.querySelectorAll<HTMLElement>('[data-subscription-id]') ?? [])
+      .find((element) => element.dataset.subscriptionId === id)
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    target?.focus({ preventScroll: true })
+  },
+  { immediate: true, flush: 'post' }
 )
 
 watch(
@@ -895,12 +937,20 @@ function tagColor(tagId: string) {
 }
 
 function openCreate() {
+  copyDraft.value = null
   editing.value = null
   showModal.value = true
 }
 
 function openEdit(row: Subscription) {
+  copyDraft.value = null
   editing.value = row
+  showModal.value = true
+}
+
+function openCopy(row: Subscription) {
+  editing.value = null
+  copyDraft.value = buildSubscriptionCopyDraft(row)
   showModal.value = true
 }
 
@@ -917,6 +967,7 @@ async function openRecords(id: string) {
 function closeModal() {
   showModal.value = false
   editing.value = null
+  copyDraft.value = null
 }
 
 const submitSubscriptionTask = createSingleFlight(async (payload: Record<string, unknown>, editingId?: string) => {
@@ -1041,7 +1092,11 @@ async function refreshOpenDetailIfNeeded(ids: string[]) {
 
 async function runBatchRenew() {
   if (!ensureBatchSelection()) return
-  const ids = [...selectedSubscriptionIds.value]
+  const { ids, skippedLifetimeCount } = batchRenewalSelection.value
+  if (skippedLifetimeCount > 0) {
+    message.warning(t('subscriptions.batch.lifetimeRenewSkipped', { count: skippedLifetimeCount }))
+  }
+  if (!ids.length) return
   const result = await api.batchRenewSubscriptions(ids)
   summarizeBatchResult(t('subscriptions.actions.batchRenew'), result)
   await refetchCurrentSubscriptions()
@@ -1098,6 +1153,7 @@ async function runBatchDelete() {
 }
 
 async function quickRenew(row: Subscription) {
+  if (!canRenewSubscription(row)) return
   await api.renewSubscription(row.id)
   message.success(t('subscriptions.messages.renewed', { name: row.name }))
   await refetchCurrentSubscriptions()
@@ -1151,8 +1207,11 @@ function getRowProps(row: SubscriptionTableRow) {
   const targetId = row.__rowType === 'main' ? row.id : row.subscriptionId
 
   return {
+    'data-subscription-id': row.__rowType === 'main' ? targetId : undefined,
+    tabindex: row.__rowType === 'main' && focusedSubscriptionId.value === targetId ? -1 : undefined,
     draggable: canDragReorder.value && row.__rowType === 'main' && armedDragId.value === targetId,
     class: [
+      focusedSubscriptionId.value === targetId ? 'subscription-row--focused' : '',
       canDragReorder.value && row.__rowType === 'main' ? 'subscription-row--draggable' : '',
       draggingId.value === targetId ? 'subscription-row--dragging' : '',
       dragOverId.value === targetId ? 'subscription-row--drag-over' : ''
@@ -1260,8 +1319,10 @@ function formatDate(value: string) {
   return formatDateInTimezone(value, settings.value?.timezone)
 }
 
-function formatInterval(count: number, unit: string) {
-  return t('subscriptions.values.interval', { count, unit })
+function formatSubscriptionInterval(subscription: Subscription) {
+  return subscription.billingType === 'lifetime'
+    ? t('subscriptions.billingType.lifetime')
+    : t('subscriptions.values.interval', { count: subscription.billingIntervalCount, unit: unitLabel(subscription.billingIntervalUnit) })
 }
 
 function unitLabel(unit: string) {
@@ -1298,6 +1359,19 @@ function unitLabel(unit: string) {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.mobile-subscription-card--focused {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
+}
+
+:deep(.subscription-row--focused td) {
+  background: var(--app-accent-soft);
+}
+
+:deep(.subscription-row--focused td:first-child) {
+  box-shadow: inset 3px 0 var(--app-accent);
 }
 
 .mobile-subscription-card__header {
@@ -1344,21 +1418,25 @@ function unitLabel(unit: string) {
   color: var(--app-text-primary);
 }
 
-.subscription-logo {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+:deep(.subscription-logo) {
+  box-sizing: border-box;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  padding: 0;
+  border-radius: 8px;
   object-fit: contain;
-  border: 1px solid var(--app-border-soft);
-  background: var(--app-surface);
+  border: 0;
+  background: transparent;
 }
 
-.subscription-logo--placeholder {
+:deep(.subscription-logo--placeholder) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: var(--app-accent-soft);
   color: var(--app-accent);
+  font-size: 22px;
   font-weight: 700;
 }
 

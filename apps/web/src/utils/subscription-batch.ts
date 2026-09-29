@@ -33,6 +33,14 @@ export function getBatchStatusText(status: BatchSettableStatus) {
   }[status]
 }
 
+export function getBatchRenewalSelection(subscriptions: Subscription[]) {
+  const recurring = subscriptions.filter((item) => item.billingType !== 'lifetime')
+  return {
+    ids: recurring.map((item) => item.id),
+    skippedLifetimeCount: subscriptions.length - recurring.length
+  }
+}
+
 export function countBatchDeletableSubscriptions(subscriptions: Array<Pick<Subscription, 'status'>>) {
   const deletableCount = subscriptions.filter((item) => item.status !== 'active').length
   return {

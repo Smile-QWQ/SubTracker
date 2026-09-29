@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Subscription } from '../../../src/types/api'
-import { buildSubscriptionTableRows, paginateSubscriptions } from '../../../src/utils/subscription-table'
+import { buildSubscriptionTableRows, canRenewSubscription, compareSubscriptionRenewalDates, paginateSubscriptions } from '../../../src/utils/subscription-table'
 
 function createSubscription(id: string, overrides: Partial<Subscription> = {}): Subscription {
   return {
@@ -30,6 +30,24 @@ function createSubscription(id: string, overrides: Partial<Subscription> = {}): 
 }
 
 describe('subscription-table utils', () => {
+  it('never offers renewal for lifetime subscriptions, including expired records', () => {
+    expect(canRenewSubscription(createSubscription('legacy'))).toBe(true)
+    expect(canRenewSubscription(createSubscription('recurring', { billingType: 'recurring', status: 'expired' }))).toBe(true)
+    expect(canRenewSubscription(createSubscription('paused', { status: 'paused' }))).toBe(false)
+    expect(canRenewSubscription(createSubscription('lifetime', { billingType: 'lifetime' }))).toBe(false)
+    expect(canRenewSubscription(createSubscription('expired-lifetime', { billingType: 'lifetime', status: 'expired' }))).toBe(false)
+  })
+
+  it('sorts lifetime records after real renewal dates instead of using their placeholder date', () => {
+    const records = [
+      createSubscription('lifetime', { billingType: 'lifetime', nextRenewalDate: '2000-01-01' }),
+      createSubscription('later', { nextRenewalDate: '2026-03-01' }),
+      createSubscription('earlier')
+    ]
+    expect(records.sort(compareSubscriptionRenewalDates).map((item) => item.id)).toEqual(['earlier', 'later', 'lifetime'])
+    expect(compareSubscriptionRenewalDates(records[2], { ...records[2], nextRenewalDate: '2099-01-01' })).toBe(0)
+  })
+
   it('builds a note row immediately after the main row', () => {
     const rows = buildSubscriptionTableRows([
       createSubscription('a', { notes: '  备注 A  ' }),

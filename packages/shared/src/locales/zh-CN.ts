@@ -761,9 +761,11 @@ export default {
       reorder: '调整顺序',
       finishReorder: '完成调整',
       detail: '详情',
+      copy: '复制',
       records: '记录',
       edit: '编辑',
       renew: '续订',
+      manage: '管理',
       pause: '暂停',
       cancel: '取消',
       resume: '恢复'
@@ -794,6 +796,7 @@ export default {
       delete: '将删除“{name}”及其续订记录与相关历史，此操作不可恢复，确认继续？'
     },
     messages: {
+      locateNotFound: '未找到对应订阅，该订阅可能已被删除。',
       subscriptionUpdated: '订阅已更新',
       subscriptionCreated: '订阅已创建',
       subscriptionSaveFailed: '保存失败：{message}',
@@ -833,6 +836,7 @@ export default {
     },
     batch: {
       selectFirst: '请先选择订阅',
+      lifetimeRenewSkipped: '已跳过 {count} 个买断订阅，无需续费',
       renewSuccess: '批量续订成功，共 {count} 项',
       renewPartial: '批量续订完成：成功 {success} 项，失败 {failure} 项',
       statusConfirm: '确认将已选的 {count} 项订阅设为{status}吗？',

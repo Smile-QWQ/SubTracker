@@ -760,9 +760,11 @@ export default {
       reorder: 'Reorder',
       finishReorder: 'Done reordering',
       detail: 'Details',
+      copy: 'Duplicate',
       records: 'History',
       edit: 'Edit',
       renew: 'Renew',
+      manage: 'Manage',
       pause: 'Pause',
       cancel: 'Cancel',
       resume: 'Resume'
@@ -793,6 +795,7 @@ export default {
       delete: 'Delete "{name}" along with its renewal records and related history? This action cannot be undone.'
     },
     messages: {
+      locateNotFound: 'Could not find this subscription. It may have been deleted.',
       subscriptionUpdated: 'Subscription updated',
       subscriptionCreated: 'Subscription created',
       subscriptionSaveFailed: 'Failed to save: {message}',
@@ -833,6 +836,7 @@ export default {
     },
     batch: {
       selectFirst: 'Select subscriptions first',
+      lifetimeRenewSkipped: 'Skipped {count} lifetime subscriptions; renewal is not required',
       renewSuccess: 'Renewed {count} subscriptions',
       renewPartial: 'Batch renew complete: {success} succeeded, {failure} failed',
       statusConfirm: 'Set the selected {count} subscriptions to {status}?',

@@ -4,6 +4,7 @@ import {
   areAllVisibleSubscriptionsSelected,
   countBatchDeletableSubscriptions,
   getBatchStatusText,
+  getBatchRenewalSelection,
   getVisiblePageSubscriptionIds,
   mergeSelectedSubscriptionIds,
   removeSelectedSubscriptionIds
@@ -37,6 +38,16 @@ function createSubscription(id: string, overrides: Partial<Subscription> = {}): 
 }
 
 describe('subscription batch utils', () => {
+  it('excludes lifetime ids from mixed batch renewal and counts skipped entries', () => {
+    const lifetime = createSubscription('lifetime', { billingType: 'lifetime' })
+    expect(getBatchRenewalSelection([
+      createSubscription('legacy'), lifetime,
+      createSubscription('recurring', { billingType: 'recurring' })
+    ])).toEqual({ ids: ['legacy', 'recurring'], skippedLifetimeCount: 1 })
+    expect(getBatchRenewalSelection([lifetime])).toEqual({ ids: [], skippedLifetimeCount: 1 })
+    expect(getBatchRenewalSelection([])).toEqual({ ids: [], skippedLifetimeCount: 0 })
+  })
+
   it('uses current desktop page ids for select all on desktop', () => {
     expect(
       getVisiblePageSubscriptionIds({
