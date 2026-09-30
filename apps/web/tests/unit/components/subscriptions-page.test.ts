@@ -100,6 +100,35 @@ describe('SubscriptionsPage copy and renewal actions', () => {
     expect(form.props('model')).toBeNull()
   })
 
+  it('acknowledges committed image uploads after save succeeds but before closing the form', async () => {
+    let finish!: (value: Subscription) => void
+    vi.mocked(api.createSubscription).mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    const wrapper = mountPage()
+    await findButton(wrapper, t('subscriptions.actions.create')).trigger('click')
+    const form = wrapper.getComponent(SubscriptionFormModal)
+    const onSaved = vi.fn(() => expect(form.props('show')).toBe(true))
+    form.vm.$emit('submit', { name: 'Example', imageIds: ['pending'] }, undefined, onSaved)
+    await nextTick()
+    expect(onSaved).not.toHaveBeenCalled()
+    finish(legacy)
+    await flushPromises()
+    expect(onSaved).toHaveBeenCalledTimes(1)
+    expect(form.props('show')).toBe(false)
+  })
+
+  it('keeps pending uploads uncommitted and the form open when saving fails', async () => {
+    vi.mocked(api.createSubscription).mockRejectedValueOnce(new Error('Offline'))
+    const wrapper = mountPage()
+    await findButton(wrapper, t('subscriptions.actions.create')).trigger('click')
+    const form = wrapper.getComponent(SubscriptionFormModal)
+    const onSaved = vi.fn()
+    form.vm.$emit('submit', { name: 'Example', imageIds: ['pending'] }, undefined, onSaved)
+    await flushPromises()
+    expect(onSaved).not.toHaveBeenCalled()
+    expect(form.props('show')).toBe(true)
+    expect(form.props('saving')).toBe(false)
+  })
+
   it('hides lifetime renewal controls and placeholder renewal dates on mobile', async () => {
     const wrapper = mountPage()
     const cards = wrapper.findAll('.mobile-subscription-card')

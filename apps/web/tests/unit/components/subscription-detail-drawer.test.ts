@@ -6,6 +6,8 @@ import SubscriptionDetailDrawer from '@/components/SubscriptionDetailDrawer.vue'
 import { t } from '@/locales'
 import type { SubscriptionDetail } from '@/types/api'
 
+vi.mock('@/composables/api', () => ({ api: { getSubscriptionImages: vi.fn().mockResolvedValue([]) } }))
+
 vi.mock('@/composables/settings-query', () => ({ useSettingsQuery: () => ({ data: { value: { timezone: 'UTC' } } }) }))
 
 describe('subscription detail drawer remaining value', () => {

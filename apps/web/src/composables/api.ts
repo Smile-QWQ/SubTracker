@@ -33,6 +33,9 @@ import type {
   SubtrackerBackupInspectResult,
   Subscription,
   SubscriptionDetail,
+  SubscriptionImage,
+  SubscriptionImageUpload,
+  SubscriptionImageImportResult,
   SubscriptionStatus,
   Tag,
   TelegramConfig,
@@ -201,6 +204,31 @@ export const api = {
     return unwrap<PaymentRecord[]>((await client.get(`/subscriptions/${id}/payment-records`)) as {
       data: Envelope<PaymentRecord[]>
     })
+  },
+
+  async getSubscriptionImages(id: string) {
+    return unwrap<SubscriptionImage[]>((await client.get(`/subscriptions/${encodeURIComponent(id)}/images`)) as {
+      data: Envelope<SubscriptionImage[]>
+    })
+  },
+
+  async getSubscriptionImageContent(id: string) {
+    return (await client.get<Blob>(`/subscription-images/${encodeURIComponent(id)}/content`, { responseType: 'blob' })).data
+  },
+
+  async uploadSubscriptionImage(payload: SubscriptionImageUpload) {
+    // The editor serializes uploads; avoid retaining another ~28 MiB serialized singleflight key.
+    return unwrap<SubscriptionImage>(await client.post('/subscription-images/upload', payload, { timeout: 60000 }))
+  },
+
+  async importSubscriptionImage(payload: { url: string }) {
+    // Pending images belong to one editor session. Sharing a late result with a reopened
+    // editor would let the cancelled session delete the new session's pending image.
+    return unwrap<SubscriptionImageImportResult>(await client.post('/subscription-images/import', payload, { timeout: 60000 }))
+  },
+
+  async deleteSubscriptionImage(id: string) {
+    return deleteOnce<unknown>(`/subscription-images/${encodeURIComponent(id)}`)
   },
 
   async createSubscription(payload: Record<string, unknown>) {

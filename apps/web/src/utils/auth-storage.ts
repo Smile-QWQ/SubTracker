@@ -1,5 +1,6 @@
 const TOKEN_KEY = 'subtracker.auth.token'
 const USERNAME_KEY = 'subtracker.auth.username'
+export const AUTH_SESSION_CHANGE_EVENT = 'subtracker:auth-session-change'
 
 function readFromStorage(key: string) {
   if (typeof window === 'undefined') return null
@@ -29,6 +30,7 @@ export function saveAuthSession(token: string, username: string, remember = fals
   activeStorage.setItem(USERNAME_KEY, username)
   inactiveStorage.removeItem(TOKEN_KEY)
   inactiveStorage.removeItem(USERNAME_KEY)
+  window.dispatchEvent(new Event(AUTH_SESSION_CHANGE_EVENT))
 }
 
 export function clearAuthSession() {
@@ -37,4 +39,5 @@ export function clearAuthSession() {
   window.localStorage.removeItem(USERNAME_KEY)
   window.sessionStorage.removeItem(TOKEN_KEY)
   window.sessionStorage.removeItem(USERNAME_KEY)
+  window.dispatchEvent(new Event(AUTH_SESSION_CHANGE_EVENT))
 }

@@ -13,6 +13,9 @@ const messages = vi.hoisted(() => ({ success: vi.fn(), warning: vi.fn(), error: 
 vi.mock('@/composables/settings-query', () => ({ useSettingsQuery: () => ({ data: settings }) }))
 vi.mock('@/utils/localized-message', () => ({ useLocalizedMessage: () => messages }))
 vi.mock('@/composables/api', () => ({ api: {
+  getSubscriptionImages: vi.fn().mockResolvedValue([]),
+  getSubscriptionImageContent: vi.fn().mockResolvedValue(new Blob()),
+  deleteSubscriptionImage: vi.fn().mockResolvedValue({}),
   importSubscriptionLogo: vi.fn(),
   uploadSubscriptionLogo: vi.fn(),
   getSubscriptionLogoLibrary: vi.fn().mockResolvedValue([]),

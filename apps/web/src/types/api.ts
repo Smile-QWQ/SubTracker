@@ -81,6 +81,25 @@ export interface Subscription {
   updatedAt: string
 }
 
+export interface SubscriptionImage {
+  id: string
+  fileName: string
+  contentType: string
+  size: number
+  createdAt: string
+}
+
+export interface SubscriptionImageUpload {
+  fileName: string
+  contentType: string
+  dataBase64: string
+  svgConfirmed?: boolean
+}
+
+export type SubscriptionImageImportResult =
+  | { requiresConfirmation: false; image: SubscriptionImage }
+  | { requiresConfirmation: true; fileName: string; contentType: string; dataBase64: string }
+
 export interface SubscriptionDetail extends Subscription {
   currentCycleStartDate: string
   currentCycleEndDate: string

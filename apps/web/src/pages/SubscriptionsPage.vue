@@ -967,7 +967,7 @@ function closeModal() {
   copyDraft.value = null
 }
 
-const submitSubscriptionTask = createSingleFlight(async (payload: Record<string, unknown>, editingId?: string) => {
+const submitSubscriptionTask = createSingleFlight(async (payload: Record<string, unknown>, editingId?: string, onSaved?: () => void) => {
   savingSubscription.value = true
   try {
     if (editingId) {
@@ -978,6 +978,7 @@ const submitSubscriptionTask = createSingleFlight(async (payload: Record<string,
       message.success(t('subscriptions.messages.subscriptionCreated'))
     }
 
+    onSaved?.()
     closeModal()
     await refetchCurrentSubscriptions()
   } catch (error) {
@@ -991,8 +992,8 @@ const submitSubscriptionTask = createSingleFlight(async (payload: Record<string,
   }
 })
 
-function submitSubscription(payload: Record<string, unknown>, editingId?: string) {
-  return submitSubscriptionTask.run(payload, editingId)
+function submitSubscription(payload: Record<string, unknown>, editingId?: string, onSaved?: () => void) {
+  return submitSubscriptionTask.run(payload, editingId, onSaved)
 }
 
 async function createTag(payload: { name: string; color: string; sortOrder: number }) {

@@ -1,5 +1,5 @@
 <template>
-  <n-drawer :show="show" :width="drawerWidth" @mask-click="emit('close')" @update:show="handleShowUpdate">
+  <n-drawer :show="show" :width="drawerWidth" :close-on-esc="!imagePreviewVisible" @mask-click="close" @update:show="handleShowUpdate">
     <n-drawer-content :title="t('subscriptions.detail.title')" closable>
       <n-empty v-if="!detail" :description="t('common.empty.noData')" />
       <template v-else>
@@ -90,8 +90,15 @@
             {{ detail.description || t('common.empty.noDescription') }}
           </n-card>
 
-          <n-card :title="t('common.labels.notes')">
-            {{ detail.notes || t('common.empty.noNotes') }}
+          <n-card class="detail-notes-card" :title="t('common.labels.notes')">
+            <template #header-extra>
+              <n-radio-group v-model:value="notesTab" size="small" name="subscription-detail-notes" :aria-label="t('common.labels.notes')">
+                <n-radio-button value="text">{{ t('subscriptions.detail.notesText') }}</n-radio-button>
+                <n-radio-button value="images">{{ t('subscriptions.detail.notesImages', { count: images.state.images.length }) }}</n-radio-button>
+              </n-radio-group>
+            </template>
+            <div v-show="notesTab === 'text'" class="detail-notes">{{ detail.notes || t('common.empty.noNotes') }}</div>
+            <subscription-images v-show="notesTab === 'images'" :controller="images" readonly @preview-change="imagePreviewVisible = $event" />
           </n-card>
         </n-space>
       </template>
@@ -100,10 +107,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useWindowSize } from '@vueuse/core'
-import { NCard, NDescriptions, NDescriptionsItem, NDrawer, NDrawerContent, NEmpty, NSpace, NTag } from 'naive-ui'
+import { NCard, NDescriptions, NDescriptionsItem, NDrawer, NDrawerContent, NEmpty, NRadioButton, NRadioGroup, NSpace, NTag } from 'naive-ui'
 import { t } from '@/locales'
+import SubscriptionImages from '@/components/SubscriptionImages.vue'
+import { useSubscriptionImages } from '@/composables/subscription-images'
 import { useSettingsQuery } from '@/composables/settings-query'
 import type { SubscriptionDetail } from '@/types/api'
 import { resolveLogoUrl } from '@/utils/logo'
@@ -118,6 +127,19 @@ const props = defineProps<{
   detail: SubscriptionDetail | null
 }>()
 
+const notesTab = ref<'text' | 'images'>('text')
+const imagePreviewVisible = ref(false)
+const images = useSubscriptionImages({
+  active: () => props.show,
+  subscriptionId: () => props.detail?.id
+})
+watch([() => props.show, () => props.detail?.id], () => {
+  notesTab.value = 'text'
+  imagePreviewVisible.value = false
+})
+watch(() => images.state.loadError, (error) => {
+  if (error && props.show) notesTab.value = 'images'
+})
 const { width } = useWindowSize()
 const { data: settings } = useSettingsQuery()
 const drawerWidth = computed(() => (width.value < 760 ? '100%' : 720))
@@ -192,10 +214,13 @@ function formatInterval(count: number, unit: string) {
   return t('subscriptions.values.interval', { count, unit: intervalUnitLabel(unit) })
 }
 
+function close() {
+  images.cancel()
+  emit('close')
+}
+
 function handleShowUpdate(value: boolean) {
-  if (!value) {
-    emit('close')
-  }
+  if (!value) close()
 }
 </script>
 
@@ -227,6 +252,11 @@ function handleShowUpdate(value: boolean) {
 .detail-site a {
   color: #2563eb;
   word-break: break-all;
+}
+
+.detail-notes {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .detail-value-block {

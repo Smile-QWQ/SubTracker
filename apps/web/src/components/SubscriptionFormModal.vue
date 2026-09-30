@@ -1,6 +1,7 @@
 <template>
   <n-modal
     :show="show"
+    :close-on-esc="!imagePreviewVisible && !images.state.confirmingSvg"
     preset="card"
     :title="model ? t('subscriptions.form.titleEdit') : t('subscriptions.form.titleCreate')"
     style="width: min(920px, calc(100vw - 24px))"
@@ -291,14 +292,21 @@
         @visibility-change="subscriptionReminderPreviewVisible = $event"
       />
 
-      <n-form-item :label="t('common.labels.notes')" :validation-status="validationStatusOf('notes')" :feedback="formErrors.notes">
-        <n-input
-          v-model:value="form.notes"
-          type="textarea"
-          :autosize="{ minRows: 2, maxRows: 4 }"
-          :maxlength="1000"
-          :placeholder="t('subscriptions.form.notesPlaceholder')"
-        />
+      <n-form-item :show-label="false" :validation-status="validationStatusOf('notes')" :feedback="formErrors.notes">
+        <n-tabs v-model:value="notesTab" class="subscription-notes-tabs" type="line" size="small">
+          <n-tab-pane name="text" :tab="t('subscriptions.notesTabs.text')" display-directive="show">
+            <n-input
+              v-model:value="form.notes"
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 4 }"
+              :maxlength="1000"
+              :placeholder="t('subscriptions.form.notesPlaceholder')"
+            />
+          </n-tab-pane>
+          <n-tab-pane name="images" :tab="t('subscriptions.notesTabs.images', { count: images.state.images.length })" display-directive="show">
+            <subscription-images :controller="images" :disabled="saving" @preview-change="imagePreviewVisible = $event" />
+          </n-tab-pane>
+        </n-tabs>
       </n-form-item>
 
       <div class="form-footer">
@@ -321,7 +329,7 @@
           </n-button>
           <n-button :disabled="saving" @click="handleReset">{{ t('common.actions.reset') }}</n-button>
           <n-button :disabled="saving" @click="close">{{ t('common.actions.cancel') }}</n-button>
-          <n-button type="primary" :loading="saving" :disabled="saving" @click="submit">{{ t('common.actions.save') }}</n-button>
+          <n-button type="primary" :loading="saving" :disabled="saving || !images.ready.value" @click="submit">{{ t('common.actions.save') }}</n-button>
         </n-space>
       </div>
     </n-form>
@@ -373,6 +381,8 @@ import { api } from '@/composables/api'
 import { useSettingsQuery } from '@/composables/settings-query'
 import ReminderRulesPreview from '@/components/ReminderRulesPreview.vue'
 import SubscriptionAiModal from '@/components/SubscriptionAiModal.vue'
+import SubscriptionImages from '@/components/SubscriptionImages.vue'
+import { useSubscriptionImages } from '@/composables/subscription-images'
 import { buildCurrencyOptions } from '@/utils/currency'
 import { resolveLogoUrl } from '@/utils/logo'
 import { businessDateToPickerTs, currentBusinessDatePickerTs, pickerTsToDateString } from '@/utils/timezone'
@@ -406,7 +416,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  submit: [payload: Record<string, unknown>, editingId?: string]
+  submit: [payload: Record<string, unknown>, editingId: string | undefined, onSaved: () => void]
 }>()
 
 const { width } = useWindowSize()
@@ -416,6 +426,8 @@ const helpCircleOutline = HelpCircleOutline
 const subscriptionReminderPreviewRef = ref<InstanceType<typeof ReminderRulesPreview> | null>(null)
 const subscriptionReminderPreviewVisible = ref(false)
 const showAiModal = ref(false)
+const notesTab = ref<'text' | 'images'>('text')
+const imagePreviewVisible = ref(false)
 const showLogoPanel = ref(false)
 const logoPanelTab = ref<string>(LOGO_TAB_WEB)
 const searchingLogoCandidates = ref(false)
@@ -436,6 +448,12 @@ const formErrors = reactive<SubscriptionFormErrors>({})
 const dateFieldMode = ref<'default' | 'model' | 'manual'>('default')
 const currencyEdited = ref(false)
 const formSource = computed(() => props.model ?? props.initialValues)
+const images = useSubscriptionImages({
+  active: () => props.show,
+  subscriptionId: () => props.model?.id,
+  source: () => formSource.value,
+  disabled: () => Boolean(props.saving)
+})
 
 const layoutCols = computed(() => (width.value < 700 ? 1 : 2))
 const moneyCols = computed(() => (isLifetime.value || width.value < 900 ? 2 : 4))
@@ -526,6 +544,8 @@ watch(
   (value) => {
     logoActionVersion++
     if (!value) {
+      notesTab.value = 'text'
+      imagePreviewVisible.value = false
       pendingLogoAction.value = null
       showLogoPanel.value = false
       searchingLogoCandidates.value = false
@@ -580,6 +600,10 @@ watch(
   }
 )
 
+watch(() => images.state.loadError, (error) => {
+  if (error && props.show) notesTab.value = 'images'
+})
+
 watch(isLifetime, () => {
   subscriptionReminderPreviewVisible.value = false
   clearFormErrors()
@@ -596,6 +620,8 @@ function applyModelDateValues(model: SubscriptionFormInitialValues, timezone = s
 }
 
 function resetForm() {
+  notesTab.value = 'text'
+  imagePreviewVisible.value = false
   form.name = ''
   form.tagIds = []
   form.description = ''
@@ -623,6 +649,8 @@ function resetForm() {
 }
 
 function hydrateFromModel(model: SubscriptionFormInitialValues) {
+  notesTab.value = 'text'
+  imagePreviewVisible.value = false
   form.name = model.name
   form.tagIds = model.tags?.map((item) => item.id) ?? []
   form.description = model.description
@@ -649,6 +677,8 @@ function hydrateFromModel(model: SubscriptionFormInitialValues) {
 }
 
 function handleReset() {
+  if (props.saving) return
+  void images.reset()
   if (formSource.value) {
     hydrateFromModel(formSource.value)
     message.success(t('subscriptions.messages.resetToCurrent'))
@@ -929,6 +959,9 @@ function handleNextRenewalDateUpdate(value: number | null) {
 }
 
 function submit() {
+  if (props.saving) return
+  const imageSelection = images.selection()
+  if (!imageSelection) return
   const validation = validateSubscriptionForm({
     billingType: form.billingType,
     name: form.name,
@@ -947,6 +980,8 @@ function submit() {
   Object.entries(validation.errors).forEach(([field, feedback]) => {
     setFieldError(field as keyof SubscriptionFormErrors, feedback)
   })
+
+  if (validation.errors.notes) notesTab.value = 'text'
 
   const firstError = Object.values(validation.errors)[0]
   if (firstError) {
@@ -979,16 +1014,19 @@ function submit() {
       overdueReminderRules: isLifetime.value ? '' : form.overdueReminderRules.trim(),
       webhookEnabled: !isLifetime.value && form.webhookEnabled,
       notes: form.notes,
+      imageIds: imageSelection.imageIds,
       websiteUrl: validation.normalizedWebsiteUrl,
       logoUrl: form.logoUrl || null,
       logoSource: form.logoSource || null
     },
-    props.model?.id
+    props.model?.id,
+    imageSelection.committed
   )
 }
 
 function close() {
   if (props.saving) return
+  images.cancel()
   logoActionVersion++
   pendingLogoAction.value = null
   emit('close')
