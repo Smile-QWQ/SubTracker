@@ -38,21 +38,34 @@ describe('one-use backup download authorization', () => {
   async function ticket() {
     const res = await app.inject({ method: 'POST', url: '/api/v1/settings/export/backup', headers, payload: { includeSubscriptionImages: false } })
     expect(res.statusCode).toBe(200)
-    expect(mocks.prepare).toHaveBeenCalledWith(false)
+    expect(mocks.prepare).toHaveBeenCalledWith(false, 'standard')
     return res.json().data.token as string
   }
 
+  it('passes the requested legacy format to archive preparation', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/v1/settings/export/backup', headers,
+      payload: { format: 'legacy-v0.11', includeSubscriptionImages: true } })
+    expect(res.statusCode).toBe(200)
+    expect(mocks.prepare).toHaveBeenCalledWith(true, 'legacy-v0.11')
+  })
 
 
 
-
-  it.each([{ includeSubscriptionImages: 'false' }])('rejects invalid export options %j', async payload => {
+  it.each([{ format: 'legacy' }, { includeSubscriptionImages: 'false' }])('rejects invalid export options %j', async payload => {
     const res = await app.inject({ method: 'POST', url: '/api/v1/settings/export/backup', headers, payload })
     expect(res.statusCode).toBe(422)
     expect(mocks.prepare).not.toHaveBeenCalled()
   })
 
-
+  it('reports legacy capacity failures before issuing a download ticket', async () => {
+    const { LegacyBackupLimitError } = await import('../../src/services/subtracker-backup.service')
+    mocks.prepare.mockRejectedValueOnce(new LegacyBackupLimitError('limit'))
+    const res = await app.inject({ method: 'POST', url: '/api/v1/settings/export/backup', headers,
+      payload: { format: 'legacy-v0.11' } })
+    expect(res.statusCode).toBe(413)
+    expect(res.json().error.message).toContain('750 KiB')
+    expect(res.json().data?.token).toBeUndefined()
+  })
 
   it('requires Bearer auth to prepare or use the ordinary export endpoint', async () => {
     for (const method of ['GET', 'POST'] as const) {

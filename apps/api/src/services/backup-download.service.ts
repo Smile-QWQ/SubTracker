@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import type { Readable } from 'node:stream'
+import type { SubtrackerBackupExportFormat } from '@subtracker/shared'
 import { BackupBusyError, prepareSubtrackerBackupArchive } from './subtracker-backup.service'
 
 type Archive = Awaited<ReturnType<typeof prepareSubtrackerBackupArchive>>
@@ -16,12 +17,12 @@ export function clearBackupDownloads() {
   tickets.clear()
 }
 
-export async function prepareBackupDownload(authorization: string, includeSubscriptionImages = true) {
+export async function prepareBackupDownload(authorization: string, includeSubscriptionImages = true, format: SubtrackerBackupExportFormat = 'standard') {
   cleanupBackupDownloads()
   if (tickets.size + preparing + active >= 2) throw new BackupBusyError('Too many backup downloads')
   preparing += 1
   try {
-    const archive = await prepareSubtrackerBackupArchive(includeSubscriptionImages)
+    const archive = await prepareSubtrackerBackupArchive(includeSubscriptionImages, format)
     const token = crypto.randomBytes(24).toString('hex')
     tickets.set(token, { expiresAt: Date.now() + 60_000, authorization, archive })
     return { token }

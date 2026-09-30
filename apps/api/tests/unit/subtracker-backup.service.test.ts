@@ -185,7 +185,23 @@ describe('subtracker backup service', () => {
 
 
 
-
+  it('blocks oversized legacy exports without deleting files and still allows standard export', async () => {
+    mocks.getAppSettingsMock.mockResolvedValue({ timezone: 'UTC' })
+    mocks.getPrimaryWebhookEndpointMock.mockResolvedValue({})
+    mocks.getSubscriptionOrderMock.mockResolvedValue([])
+    mocks.prismaMock.tag.findMany.mockResolvedValue([])
+    mocks.prismaMock.subscription.findMany.mockResolvedValue([])
+    mocks.prismaMock.paymentRecord.findMany.mockResolvedValue([])
+    mocks.getLocalLogoLibraryMock.mockResolvedValue([{ logoUrl: '/static/logos/large.png' }])
+    const image = Buffer.alloc(751 * 1024, 7)
+    await writeFile(path.join(fixtureRoot, 'logos', 'large.png'), image)
+    await expect(createSubtrackerBackupArchive(true, 'legacy-v0.11')).rejects.toThrow('Legacy backup exceeds')
+    expect(mocks.prismaMock.subscriptionImage.findMany).not.toHaveBeenCalled()
+    expect(mocks.prismaMock.subscription.deleteMany).not.toHaveBeenCalled()
+    const standard = await createSubtrackerBackupArchive()
+    const zip = new AdmZip(await collectBuffer(standard.stream))
+    expect(zip.getEntries().find(entry => entry.entryName === 'logos/large.png')!.getData()).toEqual(image)
+  })
 
   it.each(['zh-CN', 'en-US'] as const)('localizes backup warnings in %s instead of showing message keys', async (locale) => {
     mocks.prismaMock.subscription.findMany.mockResolvedValue([])
@@ -629,7 +645,8 @@ describe('subtracker backup service', () => {
   })
 
   it.each([
-    ['recurring', 'standard'], ['lifetime', 'standard']
+    ['recurring', 'standard'], ['lifetime', 'standard'],
+    ['recurring', 'legacy-v0.11'], ['lifetime', 'legacy-v0.11']
   ] as const)('exports %s billing type in %s format with referenced logos', async (billingType, format) => {
     mocks.getAppSettingsMock.mockResolvedValue({
       baseCurrency: 'CNY',
@@ -752,8 +769,8 @@ describe('subtracker backup service', () => {
     await writeFile(path.join(fixtureRoot, 'images', 'image_1.png'), Buffer.from('fake-image'))
     for (const { extension, buffer } of additionalLogos) await writeFile(path.join(fixtureRoot, 'logos', `extra${extension}`), buffer)
 
-    const legacy = false
-    const result = await createSubtrackerBackupArchive(true)
+    const legacy = format === 'legacy-v0.11'
+    const result = await createSubtrackerBackupArchive(true, format)
 
     expect(result.filename).toBe(`subtracker-backup-2026-05-02T16-00-00${legacy ? '-compatible-v0.11' : ''}.zip`)
     const bytes = await collectBuffer(result.stream)

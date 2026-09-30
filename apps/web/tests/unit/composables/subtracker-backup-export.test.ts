@@ -21,15 +21,47 @@ afterEach(() => { wrapper?.unmount(); vi.restoreAllMocks() })
 describe('backup export confirmation', () => {
   it('defaults to a standard backup including images without a legacy prompt', async () => {
     await state.exportBackup()
-    expect(mocks.exportBackup).toHaveBeenCalledWith(true)
+    expect(mocks.exportBackup).toHaveBeenCalledWith(true, 'standard')
+    expect(state.showLegacyBackupConfirmation.value).toBe(false)
     expect(click).toHaveBeenCalledOnce()
   })
 
+  it('does not request or download a legacy backup until confirmation, and cancellation is harmless', async () => {
+    state.backupFormat.value = 'legacy-v0.11'
+    await state.exportBackup()
+    expect(state.showLegacyBackupConfirmation.value).toBe(true)
+    expect(mocks.exportBackup).not.toHaveBeenCalled()
+    state.showLegacyBackupConfirmation.value = false
+    await state.confirmLegacyBackupExport()
+    expect(mocks.exportBackup).not.toHaveBeenCalled()
+    expect(click).not.toHaveBeenCalled()
+    await state.exportBackup()
+    await state.confirmLegacyBackupExport()
+    expect(mocks.exportBackup).toHaveBeenCalledExactlyOnceWith(false, 'legacy-v0.11')
+    expect(click).toHaveBeenCalledOnce()
+    expect(state.includeBackupImages.value).toBe(true)
+  })
 
+  it('preserves the standard image preference when switching formats', async () => {
+    state.includeBackupImages.value = false
+    state.backupFormat.value = 'legacy-v0.11'
+    state.backupFormat.value = 'standard'
+    await state.exportBackup()
+    expect(mocks.exportBackup).toHaveBeenCalledWith(false, 'standard')
+  })
 
-
-
-
+  it('keeps failed legacy preparation from triggering a download and permits retry', async () => {
+    mocks.exportBackup.mockRejectedValueOnce(new Error('750 KiB limit'))
+    state.backupFormat.value = 'legacy-v0.11'
+    state.exportBackup()
+    await state.confirmLegacyBackupExport()
+    expect(mocks.error).toHaveBeenCalledWith('750 KiB limit')
+    expect(click).not.toHaveBeenCalled()
+    expect(state.exportingBackup.value).toBe(false)
+    state.exportBackup()
+    await state.confirmLegacyBackupExport()
+    expect(click).toHaveBeenCalledOnce()
+  })
 
 
 

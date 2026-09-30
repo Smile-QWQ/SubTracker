@@ -686,8 +686,15 @@
             <n-card size="small" embedded :title="t('settings.sections.backup')">
               <n-space vertical style="width: 100%">
                 <div class="card-muted">{{ t('settings.helps.backup') }}</div>
-                <n-checkbox v-model:checked="includeBackupImages" :disabled="exportingBackup">{{ t('settings.helps.includeBackupImages') }}</n-checkbox>
-                <n-alert v-if="!includeBackupImages" type="warning" :show-icon="false">{{ t('subscriptions.backupModal.withoutImages') }}</n-alert>
+                <n-radio-group v-model:value="backupFormat" :disabled="exportingBackup" :aria-label="t('settings.backupCompatibility.formatLabel')">
+                  <n-space wrap>
+                    <n-radio value="standard">{{ t('settings.backupCompatibility.standard') }}</n-radio>
+                    <n-radio value="legacy-v0.11">{{ t('settings.backupCompatibility.legacy') }}</n-radio>
+                  </n-space>
+                </n-radio-group>
+                <n-checkbox :checked="backupFormat === 'standard' && includeBackupImages" :disabled="exportingBackup || backupFormat !== 'standard'" @update:checked="includeBackupImages = $event">{{ t('settings.helps.includeBackupImages') }}</n-checkbox>
+                <n-alert v-if="backupFormat === 'legacy-v0.11'" type="warning" :show-icon="false">{{ t('settings.backupCompatibility.hint', { size: legacyBackupMaxKiB }) }}</n-alert>
+                <n-alert v-else-if="!includeBackupImages" type="warning" :show-icon="false">{{ t('subscriptions.backupModal.withoutImages') }}</n-alert>
                 <n-space class="settings-actions settings-actions--wrap" wrap>
                   <n-button type="primary" :loading="exportingBackup" @click="exportBackup">{{ t('settings.buttons.exportBackup') }}</n-button>
                   <n-button type="success" ghost @click="showSubtrackerBackupModal = true">{{ t('settings.buttons.restoreBackup') }}</n-button>
@@ -738,6 +745,27 @@
       </n-grid-item>
     </n-grid>
 
+    <n-modal
+      v-model:show="showLegacyBackupConfirmation"
+      preset="dialog"
+      type="warning"
+      :title="t('settings.backupCompatibility.title')"
+      :positive-text="t('settings.backupCompatibility.continueExport')"
+      :negative-text="t('common.actions.cancel')"
+      style="width: min(560px, calc(100vw - 32px))"
+      @positive-click="confirmLegacyBackupExport"
+    >
+      <ul style="padding-left: 20px; line-height: 1.8">
+        <li>{{ t('settings.backupCompatibility.supported') }}</li>
+        <li>{{ t('settings.backupCompatibility.preserved') }}</li>
+        <li>{{ t('settings.backupCompatibility.logoLimit') }}</li>
+        <li><strong>{{ t('settings.backupCompatibility.excluded') }}</strong></li>
+        <li>{{ t('settings.backupCompatibility.capacity', { size: legacyBackupMaxKiB }) }}</li>
+        <li>{{ t('settings.backupCompatibility.unchanged') }}</li>
+      </ul>
+      <div class="card-muted">{{ t('settings.backupCompatibility.recommendation') }}</div>
+    </n-modal>
+
     <subtracker-backup-modal
       :show="showSubtrackerBackupModal"
       @close="showSubtrackerBackupModal = false"
@@ -781,6 +809,7 @@ import {
   DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
   DEFAULT_OVERDUE_REMINDER_RULES,
   DEFAULT_RESEND_API_URL,
+  LEGACY_SUBTRACKER_BACKUP_MAX_BYTES,
   createEmptyNotificationTemplateConfig
 } from '@subtracker/shared'
 import {
@@ -801,6 +830,9 @@ import {
   NIcon,
   NInput,
   NInputNumber,
+  NModal,
+  NRadio,
+  NRadioGroup,
   NSelect,
   NSpace,
   NSwitch,
@@ -1019,8 +1051,9 @@ const sourceCurrency = ref('USD')
 const targetCurrency = ref('CNY')
 const converterAmount = ref(1)
 const showSubtrackerBackupModal = ref(false)
+const legacyBackupMaxKiB = LEGACY_SUBTRACKER_BACKUP_MAX_BYTES / 1024
 const {
-  includeBackupImages, exportingBackup, exportBackup,
+  backupFormat, includeBackupImages, exportingBackup, showLegacyBackupConfirmation, exportBackup, confirmLegacyBackupExport,
 } = useSubtrackerBackupExport()
 const showWallosImportModal = ref(false)
 const showAppriseTargetsModal = ref(false)

@@ -279,7 +279,21 @@ export default {
       migration: 'Import data from similar third-party projects'
     },
 
-
+    backupCompatibility: {
+      formatLabel: 'Backup format',
+      standard: 'Standard backup',
+      legacy: 'Compatible with older versions',
+      hint: 'For v0.11.0–v0.11.1, without note images. Legacy upload limits cap this ZIP at {size} KiB. Earlier versions are not guaranteed to work.',
+      title: 'Export a legacy-compatible backup?',
+      continueExport: 'Continue export',
+      supported: 'Importable by v0.11.0–v0.11.1. Earlier versions are not guaranteed to work.',
+      preserved: 'Keeps subscriptions (including lifetime purchases), text notes, tags, payment records, logos, business settings, and ordering. Login credentials are not included.',
+      logoLimit: 'Older versions only restore logos referenced by subscriptions, not unused logos in the library.',
+      excluded: 'Note images are excluded. This is not a complete backup.',
+      capacity: 'Legacy upload limits cap this ZIP at {size} KiB. If exceeded, use a standard backup and upgrade the receiving instance.',
+      unchanged: 'Only the exported file is affected. No data or images in this instance will be modified or deleted.',
+      recommendation: 'Also keep a standard backup with note images included.'
+    },
     buttons: {
       previewReminderRules: 'Preview rules',
       collapseReminderPreview: 'Hide reminder preview',
@@ -1491,7 +1505,7 @@ Hard requirements:
         subtrackerBackupManifestInvalid: 'The backup manifest is invalid',
         subtrackerBackupInvalidFile: 'This is not a valid SubTracker backup file',
         subtrackerBackupTooLarge: 'The backup exceeds a server archive, entry, expanded-size, or temporary-storage limit. Check the limits or cancel unused previews and try again',
-
+      subtrackerBackupLegacyTooLarge: 'The compatibility backup exceeds 750 KiB and cannot be uploaded to the older API. No data or logos were removed. Use a standard backup and upgrade the receiving instance to a version that supports it',
       subtrackerBackupBusy: 'Another backup operation is running or too many previews are pending. Complete or cancel it first',
       subtrackerBackupZipRequired: 'Upload the ZIP file directly',
       subtrackerBackupExportFailed: 'Backup export failed. Check the files and server storage space',

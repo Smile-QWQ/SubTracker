@@ -280,7 +280,21 @@ export default {
       migration: '从第三方同类项目导入数据'
     },
 
-
+    backupCompatibility: {
+      formatLabel: '备份格式',
+      standard: '标准备份',
+      legacy: '兼容旧版本导入',
+      hint: '适用于 v0.11.0～v0.11.1，不包含图片备注。受旧版上传限制，兼容包最大 {size} KiB；更早版本不保证兼容。',
+      title: '导出旧版兼容备份？',
+      continueExport: '继续导出',
+      supported: '可在 v0.11.0～v0.11.1 中导入，更早版本不保证兼容。',
+      preserved: '保留订阅（含买断）、文字备注、标签、付款记录、Logo、业务设置和排序，不包含登录凭据。',
+      logoLimit: '旧版只恢复被订阅引用的 Logo，不会恢复图库中未使用的 Logo。',
+      excluded: '不包含图片备注，不能代替完整备份。',
+      capacity: '受旧版上传限制，兼容 ZIP 最大 {size} KiB。超限请使用标准备份，并升级接收端。',
+      unchanged: '仅影响导出文件，不会修改或删除当前实例中的数据和图片。',
+      recommendation: '建议同时保留一份包含图片备注的标准备份。'
+    },
     buttons: {
       previewReminderRules: '预览提醒规则',
       collapseReminderPreview: '收起提醒预览',
@@ -1489,7 +1503,7 @@ export default {
         subtrackerBackupManifestInvalid: '备份 manifest 格式无效',
         subtrackerBackupInvalidFile: '不是合法的 SubTracker 备份文件',
         subtrackerBackupTooLarge: '备份超过服务器的容量、单文件或临时空间限制，请查看容量限制或清理未完成的预览后重试',
-
+      subtrackerBackupLegacyTooLarge: '兼容备份超过 750 KiB 上限，旧版接口无法接收。未删除任何数据或 Logo，请改用标准备份并升级接收端至支持新版备份的版本',
       subtrackerBackupBusy: '另一个备份操作正在进行，或待确认的预览过多，请完成或取消后重试',
       subtrackerBackupZipRequired: '请直接上传 ZIP 文件',
       subtrackerBackupExportFailed: '备份导出失败，请检查文件与服务器存储空间',

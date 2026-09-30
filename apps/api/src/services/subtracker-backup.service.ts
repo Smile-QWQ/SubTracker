@@ -16,8 +16,9 @@ import type {
   SubtrackerBackupInspectResultDto,
   SubtrackerBackupSubscriptionDto,
   SubtrackerBackupTagDto,
+  SubtrackerBackupExportFormat
 } from '@subtracker/shared'
-import { DEFAULT_APP_LOCALE, SettingsSchema, NotificationWebhookSettingsSchema, getMessage, LOGO_MIME_BY_EXTENSION } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE, SettingsSchema, NotificationWebhookSettingsSchema, getMessage, LOGO_MIME_BY_EXTENSION, LEGACY_SUBTRACKER_BACKUP_MAX_BYTES } from '@subtracker/shared'
 import { prisma } from '../db'
 import { formatDateInTimezone, parseDateInTimezone, toTimezonedDayjs } from '../utils/timezone'
 import { getLocalLogoLibrary, getLogoStorageDir, saveImportedLogoBuffer } from './logo.service'
@@ -141,6 +142,7 @@ export async function discardSubtrackerBackup(importToken: string, owner = '') {
 }
 
 export class BackupBusyError extends Error {}
+export class LegacyBackupLimitError extends BackupLimitError {}
 let operationActive = false
 function claimOperation() {
   if (operationActive) throw new BackupBusyError('Another backup operation is running')
@@ -321,23 +323,34 @@ async function buildBackupManifest(includeSubscriptionImages = true) {
   }
 }
 
-export async function prepareSubtrackerBackupArchive(includeSubscriptionImages = true) {
-  const { manifest, files } = await buildBackupManifest(includeSubscriptionImages)
+export async function prepareSubtrackerBackupArchive(includeSubscriptionImages = true, format: SubtrackerBackupExportFormat = 'standard') {
+  const legacy = format === 'legacy-v0.11'
+  const withImages = !legacy && includeSubscriptionImages
+  const { manifest, files } = await buildBackupManifest(withImages)
+  if (legacy) {
+    manifest.schemaVersion = 1
+    delete manifest.assets.subscriptionImages
+    // Old readers ignore this marker; new readers still warn that images are excluded.
+  }
   const data = Buffer.from(JSON.stringify(manifest, null, 2), 'utf8')
   const limits = getBackupLimits()
   const expanded = files.reduce((sum, file) => sum + file.size, data.length)
   // Conservative ZIP header allowance rejects oversized downloads before sending headers.
   const archiveBound = expanded + 1024 + files.reduce((sum, file) => sum + 256 + 2 * Buffer.byteLength(file.path), 0)
+  if (legacy && archiveBound > LEGACY_SUBTRACKER_BACKUP_MAX_BYTES) {
+    throw new LegacyBackupLimitError('Legacy backup exceeds the v0.11 JSON upload limit')
+  }
+  if (legacy) limits.maxArchiveBytes = Math.min(limits.maxArchiveBytes, LEGACY_SUBTRACKER_BACKUP_MAX_BYTES)
   if (data.length > ZIP_MANIFEST_LIMIT || files.length + 1 > ZIP_ENTRY_LIMIT || expanded > limits.maxExpandedBytes || archiveBound > limits.maxArchiveBytes) {
     throw new BackupLimitError('Backup size limit exceeded')
   }
-  const suffix = includeSubscriptionImages ? '.zip' : '-without-images.zip'
+  const suffix = `${legacy ? '-compatible-v0.11.zip' : withImages ? '.zip' : '-without-images.zip'}`
   const filename = buildBackupFileName(manifest.data.settings.timezone).replace('.zip', suffix)
   return { filename, contentType: 'application/zip', openStream: () => createZipStream(data, files, limits) }
 }
 
-export async function createSubtrackerBackupArchive(includeSubscriptionImages = true) {
-  const archive = await prepareSubtrackerBackupArchive(includeSubscriptionImages)
+export async function createSubtrackerBackupArchive(includeSubscriptionImages = true, format: SubtrackerBackupExportFormat = 'standard') {
+  const archive = await prepareSubtrackerBackupArchive(includeSubscriptionImages, format)
   return { filename: archive.filename, contentType: archive.contentType, stream: archive.openStream() }
 }
 

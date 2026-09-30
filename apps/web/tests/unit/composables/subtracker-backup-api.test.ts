@@ -21,7 +21,7 @@ describe('native backup streaming API', () => {
     const result = await api.exportBackup(false)
     expect('downloadUrl' in result && result.downloadUrl).toContain('/settings/export/backup/download/one-use-token')
     expect(request().method).toBe('post')
-    expect(JSON.parse(request().data)).toEqual({ includeSubscriptionImages: false })
+    expect(JSON.parse(request().data)).toEqual({ includeSubscriptionImages: false, format: 'standard' })
     expect(request().responseType).not.toBe('blob')
     expect(request().url).toBe('/settings/export/backup')
     expect(request().timeout).toBe(120000)
@@ -38,7 +38,11 @@ describe('native backup streaming API', () => {
     expect(request().timeout).toBe(1800000)
   })
 
-
+  it('sends the legacy format explicitly without buffering the download', async () => {
+    await api.exportBackup(false, 'legacy-v0.11')
+    expect(JSON.parse(request().data)).toEqual({ includeSubscriptionImages: false, format: 'legacy-v0.11' })
+    expect(request().responseType).not.toBe('blob')
+  })
 
 
 

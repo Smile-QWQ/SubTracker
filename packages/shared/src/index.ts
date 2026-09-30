@@ -525,8 +525,10 @@ export const WallosImportCommitSchema = z.object({
 export const SubtrackerBackupScopeSchema = z.enum(['business-complete'])
 export const SubtrackerBackupRestoreModeSchema = z.enum(['replace', 'append'])
 export const SubtrackerBackupExportSchema = z.object({
+  format: z.enum(['standard', 'legacy-v0.11']).default('standard'),
   includeSubscriptionImages: z.boolean().default(true),
 })
+export type SubtrackerBackupExportFormat = z.infer<typeof SubtrackerBackupExportSchema>['format']
 
 export const SubtrackerBackupInspectSchema = z.object({
   filename: z.string().min(1).max(255),
@@ -878,6 +880,8 @@ export interface SubtrackerBackupAssetLogoDto {
 }
 
 export const DEFAULT_SUBTRACKER_BACKUP_MAX_BYTES = 2 * 1024 * 1024 * 1024
+// v0.11.0/v0.11.1 accept 1 MiB JSON requests; leave room for base64 and JSON metadata.
+export const LEGACY_SUBTRACKER_BACKUP_MAX_BYTES = 750 * 1024
 
 export interface SubtrackerBackupLimitsDto {
   maxArchiveBytes: number
