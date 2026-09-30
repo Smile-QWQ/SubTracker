@@ -278,7 +278,16 @@ export default {
       includeBackupImages: 'Include note images',
       migration: 'Import data from similar third-party projects'
     },
-
+    backupMissing: {
+      title: 'Some backup files are missing',
+      description: '{count} local files are missing. Check the storage directory or mount. Cancel to recover them, or confirm excluding the files below:',
+      logo: 'Logo',
+      image: 'Note image',
+      unusedLogo: 'Unused library logo',
+      continueExport: 'Exclude missing files and export',
+      warning: 'This will be an incomplete backup and cannot restore the listed files. Replace mode also deletes existing logos and note images on the receiving instance.',
+      unchanged: 'Only missing files and their references in the exported copy are excluded. Subscriptions and text notes are kept. No data in this instance is changed or deleted.'
+    },
     backupCompatibility: {
       formatLabel: 'Backup format',
       standard: 'Standard backup',
@@ -1540,7 +1549,7 @@ Hard requirements:
         logoNeedsManualFill: 'The logo file must be restored later from a directory or ZIP package.'
       },
       subtrackerBackupWarnings: {
-
+        missingAssets: 'This incomplete backup excluded {count} missing files with confirmation. They cannot be restored; replace mode also deletes existing logos and note images on the receiving instance.',
         noLocalLogos: 'This backup does not include local logo files.',
         noPaymentRecords: 'This backup does not include payment records.',
       withoutImages: 'This backup excludes note images and does not replace a complete backup. Replace mode deletes existing note images.',

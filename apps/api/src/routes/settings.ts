@@ -30,7 +30,7 @@ import {
   withAppriseSyncState
 } from '../services/apprise-config.service'
 import { syncAppriseConfig } from '../services/apprise-notification.service'
-import { BackupBusyError, LegacyBackupLimitError } from '../services/subtracker-backup.service'
+import { BackupBusyError, LegacyBackupLimitError, BackupMissingAssetsError } from '../services/subtracker-backup.service'
 import { claimBackupDownload, openBackupDownload, prepareBackupDownload } from '../services/backup-download.service'
 import { BackupLimitError } from '../utils/streaming-zip'
 import { verifyToken } from '../services/auth.service'
@@ -331,8 +331,9 @@ export async function settingsRoutes(app: FastifyInstance) {
       return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidSubtrackerBackupExportPayload')
     }
     try {
-      return sendOk(reply, await prepareBackupDownload(request.headers.authorization ?? '', parsed.data.includeSubscriptionImages, parsed.data.format))
+      return sendOk(reply, await prepareBackupDownload(request.headers.authorization ?? '', parsed.data.includeSubscriptionImages, parsed.data.format, parsed.data.confirmedMissingAssets))
     } catch (error) {
+      if (error instanceof BackupMissingAssetsError) return sendOk(reply, { missingAssets: error.assets })
       request.log.error({ err: error }, 'Backup export preparation failed')
       return sendError(reply, error instanceof BackupLimitError ? 413 : error instanceof BackupBusyError ? 409 : 400, 'backup_export_failed',
         error instanceof LegacyBackupLimitError ? 'api.errors.imports.subtrackerBackupLegacyTooLarge' : error instanceof BackupLimitError ? 'api.errors.imports.subtrackerBackupTooLarge' : error instanceof BackupBusyError ? 'api.errors.imports.subtrackerBackupBusy' : 'api.errors.imports.subtrackerBackupExportFailed')

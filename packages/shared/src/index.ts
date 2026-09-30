@@ -524,9 +524,19 @@ export const WallosImportCommitSchema = z.object({
 
 export const SubtrackerBackupScopeSchema = z.enum(['business-complete'])
 export const SubtrackerBackupRestoreModeSchema = z.enum(['replace', 'append'])
+const BackupAssetPathSchema = z.string().max(512).regex(/^(logos|subscription-images)\/[^/\\\x00-\x1f\x7f]+$/)
+export const SubtrackerBackupMissingAssetSchema = z.object({
+  kind: z.enum(['logo', 'subscriptionImage']),
+  path: BackupAssetPathSchema,
+  fileName: z.string().min(1).max(512),
+  subscriptions: z.array(z.object({ id: z.string(), name: z.string() })).max(10000)
+})
+export type SubtrackerBackupMissingAssetDto = z.infer<typeof SubtrackerBackupMissingAssetSchema>
+export type SubtrackerBackupExportResultDto = { token: string } | { missingAssets: SubtrackerBackupMissingAssetDto[] }
 export const SubtrackerBackupExportSchema = z.object({
   format: z.enum(['standard', 'legacy-v0.11']).default('standard'),
   includeSubscriptionImages: z.boolean().default(true),
+  confirmedMissingAssets: z.array(BackupAssetPathSchema).max(10000).default([])
 })
 export type SubtrackerBackupExportFormat = z.infer<typeof SubtrackerBackupExportSchema>['format']
 

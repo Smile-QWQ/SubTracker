@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { LogoImportResult, SubtrackerBackupLimitsDto, SubtrackerBackupExportFormat } from '@subtracker/shared'
+import type { LogoImportResult, SubtrackerBackupLimitsDto, SubtrackerBackupExportFormat, SubtrackerBackupExportResultDto } from '@subtracker/shared'
 import type {
   AppLocale,
   AppLocaleResponse,
@@ -438,10 +438,11 @@ export const api = {
     return postOnce<{ success: boolean; statusCode: number; responseBody: string }>('/notifications/test/webhook', payload)
   },
 
-  async exportBackup(includeSubscriptionImages = true, format: SubtrackerBackupExportFormat = 'standard') {
-    const result = unwrap<{ token: string }>(await client.post('/settings/export/backup', {
-      includeSubscriptionImages, format
+  async exportBackup(includeSubscriptionImages = true, format: SubtrackerBackupExportFormat = 'standard', confirmedMissingAssets: string[] = []) {
+    const result = unwrap<SubtrackerBackupExportResultDto>(await client.post('/settings/export/backup', {
+      includeSubscriptionImages, format, ...(confirmedMissingAssets.length ? { confirmedMissingAssets } : {})
     }, { timeout: 120000 }))
+    if ('missingAssets' in result) return result
     return { downloadUrl: client.getUri({ url: `/settings/export/backup/download/${encodeURIComponent(result.token)}` }) }
   },
 

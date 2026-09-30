@@ -82,7 +82,8 @@ vi.mock('../../src/services/subscription-images.service', () => ({
 }))
 
 import AdmZip from 'adm-zip'
-import { cleanupExpiredImports, commitSubtrackerBackup, createSubtrackerBackupArchive, discardSubtrackerBackup, disposeSubtrackerBackups, inspectSubtrackerBackupFile as inspectStream } from '../../src/services/subtracker-backup.service'
+import * as streamingZip from '../../src/utils/streaming-zip'
+import { BackupMissingAssetsError, cleanupExpiredImports, commitSubtrackerBackup, createSubtrackerBackupArchive, discardSubtrackerBackup, disposeSubtrackerBackups, inspectSubtrackerBackupFile as inspectStream } from '../../src/services/subtracker-backup.service'
 
 let fixtureRoot: string
 // Legacy ZIP fixtures remain unchanged; the production transport now receives raw streams.
@@ -183,7 +184,93 @@ describe('subtracker backup service', () => {
     expect(preview.warnings.join(' ')).toContain('does not replace a complete backup')
   })
 
+  describe('missing source assets', () => {
+    async function setupSources() {
+      const data = JSON.parse(new AdmZip(Buffer.from(makeImageBackup().input.base64, 'base64')).getEntries().find(entry => entry.entryName === 'manifest.json')!.getData().toString()).data
+      const subscription = { ...data.subscriptions[0], startDate: new Date('2026-04-01'), nextRenewalDate: new Date('2026-05-01'),
+        createdAt: new Date(), updatedAt: new Date(), tags: [], logoUrl: '/static/logos/gone.png', logoSource: 'upload', logoFetchedAt: new Date() }
+      const subscriptions = [subscription, { ...subscription, id: 'sub_2', name: 'Shared logo' }]
+      mocks.getAppSettingsMock.mockResolvedValue(data.settings)
+      mocks.getPrimaryWebhookEndpointMock.mockResolvedValue({})
+      mocks.getSubscriptionOrderMock.mockResolvedValue(['sub_1', 'sub_2'])
+      mocks.getLocalLogoLibraryMock.mockResolvedValue([{ logoUrl: '/static/logos/healthy.png' }])
+      mocks.saveImportedLogoBufferMock.mockResolvedValue({ logoUrl: '/static/logos/restored.png', logoSource: 'backup-zip', logoFetchedAt: new Date() })
+      mocks.prismaMock.tag.findMany.mockResolvedValue([])
+      mocks.prismaMock.paymentRecord.findMany.mockResolvedValue([])
+      mocks.prismaMock.subscription.findMany.mockResolvedValue(subscriptions)
+      mocks.prismaMock.subscriptionImage.findMany.mockResolvedValue([
+        { id: 'i1', subscriptionId: 'sub_1', storageName: 'gone.png', fileName: 'Missing receipt.png', contentType: 'image/png', size: pngLogo.length, createdAt: new Date() },
+        { id: 'i2', subscriptionId: 'sub_1', storageName: 'healthy.png', fileName: 'Kept receipt.png', contentType: 'image/png', size: pngLogo.length, createdAt: new Date() }
+      ])
+      await writeFile(path.join(fixtureRoot, 'logos', 'healthy.png'), pngLogo)
+      await writeFile(path.join(fixtureRoot, 'images', 'healthy.png'), pngLogo)
+      return subscriptions
+    }
+    const paths = ['logos/gone.png', 'subscription-images/gone.png']
 
+    it('lists missing files with associated subscriptions and requires consent for every missing path', async () => {
+      await setupSources()
+      const error = await createSubtrackerBackupArchive().catch(error => error)
+      expect(error).toBeInstanceOf(BackupMissingAssetsError)
+      expect(error.assets.map((asset: { path: string }) => asset.path)).toEqual(paths)
+      expect(error.assets[0].subscriptions.map((sub: { id: string }) => sub.id)).toEqual(['sub_1', 'sub_2'])
+      expect(error.assets[1]).toMatchObject({ kind: 'subscriptionImage', fileName: 'Missing receipt.png', subscriptions: [{ id: 'sub_1', name: 'Subscription' }] })
+      await expect(createSubtrackerBackupArchive(true, 'standard', paths.slice(0, 1))).rejects.toBeInstanceOf(BackupMissingAssetsError)
+      expect(mocks.prismaMock.$transaction).not.toHaveBeenCalled()
+    })
+
+    it.each(['standard', 'legacy-v0.11'] as const)('repairs only the %s export copy and marks the restorable backup incomplete', async format => {
+      const original = await setupSources()
+      const archive = await createSubtrackerBackupArchive(true, format, paths)
+      const bytes = await collectBuffer(archive.stream)
+      const zip = new AdmZip(bytes)
+      const manifest = JSON.parse(zip.getEntries().find(entry => entry.entryName === 'manifest.json')!.getData().toString())
+      expect(archive.filename).toContain('-incomplete')
+      expect(manifest.schemaVersion).toBe(format === 'standard' ? 2 : 1)
+      expect(manifest.omittedAssets).toHaveLength(format === 'standard' ? 2 : 1)
+      expect(manifest.data.subscriptions).toHaveLength(2)
+      for (const sub of manifest.data.subscriptions) expect(sub).toMatchObject({ logoUrl: null, logoSource: null, logoFetchedAt: null, notes: 'Keep this text' })
+      expect(original.every(sub => sub.logoUrl === '/static/logos/gone.png')).toBe(true)
+      expect(zip.getEntries().find(entry => entry.entryName === 'logos/healthy.png')!.getData()).toEqual(pngLogo)
+      if (format === 'standard') {
+        expect(manifest.assets.subscriptionImages).toHaveLength(1)
+        expect(zip.getEntries().find(entry => entry.entryName === 'subscription-images/healthy.png')!.getData()).toEqual(pngLogo)
+      } else expect(mocks.prismaMock.subscriptionImage.findMany).not.toHaveBeenCalled()
+      expect(mocks.prismaMock.$transaction).not.toHaveBeenCalled()
+      expect(mocks.removeImageFilesMock).not.toHaveBeenCalled()
+      mocks.prismaMock.subscription.findMany.mockResolvedValue([])
+      for (const locale of ['zh-CN', 'en-US'] as const) {
+        const preview = await inspectStream(Readable.from(bytes), locale)
+        expect(preview.warnings.some(message => message.includes(locale === 'zh-CN' ? '不完整备份' : 'incomplete backup'))).toBe(true)
+        await discardSubtrackerBackup(preview.importToken)
+      }
+      const preview = await inspectStream(Readable.from(bytes))
+      await commitSubtrackerBackup({ importToken: preview.importToken, mode: 'append', restoreSettings: false })
+      expect(mocks.prismaMock.subscription.create).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not silently omit newly missing files and includes recovered files even if previously confirmed', async () => {
+      await setupSources()
+      await rm(path.join(fixtureRoot, 'logos', 'healthy.png'))
+      await expect(createSubtrackerBackupArchive(true, 'standard', paths)).rejects.toBeInstanceOf(BackupMissingAssetsError)
+      await writeFile(path.join(fixtureRoot, 'logos', 'healthy.png'), pngLogo)
+      await writeFile(path.join(fixtureRoot, 'logos', 'gone.png'), pngLogo)
+      await writeFile(path.join(fixtureRoot, 'images', 'gone.png'), pngLogo)
+      const archive = await createSubtrackerBackupArchive(true, 'standard', paths)
+      const zip = new AdmZip(await collectBuffer(archive.stream))
+      expect(archive.filename).not.toContain('incomplete')
+      expect(JSON.parse(zip.getEntries().find(entry => entry.entryName === 'manifest.json')!.getData().toString()).omittedAssets).toBeUndefined()
+      expect(zip.getEntries().find(entry => entry.entryName === 'logos/gone.png')!.getData()).toEqual(pngLogo)
+    })
+
+    it('does not treat invalid file sizes or permission failures as missing', async () => {
+      await setupSources()
+      await writeFile(path.join(fixtureRoot, 'images', 'healthy.png'), Buffer.from('incorrect size'))
+      await expect(createSubtrackerBackupArchive(true, 'standard', paths)).rejects.toThrow('Invalid stored subscription image size')
+      const spy = vi.spyOn(streamingZip, 'describeZipSource').mockRejectedValueOnce(Object.assign(new Error('permission denied'), { code: 'EACCES' }))
+      try { await expect(createSubtrackerBackupArchive(true, 'standard', paths)).rejects.toThrow('permission denied') } finally { spy.mockRestore() }
+    })
+  })
 
   it('blocks oversized legacy exports without deleting files and still allows standard export', async () => {
     mocks.getAppSettingsMock.mockResolvedValue({ timezone: 'UTC' })

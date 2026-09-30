@@ -38,7 +38,7 @@ describe('one-use backup download authorization', () => {
   async function ticket() {
     const res = await app.inject({ method: 'POST', url: '/api/v1/settings/export/backup', headers, payload: { includeSubscriptionImages: false } })
     expect(res.statusCode).toBe(200)
-    expect(mocks.prepare).toHaveBeenCalledWith(false, 'standard')
+    expect(mocks.prepare).toHaveBeenCalledWith(false, 'standard', [])
     return res.json().data.token as string
   }
 
@@ -46,12 +46,25 @@ describe('one-use backup download authorization', () => {
     const res = await app.inject({ method: 'POST', url: '/api/v1/settings/export/backup', headers,
       payload: { format: 'legacy-v0.11', includeSubscriptionImages: true } })
     expect(res.statusCode).toBe(200)
-    expect(mocks.prepare).toHaveBeenCalledWith(true, 'legacy-v0.11')
+    expect(mocks.prepare).toHaveBeenCalledWith(true, 'legacy-v0.11', [])
   })
 
+  it('returns missing assets without allocating tickets and forwards explicit consent', async () => {
+    const { BackupMissingAssetsError } = await import('../../src/services/subtracker-backup.service')
+    const assets = [{ kind: 'logo' as const, path: 'logos/missing.png', fileName: 'missing.png', subscriptions: [{ id: 's1', name: 'Example' }] }]
+    for (let i = 0; i < 3; i++) {
+      mocks.prepare.mockRejectedValueOnce(new BackupMissingAssetsError(assets))
+      const res = await app.inject({ method: 'POST', url: '/api/v1/settings/export/backup', headers, payload: {} })
+      expect(res.statusCode).toBe(200)
+      expect(res.json().data).toEqual({ missingAssets: assets })
+    }
+    const res = await app.inject({ method: 'POST', url: '/api/v1/settings/export/backup', headers,
+      payload: { confirmedMissingAssets: ['logos/missing.png'] } })
+    expect(res.json().data.token).toMatch(/^[a-f0-9]{48}$/)
+    expect(mocks.prepare).toHaveBeenLastCalledWith(true, 'standard', ['logos/missing.png'])
+  })
 
-
-  it.each([{ format: 'legacy' }, { includeSubscriptionImages: 'false' }])('rejects invalid export options %j', async payload => {
+  it.each([{ format: 'legacy' }, { includeSubscriptionImages: 'false' }, { confirmedMissingAssets: true }, { confirmedMissingAssets: ['C:\\private.png'] }, { confirmedMissingAssets: ['logos/../private.png'] }])('rejects invalid export options %j', async payload => {
     const res = await app.inject({ method: 'POST', url: '/api/v1/settings/export/backup', headers, payload })
     expect(res.statusCode).toBe(422)
     expect(mocks.prepare).not.toHaveBeenCalled()

@@ -16,9 +16,10 @@ import type {
   SubtrackerBackupInspectResultDto,
   SubtrackerBackupSubscriptionDto,
   SubtrackerBackupTagDto,
-  SubtrackerBackupExportFormat
+  SubtrackerBackupExportFormat,
+  SubtrackerBackupMissingAssetDto
 } from '@subtracker/shared'
-import { DEFAULT_APP_LOCALE, SettingsSchema, NotificationWebhookSettingsSchema, getMessage, LOGO_MIME_BY_EXTENSION, LEGACY_SUBTRACKER_BACKUP_MAX_BYTES } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE, SettingsSchema, NotificationWebhookSettingsSchema, getMessage, LOGO_MIME_BY_EXTENSION, LEGACY_SUBTRACKER_BACKUP_MAX_BYTES, SubtrackerBackupMissingAssetSchema } from '@subtracker/shared'
 import { prisma } from '../db'
 import { formatDateInTimezone, parseDateInTimezone, toTimezonedDayjs } from '../utils/timezone'
 import { getLocalLogoLibrary, getLogoStorageDir, saveImportedLogoBuffer } from './logo.service'
@@ -49,6 +50,7 @@ type BackupManifest = {
   app: typeof BACKUP_APP_NAME
   scope: typeof BACKUP_SCOPE
   includesSubscriptionImages?: boolean
+  omittedAssets?: SubtrackerBackupMissingAssetDto[]
   data: {
     settings: SettingsInput
     notificationWebhook: NotificationWebhookSettingsInput
@@ -143,6 +145,11 @@ export async function discardSubtrackerBackup(importToken: string, owner = '') {
 
 export class BackupBusyError extends Error {}
 export class LegacyBackupLimitError extends BackupLimitError {}
+export class BackupMissingAssetsError extends Error {
+  constructor(readonly assets: SubtrackerBackupMissingAssetDto[]) {
+    super('Backup source files are missing')
+  }
+}
 let operationActive = false
 function claimOperation() {
   if (operationActive) throw new BackupBusyError('Another backup operation is running')
@@ -162,7 +169,18 @@ function buildBackupFileName(timezone: string, now = new Date()) {
   return `subtracker-backup-${stamp}.zip`
 }
 
-async function readLocalLogoAssets(subscriptions: SubtrackerBackupSubscriptionDto[]) {
+async function describeOptionalSource(filename: string, asset: SubtrackerBackupMissingAssetDto, missing: SubtrackerBackupMissingAssetDto[]) {
+  try {
+    return await describeZipSource(filename, asset.path)
+  } catch (error) {
+    // Only absent files can be omitted with consent; all other storage failures remain fatal.
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    missing.push(asset)
+    return null
+  }
+}
+
+async function readLocalLogoAssets(subscriptions: SubtrackerBackupSubscriptionDto[], missing: SubtrackerBackupMissingAssetDto[]) {
   const logoDir = getLogoStorageDir()
   const assets: SubtrackerBackupAssetLogoDto[] = []
   const files: ZipSourceFile[] = []
@@ -177,7 +195,11 @@ async function readLocalLogoAssets(subscriptions: SubtrackerBackupSubscriptionDt
     if (!filename) continue
     const absolutePath = path.join(logoDir, filename)
     const zipPath = `${LOGO_ENTRY_PREFIX}${filename}`
-    const file = await describeZipSource(absolutePath, zipPath)
+    const file = await describeOptionalSource(absolutePath, {
+      kind: 'logo', path: zipPath, fileName: filename,
+      subscriptions: subscriptions.filter(item => item.logoUrl === logoUrl).map(({ id, name }) => ({ id, name }))
+    }, missing)
+    if (!file) continue
     files.push(file)
     assets.push({
       path: zipPath,
@@ -191,7 +213,7 @@ async function readLocalLogoAssets(subscriptions: SubtrackerBackupSubscriptionDt
   return { assets, files }
 }
 
-async function readSubscriptionImageAssets() {
+async function readSubscriptionImageAssets(subscriptions: SubtrackerBackupSubscriptionDto[], missing: SubtrackerBackupMissingAssetDto[]) {
   const images: BackupImageRow[] = await prisma.subscriptionImage.findMany({
     where: { subscriptionId: { not: null } },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
@@ -204,7 +226,11 @@ async function readSubscriptionImageAssets() {
       throw new Error('Invalid stored subscription image name')
     }
     const zipPath = `${IMAGE_ENTRY_PREFIX}${image.storageName}`
-    const file = await describeZipSource(path.join(getSubscriptionImageStorageDir(), image.storageName), zipPath)
+    const file = await describeOptionalSource(path.join(getSubscriptionImageStorageDir(), image.storageName), {
+      kind: 'subscriptionImage', path: zipPath, fileName: image.fileName,
+      subscriptions: subscriptions.filter(item => item.id === image.subscriptionId).map(({ id, name }) => ({ id, name }))
+    }, missing)
+    if (!file) continue
     if (file.size !== image.size) throw new Error('Invalid stored subscription image size')
     files.push(file)
     assets.push({
@@ -220,7 +246,7 @@ async function readSubscriptionImageAssets() {
   return { assets, files }
 }
 
-async function buildBackupManifest(includeSubscriptionImages = true) {
+async function buildBackupManifest(includeSubscriptionImages = true, confirmedMissingAssets: string[] = []) {
   const [settings, webhookSettings, tags, subscriptions, paymentRecords, subscriptionOrder] = await Promise.all([
     getAppSettings(),
     getPrimaryWebhookEndpoint(),
@@ -288,7 +314,8 @@ async function buildBackupManifest(includeSubscriptionImages = true) {
     createdAt: record.createdAt.toISOString()
   }))
 
-  const { assets, files } = await readLocalLogoAssets(serializedSubscriptions)
+  const missing: SubtrackerBackupMissingAssetDto[] = []
+  const { assets, files } = await readLocalLogoAssets(serializedSubscriptions, missing)
 
   for (const asset of assets) {
     asset.referencedBySubscriptionIds = serializedSubscriptions
@@ -296,13 +323,24 @@ async function buildBackupManifest(includeSubscriptionImages = true) {
       .map((subscription) => subscription.id)
   }
 
-  const imageAssets = includeSubscriptionImages ? await readSubscriptionImageAssets() : { assets: [], files: [] }
+  const imageAssets = includeSubscriptionImages ? await readSubscriptionImageAssets(serializedSubscriptions, missing) : { assets: [], files: [] }
+  const confirmed = new Set(confirmedMissingAssets)
+  if (missing.some(asset => !confirmed.has(asset.path))) throw new BackupMissingAssetsError(missing)
+  // Repair only the exported copy so every remaining asset reference is restorable.
+  const missingLogoSubscriptions = new Set(missing.filter(asset => asset.kind === 'logo').flatMap(asset => asset.subscriptions.map(item => item.id)))
+  for (const subscription of serializedSubscriptions) {
+    if (!missingLogoSubscriptions.has(subscription.id)) continue
+    subscription.logoUrl = null
+    subscription.logoSource = null
+    subscription.logoFetchedAt = null
+  }
   const manifest: BackupManifest = {
     schemaVersion: BACKUP_SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
     app: BACKUP_APP_NAME,
     scope: BACKUP_SCOPE,
     includesSubscriptionImages: includeSubscriptionImages,
+    ...(missing.length ? { omittedAssets: missing } : {}),
     data: {
       settings: SettingsSchema.parse(settings),
       notificationWebhook: webhookSettings,
@@ -323,10 +361,10 @@ async function buildBackupManifest(includeSubscriptionImages = true) {
   }
 }
 
-export async function prepareSubtrackerBackupArchive(includeSubscriptionImages = true, format: SubtrackerBackupExportFormat = 'standard') {
+export async function prepareSubtrackerBackupArchive(includeSubscriptionImages = true, format: SubtrackerBackupExportFormat = 'standard', confirmedMissingAssets: string[] = []) {
   const legacy = format === 'legacy-v0.11'
   const withImages = !legacy && includeSubscriptionImages
-  const { manifest, files } = await buildBackupManifest(withImages)
+  const { manifest, files } = await buildBackupManifest(withImages, confirmedMissingAssets)
   if (legacy) {
     manifest.schemaVersion = 1
     delete manifest.assets.subscriptionImages
@@ -344,13 +382,13 @@ export async function prepareSubtrackerBackupArchive(includeSubscriptionImages =
   if (data.length > ZIP_MANIFEST_LIMIT || files.length + 1 > ZIP_ENTRY_LIMIT || expanded > limits.maxExpandedBytes || archiveBound > limits.maxArchiveBytes) {
     throw new BackupLimitError('Backup size limit exceeded')
   }
-  const suffix = `${legacy ? '-compatible-v0.11.zip' : withImages ? '.zip' : '-without-images.zip'}`
+  const suffix = `${manifest.omittedAssets?.length ? '-incomplete' : ''}${legacy ? '-compatible-v0.11.zip' : withImages ? '.zip' : '-without-images.zip'}`
   const filename = buildBackupFileName(manifest.data.settings.timezone).replace('.zip', suffix)
   return { filename, contentType: 'application/zip', openStream: () => createZipStream(data, files, limits) }
 }
 
-export async function createSubtrackerBackupArchive(includeSubscriptionImages = true, format: SubtrackerBackupExportFormat = 'standard') {
-  const archive = await prepareSubtrackerBackupArchive(includeSubscriptionImages, format)
+export async function createSubtrackerBackupArchive(includeSubscriptionImages = true, format: SubtrackerBackupExportFormat = 'standard', confirmedMissingAssets: string[] = []) {
+  const archive = await prepareSubtrackerBackupArchive(includeSubscriptionImages, format, confirmedMissingAssets)
   return { filename: archive.filename, contentType: archive.contentType, stream: archive.openStream() }
 }
 
@@ -385,6 +423,11 @@ function parseBackupManifest(raw: unknown, locale: AppLocale = DEFAULT_APP_LOCAL
   }
   if (manifest.includesSubscriptionImages === false && manifest.assets.subscriptionImages?.length) {
     throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupManifestInvalid'))
+  }
+  if (manifest.omittedAssets !== undefined) {
+    const omitted = SubtrackerBackupMissingAssetSchema.array().max(ZIP_ENTRY_LIMIT).safeParse(manifest.omittedAssets)
+    if (!omitted.success) throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupManifestInvalid'))
+    manifest.omittedAssets = omitted.data
   }
   // Strip unknown settings so a business backup cannot overwrite login credentials.
   manifest.data.settings = SettingsSchema.parse(manifest.data.settings)
@@ -503,6 +546,7 @@ function buildBackupWarnings(manifest: BackupManifest, locale: AppLocale = DEFAU
     warnings.push(getMessage(locale, 'api.errors.subtrackerBackupWarnings.noPaymentRecords'))
   }
 
+  if (manifest.omittedAssets?.length) warnings.push(getMessage(locale, 'api.errors.subtrackerBackupWarnings.missingAssets', { count: manifest.omittedAssets.length }))
   if (manifest.includesSubscriptionImages === false) warnings.push(getMessage(locale, 'api.errors.subtrackerBackupWarnings.withoutImages'))
   warnings.push(getMessage(locale, 'api.errors.subtrackerBackupWarnings.excludedSecretsAndHistory'))
   warnings.push(getMessage(locale, 'api.errors.subtrackerBackupWarnings.appendModeDedup'))

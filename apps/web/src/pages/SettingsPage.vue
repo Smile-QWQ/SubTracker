@@ -766,6 +766,29 @@
       <div class="card-muted">{{ t('settings.backupCompatibility.recommendation') }}</div>
     </n-modal>
 
+    <n-modal
+      :show="showMissingBackupConfirmation"
+      preset="dialog"
+      type="warning"
+      :title="t('settings.backupMissing.title')"
+      :positive-text="t('settings.backupMissing.continueExport')"
+      :negative-text="t('common.actions.cancel')"
+      style="width: min(600px, calc(100vw - 32px))"
+      @update:show="value => { if (!value) cancelMissingBackupExport() }"
+      @positive-click="confirmMissingBackupExport"
+    >
+      <p>{{ t('settings.backupMissing.description', { count: missingBackupAssets.length }) }}</p>
+      <ul style="max-height: 30vh; overflow-y: auto; overflow-wrap: anywhere; padding-left: 20px; line-height: 1.8">
+        <li v-for="asset in missingBackupAssets" :key="asset.path">
+          <strong>{{ asset.kind === 'logo' ? t('settings.backupMissing.logo') : t('settings.backupMissing.image') }}</strong>
+          · {{ asset.fileName }}
+          <div class="card-muted">{{ asset.subscriptions.map(item => item.name).join('、') || t('settings.backupMissing.unusedLogo') }}</div>
+        </li>
+      </ul>
+      <p><strong>{{ t('settings.backupMissing.warning') }}</strong></p>
+      <p class="card-muted">{{ t('settings.backupMissing.unchanged') }}</p>
+    </n-modal>
+
     <subtracker-backup-modal
       :show="showSubtrackerBackupModal"
       @close="showSubtrackerBackupModal = false"
@@ -1054,6 +1077,7 @@ const showSubtrackerBackupModal = ref(false)
 const legacyBackupMaxKiB = LEGACY_SUBTRACKER_BACKUP_MAX_BYTES / 1024
 const {
   backupFormat, includeBackupImages, exportingBackup, showLegacyBackupConfirmation, exportBackup, confirmLegacyBackupExport,
+  showMissingBackupConfirmation, missingBackupAssets, cancelMissingBackupExport, confirmMissingBackupExport
 } = useSubtrackerBackupExport()
 const showWallosImportModal = ref(false)
 const showAppriseTargetsModal = ref(false)

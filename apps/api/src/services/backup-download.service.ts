@@ -17,12 +17,12 @@ export function clearBackupDownloads() {
   tickets.clear()
 }
 
-export async function prepareBackupDownload(authorization: string, includeSubscriptionImages = true, format: SubtrackerBackupExportFormat = 'standard') {
+export async function prepareBackupDownload(authorization: string, includeSubscriptionImages = true, format: SubtrackerBackupExportFormat = 'standard', confirmedMissingAssets: string[] = []) {
   cleanupBackupDownloads()
   if (tickets.size + preparing + active >= 2) throw new BackupBusyError('Too many backup downloads')
   preparing += 1
   try {
-    const archive = await prepareSubtrackerBackupArchive(includeSubscriptionImages, format)
+    const archive = await prepareSubtrackerBackupArchive(includeSubscriptionImages, format, confirmedMissingAssets)
     const token = crypto.randomBytes(24).toString('hex')
     tickets.set(token, { expiresAt: Date.now() + 60_000, authorization, archive })
     return { token }

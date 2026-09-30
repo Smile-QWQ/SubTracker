@@ -44,7 +44,15 @@ describe('native backup streaming API', () => {
     expect(request().responseType).not.toBe('blob')
   })
 
-
+  it('returns missing-file preflight data without constructing a download URL and sends scoped consent', async () => {
+    const missingAssets = [{ kind: 'logo', path: 'logos/gone.png', fileName: 'gone.png', subscriptions: [] }]
+    adapter.mockImplementationOnce(async (config: InternalAxiosRequestConfig) => ({
+      config, status: 200, statusText: 'OK', headers: {}, data: { data: { missingAssets } }
+    }))
+    expect(await api.exportBackup()).toEqual({ missingAssets })
+    await api.exportBackup(true, 'standard', ['logos/gone.png'])
+    expect(JSON.parse(request().data)).toEqual({ includeSubscriptionImages: true, format: 'standard', confirmedMissingAssets: ['logos/gone.png'] })
+  })
 
   it('keeps ordinary API requests at the existing 30-second default', async () => {
     await api.getSubscriptions()

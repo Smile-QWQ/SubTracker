@@ -279,7 +279,16 @@ export default {
       includeBackupImages: '包含图片备注',
       migration: '从第三方同类项目导入数据'
     },
-
+    backupMissing: {
+      title: '部分备份文件缺失',
+      description: '发现 {count} 个本地文件不存在，请检查存储目录或挂载。可取消并补回文件，或确认排除以下缺失文件：',
+      logo: 'Logo',
+      image: '图片备注',
+      unusedLogo: '未被订阅引用的图库 Logo',
+      continueExport: '排除缺失文件并导出',
+      warning: '这将是不完整备份，无法恢复列出的文件。覆盖恢复还会删除目标实例中原有的 Logo 和图片备注。',
+      unchanged: '仅在导出副本中移除缺失文件及其引用，订阅和文字备注保留，不修改或删除当前实例的数据。'
+    },
     backupCompatibility: {
       formatLabel: '备份格式',
       standard: '标准备份',
@@ -1538,7 +1547,7 @@ export default {
         logoNeedsManualFill: 'Logo 文件需后续通过目录或 zip 包补齐'
       },
       subtrackerBackupWarnings: {
-
+        missingAssets: '此备份经确认排除了 {count} 个缺失文件，是不完整备份；这些文件无法恢复，覆盖恢复还会删除目标实例原有的 Logo 和图片备注。',
         noLocalLogos: '该备份不包含本地 Logo 文件',
         noPaymentRecords: '该备份不包含支付记录',
       withoutImages: '此备份未包含图片备注，不能替代完整备份；清空恢复会删除现有图片备注',

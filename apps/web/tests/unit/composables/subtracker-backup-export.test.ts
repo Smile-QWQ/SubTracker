@@ -21,7 +21,7 @@ afterEach(() => { wrapper?.unmount(); vi.restoreAllMocks() })
 describe('backup export confirmation', () => {
   it('defaults to a standard backup including images without a legacy prompt', async () => {
     await state.exportBackup()
-    expect(mocks.exportBackup).toHaveBeenCalledWith(true, 'standard')
+    expect(mocks.exportBackup).toHaveBeenCalledWith(true, 'standard', [])
     expect(state.showLegacyBackupConfirmation.value).toBe(false)
     expect(click).toHaveBeenCalledOnce()
   })
@@ -37,7 +37,7 @@ describe('backup export confirmation', () => {
     expect(click).not.toHaveBeenCalled()
     await state.exportBackup()
     await state.confirmLegacyBackupExport()
-    expect(mocks.exportBackup).toHaveBeenCalledExactlyOnceWith(false, 'legacy-v0.11')
+    expect(mocks.exportBackup).toHaveBeenCalledExactlyOnceWith(false, 'legacy-v0.11', [])
     expect(click).toHaveBeenCalledOnce()
     expect(state.includeBackupImages.value).toBe(true)
   })
@@ -47,7 +47,7 @@ describe('backup export confirmation', () => {
     state.backupFormat.value = 'legacy-v0.11'
     state.backupFormat.value = 'standard'
     await state.exportBackup()
-    expect(mocks.exportBackup).toHaveBeenCalledWith(false, 'standard')
+    expect(mocks.exportBackup).toHaveBeenCalledWith(false, 'standard', [])
   })
 
   it('keeps failed legacy preparation from triggering a download and permits retry', async () => {
@@ -63,14 +63,67 @@ describe('backup export confirmation', () => {
     expect(click).toHaveBeenCalledOnce()
   })
 
+  const missing = [{ kind: 'logo', path: 'logos/missing.png', fileName: 'missing.png', subscriptions: [{ id: 's1', name: '<img src=x>' }] }]
 
+  it('requires confirmation for missing files and cancels without downloading', async () => {
+    mocks.exportBackup.mockResolvedValueOnce({ missingAssets: missing })
+    await state.exportBackup()
+    expect(state.showMissingBackupConfirmation.value).toBe(true)
+    expect(state.missingBackupAssets.value).toEqual(missing)
+    expect(click).not.toHaveBeenCalled()
+    expect(mocks.error).not.toHaveBeenCalled()
+    await state.exportBackup()
+    expect(mocks.exportBackup).toHaveBeenCalledOnce()
+    state.cancelMissingBackupExport()
+    await state.confirmMissingBackupExport()
+    expect(mocks.exportBackup).toHaveBeenCalledOnce()
+    expect(state.missingBackupAssets.value).toEqual([])
+    await state.exportBackup()
+    expect(mocks.exportBackup).toHaveBeenLastCalledWith(true, 'standard', [])
+    expect(click).toHaveBeenCalledOnce()
+  })
 
+  it('freezes the requested options and confirms only the displayed missing files', async () => {
+    mocks.exportBackup.mockResolvedValueOnce({ missingAssets: missing })
+    state.includeBackupImages.value = false
+    await state.exportBackup()
+    state.backupFormat.value = 'legacy-v0.11'
+    state.includeBackupImages.value = true
+    await state.confirmMissingBackupExport()
+    expect(mocks.exportBackup).toHaveBeenLastCalledWith(false, 'standard', ['logos/missing.png'])
+    expect(state.showMissingBackupConfirmation.value).toBe(false)
+    expect(click).toHaveBeenCalledOnce()
+    await state.confirmMissingBackupExport()
+    expect(click).toHaveBeenCalledOnce()
+  })
 
+  it('prompts again if more files disappear and supports the legacy confirmation flow', async () => {
+    state.backupFormat.value = 'legacy-v0.11'
+    mocks.exportBackup.mockResolvedValueOnce({ missingAssets: missing })
+    state.exportBackup()
+    await state.confirmLegacyBackupExport()
+    expect(state.showMissingBackupConfirmation.value).toBe(true)
+    const more = [...missing, { ...missing[0], path: 'logos/new.png' }]
+    mocks.exportBackup.mockResolvedValueOnce({ missingAssets: more })
+    expect(await state.confirmMissingBackupExport()).toBe(false)
+    expect(state.showMissingBackupConfirmation.value).toBe(true)
+    expect(click).not.toHaveBeenCalled()
+    await state.confirmMissingBackupExport()
+    expect(mocks.exportBackup).toHaveBeenLastCalledWith(false, 'legacy-v0.11', more.map(asset => asset.path))
+    expect(click).toHaveBeenCalledOnce()
+  })
 
-
-
-
-
+  it('does not open a late missing-file prompt after leaving settings', async () => {
+    let resolve!: (value: unknown) => void
+    mocks.exportBackup.mockImplementationOnce(() => new Promise(r => { resolve = r }))
+    void state.exportBackup()
+    wrapper!.unmount()
+    wrapper = undefined
+    resolve({ missingAssets: missing })
+    await flushPromises()
+    expect(state.showMissingBackupConfirmation.value).toBe(false)
+    expect(click).not.toHaveBeenCalled()
+  })
 
   it('serializes exports and ignores late results after leaving settings', async () => {
     let resolve!: (value: { downloadUrl: string }) => void
