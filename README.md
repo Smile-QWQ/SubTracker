@@ -75,7 +75,7 @@ Default credentials:
 
 ## Features
 
-- **Subscription management**: create, duplicate, edit, renew, pause, disable, and restore subscriptions; review renewal history; and manage larger collections with tags, multi-tag filtering, custom ordering, search, bulk status updates, and bulk deletion.
+- **Subscription management**: create, duplicate, edit, renew, pause, disable, and restore subscriptions; review renewal history; attach multiple note images via local upload or URL; and manage larger collections with tags, multi-tag filtering, custom ordering, search, bulk status updates, and bulk deletion.
 - **Lifetime purchases**: track lifetime licenses and one-time purchases separately, with a dedicated investment total and no renewal reminders or recurring spending projections.
 - **Reminder rules**: define reminders before renewal, on the renewal day, and after expiration with the `days&time;` format; override defaults per subscription; and preview the resulting trigger schedule before saving.
 - **Statistics and budgets**: normalize multi-currency subscriptions into a base currency, track spending totals and trends, inspect monthly/yearly tag spending and status breakdowns, review the next 30 days of renewals, compare auto-renew ratios, and configure monthly, yearly, or per-tag budgets.

@@ -225,7 +225,49 @@ server {
     }
 
     location /api/ {
+        client_max_body_size 30m;
+        proxy_read_timeout 120s;
         proxy_pass http://127.0.0.1:3001/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location = /api/v1/import/subtracker/inspect {
+        # API enforces the configurable ZIP size limit; do not buffer uploads twice.
+        client_max_body_size 0;
+        client_body_timeout 300s;
+        proxy_request_buffering off;
+        proxy_read_timeout 1800s;
+        proxy_send_timeout 300s;
+        proxy_pass http://127.0.0.1:3001/api/v1/import/subtracker/inspect;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location = /api/v1/import/subtracker/commit {
+        client_max_body_size 1m;
+        proxy_read_timeout 1800s;
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /api/v1/settings/export/backup {
+        access_log off;
+        client_max_body_size 1m;
+        proxy_buffering off;
+        proxy_read_timeout 1800s;
+        send_timeout 300s;
+        proxy_pass http://127.0.0.1:3001;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -246,6 +288,16 @@ server {
 
 ---
 
+图片备注单张上限仍为 20 MiB。原生备份直接上传 ZIP，不经过 base64；压缩包和解压总量默认分别限 2 GiB，可用下方环境变量调整。原生备份上传端点由 API 流式限长，其他图片 JSON 上传仍保留 30 MiB 的反代限制。完整部署的内置 Nginx 已配置；自建或外层反代也需同步上传限制、超时和关闭备份缓冲，避免在代理层重复暂存大文件。下载使用 60 秒有效、单次使用的票据，外层反代也应关闭 `/api/v1/settings/export/backup` 路径的访问日志，避免记录票据。生产环境应使用 HTTPS。
+
+Docker 镜像将图片备注保存在 `/app/data/subscription-images`，沿用已有 `data/` 持久化挂载，不与公开 Logo 目录混放。本地开发默认保存在 `apps/api/storage/subscription-images`，如需自定义可设置 `SUBSCRIPTION_IMAGE_STORAGE_DIR`。Logo 默认位于固定的 `apps/api/storage/logos`（可通过 `LOGO_STORAGE_DIR` 覆盖），不受启动目录影响；Docker 中原有 Logo 挂载路径不变。
+
+备份临时文件在 Docker 内使用 `/app/data/backup-temp`，无需新增挂载；开发默认使用 `apps/api/storage/backup-temp`。取消、恢复完成或预览过期（15 分钟）后会清理，重启后也会清扫过期残留。默认最多保留 2 个预览，临时 ZIP 总额度为单包上限的两倍；恢复还需为新图片预留磁盘空间，建议按“待恢复 ZIP + 解压后的资源”预留，原文件会在数据库事务成功后才删除。导出默认包含图片备注；取消勾选会生成明确标记的轻量包，不可替代完整备份。旧版 schema 1/2 ZIP 仍可恢复。
+
+若本地 Logo 或图片备注文件缺失，导出会列出文件和关联订阅，需明确确认才能排除。仅导出副本中的缺失文件及引用会被移除，源数据不变；ZIP 文件名带 `incomplete`，新版恢复预览也会提示不完整。应优先检查挂载或补回文件；覆盖恢复不完整备份会删除目标实例原有的 Logo 和图片备注。
+
+需要将数据恢复到 v0.11.0～v0.11.1 时，可选择「兼容旧版本导入」并确认提示。该模式导出 schema 1，保留订阅、文字备注、标签、付款、Logo、业务设置和排序，排除图片备注，不修改当前数据。旧版仅恢复被订阅引用的 Logo，不会恢复图库中未使用的 Logo。由于旧版 Base64 上传接口的请求体上限为 1 MiB，兼容 ZIP 保守限制为 750 KiB，超限会阻止导出；新版容量环境变量不能提高旧版接收能力。更早版本不保证兼容，建议另外保留包含图片的标准备份。
+
 ## 5. 核心环境变量
 
 脚本会自动生成 `.env`，常见需要调整的字段如下：
@@ -263,6 +315,16 @@ DEFAULT_APP_LOCALE=zh-CN
 说明：
 
 - 以上列的是常见需要调整的字段；其余带默认值的配置通常保持默认即可
+- 可选原生备份配置（单位均为 MiB；修改后重建容器）：
+
+```bash
+BACKUP_MAX_ARCHIVE_MIB=2048
+BACKUP_MAX_EXPANDED_MIB=2048
+# 留空时默认是压缩包上限的两倍
+BACKUP_TEMP_MAX_MIB=
+```
+
+自定义临时目录使用 API 环境变量 `BACKUP_TEMP_DIR`，并自行确保该目录有足够空间和合适的访问权限；官方镜像默认目录无需改动。
 
 完整部署还会多一个：
 
