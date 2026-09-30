@@ -1,15 +1,28 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { additionalLogos } from './logo-fixtures'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { Readable } from 'node:stream'
+import { buffer as collectBuffer } from 'node:stream/consumers'
+import { additionalLogos, pngLogo } from './logo-fixtures'
+import type { SubtrackerBackupAssetImageDto } from '@subtracker/shared'
 
 const mocks = vi.hoisted(() => ({
   prismaMock: {
+    $transaction: vi.fn(),
     tag: {
       findMany: vi.fn(),
-      create: vi.fn()
+      create: vi.fn(),
+      deleteMany: vi.fn()
     },
     subscription: {
       findMany: vi.fn(),
-      create: vi.fn()
+      create: vi.fn(),
+      deleteMany: vi.fn()
+    },
+    subscriptionImage: {
+      findMany: vi.fn(),
+      deleteMany: vi.fn()
     },
     paymentRecord: {
       findMany: vi.fn(),
@@ -31,12 +44,11 @@ const mocks = vi.hoisted(() => ({
   setSubscriptionOrderMock: vi.fn(),
   setSettingMock: vi.fn(),
   saveImportedLogoBufferMock: vi.fn(),
+  getImageStorageDirMock: vi.fn(),
+  writeImageFileMock: vi.fn(),
+  removeImageFilesMock: vi.fn(),
   getLocalLogoLibraryMock: vi.fn(),
-  getLogoStorageDirMock: vi.fn(),
-  readFileMock: vi.fn(),
-  readdirMock: vi.fn(),
-  mkdirMock: vi.fn(),
-  rmMock: vi.fn()
+  getLogoStorageDirMock: vi.fn()
 }))
 
 vi.mock('../../src/db', () => ({
@@ -63,71 +75,151 @@ vi.mock('../../src/services/logo.service', () => ({
   saveImportedLogoBuffer: mocks.saveImportedLogoBufferMock
 }))
 
-vi.mock('node:fs/promises', () => ({
-  readFile: mocks.readFileMock,
-  readdir: mocks.readdirMock,
-  mkdir: mocks.mkdirMock,
-  rm: mocks.rmMock
+vi.mock('../../src/services/subscription-images.service', () => ({
+  getSubscriptionImageStorageDir: mocks.getImageStorageDirMock,
+  writeSubscriptionImageFile: mocks.writeImageFileMock,
+  removeSubscriptionImageFiles: mocks.removeImageFilesMock
 }))
 
-vi.mock('adm-zip', () => {
-  return {
-    default: class MockAdmZip {
-      private entries: Array<{ entryName: string; isDirectory: boolean; data: Buffer }> = []
-
-      constructor(buffer?: Buffer) {
-        if (!buffer?.length) {
-          return
-        }
-        const parsed = JSON.parse(buffer.toString('utf8')) as Array<{ entryName: string; isDirectory: boolean; data: string }>
-        this.entries = parsed.map((entry) => ({
-          entryName: entry.entryName,
-          isDirectory: entry.isDirectory,
-          data: Buffer.from(entry.data, 'base64')
-        }))
-      }
-
-      addFile(entryName: string, data: Buffer) {
-        this.entries.push({
-          entryName,
-          isDirectory: false,
-          data: Buffer.from(data)
-        })
-      }
-
-      getEntries() {
-        return this.entries.map((entry) => ({
-          entryName: entry.entryName,
-          isDirectory: entry.isDirectory,
-          getData: () => Buffer.from(entry.data)
-        }))
-      }
-
-      toBuffer() {
-        return Buffer.from(
-          JSON.stringify(
-            this.entries.map((entry) => ({
-              entryName: entry.entryName,
-              isDirectory: entry.isDirectory,
-              data: entry.data.toString('base64')
-            }))
-          ),
-          'utf8'
-        )
-      }
-    }
-  }
-})
-
 import AdmZip from 'adm-zip'
-import { commitSubtrackerBackup, createSubtrackerBackupArchive, inspectSubtrackerBackupFile } from '../../src/services/subtracker-backup.service'
+import { cleanupExpiredImports, commitSubtrackerBackup, createSubtrackerBackupArchive, discardSubtrackerBackup, disposeSubtrackerBackups, inspectSubtrackerBackupFile as inspectStream } from '../../src/services/subtracker-backup.service'
+
+let fixtureRoot: string
+// Legacy ZIP fixtures remain unchanged; the production transport now receives raw streams.
+function inspectSubtrackerBackupFile(input: { base64: string; filename: string; contentType: string }, locale?: 'zh-CN' | 'en-US') {
+  return inspectStream(Readable.from(Buffer.from(input.base64, 'base64')), locale)
+}
+
+function makeImageBackup(options: { assets?: SubtrackerBackupAssetImageDto[]; bytes?: Buffer; omitFile?: boolean } = {}) {
+  const asset: SubtrackerBackupAssetImageDto = {
+    id: 'image_1', subscriptionId: 'sub_1', path: 'subscription-images/image_1.png',
+    fileName: '订单.png', contentType: 'image/png', size: pngLogo.length, createdAt: '2026-04-01T00:00:00.000Z'
+  }
+  const assets = options.assets ?? [asset]
+  const zip = new AdmZip()
+  zip.addFile('manifest.json', Buffer.from(JSON.stringify({
+    schemaVersion: 2, exportedAt: '2026-05-02T00:00:00.000Z', app: 'SubTracker', scope: 'business-complete',
+    data: {
+      settings: { timezone: 'Asia/Shanghai' }, notificationWebhook: {}, tags: [], paymentRecords: [], subscriptionOrder: ['sub_1'],
+      subscriptions: [{
+        id: 'sub_1', name: 'Subscription', notes: 'Keep this text', description: '', amount: 10, currency: 'CNY',
+        billingIntervalCount: 1, billingIntervalUnit: 'month', status: 'active', autoRenew: false,
+        startDate: '2026-04-01', nextRenewalDate: '2026-05-01', notifyDaysBefore: 3, webhookEnabled: false,
+        tagIds: [], createdAt: '2026-04-01T00:00:00.000Z', updatedAt: '2026-04-01T00:00:00.000Z'
+      }]
+    },
+    assets: { logos: [], subscriptionImages: assets }
+  })))
+  if (!options.omitFile) {
+    for (const item of assets) zip.addFile(item.path, options.bytes ?? pngLogo)
+  }
+  return { asset, input: { filename: 'images.zip', contentType: 'application/zip', base64: zip.toBuffer().toString('base64') } }
+}
 
 describe('subtracker backup service', () => {
-  beforeEach(() => {
-    vi.useFakeTimers()
+  it('binds preview tokens to their session and atomically consumes them', async () => {
+    mocks.prismaMock.subscription.findMany.mockResolvedValue([])
+    mocks.prismaMock.tag.findMany.mockResolvedValue([])
+    mocks.getSubscriptionOrderMock.mockResolvedValue([])
+    const bytes = Buffer.from(makeImageBackup().input.base64, 'base64')
+    const preview = await inspectStream(Readable.from(bytes), 'en-US', 'owner')
+    await discardSubtrackerBackup(preview.importToken, 'different-owner')
+    await expect(commitSubtrackerBackup({ importToken: preview.importToken, mode: 'append', restoreSettings: false }, 'en-US', 'different-owner')).rejects.toThrow()
+    expect(mocks.prismaMock.$transaction).not.toHaveBeenCalled()
+    await commitSubtrackerBackup({ importToken: preview.importToken, mode: 'append', restoreSettings: false }, 'en-US', 'owner')
+    await expect(commitSubtrackerBackup({ importToken: preview.importToken, mode: 'append', restoreSettings: false }, 'en-US', 'owner')).rejects.toThrow()
+    expect(await readdir(path.join(fixtureRoot, 'temp'))).toEqual([])
+  })
+
+  it('removes preview files on cancellation and expiry', async () => {
+    mocks.prismaMock.subscription.findMany.mockResolvedValue([])
+    const preview = await inspectSubtrackerBackupFile(makeImageBackup().input)
+    await discardSubtrackerBackup(preview.importToken)
+    expect(await readdir(path.join(fixtureRoot, 'temp'))).toEqual([])
+    await inspectSubtrackerBackupFile(makeImageBackup().input)
+    vi.setSystemTime(new Date('2026-05-02T09:00:00.000Z'))
+    await cleanupExpiredImports()
+    expect(await readdir(path.join(fixtureRoot, 'temp'))).toEqual([])
+  })
+
+  it('caps pending previews and cleans a rejected archive', async () => {
+    mocks.prismaMock.subscription.findMany.mockResolvedValue([])
+    await expect(inspectStream(Readable.from(Buffer.from('not a ZIP')))).rejects.toThrow()
+    expect(await readdir(path.join(fixtureRoot, 'temp'))).toEqual([])
+    await inspectSubtrackerBackupFile(makeImageBackup().input)
+    await inspectSubtrackerBackupFile(makeImageBackup().input)
+    await expect(inspectSubtrackerBackupFile(makeImageBackup().input)).rejects.toThrow('pending')
+    expect(await readdir(path.join(fixtureRoot, 'temp'))).toHaveLength(2)
+  })
+
+  it('revalidates disk contents before destructive restore', async () => {
+    mocks.prismaMock.subscription.findMany.mockResolvedValue([])
+    const preview = await inspectSubtrackerBackupFile(makeImageBackup().input)
+    const [directory] = await readdir(path.join(fixtureRoot, 'temp'))
+    await writeFile(path.join(fixtureRoot, 'temp', directory, 'archive.zip'), 'corrupt')
+    await expect(commitSubtrackerBackup({ importToken: preview.importToken, mode: 'replace', restoreSettings: true })).rejects.toThrow()
+    expect(mocks.prismaMock.$transaction).not.toHaveBeenCalled()
+    expect(mocks.prismaMock.subscription.deleteMany).not.toHaveBeenCalled()
+    expect(await readdir(path.join(fixtureRoot, 'temp'))).toEqual([])
+  })
+
+  it('exports an explicitly marked lightweight backup without querying image records', async () => {
+    mocks.getAppSettingsMock.mockResolvedValue({ timezone: 'UTC' })
+    mocks.getPrimaryWebhookEndpointMock.mockResolvedValue({})
+    mocks.getSubscriptionOrderMock.mockResolvedValue([])
+    mocks.getLocalLogoLibraryMock.mockResolvedValue([])
+    mocks.prismaMock.tag.findMany.mockResolvedValue([])
+    mocks.prismaMock.subscription.findMany.mockResolvedValue([])
+    mocks.prismaMock.paymentRecord.findMany.mockResolvedValue([])
+    const archive = await createSubtrackerBackupArchive(false)
+    const bytes = await collectBuffer(archive.stream)
+    const manifest = JSON.parse(new AdmZip(bytes).getEntries()[0].getData().toString())
+    expect(archive.filename).toContain('-without-images.zip')
+    expect(manifest.includesSubscriptionImages).toBe(false)
+    expect(manifest.assets.subscriptionImages).toEqual([])
+    expect(mocks.prismaMock.subscriptionImage.findMany).not.toHaveBeenCalled()
+    const preview = await inspectStream(Readable.from(bytes), 'en-US')
+    expect(preview.summary.includesSubscriptionImages).toBe(false)
+    expect(preview.warnings.join(' ')).toContain('does not replace a complete backup')
+  })
+
+
+
+
+
+  it.each(['zh-CN', 'en-US'] as const)('localizes backup warnings in %s instead of showing message keys', async (locale) => {
+    mocks.prismaMock.subscription.findMany.mockResolvedValue([])
+    const { input } = makeImageBackup()
+    const preview = await inspectSubtrackerBackupFile(input, locale)
+    expect(preview.warnings).toHaveLength(4)
+    expect(preview.warnings.every(message => !message.startsWith('api.'))).toBe(true)
+    expect(preview.warnings[0]).toContain(locale === 'zh-CN' ? '本地 Logo' : 'local logo')
+  })
+
+  afterEach(async () => {
+    await disposeSubtrackerBackups()
+    await rm(fixtureRoot, { recursive: true, force: true })
+    vi.unstubAllEnvs()
+    vi.useRealTimers()
+  })
+
+  beforeEach(async () => {
+    fixtureRoot = await mkdtemp(path.join(os.tmpdir(), 'subtracker-backup-test-'))
+    await mkdir(path.join(fixtureRoot, 'logos'))
+    await mkdir(path.join(fixtureRoot, 'images'))
+    vi.stubEnv('BACKUP_TEMP_DIR', path.join(fixtureRoot, 'temp'))
+    mocks.prismaMock.$transaction.mockReset().mockImplementation(callback => callback(mocks.prismaMock))
+    vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-05-02T08:00:00.000Z'))
     mocks.prismaMock.tag.findMany.mockReset()
     mocks.prismaMock.subscription.findMany.mockReset()
+    mocks.prismaMock.subscription.deleteMany.mockReset()
+    mocks.prismaMock.tag.deleteMany.mockReset()
+    mocks.prismaMock.subscriptionImage.findMany.mockReset().mockResolvedValue([])
+    mocks.prismaMock.subscriptionImage.deleteMany.mockReset()
+    mocks.getImageStorageDirMock.mockReset().mockReturnValue(path.join(fixtureRoot, 'images'))
+    mocks.writeImageFileMock.mockReset().mockResolvedValue('restored.png')
+    mocks.removeImageFilesMock.mockReset().mockResolvedValue(undefined)
     mocks.prismaMock.paymentRecord.findMany.mockReset()
     mocks.prismaMock.tag.create.mockReset()
     mocks.prismaMock.subscription.create.mockReset()
@@ -144,11 +236,74 @@ describe('subtracker backup service', () => {
     mocks.setSettingMock.mockReset()
     mocks.saveImportedLogoBufferMock.mockReset()
     mocks.getLocalLogoLibraryMock.mockReset()
-    mocks.getLogoStorageDirMock.mockReset()
-    mocks.readFileMock.mockReset()
-    mocks.readdirMock.mockReset()
-    mocks.mkdirMock.mockReset()
-    mocks.rmMock.mockReset()
+    mocks.getLogoStorageDirMock.mockReset().mockReturnValue(path.join(fixtureRoot, 'logos'))
+  })
+
+  it('restores private images with their subscription and counts them separately from logos', async () => {
+    mocks.prismaMock.subscription.findMany.mockResolvedValue([])
+    mocks.prismaMock.tag.findMany.mockResolvedValue([])
+    mocks.getSubscriptionOrderMock.mockResolvedValue([])
+    const preview = await inspectSubtrackerBackupFile(makeImageBackup().input)
+    expect(preview.summary.subscriptionImagesTotal).toBe(1)
+    const result = await commitSubtrackerBackup({ importToken: preview.importToken, mode: 'append', restoreSettings: false })
+    expect(result.importedSubscriptionImages).toBe(1)
+    expect(result.importedLogos).toBe(0)
+    expect(mocks.writeImageFileMock).toHaveBeenCalledWith(pngLogo, 'image/png')
+    expect(mocks.prismaMock.subscription.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      notes: 'Keep this text', images: { create: [expect.objectContaining({ fileName: '订单.png', storageName: 'restored.png', size: pngLogo.length })] }
+    }) })
+  })
+
+  it('does not duplicate images when append skips an existing subscription', async () => {
+    mocks.prismaMock.subscription.findMany.mockResolvedValue([{ id: 'sub_1' }])
+    mocks.prismaMock.tag.findMany.mockResolvedValue([])
+    const preview = await inspectSubtrackerBackupFile(makeImageBackup().input)
+    const result = await commitSubtrackerBackup({ importToken: preview.importToken, mode: 'append', restoreSettings: false })
+    expect(result.importedSubscriptionImages).toBe(0)
+    expect(mocks.writeImageFileMock).not.toHaveBeenCalled()
+  })
+
+  it('cleans staged image files when restoring a subscription fails', async () => {
+    mocks.prismaMock.subscription.findMany.mockResolvedValue([])
+    mocks.prismaMock.tag.findMany.mockResolvedValue([])
+    mocks.prismaMock.subscription.create.mockRejectedValueOnce(new Error('database failure'))
+    const preview = await inspectSubtrackerBackupFile(makeImageBackup().input)
+    await expect(commitSubtrackerBackup({ importToken: preview.importToken, mode: 'append', restoreSettings: false })).rejects.toThrow('database failure')
+    expect(mocks.removeImageFilesMock).toHaveBeenCalledWith(['restored.png'])
+  })
+
+  it.each([
+    { path: '../private.png' }, { path: 'subscription-images/../private.png' },
+    { subscriptionId: 'missing' }, { size: 20 * 1024 * 1024 + 1 },
+    { size: -1 }, { contentType: 'text/html' }, { createdAt: 'invalid' }, { fileName: '' }
+  ])('rejects invalid image metadata before any restore: %s', async (changes) => {
+    const { asset } = makeImageBackup()
+    await expect(inspectSubtrackerBackupFile(makeImageBackup({ assets: [{ ...asset, ...changes }] }).input)).rejects.toThrow()
+    expect(mocks.prismaMock.subscription.deleteMany).not.toHaveBeenCalled()
+    expect(mocks.writeImageFileMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects missing image files and forged non-image bytes', async () => {
+    await expect(inspectSubtrackerBackupFile(makeImageBackup({ omitFile: true }).input)).rejects.toThrow()
+    const bytes = Buffer.alloc(pngLogo.length, 65)
+    await expect(inspectSubtrackerBackupFile(makeImageBackup({ bytes }).input)).rejects.toThrow()
+  })
+
+  it('rejects more than 20 images per subscription and duplicate IDs', async () => {
+    const { asset } = makeImageBackup()
+    const assets = Array.from({ length: 21 }, (_, i) => ({ ...asset, id: `img_${i}`, path: `subscription-images/img_${i}.png` }))
+    await expect(inspectSubtrackerBackupFile(makeImageBackup({ assets }).input)).rejects.toThrow()
+    await expect(inspectSubtrackerBackupFile(makeImageBackup({ assets: [asset, { ...asset, path: 'subscription-images/other.png' }] }).input)).rejects.toThrow()
+  })
+
+  it('removes existing image rows and files in replace mode', async () => {
+    mocks.prismaMock.subscription.findMany.mockResolvedValue([])
+    mocks.prismaMock.tag.findMany.mockResolvedValue([])
+    mocks.prismaMock.subscriptionImage.findMany.mockResolvedValue([{ storageName: 'old.png' }])
+    const preview = await inspectSubtrackerBackupFile(makeImageBackup().input)
+    await commitSubtrackerBackup({ importToken: preview.importToken, mode: 'replace', restoreSettings: true })
+    expect(mocks.prismaMock.subscriptionImage.deleteMany).toHaveBeenCalled()
+    expect(mocks.removeImageFilesMock).toHaveBeenCalledWith(['old.png'])
   })
 
   it.each([undefined, 'recurring', 'lifetime'] as const)('imports %s billing type and batch inserts payment records', async (billingType) => {
@@ -319,7 +474,7 @@ describe('subtracker backup service', () => {
         })
       ]
     })
-    expect(mocks.setSubscriptionOrderMock).toHaveBeenCalledWith(['sub_old', 'sub_new'])
+    expect(mocks.setSubscriptionOrderMock).toHaveBeenCalledWith(['sub_old', 'sub_new'], mocks.prismaMock)
   })
 
   it('does not rewrite order during append no-op', async () => {
@@ -473,7 +628,9 @@ describe('subtracker backup service', () => {
     expect(mocks.prismaMock.paymentRecord.createMany).not.toHaveBeenCalled()
   })
 
-  it.each(['recurring', 'lifetime'] as const)('exports %s billing type with manifest and referenced logos', async (billingType) => {
+  it.each([
+    ['recurring', 'standard'], ['lifetime', 'standard']
+  ] as const)('exports %s billing type in %s format with referenced logos', async (billingType, format) => {
     mocks.getAppSettingsMock.mockResolvedValue({
       baseCurrency: 'CNY',
       timezone: 'Asia/Shanghai',
@@ -583,24 +740,49 @@ describe('subtracker backup service', () => {
         createdAt: new Date('2026-04-01T00:00:00.000Z')
       }
     ])
+    mocks.prismaMock.subscriptionImage.findMany.mockResolvedValue([{
+      id: 'image_1', subscriptionId: 'sub_1', fileName: 'receipt.png', storageName: 'image_1.png',
+      contentType: 'image/png', size: 10, createdAt: new Date('2026-04-01T00:00:00Z')
+    }])
     mocks.getLocalLogoLibraryMock.mockResolvedValue([
       { logoUrl: '/static/logos/netflix.png' },
       ...additionalLogos.map(({ extension }) => ({ logoUrl: `/static/logos/extra${extension}` }))
     ])
-    mocks.getLogoStorageDirMock.mockReturnValue('D:/fake/logos')
-    mocks.readFileMock.mockImplementation(async (filename: string) =>
-      additionalLogos.find(({ extension }) => filename.endsWith(extension))?.buffer ?? Buffer.from('fake-image'))
+    await writeFile(path.join(fixtureRoot, 'logos', 'netflix.png'), Buffer.from('fake-image'))
+    await writeFile(path.join(fixtureRoot, 'images', 'image_1.png'), Buffer.from('fake-image'))
+    for (const { extension, buffer } of additionalLogos) await writeFile(path.join(fixtureRoot, 'logos', `extra${extension}`), buffer)
 
-    const result = await createSubtrackerBackupArchive()
+    const legacy = false
+    const result = await createSubtrackerBackupArchive(true)
 
-    expect(result.filename).toBe('subtracker-backup-2026-05-02T16-00-00.zip')
-    const zip = new AdmZip(Buffer.from(await result.buffer))
+    expect(result.filename).toBe(`subtracker-backup-2026-05-02T16-00-00${legacy ? '-compatible-v0.11' : ''}.zip`)
+    const bytes = await collectBuffer(result.stream)
+    if (legacy) {
+      expect(bytes.length).toBeLessThanOrEqual(750 * 1024)
+      expect(Buffer.byteLength(JSON.stringify({ filename: result.filename, contentType: result.contentType, base64: bytes.toString('base64') }))).toBeLessThan(1024 * 1024)
+    }
+    const zip = new AdmZip(bytes)
     const entries = zip.getEntries().map((entry) => entry.entryName)
     expect(entries).toContain('manifest.json')
     expect(entries).toContain('logos/netflix.png')
+    if (legacy) {
+      expect(entries.some(name => name.startsWith('subscription-images/'))).toBe(false)
+      expect(mocks.prismaMock.subscriptionImage.findMany).not.toHaveBeenCalled()
+    } else {
+      expect(entries).toContain('subscription-images/image_1.png')
+      expect(mocks.prismaMock.subscriptionImage.findMany).toHaveBeenCalledWith({
+        where: { subscriptionId: { not: null } }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
+      })
+    }
     const manifest = JSON.parse(
       zip.getEntries().find((entry) => entry.entryName === 'manifest.json')!.getData().toString('utf8')
     )
+    expect(manifest.schemaVersion).toBe(legacy ? 1 : 2)
+    expect(manifest.includesSubscriptionImages).toBe(!legacy)
+    expect(manifest.assets.subscriptionImages).toEqual(legacy ? undefined : [{
+      id: 'image_1', subscriptionId: 'sub_1', fileName: 'receipt.png', path: 'subscription-images/image_1.png',
+      contentType: 'image/png', size: 10, createdAt: '2026-04-01T00:00:00.000Z'
+    }])
     expect(manifest.data.subscriptions).toHaveLength(1)
     expect(manifest.data.subscriptions[0].billingType).toBe(billingType)
     expect(manifest.assets.logos[0]).toMatchObject({

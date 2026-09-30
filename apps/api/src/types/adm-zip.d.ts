@@ -2,6 +2,8 @@ declare module 'adm-zip' {
   export interface IZipEntry {
     entryName: string
     isDirectory: boolean
+    header: { size: number; method: number; crc: number; flags: number }
+    getCompressedData(): Buffer
     getData(): Buffer
   }
 

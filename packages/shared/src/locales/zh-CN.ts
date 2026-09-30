@@ -275,9 +275,12 @@ export default {
       structuredOutput:
         '开启后会优先使用厂商支持的结构化 JSON 输出；若不支持，系统会自动降级为普通 JSON 提示词模式。',
       backup:
-        '支持通过 ZIP 进行备份与恢复，包含订阅、标签、支付记录、排序、系统设置与本地 Logo',
+        '支持通过 ZIP 进行备份与恢复，包含订阅、标签、支付记录、排序、系统设置、本地 Logo；默认包含备注图片',
+      includeBackupImages: '包含图片备注',
       migration: '从第三方同类项目导入数据'
     },
+
+
     buttons: {
       previewReminderRules: '预览提醒规则',
       collapseReminderPreview: '收起提醒预览',
@@ -981,7 +984,7 @@ export default {
     backupModal: {
       title: '恢复备份',
       description:
-        '该 ZIP 会恢复订阅、标签、支付记录、排序、系统设置与本地 Logo；不会恢复登录凭据、会话密钥、Webhook 历史和汇率数据',
+        '该 ZIP 会恢复订阅、标签、支付记录、排序、系统设置、本地 Logo 与备注图片；不会恢复登录凭据、会话密钥、Webhook 历史和汇率数据',
       pickZip: '选择 ZIP 文件',
       noFileSelected: '未选择文件',
       previewBackup: '预览备份',
@@ -989,11 +992,12 @@ export default {
       tags: '标签',
       paymentRecords: '支付记录',
       localLogos: '本地 Logo',
+      subscriptionImages: '备注图片',
       restoreMode: '恢复模式',
       replaceMode: '清空现有数据后恢复',
       appendMode: '保留现有数据并追加恢复',
       replaceWarning:
-        '将删除当前实例中的订阅、标签、支付记录、排序、系统设置和本地 Logo，然后再按文件内容重新恢复',
+        '将删除当前实例中的订阅、标签、支付记录、排序、系统设置、本地 Logo 和备注图片，然后再按文件内容重新恢复',
       appendHelp:
         '追加恢复时：同名标签会复用现有标签；订阅与支付记录按备份中的唯一标识（CUID）幂等跳过；系统设置是否覆盖由你单独选择',
       restoreSettingsLabel: '同时覆盖当前系统设置',
@@ -1004,10 +1008,16 @@ export default {
       warnings: '警告信息',
       confirmRestore: '确认恢复',
       invalidZip: '备份 ZIP 无法解析',
+      backupTooLarge: '备份 ZIP 不能超过服务器设置的 {limit}',
+      sizeLimits: '服务器限制：ZIP 最大 {archive}，解压后总量最大 {expanded}。上传与恢复需要服务器有足够的临时磁盘空间。',
+      uploadProgress: '正在上传备份：{percent}%',
+      validating: '上传完成，正在校验备份内容…',
+      restoring: '正在恢复，请勿关闭页面。大备份可能需要较长时间。',
+      withoutImages: '此为不含图片备注的轻量备份，不能替代完整备份。清空恢复时，现有图片备注也会被删除。',
       previewFailed: '备份预览失败',
       previewGenerated: '已生成备份预览',
       nothingImported: '未导入任何新数据，重复项已自动跳过',
-      restoreCompleted: '恢复完成：{subscriptions} 条订阅，{tags} 个新标签，{payments} 条支付记录，{logos} 个 Logo',
+      restoreCompleted: '恢复完成：{subscriptions} 条订阅，{tags} 个新标签，{payments} 条支付记录，{logos} 个 Logo，{images} 张备注图片',
       restoreFailed: '恢复失败'
     }
   },
@@ -1356,6 +1366,7 @@ export default {
         invalidWallosInspectPayload: 'Wallos 预览请求体不合法',
         invalidWallosCommitPayload: 'Wallos 导入请求体不合法',
         invalidSubtrackerBackupInspectPayload: 'SubTracker 备份预览请求体不合法',
+      invalidSubtrackerBackupExportPayload: 'SubTracker 备份导出选项不合法',
         invalidSubtrackerBackupCommitPayload: 'SubTracker 备份恢复请求体不合法',
         invalidTagPayload: '标签请求体不合法',
         invalidTagId: '标签 ID 不合法',
@@ -1477,6 +1488,13 @@ export default {
         subtrackerBackupCommitFailed: 'SubTracker 备份恢复失败',
         subtrackerBackupManifestInvalid: '备份 manifest 格式无效',
         subtrackerBackupInvalidFile: '不是合法的 SubTracker 备份文件',
+        subtrackerBackupTooLarge: '备份超过服务器的容量、单文件或临时空间限制，请查看容量限制或清理未完成的预览后重试',
+
+      subtrackerBackupBusy: '另一个备份操作正在进行，或待确认的预览过多，请完成或取消后重试',
+      subtrackerBackupZipRequired: '请直接上传 ZIP 文件',
+      subtrackerBackupExportFailed: '备份导出失败，请检查文件与服务器存储空间',
+        subtrackerBackupInvalidImage: '备份中的备注图片文件无效或缺失',
+        subtrackerBackupTooManyEntries: '备份 ZIP 中的文件条目过多',
         subtrackerBackupUnsupportedVersion: '不支持的备份版本：{version}',
         subtrackerBackupUnsupportedScope: '不支持的备份范围：{scope}',
         subtrackerBackupManifestMissingData: '备份 manifest 缺少关键数据',
@@ -1506,8 +1524,10 @@ export default {
         logoNeedsManualFill: 'Logo 文件需后续通过目录或 zip 包补齐'
       },
       subtrackerBackupWarnings: {
+
         noLocalLogos: '该备份不包含本地 Logo 文件',
         noPaymentRecords: '该备份不包含支付记录',
+      withoutImages: '此备份未包含图片备注，不能替代完整备份；清空恢复会删除现有图片备注',
         excludedSecretsAndHistory: '不会恢复登录凭据、会话密钥、Webhook 历史和汇率数据',
         appendModeDedup: '追加导入时，订阅与支付记录按备份中的唯一标识（CUID）幂等跳过；同名标签会复用现有标签'
       },

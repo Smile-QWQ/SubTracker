@@ -1,5 +1,5 @@
 <template>
-  <n-modal :show="show" preset="card" :title="t('subscriptions.backupModal.title')" style="width: min(960px, calc(100vw - 24px))" @update:show="handleShowUpdate">
+  <n-modal :show="show" preset="card" :title="t('subscriptions.backupModal.title')" style="width: min(960px, calc(100vw - 24px))" :mask-closable="!committing" :close-on-esc="!committing" :closable="!committing" @update:show="handleShowUpdate">
     <n-space vertical :size="16" style="width: 100%">
       <n-alert type="info" :show-icon="false">
         {{ t('subscriptions.backupModal.description') }}
@@ -13,14 +13,21 @@
           class="hidden-input"
           @change="handleFileChange"
         />
-        <n-button @click="pickFile">{{ t('subscriptions.backupModal.pickZip') }}</n-button>
+        <n-button :disabled="committing" @click="pickFile">{{ t('subscriptions.backupModal.pickZip') }}</n-button>
         <span class="file-name">{{ selectedFileName || t('subscriptions.backupModal.noFileSelected') }}</span>
-        <n-button type="primary" :disabled="!selectedFile" :loading="inspecting" @click="inspectFile">
+        <n-button type="primary" :disabled="!selectedFile || committing" :loading="inspecting" @click="inspectFile">
           {{ t('subscriptions.backupModal.previewBackup') }}
         </n-button>
       </n-space>
 
+      <div v-if="limits" class="file-name">{{ t('subscriptions.backupModal.sizeLimits', { archive: formatBytes(limits.maxArchiveBytes), expanded: formatBytes(limits.maxExpandedBytes) }) }}</div>
+      <n-alert v-if="inspecting" type="info" :show-icon="false">
+        {{ uploadPercent < 100 ? t('subscriptions.backupModal.uploadProgress', { percent: uploadPercent }) : t('subscriptions.backupModal.validating') }}
+      </n-alert>
+      <n-alert v-if="committing" type="info" :show-icon="false">{{ t('subscriptions.backupModal.restoring') }}</n-alert>
+
       <template v-if="preview">
+        <n-alert v-if="preview.summary.includesSubscriptionImages === false" type="warning" :show-icon="false">{{ t('subscriptions.backupModal.withoutImages') }}</n-alert>
         <n-grid :cols="summaryCols" :x-gap="12" :y-gap="12">
           <n-grid-item>
             <n-card size="small">
@@ -46,11 +53,17 @@
               <div class="summary-value">{{ preview.summary.logosTotal }}</div>
             </n-card>
           </n-grid-item>
+          <n-grid-item>
+            <n-card size="small">
+              <div class="summary-label">{{ t('subscriptions.backupModal.subscriptionImages') }}</div>
+              <div class="summary-value">{{ preview.summary.subscriptionImagesTotal ?? 0 }}</div>
+            </n-card>
+          </n-grid-item>
         </n-grid>
 
         <n-card :title="t('subscriptions.backupModal.restoreMode')" size="small">
           <n-space vertical>
-            <n-radio-group v-model:value="restoreMode">
+            <n-radio-group v-model:value="restoreMode" :disabled="committing">
               <n-space vertical>
                 <n-radio value="replace">{{ t('subscriptions.backupModal.replaceMode') }}</n-radio>
                 <n-radio value="append">{{ t('subscriptions.backupModal.appendMode') }}</n-radio>
@@ -66,7 +79,7 @@
                 {{ t('subscriptions.backupModal.appendHelp') }}
               </n-alert>
               <div class="switch-row">
-                <n-switch v-model:value="restoreSettings" />
+                <n-switch v-model:value="restoreSettings" :disabled="committing" />
                 <span class="switch-inline-label">{{ t('subscriptions.backupModal.restoreSettingsLabel') }}</span>
               </div>
             </template>
@@ -98,8 +111,8 @@
       </template>
 
       <n-space justify="end">
-        <n-button @click="close">{{ t('common.actions.cancel') }}</n-button>
-        <n-button type="primary" :disabled="!preview" :loading="committing" @click="commitImport">
+        <n-button :disabled="committing" @click="close">{{ t('common.actions.cancel') }}</n-button>
+        <n-button type="primary" :disabled="!preview || inspecting" :loading="committing" @click="commitImport">
           {{ t('subscriptions.backupModal.confirmRestore') }}
         </n-button>
       </n-space>
@@ -108,7 +121,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import type { SubtrackerBackupLimitsDto } from '@subtracker/shared'
 import { useWindowSize } from '@vueuse/core'
 import { NAlert, NButton, NCard, NGrid, NGridItem, NModal, NRadio, NRadioGroup, NSpace, NSwitch } from 'naive-ui'
 import { t } from '@/locales'
@@ -135,8 +149,43 @@ const inspecting = ref(false)
 const committing = ref(false)
 const restoreMode = ref<'replace' | 'append'>('replace')
 const restoreSettings = ref(false)
+const limits = ref<SubtrackerBackupLimitsDto | null>(null)
+const uploadPercent = ref(0)
+let generation = 0
+let uploadController: AbortController | undefined
 
-const summaryCols = computed(() => (width.value < 700 ? 2 : 4))
+function formatBytes(bytes: number) {
+  return bytes >= 1024 ** 3 ? `${Number((bytes / 1024 ** 3).toFixed(2))} GiB` : `${Number((bytes / 1024 ** 2).toFixed(2))} MiB`
+}
+
+function discardPreview() {
+  const token = preview.value?.importToken
+  preview.value = null
+  if (token) void api.discardSubtrackerBackup(token).catch(() => undefined)
+}
+
+function reset() {
+  generation += 1
+  uploadController?.abort()
+  uploadController = undefined
+  inspecting.value = false
+  uploadPercent.value = 0
+  discardPreview()
+  selectedFile.value = null
+  selectedFileName.value = ''
+  if (fileInputRef.value) fileInputRef.value.value = ''
+}
+
+watch(() => props.show, show => {
+  reset()
+  if (show) {
+    const current = generation
+    void api.getSubtrackerBackupLimits().then(value => { if (current === generation) limits.value = value }).catch(() => undefined)
+  }
+}, { immediate: true })
+onBeforeUnmount(reset)
+
+const summaryCols = computed(() => (width.value < 700 ? 2 : 5))
 
 function normalizePreviewErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -153,10 +202,12 @@ function buildRestoreSuccessMessage(result: {
   importedTags: number
   importedPaymentRecords: number
   importedLogos: number
+  importedSubscriptionImages?: number
   mode: 'replace' | 'append'
 }) {
+  const images = result.importedSubscriptionImages ?? 0
   const importedTotal =
-    result.importedSubscriptions + result.importedTags + result.importedPaymentRecords + result.importedLogos
+    result.importedSubscriptions + result.importedTags + result.importedPaymentRecords + result.importedLogos + images
 
   if (result.mode === 'append' && importedTotal === 0) {
     return t('subscriptions.backupModal.nothingImported')
@@ -166,7 +217,8 @@ function buildRestoreSuccessMessage(result: {
     subscriptions: result.importedSubscriptions,
     tags: result.importedTags,
     payments: result.importedPaymentRecords,
-    logos: result.importedLogos
+    logos: result.importedLogos,
+    images
   })
 }
 
@@ -176,35 +228,45 @@ function pickFile() {
 
 function handleFileChange(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0]
+  if (committing.value) return
+  reset()
   selectedFile.value = file ?? null
   selectedFileName.value = file?.name ?? ''
-  preview.value = null
   restoreMode.value = 'replace'
   restoreSettings.value = false
 }
 
 async function inspectFile() {
-  if (!selectedFile.value) return
-
+  const file = selectedFile.value
+  if (!file || inspecting.value || committing.value) return
+  const current = ++generation
+  const previous = preview.value?.importToken
+  preview.value = null
   inspecting.value = true
+  uploadPercent.value = 0
+  uploadController = new AbortController()
+  const signal = uploadController.signal
   try {
-    const base64 = await readFileAsBase64(selectedFile.value)
-    preview.value = await api.inspectSubtrackerBackup({
-      filename: selectedFile.value.name,
-      contentType: selectedFile.value.type || 'application/zip',
-      base64
-    })
+    if (previous) await api.discardSubtrackerBackup(previous)
+    limits.value = await api.getSubtrackerBackupLimits()
+    if (current !== generation) return
+    if (file.size > limits.value.maxArchiveBytes) throw new Error(t('subscriptions.backupModal.backupTooLarge', { limit: formatBytes(limits.value.maxArchiveBytes) }))
+    const result = await api.inspectSubtrackerBackup(file, { signal, onProgress: percent => { if (current === generation) uploadPercent.value = percent } })
+    if (current !== generation || !props.show) {
+      void api.discardSubtrackerBackup(result.importToken).catch(() => undefined)
+      return
+    }
+    preview.value = result
     message.success(t('subscriptions.backupModal.previewGenerated'))
   } catch (error) {
-    preview.value = null
-    message.error(normalizePreviewErrorMessage(error))
+    if (current === generation && !signal.aborted) message.error(normalizePreviewErrorMessage(error))
   } finally {
-    inspecting.value = false
+    if (current === generation) inspecting.value = false
   }
 }
 
 async function commitImport() {
-  if (!preview.value) return
+  if (!preview.value || committing.value || inspecting.value) return
 
   committing.value = true
   try {
@@ -213,13 +275,16 @@ async function commitImport() {
       mode: restoreMode.value,
       restoreSettings: restoreMode.value === 'replace' ? true : restoreSettings.value
     })
+    preview.value = null
     message.success(buildRestoreSuccessMessage(result))
     emit('imported', {
       mode: result.mode,
       restoredSettings: result.restoredSettings
     })
-    close()
+    reset()
+    emit('close')
   } catch (error) {
+    discardPreview()
     message.error(error instanceof Error ? error.message : t('subscriptions.backupModal.restoreFailed'))
   } finally {
     committing.value = false
@@ -227,25 +292,13 @@ async function commitImport() {
 }
 
 function close() {
+  if (committing.value) return
+  reset()
   emit('close')
 }
 
 function handleShowUpdate(value: boolean) {
-  if (!value) {
-    emit('close')
-  }
-}
-
-function readFileAsBase64(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const raw = String(reader.result ?? '')
-      resolve(raw.includes(',') ? raw.split(',')[1] : raw)
-    }
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
+  if (!value) close()
 }
 </script>
 

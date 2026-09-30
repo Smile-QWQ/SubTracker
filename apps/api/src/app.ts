@@ -23,6 +23,9 @@ import { versionRoutes } from './routes/version'
 import { appRoutes } from './routes/app'
 import { verifyToken } from './services/auth.service'
 import { getLogoStorageDir } from './services/logo.service'
+import { cleanupExpiredImports, disposeSubtrackerBackups } from './services/subtracker-backup.service'
+import { cleanupBackupDownloads, clearBackupDownloads } from './services/backup-download.service'
+import { getBackupLimits } from './services/backup-files.service'
 
 export async function buildApp() {
   const app = Fastify({
@@ -81,6 +84,7 @@ export async function buildApp() {
       url === '/api/v1/auth/forgot-password/request' ||
       url === '/api/v1/auth/forgot-password/reset' ||
       url === '/api/v1/version/updates' ||
+      (request.method === 'GET' && /^\/api\/v1\/settings\/export\/backup\/download\/[a-f0-9]{48}$/.test(url)) ||
       (request.method === 'GET' && url === '/api/v1/app/locale')
 
     if (isPublicRoute) {
@@ -118,6 +122,22 @@ export async function buildApp() {
     },
     { prefix: '/api/v1' }
   )
+
+  let backupCleanupTimer: NodeJS.Timeout | undefined
+  app.addHook('onReady', async () => {
+    getBackupLimits()
+    await cleanupExpiredImports()
+    backupCleanupTimer = setInterval(() => {
+      cleanupBackupDownloads()
+      void cleanupExpiredImports().catch(error => app.log.warn({ err: error }, 'Backup temporary file cleanup failed'))
+    }, 60_000)
+    backupCleanupTimer.unref()
+  })
+  app.addHook('onClose', async () => {
+    clearInterval(backupCleanupTimer)
+    clearBackupDownloads()
+    await disposeSubtrackerBackups()
+  })
 
   app.setErrorHandler((error, _request, reply) => {
     app.log.error(error)

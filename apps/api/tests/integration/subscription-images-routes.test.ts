@@ -1,5 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
+import { Readable } from 'node:stream'
+import { buffer as collectBuffer } from 'node:stream/consumers'
 import { access, mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -26,6 +28,7 @@ import {
   SUBSCRIPTION_IMAGE_MAX_BYTES, writeSubscriptionImageFile
 } from '../../src/services/subscription-images.service'
 import { RemoteImageTooLargeError } from '../../src/utils/remote-image'
+import { createSubtrackerBackupArchive, inspectSubtrackerBackupFile, commitSubtrackerBackup } from '../../src/services/subtracker-backup.service'
 
 const headers = { authorization: 'Bearer test-bearer', 'x-subtracker-locale': 'en-US' }
 const subscriptionPayload = {
@@ -169,7 +172,35 @@ describe('private subscription image routes with an isolated SQLite database', (
     expect(await state.prisma.subscriptionImage.count()).toBe(1)
   })
 
-
+  it('round-trips PNG and 20 MiB SVG images through a real ZIP, without exporting pending uploads or duplicating append records', async () => {
+    const pngId = (await upload()).json().data.id
+    const svg = Buffer.alloc(SUBSCRIPTION_IMAGE_MAX_BYTES, 32)
+    svg.write('<svg/>')
+    const svgId = (await upload(svg, { svgConfirmed: true, fileName: 'large.svg' })).json().data.id
+    const subscriptionId = await create([pngId, svgId])
+    const pendingId = (await upload()).json().data.id
+    const archive = await createSubtrackerBackupArchive()
+    const bytes = await collectBuffer(archive.stream)
+    const preview = await inspectSubtrackerBackupFile(Readable.from(bytes))
+    expect(preview.summary.subscriptionImagesTotal).toBe(2)
+    const append = await commitSubtrackerBackup({ importToken: preview.importToken, mode: 'append', restoreSettings: false })
+    expect(append.importedSubscriptionImages).toBe(0)
+    expect(await state.prisma.subscriptionImage.count()).toBe(3)
+    const again = await inspectSubtrackerBackupFile(Readable.from(bytes))
+    const restored = await commitSubtrackerBackup({ importToken: again.importToken, mode: 'replace', restoreSettings: true })
+    expect(restored.importedSubscriptionImages).toBe(2)
+    expect(await state.prisma.subscriptionImage.findUnique({ where: { id: pendingId } })).toBeNull()
+    const list = await app.inject({ url: `/api/v1/subscriptions/${subscriptionId}/images`, headers })
+    expect(list.statusCode).toBe(200)
+    expect(list.json().data).toHaveLength(2)
+    for (const image of list.json().data) {
+      const response = await app.inject({ url: `/api/v1/subscription-images/${image.id}/content`, headers })
+      // Buffer.equals checks large attachments without enumerating millions of byte properties.
+      expect(response.rawPayload.equals(image.contentType === 'image/png' ? pngLogo : svg)).toBe(true)
+    }
+    expect((await state.prisma.subscription.findUniqueOrThrow({ where: { id: subscriptionId } })).notes).toBe(subscriptionPayload.notes)
+    expect(await files()).toHaveLength(2)
+  }, 30_000)
 
   it('returns malformed JSON as 400, not the global internal error response', async () => {
     const res = await app.inject({ method: 'POST', url: '/api/v1/subscription-images/upload',

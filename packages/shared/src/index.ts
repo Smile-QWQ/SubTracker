@@ -524,6 +524,9 @@ export const WallosImportCommitSchema = z.object({
 
 export const SubtrackerBackupScopeSchema = z.enum(['business-complete'])
 export const SubtrackerBackupRestoreModeSchema = z.enum(['replace', 'append'])
+export const SubtrackerBackupExportSchema = z.object({
+  includeSubscriptionImages: z.boolean().default(true),
+})
 
 export const SubtrackerBackupInspectSchema = z.object({
   filename: z.string().min(1).max(255),
@@ -874,12 +877,31 @@ export interface SubtrackerBackupAssetLogoDto {
   referencedBySubscriptionIds: string[]
 }
 
+export const DEFAULT_SUBTRACKER_BACKUP_MAX_BYTES = 2 * 1024 * 1024 * 1024
+
+export interface SubtrackerBackupLimitsDto {
+  maxArchiveBytes: number
+  maxExpandedBytes: number
+}
+
+export interface SubtrackerBackupAssetImageDto {
+  id: string
+  subscriptionId: string
+  path: string
+  fileName: string
+  contentType: string
+  size: number
+  createdAt: string
+}
+
 export interface SubtrackerBackupSummaryDto {
   scope: SubtrackerBackupScope
   subscriptionsTotal: number
   tagsTotal: number
   paymentRecordsTotal: number
   logosTotal: number
+  subscriptionImagesTotal?: number
+  includesSubscriptionImages?: boolean
   includesSettings: boolean
 }
 
@@ -910,5 +932,6 @@ export interface SubtrackerBackupCommitResultDto {
   importedPaymentRecords: number
   skippedPaymentRecords: number
   importedLogos: number
+  importedSubscriptionImages?: number
   warnings: string[]
 }

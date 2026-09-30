@@ -1,36 +1,42 @@
 import crypto from 'node:crypto'
-import { mkdir, readFile, readdir, rm } from 'node:fs/promises'
+import { readdir, rm } from 'node:fs/promises'
 import path from 'node:path'
-import AdmZip from 'adm-zip'
+import type { Readable } from 'node:stream'
+import type { Prisma } from '@prisma/client'
 import type {
   AppLocale,
   NotificationWebhookSettingsInput,
   PaymentRecordDto,
   SettingsInput,
   SubtrackerBackupAssetLogoDto,
+  SubtrackerBackupAssetImageDto,
   SubtrackerBackupCommitInput,
   SubtrackerBackupCommitResultDto,
   SubtrackerBackupInspectConflictsDto,
-  SubtrackerBackupInspectInput,
   SubtrackerBackupInspectResultDto,
   SubtrackerBackupSubscriptionDto,
-  SubtrackerBackupTagDto
+  SubtrackerBackupTagDto,
 } from '@subtracker/shared'
-import { DEFAULT_APP_LOCALE, SettingsSchema, getMessage, LOGO_MIME_BY_EXTENSION } from '@subtracker/shared'
+import { DEFAULT_APP_LOCALE, SettingsSchema, NotificationWebhookSettingsSchema, getMessage, LOGO_MIME_BY_EXTENSION } from '@subtracker/shared'
 import { prisma } from '../db'
 import { formatDateInTimezone, parseDateInTimezone, toTimezonedDayjs } from '../utils/timezone'
 import { getLocalLogoLibrary, getLogoStorageDir, saveImportedLogoBuffer } from './logo.service'
 import { getAppSettings, setSetting } from './settings.service'
+import { getSubscriptionImageStorageDir, writeSubscriptionImageFile, removeSubscriptionImageFiles } from './subscription-images.service'
+import { inspectDownloadedImage } from '../utils/remote-image'
+import { BoundedZipReader, createZipStream, describeZipSource, ZIP_ASSET_LIMIT, ZIP_MANIFEST_LIMIT, ZIP_ENTRY_LIMIT, BackupLimitError, type ZipSourceFile } from '../utils/streaming-zip'
+import { BACKUP_PREVIEW_TTL_MS, cleanupAbandonedBackupFiles, disposeBackupUpload, getBackupLimits, saveBackupUpload, type BackupUpload } from './backup-files.service'
 import { getSubscriptionOrder, setSubscriptionOrder } from './subscription-order.service'
 import { normalizeTagIds } from './tag.service'
 import { getPrimaryWebhookEndpoint } from './webhook.service'
 
-const IMPORT_TOKEN_TTL_MS = 15 * 60 * 1000
-const BACKUP_SCHEMA_VERSION = 1
+const BACKUP_SCHEMA_VERSION = 2
+const IMAGE_MAX_BYTES = ZIP_ASSET_LIMIT
 const BACKUP_APP_NAME = 'SubTracker'
 const BACKUP_SCOPE = 'business-complete' as const
 const MANIFEST_ENTRY = 'manifest.json'
 const LOGO_ENTRY_PREFIX = 'logos/'
+const IMAGE_ENTRY_PREFIX = 'subscription-images/'
 const EXCLUDED_SETTING_KEYS = new Set([
   'authCredentials',
   'authSessionSecret'
@@ -41,6 +47,7 @@ type BackupManifest = {
   exportedAt: string
   app: typeof BACKUP_APP_NAME
   scope: typeof BACKUP_SCOPE
+  includesSubscriptionImages?: boolean
   data: {
     settings: SettingsInput
     notificationWebhook: NotificationWebhookSettingsInput
@@ -51,13 +58,14 @@ type BackupManifest = {
   }
   assets: {
     logos: SubtrackerBackupAssetLogoDto[]
+    subscriptionImages?: SubtrackerBackupAssetImageDto[]
   }
 }
 
 type CachedImportEntry = {
   expiresAt: number
-  manifest: BackupManifest
-  logoAssets: Map<string, { buffer: Buffer; contentType: string }>
+  owner: string
+  upload: BackupUpload
   preview: SubtrackerBackupInspectResultDto
 }
 
@@ -90,6 +98,15 @@ type BackupSubscriptionRow = {
   updatedAt: Date
   tags: BackupSubscriptionTagRow[]
 }
+type BackupImageRow = {
+  id: string
+  subscriptionId: string | null
+  fileName: string
+  storageName: string
+  contentType: string
+  size: number
+  createdAt: Date
+}
 type BackupPaymentRecordRow = {
   id: string
   subscriptionId: string
@@ -106,21 +123,32 @@ type BackupPaymentRecordRow = {
 
 const previewCache = new Map<string, CachedImportEntry>()
 
-function cleanupExpiredImports() {
-  const now = Date.now()
-  for (const [token, entry] of previewCache.entries()) {
-    if (entry.expiresAt <= now) {
+export async function cleanupExpiredImports() {
+  for (const [token, entry] of previewCache) {
+    if (entry.expiresAt <= Date.now()) {
       previewCache.delete(token)
+      await disposeBackupUpload(entry.upload)
     }
   }
+  await cleanupAbandonedBackupFiles()
+}
+
+export async function discardSubtrackerBackup(importToken: string, owner = '') {
+  const entry = previewCache.get(importToken)
+  if (!entry || entry.owner !== owner) return
+  previewCache.delete(importToken)
+  await disposeBackupUpload(entry.upload)
+}
+
+export class BackupBusyError extends Error {}
+let operationActive = false
+function claimOperation() {
+  if (operationActive) throw new BackupBusyError('Another backup operation is running')
+  operationActive = true
 }
 
 function fileTypeFromName(filename: string) {
   return LOGO_MIME_BY_EXTENSION[path.extname(filename).toLowerCase()] ?? 'application/octet-stream'
-}
-
-function normalizeZipLogoPath(value: string) {
-  return value.replaceAll('\\', '/').replace(/^\/+/, '')
 }
 
 function createImportToken() {
@@ -132,13 +160,13 @@ function buildBackupFileName(timezone: string, now = new Date()) {
   return `subtracker-backup-${stamp}.zip`
 }
 
-async function readLocalLogoAssets(logoUrls: string[]) {
+async function readLocalLogoAssets(subscriptions: SubtrackerBackupSubscriptionDto[]) {
   const logoDir = getLogoStorageDir()
   const assets: SubtrackerBackupAssetLogoDto[] = []
-  const fileBuffers = new Map<string, Buffer>()
+  const files: ZipSourceFile[] = []
   const libraryItems = await getLocalLogoLibrary()
   const candidateLogoUrls = new Set([
-    ...logoUrls.filter((item) => item.startsWith('/static/logos/')),
+    ...subscriptions.map(item => item.logoUrl ?? '').filter(item => item.startsWith('/static/logos/')),
     ...libraryItems.map((item) => item.logoUrl).filter((item): item is string => Boolean(item?.startsWith('/static/logos/')))
   ])
 
@@ -146,8 +174,9 @@ async function readLocalLogoAssets(logoUrls: string[]) {
     const filename = path.basename(logoUrl)
     if (!filename) continue
     const absolutePath = path.join(logoDir, filename)
-    const buffer = await readFile(absolutePath)
     const zipPath = `${LOGO_ENTRY_PREFIX}${filename}`
+    const file = await describeZipSource(absolutePath, zipPath)
+    files.push(file)
     assets.push({
       path: zipPath,
       filename,
@@ -155,16 +184,41 @@ async function readLocalLogoAssets(logoUrls: string[]) {
       contentType: fileTypeFromName(filename),
       referencedBySubscriptionIds: []
     })
-    fileBuffers.set(zipPath, buffer)
   }
 
-  return {
-    assets,
-    fileBuffers
-  }
+  return { assets, files }
 }
 
-async function buildBackupManifest(): Promise<{ manifest: BackupManifest; logoBuffers: Map<string, Buffer> }> {
+async function readSubscriptionImageAssets() {
+  const images: BackupImageRow[] = await prisma.subscriptionImage.findMany({
+    where: { subscriptionId: { not: null } },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
+  })
+  const assets: SubtrackerBackupAssetImageDto[] = []
+  const files: ZipSourceFile[] = []
+  for (const image of images) {
+    if (!image.subscriptionId) continue
+    if (!/^[\w-]+\.[a-z0-9]+$/i.test(image.storageName)) {
+      throw new Error('Invalid stored subscription image name')
+    }
+    const zipPath = `${IMAGE_ENTRY_PREFIX}${image.storageName}`
+    const file = await describeZipSource(path.join(getSubscriptionImageStorageDir(), image.storageName), zipPath)
+    if (file.size !== image.size) throw new Error('Invalid stored subscription image size')
+    files.push(file)
+    assets.push({
+      id: image.id,
+      subscriptionId: image.subscriptionId,
+      path: zipPath,
+      fileName: image.fileName,
+      contentType: image.contentType,
+      size: image.size,
+      createdAt: image.createdAt.toISOString()
+    })
+  }
+  return { assets, files }
+}
+
+async function buildBackupManifest(includeSubscriptionImages = true) {
   const [settings, webhookSettings, tags, subscriptions, paymentRecords, subscriptionOrder] = await Promise.all([
     getAppSettings(),
     getPrimaryWebhookEndpoint(),
@@ -232,9 +286,7 @@ async function buildBackupManifest(): Promise<{ manifest: BackupManifest; logoBu
     createdAt: record.createdAt.toISOString()
   }))
 
-  const { assets, fileBuffers } = await readLocalLogoAssets(
-    serializedSubscriptions.map((item) => item.logoUrl ?? '').filter(Boolean)
-  )
+  const { assets, files } = await readLocalLogoAssets(serializedSubscriptions)
 
   for (const asset of assets) {
     asset.referencedBySubscriptionIds = serializedSubscriptions
@@ -242,11 +294,13 @@ async function buildBackupManifest(): Promise<{ manifest: BackupManifest; logoBu
       .map((subscription) => subscription.id)
   }
 
+  const imageAssets = includeSubscriptionImages ? await readSubscriptionImageAssets() : { assets: [], files: [] }
   const manifest: BackupManifest = {
     schemaVersion: BACKUP_SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
     app: BACKUP_APP_NAME,
     scope: BACKUP_SCOPE,
+    includesSubscriptionImages: includeSubscriptionImages,
     data: {
       settings: SettingsSchema.parse(settings),
       notificationWebhook: webhookSettings,
@@ -256,30 +310,35 @@ async function buildBackupManifest(): Promise<{ manifest: BackupManifest; logoBu
       subscriptionOrder
     },
     assets: {
-      logos: assets
+      logos: assets,
+      subscriptionImages: imageAssets.assets
     }
   }
 
   return {
     manifest,
-    logoBuffers: fileBuffers
+    files: [...files, ...imageAssets.files]
   }
 }
 
-export async function createSubtrackerBackupArchive() {
-  const { manifest, logoBuffers } = await buildBackupManifest()
-  const zip = new AdmZip()
-  zip.addFile(MANIFEST_ENTRY, Buffer.from(JSON.stringify(manifest, null, 2), 'utf8'))
-
-  for (const [entryName, buffer] of logoBuffers.entries()) {
-    zip.addFile(entryName, buffer)
+export async function prepareSubtrackerBackupArchive(includeSubscriptionImages = true) {
+  const { manifest, files } = await buildBackupManifest(includeSubscriptionImages)
+  const data = Buffer.from(JSON.stringify(manifest, null, 2), 'utf8')
+  const limits = getBackupLimits()
+  const expanded = files.reduce((sum, file) => sum + file.size, data.length)
+  // Conservative ZIP header allowance rejects oversized downloads before sending headers.
+  const archiveBound = expanded + 1024 + files.reduce((sum, file) => sum + 256 + 2 * Buffer.byteLength(file.path), 0)
+  if (data.length > ZIP_MANIFEST_LIMIT || files.length + 1 > ZIP_ENTRY_LIMIT || expanded > limits.maxExpandedBytes || archiveBound > limits.maxArchiveBytes) {
+    throw new BackupLimitError('Backup size limit exceeded')
   }
+  const suffix = includeSubscriptionImages ? '.zip' : '-without-images.zip'
+  const filename = buildBackupFileName(manifest.data.settings.timezone).replace('.zip', suffix)
+  return { filename, contentType: 'application/zip', openStream: () => createZipStream(data, files, limits) }
+}
 
-  return {
-    filename: buildBackupFileName(manifest.data.settings.timezone),
-    contentType: 'application/zip',
-    buffer: zip.toBuffer()
-  }
+export async function createSubtrackerBackupArchive(includeSubscriptionImages = true) {
+  const archive = await prepareSubtrackerBackupArchive(includeSubscriptionImages)
+  return { filename: archive.filename, contentType: archive.contentType, stream: archive.openStream() }
 }
 
 function parseBackupManifest(raw: unknown, locale: AppLocale = DEFAULT_APP_LOCALE): BackupManifest {
@@ -291,13 +350,16 @@ function parseBackupManifest(raw: unknown, locale: AppLocale = DEFAULT_APP_LOCAL
   if (manifest.app !== BACKUP_APP_NAME) {
     throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupInvalidFile'))
   }
-  if (manifest.schemaVersion !== BACKUP_SCHEMA_VERSION) {
+  if (![1, BACKUP_SCHEMA_VERSION].includes(manifest.schemaVersion)) {
     throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupUnsupportedVersion', { version: manifest.schemaVersion }))
   }
   if (manifest.scope !== BACKUP_SCOPE) {
     throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupUnsupportedScope', { scope: manifest.scope }))
   }
-  if (!manifest.data || !manifest.assets) {
+  if (!manifest.data || !manifest.assets || !Array.isArray(manifest.data.subscriptions) ||
+      !Array.isArray(manifest.data.tags) || !Array.isArray(manifest.data.paymentRecords) ||
+      !Array.isArray(manifest.data.subscriptionOrder) || !Array.isArray(manifest.assets.logos) ||
+      (manifest.assets.subscriptionImages !== undefined && !Array.isArray(manifest.assets.subscriptionImages))) {
     throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupManifestMissingData'))
   }
 
@@ -305,41 +367,67 @@ function parseBackupManifest(raw: unknown, locale: AppLocale = DEFAULT_APP_LOCAL
     throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupManifestInvalid'))
   }
 
+  if (manifest.includesSubscriptionImages !== undefined && typeof manifest.includesSubscriptionImages !== 'boolean') {
+    throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupManifestInvalid'))
+  }
+  if (manifest.includesSubscriptionImages === false && manifest.assets.subscriptionImages?.length) {
+    throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupManifestInvalid'))
+  }
+  // Strip unknown settings so a business backup cannot overwrite login credentials.
+  manifest.data.settings = SettingsSchema.parse(manifest.data.settings)
+  manifest.data.notificationWebhook = NotificationWebhookSettingsSchema.parse(manifest.data.notificationWebhook)
   return manifest
 }
 
-async function decodeBackupArchive(input: SubtrackerBackupInspectInput, locale: AppLocale = DEFAULT_APP_LOCALE) {
-  const buffer = Buffer.from(input.base64, 'base64')
-  if (!buffer.length) {
-    throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupFileEmpty'))
-  }
-
-  const zip = new AdmZip(buffer)
-  const entries = zip.getEntries()
-  const manifestEntry = entries.find((entry) => !entry.isDirectory && normalizeZipLogoPath(entry.entryName) === MANIFEST_ENTRY)
-  if (!manifestEntry) {
-    throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupMissingManifest'))
-  }
-
-  const manifest = parseBackupManifest(JSON.parse(manifestEntry.getData().toString('utf8')), locale)
-  const logoAssets = new Map<string, { buffer: Buffer; contentType: string }>()
-
-  for (const asset of manifest.assets.logos) {
-    const normalizedPath = normalizeZipLogoPath(asset.path)
-    const entry = entries.find((item) => !item.isDirectory && normalizeZipLogoPath(item.entryName) === normalizedPath)
-    if (!entry) {
-      throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupMissingLogo', { path: asset.path }))
+async function decodeBackupArchive(upload: BackupUpload, locale: AppLocale = DEFAULT_APP_LOCALE, signal?: AbortSignal) {
+  const reader = await BoundedZipReader.open(upload.filename, getBackupLimits().maxExpandedBytes, signal)
+  try {
+    if (!reader.entries.has(MANIFEST_ENTRY)) throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupMissingManifest'))
+    const manifest = parseBackupManifest(JSON.parse((await reader.read(MANIFEST_ENTRY, ZIP_MANIFEST_LIMIT)).toString('utf8')), locale)
+    const consumed = new Set([MANIFEST_ENTRY])
+    for (const asset of manifest.assets.logos) {
+      if (!asset || typeof asset.path !== 'string' || !/^logos\/[^/\\]+$/.test(asset.path) || consumed.has(asset.path) ||
+          !Object.values(LOGO_MIME_BY_EXTENSION).includes(asset.contentType as never) || !Array.isArray(asset.referencedBySubscriptionIds)) {
+        throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupManifestInvalid'))
+      }
+      const entry = reader.entries.get(asset.path)
+      if (!entry || entry.uncompressedSize === 0) throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupMissingLogo', { path: asset.path }))
+      await reader.consume(asset.path, ZIP_ASSET_LIMIT)
+      consumed.add(asset.path)
     }
 
-    logoAssets.set(normalizedPath, {
-      buffer: entry.getData(),
-      contentType: asset.contentType
-    })
-  }
-
-  return {
-    manifest,
-    logoAssets
+    const imageIds = new Set<string>()
+    const imageCounts = new Map<string, number>()
+    const subscriptionIds = new Set(manifest.data.subscriptions.map(item => item.id))
+    const invalidImage = () => new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupInvalidImage'))
+    for (const asset of manifest.assets.subscriptionImages ?? []) {
+      if (!asset || typeof asset.id !== 'string' || !/^[\w-]{1,128}$/.test(asset.id) || imageIds.has(asset.id) ||
+          !subscriptionIds.has(asset.subscriptionId) || typeof asset.path !== 'string' ||
+          !/^subscription-images\/[\w-]+\.[a-z0-9]+$/i.test(asset.path) || consumed.has(asset.path) ||
+          typeof asset.fileName !== 'string' || !asset.fileName.trim() || asset.fileName.length > 255 ||
+          typeof asset.contentType !== 'string' || !Number.isInteger(asset.size) || asset.size <= 0 || asset.size > IMAGE_MAX_BYTES ||
+          typeof asset.createdAt !== 'string' || !Number.isFinite(Date.parse(asset.createdAt))) throw invalidImage()
+      const count = (imageCounts.get(asset.subscriptionId) ?? 0) + 1
+      if (count > 20) throw invalidImage()
+      imageCounts.set(asset.subscriptionId, count)
+      imageIds.add(asset.id)
+      if (reader.entries.get(asset.path)?.uncompressedSize !== asset.size) throw invalidImage()
+      const data = await reader.read(asset.path, IMAGE_MAX_BYTES)
+      try {
+        if (inspectDownloadedImage(data, '', { maxBytes: IMAGE_MAX_BYTES }).contentType !== asset.contentType) throw invalidImage()
+      } catch {
+        throw invalidImage()
+      }
+      consumed.add(asset.path)
+    }
+    // Validate even unreferenced entries before any destructive restore, without retaining their bytes.
+    for (const [name, entry] of reader.entries) {
+      if (!consumed.has(name)) await reader.consume(name, entry.uncompressedSize)
+    }
+    return { manifest, reader }
+  } catch (error) {
+    reader.close()
+    throw error
   }
 }
 
@@ -395,59 +483,76 @@ function buildBackupWarnings(manifest: BackupManifest, locale: AppLocale = DEFAU
   const warnings: string[] = []
 
   if (manifest.assets.logos.length === 0) {
-    warnings.push(getMessage(locale, 'api.errors.imports.subtrackerBackupWarnings.noLocalLogos'))
+    warnings.push(getMessage(locale, 'api.errors.subtrackerBackupWarnings.noLocalLogos'))
   }
 
   if (manifest.data.paymentRecords.length === 0) {
-    warnings.push(getMessage(locale, 'api.errors.imports.subtrackerBackupWarnings.noPaymentRecords'))
+    warnings.push(getMessage(locale, 'api.errors.subtrackerBackupWarnings.noPaymentRecords'))
   }
 
-  warnings.push(getMessage(locale, 'api.errors.imports.subtrackerBackupWarnings.excludedSecretsAndHistory'))
-  warnings.push(getMessage(locale, 'api.errors.imports.subtrackerBackupWarnings.appendModeDedup'))
+  if (manifest.includesSubscriptionImages === false) warnings.push(getMessage(locale, 'api.errors.subtrackerBackupWarnings.withoutImages'))
+  warnings.push(getMessage(locale, 'api.errors.subtrackerBackupWarnings.excludedSecretsAndHistory'))
+  warnings.push(getMessage(locale, 'api.errors.subtrackerBackupWarnings.appendModeDedup'))
 
   return warnings
 }
 
 export async function inspectSubtrackerBackupFile(
-  input: SubtrackerBackupInspectInput,
-  locale: AppLocale = DEFAULT_APP_LOCALE
+  source: Readable,
+  locale: AppLocale = DEFAULT_APP_LOCALE,
+  owner = '',
+  signal?: AbortSignal
 ): Promise<SubtrackerBackupInspectResultDto> {
-  cleanupExpiredImports()
-
-  const { manifest, logoAssets } = await decodeBackupArchive(input, locale)
-  const conflicts = await buildInspectConflicts(manifest)
-  const preview: SubtrackerBackupInspectResultDto = {
-    isSubtrackerBackup: true,
-    summary: {
-      scope: BACKUP_SCOPE,
-      subscriptionsTotal: manifest.data.subscriptions.length,
-      tagsTotal: manifest.data.tags.length,
-      paymentRecordsTotal: manifest.data.paymentRecords.length,
-      logosTotal: manifest.assets.logos.length,
-      includesSettings: true
-    },
-    warnings: buildBackupWarnings(manifest, locale),
-    importToken: createImportToken(),
-    availableModes: ['replace', 'append'],
-    conflicts
+  claimOperation()
+  let upload: BackupUpload | undefined
+  try {
+    await cleanupExpiredImports()
+    if (previewCache.size >= 2) throw new BackupBusyError('Too many pending backup previews')
+    upload = await saveBackupUpload(source)
+    signal?.throwIfAborted()
+    const { manifest, reader } = await decodeBackupArchive(upload, locale, signal)
+    reader.close()
+    const conflicts = await buildInspectConflicts(manifest)
+    signal?.throwIfAborted()
+    const preview: SubtrackerBackupInspectResultDto = {
+      isSubtrackerBackup: true,
+      summary: {
+        scope: BACKUP_SCOPE,
+        subscriptionsTotal: manifest.data.subscriptions.length,
+        tagsTotal: manifest.data.tags.length,
+        paymentRecordsTotal: manifest.data.paymentRecords.length,
+        logosTotal: manifest.assets.logos.length,
+        subscriptionImagesTotal: manifest.assets.subscriptionImages?.length ?? 0,
+        includesSubscriptionImages: manifest.includesSubscriptionImages !== false,
+        includesSettings: true
+      },
+      warnings: buildBackupWarnings(manifest, locale),
+      importToken: createImportToken(),
+      availableModes: ['replace', 'append'],
+      conflicts
+    }
+    previewCache.set(preview.importToken, { expiresAt: Date.now() + BACKUP_PREVIEW_TTL_MS, owner, upload, preview })
+    return preview
+  } catch (error) {
+    if (upload) await disposeBackupUpload(upload)
+    throw error
+  } finally {
+    operationActive = false
   }
-
-  previewCache.set(preview.importToken, {
-    expiresAt: Date.now() + IMPORT_TOKEN_TTL_MS,
-    manifest,
-    logoAssets,
-    preview
-  })
-
-  return preview
 }
 
-async function clearBusinessData() {
-  await prisma.paymentRecord.deleteMany()
-  await prisma.subscriptionTag.deleteMany()
-  await prisma.subscription.deleteMany()
-  await prisma.tag.deleteMany()
-  await prisma.setting.deleteMany({
+export async function disposeSubtrackerBackups() {
+  for (const [token, entry] of previewCache) await discardSubtrackerBackup(token, entry.owner)
+}
+
+async function clearBusinessData(tx: Prisma.TransactionClient) {
+  const imageRows = await tx.subscriptionImage.findMany({ select: { storageName: true } })
+  await tx.subscriptionImage.deleteMany()
+  await tx.paymentRecord.deleteMany()
+  await tx.subscriptionTag.deleteMany()
+  await tx.subscription.deleteMany()
+  await tx.tag.deleteMany()
+  await tx.setting.deleteMany({
     where: {
       key: {
         notIn: Array.from(EXCLUDED_SETTING_KEYS)
@@ -455,22 +560,17 @@ async function clearBusinessData() {
     }
   })
 
-  const logoDir = getLogoStorageDir()
-  await mkdir(logoDir, { recursive: true })
-  const existingFiles = await readdir(logoDir)
-  await Promise.all(existingFiles.map((file) => rm(path.join(logoDir, file), { force: true })))
+  return imageRows.map(image => image.storageName)
 }
 
-async function restoreSettingsFromBackup(settings: BackupManifest['data']['settings']) {
-  await Promise.all(
-    Object.entries(settings).map(([key, value]) => setSetting(key, value))
-  )
+async function restoreSettingsFromBackup(settings: BackupManifest['data']['settings'], tx: Prisma.TransactionClient) {
+  await Promise.all(Object.entries(settings).filter(([key]) => !EXCLUDED_SETTING_KEYS.has(key)).map(([key, value]) => setSetting(key, value, tx)))
 }
 
-async function buildTagRestoreMap(manifest: BackupManifest) {
+async function buildTagRestoreMap(manifest: BackupManifest, tx: Prisma.TransactionClient) {
   const existingByName = new Map<string, BackupTagRow>(
     (
-      await prisma.tag.findMany({
+      await tx.tag.findMany({
         where: {
           name: {
             in: manifest.data.tags.map((tag) => tag.name)
@@ -492,7 +592,7 @@ async function buildTagRestoreMap(manifest: BackupManifest) {
       continue
     }
 
-    await prisma.tag.create({
+    await tx.tag.create({
       data: {
         id: tag.id,
         name: tag.name,
@@ -510,21 +610,6 @@ async function buildTagRestoreMap(manifest: BackupManifest) {
     importedTags,
     reusedTags
   }
-}
-
-async function importLogoFromAsset(
-  subscriptionId: string,
-  manifest: BackupManifest,
-  logoAssets: Map<string, { buffer: Buffer; contentType: string }>,
-  locale: AppLocale = DEFAULT_APP_LOCALE
-) {
-  const asset = manifest.assets.logos.find((item) => item.referencedBySubscriptionIds.includes(subscriptionId))
-  if (!asset) return null
-
-  const entry = logoAssets.get(normalizeZipLogoPath(asset.path))
-  if (!entry) return null
-
-  return saveImportedLogoBuffer(entry.buffer, entry.contentType, 'backup-zip', locale)
 }
 
 function toPaymentRecordCreateManyInput(records: PaymentRecordDto[]) {
@@ -545,171 +630,137 @@ function toPaymentRecordCreateManyInput(records: PaymentRecordDto[]) {
 
 export async function commitSubtrackerBackup(
   input: SubtrackerBackupCommitInput,
-  locale: AppLocale = DEFAULT_APP_LOCALE
+  locale: AppLocale = DEFAULT_APP_LOCALE,
+  owner = ''
 ): Promise<SubtrackerBackupCommitResultDto> {
-  cleanupExpiredImports()
-
-  const cached = previewCache.get(input.importToken)
-  if (!cached || cached.expiresAt <= Date.now()) {
+  claimOperation()
+  let cached: CachedImportEntry | undefined
+  let reader: BoundedZipReader | undefined
+  let committed = false
+  const newImageNames: string[] = []
+  const newLogoNames: string[] = []
+  try {
+    await cleanupExpiredImports()
+    const candidate = previewCache.get(input.importToken)
+    if (!candidate || candidate.owner !== owner) throw new Error(getMessage(locale, 'api.errors.imports.importTokenInvalid'))
+    cached = candidate
     previewCache.delete(input.importToken)
-    throw new Error(getMessage(locale, 'api.errors.imports.importTokenInvalid'))
-  }
-  previewCache.delete(input.importToken)
-
-  const { manifest, logoAssets } = cached
-  const appTimezone = manifest.data.settings.timezone
-
-  if (input.mode === 'replace') {
-    await clearBusinessData()
-  }
-
-  const { tagIdMap, importedTags, reusedTags } = await buildTagRestoreMap(manifest)
-  const existingSubscriptionIds = new Set(
-    (
-      await prisma.subscription.findMany({
-        where: {
-          id: {
-            in: manifest.data.subscriptions.map((item) => item.id)
-          }
-        },
-        select: {
-          id: true
-        }
-      })
-    ).map((item: ExistingIdRow) => item.id)
-  )
-  const incomingPaymentSubscriptionIds = Array.from(new Set(manifest.data.paymentRecords.map((item) => item.subscriptionId)))
-  const existingPaymentRecordRows: ExistingIdRow[] =
-    input.mode === 'append' && incomingPaymentSubscriptionIds.length
-      ? await prisma.paymentRecord.findMany({
-          where: {
-            subscriptionId: {
-              in: incomingPaymentSubscriptionIds
-            }
-          },
-          select: {
-            id: true
-          }
-        })
+    // Recheck the complete on-disk archive before staging files or changing business data.
+    const decoded = await decodeBackupArchive(cached.upload, locale)
+    reader = decoded.reader
+    const { manifest } = decoded
+    const appTimezone = manifest.data.settings.timezone
+    const existingSubscriptionIds = new Set(input.mode === 'append'
+      ? (await prisma.subscription.findMany({ where: { id: { in: manifest.data.subscriptions.map(item => item.id) } }, select: { id: true } })).map(item => item.id)
+      : [])
+    const oldLogoNames = input.mode === 'replace'
+      ? await readdir(getLogoStorageDir()).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return []; throw error })
       : []
-  const existingPaymentRecordIds = new Set(existingPaymentRecordRows.map((item) => item.id))
-
-  let importedSubscriptions = 0
-  let skippedSubscriptions = 0
-  let importedPaymentRecords = 0
-  let skippedPaymentRecords = 0
-  let importedLogos = 0
-  const importedSubscriptionIds = new Set<string>()
-  const subscriptionTagRows: Array<{ subscriptionId: string; tagId: string }> = []
-  const paymentRecordRows: PaymentRecordDto[] = []
-
-  for (const subscription of manifest.data.subscriptions) {
-    if (input.mode === 'append' && existingSubscriptionIds.has(subscription.id)) {
-      skippedSubscriptions += 1
-      continue
+    type RestoredLogo = Awaited<ReturnType<typeof saveImportedLogoBuffer>>
+    type RestoredImage = { fileName: string; storageName: string; contentType: string; size: number; createdAt: Date }
+    const logosBySubscription = new Map<string, RestoredLogo>()
+    const imagesBySubscription = new Map<string, RestoredImage[]>()
+    // Stage original bytes under new generated filenames outside the database transaction.
+    for (const asset of manifest.assets.logos) {
+      if (input.mode === 'append' && asset.referencedBySubscriptionIds.length && asset.referencedBySubscriptionIds.every(id => existingSubscriptionIds.has(id))) continue
+      const logo = await saveImportedLogoBuffer(await reader.read(asset.path, ZIP_ASSET_LIMIT), asset.contentType, 'backup-zip', locale)
+      newLogoNames.push(path.basename(logo.logoUrl))
+      for (const id of asset.referencedBySubscriptionIds) logosBySubscription.set(id, logo)
     }
-
-    const importedLogo = subscription.logoUrl?.startsWith('/static/logos/')
-      ? await importLogoFromAsset(subscription.id, manifest, logoAssets, locale)
-      : null
-
-    if (importedLogo) {
-      importedLogos += 1
+    for (const asset of manifest.assets.subscriptionImages ?? []) {
+      if (existingSubscriptionIds.has(asset.subscriptionId)) continue
+      const bytes = await reader.read(asset.path, IMAGE_MAX_BYTES)
+      const storageName = await writeSubscriptionImageFile(bytes, asset.contentType)
+      newImageNames.push(storageName)
+      const images = imagesBySubscription.get(asset.subscriptionId) ?? []
+      images.push({ fileName: asset.fileName, storageName, contentType: asset.contentType, size: bytes.length, createdAt: new Date(asset.createdAt) })
+      imagesBySubscription.set(asset.subscriptionId, images)
     }
-
-    await prisma.subscription.create({
-      data: {
-        id: subscription.id,
-        name: subscription.name,
-        description: subscription.description,
-        websiteUrl: subscription.websiteUrl,
-        logoUrl: importedLogo?.logoUrl ?? subscription.logoUrl,
-        logoSource: importedLogo?.logoSource ?? subscription.logoSource,
-        logoFetchedAt: importedLogo ? new Date() : subscription.logoFetchedAt ? new Date(subscription.logoFetchedAt) : null,
-        billingType: subscription.billingType ?? 'recurring',
-        status: subscription.billingType === 'lifetime' && subscription.status === 'expired' ? 'active' : subscription.status,
-        amount: subscription.amount,
-        currency: subscription.currency,
-        billingIntervalCount: subscription.billingIntervalCount,
-        billingIntervalUnit: subscription.billingIntervalUnit,
-        autoRenew: subscription.billingType === 'lifetime' ? false : subscription.autoRenew,
-        startDate: parseDateInTimezone(subscription.startDate, appTimezone),
-        nextRenewalDate: parseDateInTimezone(subscription.billingType === 'lifetime' ? subscription.startDate : subscription.nextRenewalDate, appTimezone),
-        notifyDaysBefore: subscription.notifyDaysBefore,
-        advanceReminderRules: subscription.advanceReminderRules,
-        overdueReminderRules: subscription.overdueReminderRules,
-        webhookEnabled: subscription.billingType === 'lifetime' ? false : subscription.webhookEnabled,
-        notes: subscription.notes,
-        createdAt: new Date(subscription.createdAt),
-        updatedAt: new Date(subscription.updatedAt)
-      }
-    })
-
-    for (const tagId of normalizeTagIds(subscription.tagIds.map((tagId) => tagIdMap.get(tagId)).filter((value): value is string => Boolean(value)))) {
-      subscriptionTagRows.push({
-        subscriptionId: subscription.id,
-        tagId
-      })
-    }
-
-    importedSubscriptionIds.add(subscription.id)
-    importedSubscriptions += 1
-  }
-
-  if (subscriptionTagRows.length > 0) {
-    await prisma.subscriptionTag.createMany({
-      data: subscriptionTagRows
-    })
-  }
-
-  for (const record of manifest.data.paymentRecords) {
-    if (input.mode === 'append' && existingPaymentRecordIds.has(record.id)) {
-      skippedPaymentRecords += 1
-      continue
-    }
-
-    paymentRecordRows.push(record)
-    importedPaymentRecords += 1
-  }
-
-  if (paymentRecordRows.length > 0) {
-    await prisma.paymentRecord.createMany({
-      data: toPaymentRecordCreateManyInput(paymentRecordRows)
-    })
-  }
-
-  if (input.mode === 'replace') {
-    await setSubscriptionOrder(manifest.data.subscriptionOrder.filter((id) => manifest.data.subscriptions.some((item) => item.id === id)))
-    await restoreSettingsFromBackup(manifest.data.settings)
-    await setSetting('notificationWebhook', manifest.data.notificationWebhook)
-  } else {
-    if (importedSubscriptionIds.size > 0) {
-      const appendOrder = new Set(await getSubscriptionOrder())
-      for (const id of manifest.data.subscriptionOrder) {
-        if (importedSubscriptionIds.has(id) && !appendOrder.has(id)) {
-          appendOrder.add(id)
+    reader.close()
+    reader = undefined
+    let oldImageNames: string[] = []
+    const result = await prisma.$transaction(async tx => {
+      if (input.mode === 'replace') oldImageNames = await clearBusinessData(tx)
+      const { tagIdMap, importedTags, reusedTags } = await buildTagRestoreMap(manifest, tx)
+      const incomingPaymentSubscriptionIds = Array.from(new Set(manifest.data.paymentRecords.map(item => item.subscriptionId)))
+      const existingPayments = input.mode === 'append' && incomingPaymentSubscriptionIds.length
+        ? await tx.paymentRecord.findMany({ where: { subscriptionId: { in: incomingPaymentSubscriptionIds } }, select: { id: true } })
+        : []
+      const existingPaymentIds = new Set(existingPayments.map(item => item.id))
+      const importedSubscriptionIds = new Set<string>()
+      const subscriptionTagRows: Array<{ subscriptionId: string; tagId: string }> = []
+      let skippedSubscriptions = 0
+      for (const subscription of manifest.data.subscriptions) {
+        if (existingSubscriptionIds.has(subscription.id)) { skippedSubscriptions += 1; continue }
+        const importedLogo = subscription.logoUrl?.startsWith('/static/logos/') ? logosBySubscription.get(subscription.id) : undefined
+        const images = imagesBySubscription.get(subscription.id) ?? []
+        await tx.subscription.create({ data: {
+          id: subscription.id,
+          name: subscription.name,
+          description: subscription.description,
+          websiteUrl: subscription.websiteUrl,
+          logoUrl: importedLogo?.logoUrl ?? subscription.logoUrl,
+          logoSource: importedLogo?.logoSource ?? subscription.logoSource,
+          logoFetchedAt: importedLogo ? new Date() : subscription.logoFetchedAt ? new Date(subscription.logoFetchedAt) : null,
+          billingType: subscription.billingType ?? 'recurring',
+          status: subscription.billingType === 'lifetime' && subscription.status === 'expired' ? 'active' : subscription.status,
+          amount: subscription.amount,
+          currency: subscription.currency,
+          billingIntervalCount: subscription.billingIntervalCount,
+          billingIntervalUnit: subscription.billingIntervalUnit,
+          autoRenew: subscription.billingType === 'lifetime' ? false : subscription.autoRenew,
+          startDate: parseDateInTimezone(subscription.startDate, appTimezone),
+          nextRenewalDate: parseDateInTimezone(subscription.billingType === 'lifetime' ? subscription.startDate : subscription.nextRenewalDate, appTimezone),
+          notifyDaysBefore: subscription.notifyDaysBefore,
+          advanceReminderRules: subscription.advanceReminderRules,
+          overdueReminderRules: subscription.overdueReminderRules,
+          webhookEnabled: subscription.billingType === 'lifetime' ? false : subscription.webhookEnabled,
+          notes: subscription.notes,
+          createdAt: new Date(subscription.createdAt),
+          updatedAt: new Date(subscription.updatedAt),
+          ...(images.length ? { images: { create: images } } : {})
+        } })
+        for (const tagId of normalizeTagIds(subscription.tagIds.map(id => tagIdMap.get(id)).filter((value): value is string => Boolean(value)))) {
+          subscriptionTagRows.push({ subscriptionId: subscription.id, tagId })
         }
+        importedSubscriptionIds.add(subscription.id)
       }
-      await setSubscriptionOrder(Array.from(appendOrder))
+      if (subscriptionTagRows.length) await tx.subscriptionTag.createMany({ data: subscriptionTagRows })
+      const payments = manifest.data.paymentRecords.filter(record => !existingPaymentIds.has(record.id))
+      if (payments.length) await tx.paymentRecord.createMany({ data: toPaymentRecordCreateManyInput(payments) })
+      if (input.mode === 'replace') {
+        await setSubscriptionOrder(manifest.data.subscriptionOrder.filter(id => importedSubscriptionIds.has(id)), tx)
+      } else if (importedSubscriptionIds.size) {
+        const order = new Set(await getSubscriptionOrder(tx))
+        for (const id of manifest.data.subscriptionOrder) if (importedSubscriptionIds.has(id)) order.add(id)
+        await setSubscriptionOrder(Array.from(order), tx)
+      }
+      if (input.mode === 'replace' || input.restoreSettings) {
+        await restoreSettingsFromBackup(manifest.data.settings, tx)
+        await setSetting('notificationWebhook', manifest.data.notificationWebhook, tx)
+      }
+      return {
+        mode: input.mode, clearedExistingData: input.mode === 'replace', restoredSettings: input.mode === 'replace' || input.restoreSettings,
+        importedTags, reusedTags, importedSubscriptions: importedSubscriptionIds.size, skippedSubscriptions,
+        importedPaymentRecords: payments.length, skippedPaymentRecords: manifest.data.paymentRecords.length - payments.length,
+        importedLogos: newLogoNames.length, importedSubscriptionImages: newImageNames.length, warnings: cached!.preview.warnings
+      }
+    }, { maxWait: 10000, timeout: 120000 })
+    committed = true
+    // Old files remain readable until the complete database transaction succeeds.
+    await removeSubscriptionImageFiles(oldImageNames)
+    await Promise.allSettled(oldLogoNames.map(name => rm(path.join(getLogoStorageDir(), name), { force: true })))
+    return result
+  } finally {
+    try {
+      reader?.close()
+      if (!committed) {
+        await removeSubscriptionImageFiles(newImageNames)
+        await Promise.allSettled(newLogoNames.map(name => rm(path.join(getLogoStorageDir(), name), { force: true })))
+      }
+    } finally {
+      if (cached) await disposeBackupUpload(cached.upload).catch(() => undefined)
+      operationActive = false
     }
-
-    if (input.restoreSettings) {
-      await restoreSettingsFromBackup(manifest.data.settings)
-      await setSetting('notificationWebhook', manifest.data.notificationWebhook)
-    }
-  }
-
-  return {
-    mode: input.mode,
-    clearedExistingData: input.mode === 'replace',
-    restoredSettings: input.mode === 'replace' || input.restoreSettings,
-    importedTags,
-    reusedTags,
-    importedSubscriptions,
-    skippedSubscriptions,
-    importedPaymentRecords,
-    skippedPaymentRecords,
-    importedLogos,
-    warnings: cached.preview.warnings
   }
 }

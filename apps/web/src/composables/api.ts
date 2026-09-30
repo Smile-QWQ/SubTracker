@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { LogoImportResult } from '@subtracker/shared'
+import type { LogoImportResult, SubtrackerBackupLimitsDto } from '@subtracker/shared'
 import type {
   AppLocale,
   AppLocaleResponse,
@@ -438,17 +438,19 @@ export const api = {
     return postOnce<{ success: boolean; statusCode: number; responseBody: string }>('/notifications/test/webhook', payload)
   },
 
-  async exportBackup() {
-    const response = await client.get('/settings/export/backup', {
-      responseType: 'blob'
-    })
-    return {
-      blob: response.data as Blob,
-      filename:
-        String(response.headers['content-disposition'] ?? '')
-          .match(/filename="?([^"]+)"?/)?.[1]
-          ?.trim() || 'subtracker-backup.zip'
-    }
+  async exportBackup(includeSubscriptionImages = true) {
+    const result = unwrap<{ token: string }>(await client.post('/settings/export/backup', {
+      includeSubscriptionImages
+    }, { timeout: 120000 }))
+    return { downloadUrl: client.getUri({ url: `/settings/export/backup/download/${encodeURIComponent(result.token)}` }) }
+  },
+
+  async getSubtrackerBackupLimits() {
+    return unwrap<SubtrackerBackupLimitsDto>(await client.get('/import/subtracker/limits'))
+  },
+
+  async discardSubtrackerBackup(importToken: string) {
+    return deleteOnce<{ deleted: boolean }>(`/import/subtracker/${encodeURIComponent(importToken)}`)
   },
 
   async inspectWallosImport(payload: { filename: string; contentType: string; base64: string; sourceTimezone?: string }) {
@@ -459,11 +461,17 @@ export const api = {
     return postOnce<WallosImportCommitResult>('/import/wallos/commit', { importToken })
   },
 
-  async inspectSubtrackerBackup(payload: { filename: string; contentType: string; base64: string }) {
-    return postOnce<SubtrackerBackupInspectResult>('/import/subtracker/inspect', payload, { timeout: 60000 })
+  async inspectSubtrackerBackup(file: File, options: { signal?: AbortSignal; onProgress?: (percent: number) => void } = {}) {
+    // Send the original File directly; do not base64-encode or use a payload-based singleflight key.
+    return unwrap<SubtrackerBackupInspectResult>(await client.post('/import/subtracker/inspect', file, {
+      headers: { 'Content-Type': 'application/zip' },
+      timeout: 0,
+      signal: options.signal,
+      onUploadProgress: event => options.onProgress?.(Math.min(100, Math.round(event.loaded / Math.max(1, file.size) * 100)))
+    }))
   },
 
   async commitSubtrackerBackup(payload: { importToken: string; mode: 'replace' | 'append'; restoreSettings: boolean }) {
-    return postOnce<SubtrackerBackupCommitResult>('/import/subtracker/commit', payload, { timeout: 60000 })
+    return postOnce<SubtrackerBackupCommitResult>('/import/subtracker/commit', payload, { timeout: 1800000 })
   }
 }

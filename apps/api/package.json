@@ -28,11 +28,15 @@
     "prisma": "^6.6.0",
     "sql.js": "^1.14.1",
     "tesseract.js": "^7.0.0",
+    "yauzl": "^3.4.0",
+    "yazl": "^3.3.1",
     "zod": "^3.24.3"
   },
   "devDependencies": {
     "@types/node": "^22.14.1",
     "@types/nodemailer": "^8.0.0",
+    "@types/yauzl": "^3.4.0",
+    "@types/yazl": "^3.3.1",
     "tsup": "^8.4.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3",

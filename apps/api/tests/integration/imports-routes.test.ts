@@ -1,11 +1,13 @@
 import Fastify, { type FastifyInstance } from 'fastify'
+import { Readable } from 'node:stream'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const routeMocks = vi.hoisted(() => ({
   inspectWallosImportFileMock: vi.fn(),
   commitWallosImportMock: vi.fn(),
   inspectSubtrackerBackupFileMock: vi.fn(),
-  commitSubtrackerBackupMock: vi.fn()
+  commitSubtrackerBackupMock: vi.fn(),
+  discardSubtrackerBackupMock: vi.fn()
 }))
 
 vi.mock('../../src/services/wallos-import.service', () => ({
@@ -15,10 +17,13 @@ vi.mock('../../src/services/wallos-import.service', () => ({
 
 vi.mock('../../src/services/subtracker-backup.service', () => ({
   inspectSubtrackerBackupFile: routeMocks.inspectSubtrackerBackupFileMock,
-  commitSubtrackerBackup: routeMocks.commitSubtrackerBackupMock
+  commitSubtrackerBackup: routeMocks.commitSubtrackerBackupMock,
+  discardSubtrackerBackup: routeMocks.discardSubtrackerBackupMock,
+  BackupBusyError: class extends Error {}
 }))
 
 import { importRoutes } from '../../src/routes/imports'
+import { BackupLimitError } from '../../src/utils/streaming-zip'
 
 describe('import routes', () => {
   let app: FastifyInstance
@@ -33,10 +38,29 @@ describe('import routes', () => {
   })
 
   afterEach(async () => {
+    app.server.closeAllConnections()
     await app.close()
   })
 
-  it('accepts subtracker backup inspect payloads', async () => {
+  it('returns a readable 413 over a real chunked HTTP upload instead of resetting the socket', async () => {
+    routeMocks.inspectSubtrackerBackupFileMock.mockImplementation(async (source: Readable) => {
+      let bytes = 0
+      for await (const chunk of source.iterator({ destroyOnReturn: false })) {
+        bytes += chunk.length
+        if (bytes > 1024 * 1024) throw new BackupLimitError('Backup size limit exceeded')
+      }
+    })
+    const address = await app.listen({ host: '127.0.0.1', port: 0 })
+    const response = await fetch(`${address}/import/subtracker/inspect`, {
+      method: 'POST', headers: { 'content-type': 'application/zip' },
+      body: Readable.from([Buffer.alloc(1024 * 1024), Buffer.alloc(1024 * 1024), Buffer.alloc(1024 * 1024)]) as never,
+      duplex: 'half'
+    } as RequestInit)
+    expect(response.status).toBe(413)
+    expect(await response.json()).toMatchObject({ error: { code: 'backup_too_large' } })
+  })
+
+  it('passes raw ZIP uploads as streams with a session owner and cancellation signal', async () => {
     routeMocks.inspectSubtrackerBackupFileMock.mockResolvedValue({
       isSubtrackerBackup: true,
       summary: {
@@ -61,19 +85,12 @@ describe('import routes', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/import/subtracker/inspect',
-      payload: {
-        filename: 'subtracker-backup.zip',
-        contentType: 'application/zip',
-        base64: 'ZmFrZQ=='
-      }
+      headers: { 'content-type': 'application/zip' },
+      payload: Buffer.from('ZIP')
     })
 
     expect(res.statusCode).toBe(200)
-    expect(routeMocks.inspectSubtrackerBackupFileMock).toHaveBeenCalledWith({
-      filename: 'subtracker-backup.zip',
-      contentType: 'application/zip',
-      base64: 'ZmFrZQ=='
-    }, undefined)
+    expect(routeMocks.inspectSubtrackerBackupFileMock).toHaveBeenCalledWith(expect.any(Readable), undefined, expect.any(String), expect.any(AbortSignal))
   })
 
   it('accepts subtracker backup commit payloads', async () => {
@@ -106,7 +123,7 @@ describe('import routes', () => {
       importToken: '0123456789abcdef',
       mode: 'append',
       restoreSettings: true
-    }, undefined)
+    }, undefined, expect.any(String))
   })
 
   it('keeps subtracker backup commit response shape stable for frontend consumers', async () => {

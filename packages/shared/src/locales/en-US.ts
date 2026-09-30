@@ -274,9 +274,12 @@ export default {
       forgotPasswordChannelRequired: 'Enable at least one direct notification channel first',
       structuredOutput:
         'When enabled, the system prefers vendor-supported structured JSON output. If unsupported, it automatically falls back to prompt-based JSON output.',
-      backup: 'Backup and restore via ZIP, including subscriptions, tags, payment records, ordering, settings, and local logos.',
+      backup: 'Backup and restore via ZIP, including subscriptions, tags, payment records, ordering, settings, and local logos. Note images are included by default.',
+      includeBackupImages: 'Include note images',
       migration: 'Import data from similar third-party projects'
     },
+
+
     buttons: {
       previewReminderRules: 'Preview rules',
       collapseReminderPreview: 'Hide reminder preview',
@@ -982,7 +985,7 @@ export default {
     backupModal: {
       title: 'Restore backup',
       description:
-        'This ZIP restores subscriptions, tags, payment records, ordering, settings, and local logos. It does not restore credentials, session secrets, webhook history, or exchange-rate data.',
+        'This ZIP restores subscriptions, tags, payment records, ordering, settings, local logos, and note images. It does not restore credentials, session secrets, webhook history, or exchange-rate data.',
       pickZip: 'Choose a ZIP file',
       noFileSelected: 'No file selected',
       previewBackup: 'Preview backup',
@@ -990,11 +993,12 @@ export default {
       tags: 'Tags',
       paymentRecords: 'Payment records',
       localLogos: 'Local logos',
+      subscriptionImages: 'Note images',
       restoreMode: 'Restore mode',
       replaceMode: 'Clear existing data and restore',
       appendMode: 'Keep current data and append restored data',
       replaceWarning:
-        'This deletes current subscriptions, tags, payment records, ordering, settings, and local logos before restoring from the file.',
+        'This deletes current subscriptions, tags, payment records, ordering, settings, local logos, and note images before restoring from the file.',
       appendHelp:
         'For append restore, tags with the same name are reused; subscriptions and payment records are skipped idempotently by backup CUID; settings overwrite is controlled separately.',
       restoreSettingsLabel: 'Also overwrite current settings',
@@ -1005,10 +1009,16 @@ export default {
       warnings: 'Warnings',
       confirmRestore: 'Confirm restore',
       invalidZip: 'The backup ZIP could not be parsed',
+      backupTooLarge: 'The backup ZIP must not exceed the server limit of {limit}',
+      sizeLimits: 'Server limits: ZIP up to {archive}; expanded contents up to {expanded}. Uploading and restoring require sufficient temporary disk space.',
+      uploadProgress: 'Uploading backup: {percent}%',
+      validating: 'Upload complete. Validating backup contents…',
+      restoring: 'Restoring. Keep this page open; large backups may take some time.',
+      withoutImages: 'This lightweight backup excludes note images and does not replace a complete backup. Replace mode also deletes existing note images.',
       previewFailed: 'Failed to preview backup',
       previewGenerated: 'Backup preview ready',
       nothingImported: 'No new data was imported. Duplicate entries were skipped automatically.',
-      restoreCompleted: 'Restore complete: {subscriptions} subscriptions, {tags} new tags, {payments} payment records, {logos} logos',
+      restoreCompleted: 'Restore complete: {subscriptions} subscriptions, {tags} new tags, {payments} payment records, {logos} logos, {images} note images',
       restoreFailed: 'Restore failed'
     }
   },
@@ -1358,6 +1368,7 @@ Hard requirements:
         invalidWallosInspectPayload: 'Invalid Wallos inspect payload',
         invalidWallosCommitPayload: 'Invalid Wallos import payload',
         invalidSubtrackerBackupInspectPayload: 'Invalid SubTracker backup inspect payload',
+      invalidSubtrackerBackupExportPayload: 'Invalid SubTracker backup export options',
         invalidSubtrackerBackupCommitPayload: 'Invalid SubTracker backup commit payload',
         invalidTagPayload: 'Invalid tag payload',
         invalidTagId: 'Invalid tag id',
@@ -1479,6 +1490,13 @@ Hard requirements:
         subtrackerBackupCommitFailed: 'SubTracker backup restore failed',
         subtrackerBackupManifestInvalid: 'The backup manifest is invalid',
         subtrackerBackupInvalidFile: 'This is not a valid SubTracker backup file',
+        subtrackerBackupTooLarge: 'The backup exceeds a server archive, entry, expanded-size, or temporary-storage limit. Check the limits or cancel unused previews and try again',
+
+      subtrackerBackupBusy: 'Another backup operation is running or too many previews are pending. Complete or cancel it first',
+      subtrackerBackupZipRequired: 'Upload the ZIP file directly',
+      subtrackerBackupExportFailed: 'Backup export failed. Check the files and server storage space',
+        subtrackerBackupInvalidImage: 'The backup contains an invalid or missing note image asset',
+        subtrackerBackupTooManyEntries: 'The backup ZIP contains too many entries',
         subtrackerBackupUnsupportedVersion: 'Unsupported backup version: {version}',
         subtrackerBackupUnsupportedScope: 'Unsupported backup scope: {scope}',
         subtrackerBackupManifestMissingData: 'The backup manifest is missing required data',
@@ -1508,8 +1526,10 @@ Hard requirements:
         logoNeedsManualFill: 'The logo file must be restored later from a directory or ZIP package.'
       },
       subtrackerBackupWarnings: {
+
         noLocalLogos: 'This backup does not include local logo files.',
         noPaymentRecords: 'This backup does not include payment records.',
+      withoutImages: 'This backup excludes note images and does not replace a complete backup. Replace mode deletes existing note images.',
         excludedSecretsAndHistory: 'Login credentials, session secrets, webhook history, and exchange-rate data will not be restored.',
         appendModeDedup:
           'In append mode, subscriptions and payment records are skipped idempotently by their backup CUIDs, and tags with the same name are reused.'

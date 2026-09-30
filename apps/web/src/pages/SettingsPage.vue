@@ -686,8 +686,10 @@
             <n-card size="small" embedded :title="t('settings.sections.backup')">
               <n-space vertical style="width: 100%">
                 <div class="card-muted">{{ t('settings.helps.backup') }}</div>
+                <n-checkbox v-model:checked="includeBackupImages" :disabled="exportingBackup">{{ t('settings.helps.includeBackupImages') }}</n-checkbox>
+                <n-alert v-if="!includeBackupImages" type="warning" :show-icon="false">{{ t('subscriptions.backupModal.withoutImages') }}</n-alert>
                 <n-space class="settings-actions settings-actions--wrap" wrap>
-                  <n-button type="primary" @click="exportBackup">{{ t('settings.buttons.exportBackup') }}</n-button>
+                  <n-button type="primary" :loading="exportingBackup" @click="exportBackup">{{ t('settings.buttons.exportBackup') }}</n-button>
                   <n-button type="success" ghost @click="showSubtrackerBackupModal = true">{{ t('settings.buttons.restoreBackup') }}</n-button>
                 </n-space>
               </n-space>
@@ -785,6 +787,7 @@ import {
   NAlert,
   NButton,
   NCard,
+  NCheckbox,
   NCollapse,
   NCollapseItem,
   NCollapseTransition,
@@ -817,6 +820,7 @@ import {
 } from '@vicons/ionicons5'
 import { t, getDefaultAiPromptByLocale, getDefaultAiSummaryPromptByLocale } from '@/locales'
 import { api } from '@/composables/api'
+import { useSubtrackerBackupExport } from '@/composables/subtracker-backup-export'
 import { EXCHANGE_RATE_SNAPSHOT_QUERY_KEY, useExchangeRateSnapshotQuery } from '@/composables/exchange-rate-query'
 import { NOTIFICATION_WEBHOOK_QUERY_KEY, useNotificationWebhookQuery } from '@/composables/notification-webhook-query'
 import { SETTINGS_QUERY_KEY, useSettingsQuery } from '@/composables/settings-query'
@@ -1015,6 +1019,9 @@ const sourceCurrency = ref('USD')
 const targetCurrency = ref('CNY')
 const converterAmount = ref(1)
 const showSubtrackerBackupModal = ref(false)
+const {
+  includeBackupImages, exportingBackup, exportBackup,
+} = useSubtrackerBackupExport()
 const showWallosImportModal = ref(false)
 const showAppriseTargetsModal = ref(false)
 const showNotificationTemplatesModal = ref(false)
@@ -1845,25 +1852,6 @@ async function testApprise() {
   } catch (error) {
     message.error(error instanceof Error ? error.message : t('settings.messages.appriseTestFailed'))
   }
-}
-
-async function exportBackup() {
-  try {
-    const result = await api.exportBackup()
-    downloadBlob(result.blob, result.filename)
-    message.success(t('settings.messages.zipExportStarted'))
-  } catch (error) {
-    message.error(error instanceof Error ? error.message : t('settings.messages.zipExportFailed'))
-  }
-}
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = window.URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  window.URL.revokeObjectURL(url)
 }
 
 function refreshAppQueries() {

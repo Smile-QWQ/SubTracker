@@ -510,6 +510,8 @@ export interface SubtrackerBackupSummary {
   tagsTotal: number
   paymentRecordsTotal: number
   logosTotal: number
+  subscriptionImagesTotal?: number
+  includesSubscriptionImages?: boolean
   includesSettings: boolean
 }
 
@@ -540,6 +542,7 @@ export interface SubtrackerBackupCommitResult {
   importedPaymentRecords: number
   skippedPaymentRecords: number
   importedLogos: number
+  importedSubscriptionImages?: number
   warnings: string[]
 }
 

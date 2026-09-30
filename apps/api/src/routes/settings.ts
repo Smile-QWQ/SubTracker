@@ -5,6 +5,7 @@ import {
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_OVERDUE_REMINDER_RULES,
   SettingsSchema,
+  SubtrackerBackupExportSchema,
   getMessage,
   type AppLocale
 } from '@subtracker/shared'
@@ -29,7 +30,10 @@ import {
   withAppriseSyncState
 } from '../services/apprise-config.service'
 import { syncAppriseConfig } from '../services/apprise-notification.service'
-import { createSubtrackerBackupArchive } from '../services/subtracker-backup.service'
+import { BackupBusyError } from '../services/subtracker-backup.service'
+import { claimBackupDownload, openBackupDownload, prepareBackupDownload } from '../services/backup-download.service'
+import { BackupLimitError } from '../utils/streaming-zip'
+import { verifyToken } from '../services/auth.service'
 
 function hasDirectForgotPasswordChannelEnabled(settings: {
   emailNotificationsEnabled: boolean
@@ -321,11 +325,42 @@ function normalizeReminderSettingsPayload(
 }
 
 export async function settingsRoutes(app: FastifyInstance) {
-  app.get('/settings/export/backup', async (_request, reply) => {
-    const archive = await createSubtrackerBackupArchive()
+  app.post('/settings/export/backup', async (request, reply) => {
+    const parsed = SubtrackerBackupExportSchema.safeParse(request.body ?? {})
+    if (!parsed.success) {
+      return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidSubtrackerBackupExportPayload')
+    }
+    try {
+      return sendOk(reply, await prepareBackupDownload(request.headers.authorization ?? '', parsed.data.includeSubscriptionImages))
+    } catch (error) {
+      request.log.error({ err: error }, 'Backup export preparation failed')
+      return sendError(reply, error instanceof BackupLimitError ? 413 : error instanceof BackupBusyError ? 409 : 400, 'backup_export_failed',
+        error instanceof BackupLimitError ? 'api.errors.imports.subtrackerBackupTooLarge' : error instanceof BackupBusyError ? 'api.errors.imports.subtrackerBackupBusy' : 'api.errors.imports.subtrackerBackupExportFailed')
+    }
+  })
+
+  // Retain the authenticated streaming endpoint for API clients.
+  app.get('/settings/export/backup', async (request, reply) => {
+    const { token } = await prepareBackupDownload(request.headers.authorization ?? '')
+    const { archive } = claimBackupDownload(token)!
     reply.header('Content-Type', archive.contentType)
     reply.header('Content-Disposition', `attachment; filename="${archive.filename}"`)
-    return reply.send(archive.buffer)
+    reply.header('Cache-Control', 'private, no-store')
+    reply.header('X-Accel-Buffering', 'no')
+    return reply.send(openBackupDownload(archive))
+  })
+
+  app.get('/settings/export/backup/download/:token', { logLevel: 'silent' }, async (request, reply) => {
+    const download = claimBackupDownload((request.params as { token: string }).token)
+    const user = download ? await verifyToken(download.authorization.startsWith('Bearer ') ? download.authorization.slice(7) : undefined) : null
+    reply.header('Cache-Control', 'private, no-store')
+    reply.header('Referrer-Policy', 'no-referrer')
+    reply.header('X-Content-Type-Options', 'nosniff')
+    if (!download || !user) return sendError(reply, 401, 'unauthorized', 'api.errors.unauthorized')
+    reply.header('Content-Type', download.archive.contentType)
+    reply.header('Content-Disposition', `attachment; filename="${download.archive.filename}"`)
+    reply.header('X-Accel-Buffering', 'no')
+    return reply.send(openBackupDownload(download.archive))
   })
 
   app.get('/settings', async (_, reply) => {
