@@ -1,6 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { DEFAULT_APP_LOCALE, normalizeAppLocale } from '@subtracker/shared'
+
+// Both src/config.ts and the bundled dist/index.js sit one level below the API root.
+export const apiRootDir = fileURLToPath(new URL('../', import.meta.url))
 
 let envFileLoaded = false
 

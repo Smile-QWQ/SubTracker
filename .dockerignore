@@ -7,5 +7,7 @@ packages/*/dist
 .vscode
 data
 apps/api/dev.db
-apps/api/storage/logos
+apps/api/storage/
+.tmp/
+apps/api/prisma/*.db*
 npm-debug.log

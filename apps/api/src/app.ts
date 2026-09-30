@@ -21,6 +21,7 @@ import { tagRoutes } from './routes/tags'
 import { versionRoutes } from './routes/version'
 import { appRoutes } from './routes/app'
 import { verifyToken } from './services/auth.service'
+import { getLogoStorageDir } from './services/logo.service'
 
 export async function buildApp() {
   const app = Fastify({
@@ -52,7 +53,7 @@ export async function buildApp() {
   app.get('/static/logos/:filename', async (request, reply) => {
     const filename = (request.params as { filename: string }).filename
     const safeName = path.basename(filename)
-    const filePath = path.resolve(process.cwd(), 'apps/api/storage/logos', safeName)
+    const filePath = path.join(getLogoStorageDir(), safeName)
     const ext = path.extname(safeName).toLowerCase()
     const mimeMap = LOGO_MIME_BY_EXTENSION
 

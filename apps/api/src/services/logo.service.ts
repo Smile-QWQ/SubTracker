@@ -2,10 +2,13 @@ import { mkdir, readdir, stat, unlink, writeFile } from 'node:fs/promises'
 import crypto from 'node:crypto'
 import path from 'node:path'
 import { prisma } from '../db'
+import { apiRootDir } from '../config'
 import { fetchRemoteBody, inspectDownloadedImage } from '../utils/remote-image'
 import { DEFAULT_APP_LOCALE, getMessage, LOGO_EXTENSION_BY_MIME, type AppLocale, type LogoImportResult, type LogoSearchResultDto } from '@subtracker/shared'
 
-const logoDir = path.resolve(process.cwd(), 'apps/api/storage/logos')
+const logoDir = process.env.LOGO_STORAGE_DIR
+  ? path.resolve(process.env.LOGO_STORAGE_DIR)
+  : path.join(apiRootDir, 'storage', 'logos')
 const SEARCH_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36'
 const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000

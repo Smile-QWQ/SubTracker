@@ -17,12 +17,8 @@ describe('logo.service remote import and local persistence', () => {
 
   beforeAll(async () => {
     tempDir = await mkdtemp(path.join(tmpdir(), 'subtracker-logo-test-'))
-    const cwd = vi.spyOn(process, 'cwd').mockReturnValue(tempDir)
-    try {
-      service = await import('../../src/services/logo.service')
-    } finally {
-      cwd.mockRestore()
-    }
+    vi.stubEnv('LOGO_STORAGE_DIR', tempDir)
+    service = await import('../../src/services/logo.service')
   })
 
   beforeEach(async () => {
@@ -33,6 +29,7 @@ describe('logo.service remote import and local persistence', () => {
 
   afterAll(async () => {
     await rm(tempDir, { recursive: true, force: true })
+    vi.unstubAllEnvs()
   })
 
   async function storedBytes(logoUrl: string) {

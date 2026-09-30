@@ -4,6 +4,7 @@ import { createWorker, type Worker } from 'tesseract.js'
 import { AiRecognizeSubscriptionSchema, getDefaultAiSubscriptionPrompt, getMessage, type AppLocale } from '@subtracker/shared'
 import type { AiRecognitionResultDto } from '@subtracker/shared'
 import { getAiConfig, getResolvedAppLocale } from './settings.service'
+import { apiRootDir } from '../config'
 
 export type AiSettings = Awaited<ReturnType<typeof getAiConfig>>
 
@@ -20,7 +21,7 @@ type ChatCompletionPayload = {
   }>
 }
 
-const ocrCachePath = path.resolve(process.cwd(), 'apps/api/storage/tesseract-cache')
+const ocrCachePath = path.join(apiRootDir, 'storage', 'tesseract-cache')
 const visionTestImageBase64 =
   'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAKUlEQVR4nO3OIQEAAAACIP+f1hkWWEB6FgEBAQEBAQEBAQEBAQEBgXdgl/rw4unIZ5cAAAAASUVORK5CYII='
 let ocrWorkerPromise: Promise<Worker> | null = null

@@ -1,5 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdir } from 'node:fs/promises'
+import path from 'node:path'
+import { createWorker } from 'tesseract.js'
 import { DEFAULT_AI_CONFIG } from '@subtracker/shared'
+import { apiRootDir } from '../../src/config'
+
+vi.mock('node:fs/promises', () => ({ mkdir: vi.fn(async () => undefined) }))
 
 const mockedSettings = {
   aiConfig: {
@@ -52,7 +58,23 @@ describe('ai service', () => {
       }
     }
     recognizeMock.mockClear()
+    vi.mocked(mkdir).mockClear()
+    vi.mocked(createWorker).mockClear()
     vi.restoreAllMocks()
+  })
+
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
+
+  it.each(['../..', '.', '../../unrelated-directory'])('creates the OCR cache under the fixed API root from cwd %s', async (cwd) => {
+    vi.resetModules()
+    vi.spyOn(process, 'cwd').mockReturnValue(path.resolve(apiRootDir, cwd))
+    mockedSettings.aiConfig.capabilities.vision = false
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ choices: [{ message: { content: '{"name":"OCR Result"}' } }] })))
+    const service = await import('../../src/services/ai.service')
+    await service.recognizeSubscriptionByAi({ imageBase64: 'dGVzdA==', mimeType: 'image/png' }, 'en-US')
+    const cachePath = path.join(apiRootDir, 'storage', 'tesseract-cache')
+    expect(mkdir).toHaveBeenCalledWith(cachePath, { recursive: true })
+    expect(createWorker).toHaveBeenCalledWith(['eng', 'chi_sim'], 1, expect.objectContaining({ cachePath }))
   })
 
   it('normalizes content blocks from chat completions', async () => {
