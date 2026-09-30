@@ -10,6 +10,7 @@ import {
   type SettingsInput
 } from '@subtracker/shared'
 import { prisma } from '../db'
+import type { Prisma } from '@prisma/client'
 import { config } from '../config'
 import {
   deriveNotifyDaysBeforeFromAdvanceRules,
@@ -69,14 +70,14 @@ const DEFAULT_APPRISE_CONFIG: SettingsInput['appriseConfig'] = {
 
 const DEFAULT_NOTIFICATION_TEMPLATE_CONFIG: SettingsInput['notificationTemplateConfig'] = createEmptyNotificationTemplateConfig()
 
-export async function getSetting<T>(key: string, fallback: T): Promise<T> {
-  const row = await prisma.setting.findUnique({ where: { key } })
+export async function getSetting<T>(key: string, fallback: T, db: Prisma.TransactionClient = prisma): Promise<T> {
+  const row = await db.setting.findUnique({ where: { key } })
   if (!row) return fallback
   return row.valueJson as T
 }
 
-export async function setSetting<T>(key: string, value: T): Promise<void> {
-  await prisma.setting.upsert({
+export async function setSetting<T>(key: string, value: T, db: Prisma.TransactionClient = prisma): Promise<void> {
+  await db.setting.upsert({
     where: { key },
     update: { valueJson: value as object },
     create: { key, valueJson: value as object }

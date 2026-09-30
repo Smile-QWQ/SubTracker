@@ -64,6 +64,7 @@ model Subscription {
   overdueReminderRules String?
   webhookEnabled       Boolean            @default(true)
   notes                String             @default("")
+  images               SubscriptionImage[]
   tags                 SubscriptionTag[]
   paymentRecords       PaymentRecord[]
   deliveries           WebhookDelivery[]
@@ -72,6 +73,19 @@ model Subscription {
 
   @@index([status, nextRenewalDate])
   @@index([autoRenew, nextRenewalDate])
+}
+
+model SubscriptionImage {
+  id             String        @id @default(cuid())
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  fileName       String
+  storageName    String        @unique
+  contentType    String
+  size           Int
+  createdAt      DateTime      @default(now())
+
+  @@index([subscriptionId, createdAt])
 }
 
 model SubscriptionTag {

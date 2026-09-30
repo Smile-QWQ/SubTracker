@@ -9,6 +9,16 @@ export const REMOTE_IMAGE_MAX_BYTES = 5 * 1024 * 1024
 const REQUEST_TIMEOUT_MS = 20_000
 const MAX_REDIRECTS = 5
 
+export type ImageSizeOptions = { maxBytes?: number }
+
+export class RemoteImageTooLargeError extends Error {}
+
+function getMaxBytes(options: ImageSizeOptions) {
+  const maxBytes = options.maxBytes ?? REMOTE_IMAGE_MAX_BYTES
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) throw new Error('Invalid image byte limit')
+  return maxBytes
+}
+
 const blockedV4 = new BlockList()
 for (const [address, prefix] of [
   ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],
@@ -51,7 +61,7 @@ function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 type RemoteBody = { buffer: Buffer; contentType: string; finalUrl: string }
 type HopResult = { location: string } | RemoteBody
 
-async function requestHop(url: URL, headers: Record<string, string>, signal: AbortSignal): Promise<HopResult> {
+async function requestHop(url: URL, headers: Record<string, string>, signal: AbortSignal, maxBytes: number): Promise<HopResult> {
   signal.throwIfAborted()
   const hostname = url.hostname.replace(/^\[|\]$/g, '')
   const literalFamily = isIP(hostname)
@@ -95,9 +105,13 @@ async function requestHop(url: URL, headers: Record<string, string>, signal: Abo
       }
       const encoding = response.headers['content-encoding']
       const length = response.headers['content-length']
-      if ((encoding && encoding.toLowerCase() !== 'identity') ||
-          (length && (!/^\d+$/.test(length) || Number(length) > REMOTE_IMAGE_MAX_BYTES))) {
-        reject(new Error('Logo response is encoded or too large'))
+      if (length && /^\d+$/.test(length) && Number(length) > maxBytes) {
+        reject(new RemoteImageTooLargeError('Logo response is too large'))
+        response.destroy()
+        return
+      }
+      if ((encoding && encoding.toLowerCase() !== 'identity') || (length && !/^\d+$/.test(length))) {
+        reject(new Error('Logo response is encoded or has an invalid length'))
         response.destroy()
         return
       }
@@ -106,8 +120,8 @@ async function requestHop(url: URL, headers: Record<string, string>, signal: Abo
       let size = 0
       response.on('data', (chunk: Buffer) => {
         size += chunk.length
-        if (size > REMOTE_IMAGE_MAX_BYTES) {
-          reject(new Error('Logo response exceeds 5 MiB'))
+        if (size > maxBytes) {
+          reject(new RemoteImageTooLargeError(`Logo response exceeds ${maxBytes / 1024 / 1024} MiB`))
           response.destroy()
           return
         }
@@ -131,13 +145,14 @@ async function requestHop(url: URL, headers: Record<string, string>, signal: Abo
 }
 
 /** Bounded public-Internet GET, including DNS, every redirect, headers and streamed body. */
-export async function fetchRemoteBody(input: string, headers: Record<string, string> = {}): Promise<RemoteBody> {
+export async function fetchRemoteBody(input: string, headers: Record<string, string> = {}, options: ImageSizeOptions = {}): Promise<RemoteBody> {
+  const maxBytes = getMaxBytes(options)
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(new Error('Logo request timed out')), REQUEST_TIMEOUT_MS)
   try {
     let url = parseRemoteUrl(input)
     for (let redirects = 0; ; redirects++) {
-      const result = await requestHop(url, headers, controller.signal)
+      const result = await requestHop(url, headers, controller.signal, maxBytes)
       if (!('location' in result)) return result
       if (redirects >= MAX_REDIRECTS) throw new Error('Too many Logo redirects')
       url = parseRemoteUrl(new URL(result.location, url).toString())
@@ -241,16 +256,18 @@ function inspectWebp(buffer: Buffer): RasterMeta | null {
 }
 
 /** SVG is intentionally stored unchanged; the UI asks users to accept its risks. */
-export function inspectDownloadedImage(buffer: Buffer, _declaredType = ''): { contentType: string; width?: number; height?: number } {
+export function inspectDownloadedImage(buffer: Buffer, _declaredType = '', options: ImageSizeOptions = {}): { contentType: string; width?: number; height?: number } {
+  if (buffer.length > getMaxBytes(options)) throw new RemoteImageTooLargeError('Logo image is too large')
   if (!buffer.length) throw new Error('Logo image is empty')
   if (detectLogoContentType(buffer) === 'image/svg+xml') {
     return { contentType: 'image/svg+xml' }
   }
-  return inspectRasterImage(buffer)
+  return inspectRasterImage(buffer, '', options)
 }
 
 /** Verify raster signatures and bounded container structure, never a URL suffix or MIME alone. */
-export function inspectRasterImage(buffer: Buffer, declaredType = ''): RasterMeta {
+export function inspectRasterImage(buffer: Buffer, declaredType = '', options: ImageSizeOptions = {}): RasterMeta {
+  if (buffer.length > getMaxBytes(options)) throw new RemoteImageTooLargeError('Logo image is too large')
   const meta = inspectPng(buffer) ?? inspectJpeg(buffer) ?? inspectWebp(buffer) ??
     inspectAdditionalRaster(buffer, detectLogoContentType(buffer))
   const normalizedType: string = LOGO_MIME_BY_EXTENSION[LOGO_EXTENSION_BY_MIME[declaredType]] ?? declaredType

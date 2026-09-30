@@ -5,7 +5,7 @@ import https from 'node:https'
 import { lookup } from 'node:dns/promises'
 import type { LookupAddress, LookupAllOptions } from 'node:dns'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchRemoteBody, inspectDownloadedImage, inspectRasterImage, REMOTE_IMAGE_MAX_BYTES } from '../../src/utils/remote-image'
+import { fetchRemoteBody, inspectDownloadedImage, inspectRasterImage, REMOTE_IMAGE_MAX_BYTES, RemoteImageTooLargeError } from '../../src/utils/remote-image'
 import { additionalLogos, avifLogo, bmpLogo, gifLogo, icoLogo, jpegLogo, losslessWebpLogo, pngLogo, webpLogo } from './logo-fixtures'
 
 vi.mock('node:dns/promises', () => ({ lookup: vi.fn() }))
@@ -191,6 +191,23 @@ describe('logo remote-image public Internet transport', () => {
     expect(result.contentType).toBe('image/png')
   })
 
+  it('uses an explicit 20 MiB limit without changing the Logo default', async () => {
+    const maxBytes = 20 * 1024 * 1024
+    plans.push({ headers: { 'content-length': String(maxBytes) }, chunks: [Buffer.alloc(maxBytes)] })
+    expect((await fetchRemoteBody('https://images.example/note', {}, { maxBytes })).buffer.length).toBe(maxBytes)
+    plans.push({ headers: { 'content-length': String(maxBytes + 1) } })
+    await expect(fetchRemoteBody('https://images.example/note', {}, { maxBytes })).rejects.toBeInstanceOf(RemoteImageTooLargeError)
+    plans.push({ chunks: [Buffer.alloc(maxBytes), Buffer.from([1])] })
+    await expect(fetchRemoteBody('https://images.example/note', {}, { maxBytes })).rejects.toBeInstanceOf(RemoteImageTooLargeError)
+    plans.push({ chunks: [Buffer.alloc(REMOTE_IMAGE_MAX_BYTES + 1)] })
+    await expect(fetchRemoteBody('https://logo.example/logo')).rejects.toThrow('exceeds 5 MiB')
+  })
+
+  it('keeps private-address protection when the byte limit is customized', async () => {
+    await expect(fetchRemoteBody('http://127.0.0.1/note', {}, { maxBytes: 20 * 1024 * 1024 })).rejects.toThrow('public Internet')
+    expect(calls).toHaveLength(0)
+  })
+
   it.each(['gzip', 'br', 'deflate'])('rejects compressed content %s rather than decompressing an unbounded body', async (encoding) => {
     plans.push({ headers: { 'content-encoding': encoding } })
     await expect(fetchRemoteBody('https://logo.example/logo')).rejects.toThrow('encoded')
@@ -242,6 +259,16 @@ describe('logo remote-image public Internet transport', () => {
 })
 
 describe('logo remote-image raster format validation', () => {
+  it('applies the default5 and configurable20 MiB limits before image inspection', () => {
+    const maxBytes = 20 * 1024 * 1024
+    const svg = Buffer.alloc(maxBytes, 32)
+    svg.write('<svg/>')
+    expect(() => inspectDownloadedImage(svg)).toThrow(RemoteImageTooLargeError)
+    expect(inspectDownloadedImage(svg, '', { maxBytes }).contentType).toBe('image/svg+xml')
+    expect(() => inspectDownloadedImage(Buffer.concat([svg, Buffer.from(' ')]), '', { maxBytes })).toThrow(RemoteImageTooLargeError)
+    expect(() => inspectRasterImage(svg, '', { maxBytes: REMOTE_IMAGE_MAX_BYTES })).toThrow(RemoteImageTooLargeError)
+  })
+
   it.each([
     ['image/png', pngLogo], ['image/jpeg', jpegLogo], ['image/webp', webpLogo], ['image/webp', losslessWebpLogo]
   ] as const)('verifies %s bytes and dimensions', (contentType, buffer) => {

@@ -726,6 +726,25 @@ export default {
     }
   },
   subscriptions: {
+    notesTabs: {
+      text: '文字备注',
+      images: '图片备注（{count}）'
+    },
+    images: {
+      title: '备注图片',
+      hint: '最多 20 张，每张不超过 20 MiB。支持 PNG、JPEG、WebP、SVG、GIF、ICO、AVIF、BMP。保存订阅后生效。',
+      upload: '添加图片',
+      url: '图片链接（https://...）',
+      import: '导入链接',
+      loading: '正在加载图片…',
+      working: '正在处理图片… {name}',
+      loadFailed: '图片加载失败，请重试后再保存。',
+      previewFailed: '无法预览',
+      retry: '重试',
+      remove: '移除',
+      removeNamed: '移除 {name}',
+      empty: '暂无备注图片'
+    },
     page: {
       title: '订阅管理',
       subtitle: '管理不同周期、不同币种的订阅',
@@ -851,6 +870,8 @@ export default {
     },
     detail: {
       title: '订阅详情',
+      notesText: '文字',
+      notesImages: '图片（{count}）',
       remainingDays: '剩余 {days} 天 / {ratio}'
     },
     form: {
@@ -1505,6 +1526,15 @@ export default {
       exchangeRates: {
         refreshFailed: '刷新汇率失败',
         payloadEmpty: '汇率数据内容为空'
+      },
+      subscriptionImages: {
+        notFound: '图片不存在',
+        invalidImage: '请选择非空的 PNG、JPEG、WebP、SVG、GIF、ICO、AVIF 或 BMP 图片',
+        tooLarge: '每张图片不能超过 20 MiB',
+        limitExceeded: '每个订阅最多添加 20 张图片',
+        invalidSelection: '图片选择无效',
+        importFailed: '图片导入失败',
+        svgConfirmationRequired: '请先确认 SVG 风险再上传'
       },
       subscriptions: {
         notFound: '订阅不存在',

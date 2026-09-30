@@ -725,6 +725,25 @@ export default {
     }
   },
   subscriptions: {
+    notesTabs: {
+      text: 'Text notes',
+      images: 'Image notes ({count})'
+    },
+    images: {
+      title: 'Note images',
+      hint: 'Up to 20 images, 20 MiB each. PNG, JPEG, WebP, SVG, GIF, ICO, AVIF, BMP. Changes apply when you save.',
+      upload: 'Add images',
+      url: 'Image URL (https://...)',
+      import: 'Import URL',
+      loading: 'Loading images…',
+      working: 'Processing image… {name}',
+      loadFailed: 'Could not load images. Retry before saving.',
+      previewFailed: 'Preview unavailable',
+      retry: 'Retry',
+      remove: 'Remove',
+      removeNamed: 'Remove {name}',
+      empty: 'No note images'
+    },
     page: {
       title: 'Subscriptions',
       subtitle: 'Manage subscriptions across billing cycles and currencies',
@@ -852,6 +871,8 @@ export default {
     },
     detail: {
       title: 'Subscription details',
+      notesText: 'Text',
+      notesImages: 'Images ({count})',
       remainingDays: '{days} days left / {ratio}'
     },
     form: {
@@ -1508,6 +1529,15 @@ Hard requirements:
       exchangeRates: {
         refreshFailed: 'Failed to refresh exchange rates',
         payloadEmpty: 'The exchange-rate payload is empty'
+      },
+      subscriptionImages: {
+        notFound: 'Image not found',
+        invalidImage: 'Use a non-empty PNG, JPEG, WebP, SVG, GIF, ICO, AVIF, or BMP image',
+        tooLarge: 'Each image must be 20 MiB or smaller',
+        limitExceeded: 'A subscription can have at most 20 images',
+        invalidSelection: 'Invalid image selection',
+        importFailed: 'Failed to import image',
+        svgConfirmationRequired: 'Confirm the SVG risk before uploading'
       },
       subscriptions: {
         notFound: 'Subscription not found',

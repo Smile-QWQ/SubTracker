@@ -10,6 +10,7 @@ import { sendError } from './http'
 import { detectRequestLocale } from './i18n'
 import { authRoutes } from './routes/auth'
 import { subscriptionRoutes } from './routes/subscriptions'
+import { subscriptionImageRoutes } from './routes/subscription-images'
 import { statisticsRoutes } from './routes/statistics'
 import { calendarRoutes } from './routes/calendar'
 import { exchangeRateRoutes } from './routes/exchange-rates'
@@ -104,6 +105,7 @@ export async function buildApp() {
       await authRoutes(router)
       await tagRoutes(router)
       await subscriptionRoutes(router)
+      await subscriptionImageRoutes(router)
       await statisticsRoutes(router)
       await calendarRoutes(router)
       await exchangeRateRoutes(router)

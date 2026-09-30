@@ -245,6 +245,8 @@ const SubscriptionInputSchema = z
   .object({
     name: z.string().min(1).max(150),
     tagIds: z.array(z.string().cuid()).default([]),
+    imageIds: z.array(z.string().cuid()).max(20, 'api.errors.subscriptionImages.limitExceeded')
+      .refine((ids) => new Set(ids).size === ids.length, 'api.errors.subscriptionImages.invalidSelection').optional(),
     description: z.string().max(500).default(''),
     amount: z.number().nonnegative(),
     currency: z.string().length(3).transform((v) => v.toUpperCase()),

@@ -19,6 +19,7 @@ FROM node:20-alpine
 
 WORKDIR /app
 ENV NODE_ENV=production
+ENV SUBSCRIPTION_IMAGE_STORAGE_DIR=/app/data/subscription-images
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
@@ -30,7 +31,7 @@ COPY docker/entrypoint.sh /usr/local/bin/subtracker-entrypoint.sh
 
 RUN apk add --no-cache tzdata \
   && chmod +x /usr/local/bin/subtracker-entrypoint.sh \
-  && mkdir -p /app/data /app/apps/api/storage/logos
+  && mkdir -p /app/data/subscription-images /app/apps/api/storage/logos
 
 EXPOSE 3001
 

@@ -1,4 +1,5 @@
 import { getSetting, setSetting } from './settings.service'
+import type { Prisma } from '@prisma/client'
 
 const SUBSCRIPTION_ORDER_KEY = 'subscriptionOrder'
 
@@ -6,12 +7,12 @@ function uniqueIds(ids: string[]) {
   return Array.from(new Set(ids.filter(Boolean)))
 }
 
-export async function getSubscriptionOrder() {
-  return uniqueIds(await getSetting<string[]>(SUBSCRIPTION_ORDER_KEY, []))
+export async function getSubscriptionOrder(db?: Prisma.TransactionClient) {
+  return uniqueIds(await getSetting<string[]>(SUBSCRIPTION_ORDER_KEY, [], db))
 }
 
-export async function setSubscriptionOrder(ids: string[]) {
-  await setSetting(SUBSCRIPTION_ORDER_KEY, uniqueIds(ids))
+export async function setSubscriptionOrder(ids: string[], db?: Prisma.TransactionClient) {
+  await setSetting(SUBSCRIPTION_ORDER_KEY, uniqueIds(ids), db)
 }
 
 export async function appendSubscriptionOrder(id: string) {

@@ -20,6 +20,12 @@ import {
   sortSubscriptionsByOrder
 } from '../services/subscription-order.service'
 import { renewSubscription } from '../services/subscription.service'
+import {
+  deleteSubscriptionWithImages,
+  removeSubscriptionImageFiles,
+  replaceSubscriptionImages,
+  SubscriptionImageError
+} from '../services/subscription-images.service'
 import { calculateSubscriptionRemainingValue } from '../services/subscription-value.service'
 import { flattenSubscriptionTags, normalizeTagIds, replaceSubscriptionTags } from '../services/tag.service'
 import {
@@ -483,9 +489,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       }
 
       try {
-        await prisma.subscription.delete({
-          where: { id: row.id }
-        })
+        await deleteSubscriptionWithImages(row.id)
         await removeSubscriptionOrder(row.id)
         successCount += 1
       } catch (error) {
@@ -587,41 +591,52 @@ export async function subscriptionRoutes(app: FastifyInstance) {
 
     const timezone = await getAppTimezone()
 
-    const created = await prisma.$transaction(async (tx: any) => {
-      const subscription = await tx.subscription.create({
-        data: {
-          name: parsed.data.name,
-          description: parsed.data.description,
-          amount: parsed.data.amount,
-          currency: parsed.data.currency,
-          billingType: parsed.data.billingType,
-          billingIntervalCount: parsed.data.billingIntervalCount,
-          billingIntervalUnit: parsed.data.billingIntervalUnit,
-          autoRenew: parsed.data.autoRenew,
-          startDate: parseDateInTimezone(parsed.data.startDate, timezone),
-          nextRenewalDate: parseDateInTimezone(parsed.data.nextRenewalDate, timezone),
-          notifyDaysBefore: reminderFields.notifyDaysBefore ?? parsed.data.notifyDaysBefore,
-          ...(reminderFields.advanceReminderRules !== undefined
-            ? { advanceReminderRules: reminderFields.advanceReminderRules }
-            : {}),
-          ...(reminderFields.overdueReminderRules !== undefined
-            ? { overdueReminderRules: reminderFields.overdueReminderRules }
-            : {}),
-          webhookEnabled: parsed.data.webhookEnabled,
-          notes: parsed.data.notes,
-          websiteUrl: parsed.data.websiteUrl ?? null,
-          logoUrl: normalizedLogo.logoUrl,
-          logoSource: normalizedLogo.logoSource,
-          logoFetchedAt: normalizedLogo.logoFetchedAt
-        }
-      })
+    let created: SubscriptionDetailPayload
+    try {
+      created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        const subscription = await tx.subscription.create({
+          data: {
+            name: parsed.data.name,
+            description: parsed.data.description,
+            amount: parsed.data.amount,
+            currency: parsed.data.currency,
+            billingType: parsed.data.billingType,
+            billingIntervalCount: parsed.data.billingIntervalCount,
+            billingIntervalUnit: parsed.data.billingIntervalUnit,
+            autoRenew: parsed.data.autoRenew,
+            startDate: parseDateInTimezone(parsed.data.startDate, timezone),
+            nextRenewalDate: parseDateInTimezone(parsed.data.nextRenewalDate, timezone),
+            notifyDaysBefore: reminderFields.notifyDaysBefore ?? parsed.data.notifyDaysBefore,
+            ...(reminderFields.advanceReminderRules !== undefined
+              ? { advanceReminderRules: reminderFields.advanceReminderRules }
+              : {}),
+            ...(reminderFields.overdueReminderRules !== undefined
+              ? { overdueReminderRules: reminderFields.overdueReminderRules }
+              : {}),
+            webhookEnabled: parsed.data.webhookEnabled,
+            notes: parsed.data.notes,
+            websiteUrl: parsed.data.websiteUrl ?? null,
+            logoUrl: normalizedLogo.logoUrl,
+            logoSource: normalizedLogo.logoSource,
+            logoFetchedAt: normalizedLogo.logoFetchedAt
+          }
+        })
 
-      await replaceSubscriptionTags(tx, subscription.id, tagIds)
-      return tx.subscription.findUniqueOrThrow({
-        where: { id: subscription.id },
-        include: subscriptionInclude
+        await replaceSubscriptionTags(tx, subscription.id, tagIds)
+        if (parsed.data.imageIds !== undefined) {
+          await replaceSubscriptionImages(tx, subscription.id, parsed.data.imageIds)
+        }
+        return tx.subscription.findUniqueOrThrow({
+          where: { id: subscription.id },
+          include: subscriptionInclude
+        })
       })
-    })
+    } catch (error) {
+      if (error instanceof SubscriptionImageError) {
+        return sendError(reply, error.statusCode, 'subscription_image_error', error.message, undefined, { locale: request.locale })
+      }
+      throw error
+    }
 
     await appendSubscriptionOrder(created.id)
     return sendCreated(reply, flattenSubscriptionTags(created))
@@ -672,7 +687,8 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     try {
       const reminderFields = await resolveSubscriptionReminderFields(payload)
       const timezone = await getAppTimezone()
-      const updated = await prisma.$transaction(async (tx: any) => {
+      const removedImageFiles: string[] = []
+      const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const tagIds = payload.tagIds !== undefined ? normalizeTagIds(payload.tagIds) : null
         const existing = await tx.subscription.findUnique({
           where: { id: params.data.id }
@@ -741,6 +757,9 @@ export async function subscriptionRoutes(app: FastifyInstance) {
         if (tagIds) {
           await replaceSubscriptionTags(tx, subscription.id, tagIds)
         }
+        if (payload.imageIds !== undefined) {
+          removedImageFiles.push(...await replaceSubscriptionImages(tx, subscription.id, payload.imageIds))
+        }
 
         return tx.subscription.findUniqueOrThrow({
           where: { id: subscription.id },
@@ -748,8 +767,12 @@ export async function subscriptionRoutes(app: FastifyInstance) {
         })
       })
 
+      await removeSubscriptionImageFiles(removedImageFiles)
       return sendOk(reply, flattenSubscriptionTags(updated))
     } catch (error) {
+      if (error instanceof SubscriptionImageError) {
+        return sendError(reply, error.statusCode, 'subscription_image_error', error.message, undefined, { locale: request.locale })
+      }
       if (error instanceof Error && error.message === 'api.errors.subscriptions.recurringFieldsRequired') {
         return sendError(reply, 422, 'validation_error', error.message, undefined, { locale: request.locale })
       }
@@ -851,9 +874,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
         })
       }
 
-      await prisma.subscription.delete({
-        where: { id: params.data.id }
-      })
+      await deleteSubscriptionWithImages(params.data.id)
 
       await removeSubscriptionOrder(params.data.id)
       return sendOk(reply, { id: params.data.id, deleted: true })
