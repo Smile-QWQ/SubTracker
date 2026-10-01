@@ -16,7 +16,7 @@ export function useSubscriptionRenewal() {
       await api.renewSubscription(id)
       message.success(t('subscriptions.messages.renewed', { name }))
       await Promise.all([
-        'subscriptions', 'subscription-detail', 'subscription-payment-records',
+        'subscriptions', 'subscription-detail', 'subscription-payment-records', 'payment-history',
         'statistics-overview', 'statistics-budgets', 'calendar-events', 'dashboard-ai-summary'
       ].map((key) => queryClient.invalidateQueries({ queryKey: [key] })))
     } catch (error) {

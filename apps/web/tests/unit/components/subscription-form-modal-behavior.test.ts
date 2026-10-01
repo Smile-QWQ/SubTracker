@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, shallowMount, type VueWrapper } from '@vue/test-utils'
 import { nextTick, ref } from 'vue'
-import { NButton, NDatePicker, NFormItem, NInput, NInputNumber, NModal, NSelect, NSwitch } from 'naive-ui'
+import { NButton, NCheckbox, NDatePicker, NFormItem, NInput, NInputNumber, NModal, NSelect, NSwitch } from 'naive-ui'
 import SubscriptionFormModal from '@/components/SubscriptionFormModal.vue'
 import { api } from '@/composables/api'
 import { t } from '@/locales'
@@ -71,6 +71,18 @@ afterEach(() => {
 })
 
 describe('SubscriptionFormModal create, copy and lifetime behavior', () => {
+  it('records an initial payment only when explicitly selected and resets it for copied drafts', async () => {
+    const wrapper = mountForm({ initialValues: buildSubscriptionCopyDraft(original) })
+    const checkbox = wrapper.findAllComponents(NCheckbox).find(item => item.text() === t('paymentHistory.initial'))!
+    expect(checkbox.props('checked')).toBe(false)
+    checkbox.vm.$emit('update:checked', true)
+    await nextTick()
+    expect((await save(wrapper))?.[0]).toMatchObject({ recordInitialPayment: true })
+    await button(wrapper, t('common.actions.reset')).trigger('click')
+    expect(checkbox.props('checked')).toBe(false)
+    await wrapper.setProps({ model: original })
+    expect(wrapper.findAllComponents(NCheckbox).some(item => item.text() === t('paymentHistory.initial'))).toBe(false)
+  })
   it('uses loaded or delayed base currency for untouched new forms', async () => {
     settings.value = { baseCurrency: 'EUR', timezone: 'UTC' }
     const loaded = mountForm()
@@ -104,7 +116,7 @@ describe('SubscriptionFormModal create, copy and lifetime behavior', () => {
     expect(field(wrapper, t('common.labels.currency')).getComponent(NSelect).props('value')).toBe('JPY')
   })
 
-  it('applies lifetime AI results without renewal controls', async () => {
+  it('applies lifetime AI results without renewal controls or an implicit first payment', async () => {
     settings.value = { baseCurrency: 'CNY', timezone: 'UTC' }
     const wrapper = mountForm()
     wrapper.findComponent({ name: 'SubscriptionAiModal' }).vm.$emit('apply', {
@@ -115,7 +127,7 @@ describe('SubscriptionFormModal create, copy and lifetime behavior', () => {
     expect(wrapper.findAllComponents(NDatePicker)).toHaveLength(1)
     expect((await save(wrapper))?.[0]).toMatchObject({
       name: 'Lifetime license', billingType: 'lifetime', amount: 0, currency: 'USD', startDate: '2026-03-10',
-      nextRenewalDate: '2026-03-10', autoRenew: false, advanceReminderRules: '', overdueReminderRules: ''
+      nextRenewalDate: '2026-03-10', autoRenew: false, recordInitialPayment: false, advanceReminderRules: '', overdueReminderRules: ''
     })
     wrapper.findComponent({ name: 'SubscriptionAiModal' }).vm.$emit('apply', { notes: 'Unknown billing type' })
     await nextTick()

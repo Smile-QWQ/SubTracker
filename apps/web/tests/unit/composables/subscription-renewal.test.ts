@@ -27,7 +27,7 @@ describe('quick subscription renewal', () => {
     finish()
     await request
     expect(renewingIds.value.size).toBe(0)
-    for (const key of ['subscriptions', 'statistics-overview', 'statistics-budgets', 'calendar-events']) {
+    for (const key of ['subscriptions', 'payment-history', 'statistics-overview', 'statistics-budgets', 'calendar-events']) {
       expect(mocks.invalidate).toHaveBeenCalledWith({ queryKey: [key] })
     }
     expect(mocks.success).toHaveBeenCalledOnce()

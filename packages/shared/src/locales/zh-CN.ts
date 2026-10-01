@@ -891,7 +891,7 @@ export default {
       pause: '确认暂停该订阅？',
       cancel: '确认取消该订阅？',
       resume: '确认恢复该订阅为正常状态？',
-      delete: '将删除“{name}”及其续订记录与相关历史，此操作不可恢复，确认继续？'
+      delete: '将永久删除“{name}”及其消费记录与图片，历史支出统计也会改变。若需保留历史，请仅暂停或停用订阅。确认删除？'
     },
     messages: {
       locateNotFound: '未找到对应订阅，该订阅可能已被删除。',
@@ -938,8 +938,8 @@ export default {
       renewSuccess: '批量续订成功，共 {count} 项',
       renewPartial: '批量续订完成：成功 {success} 项，失败 {failure} 项',
       statusConfirm: '确认将已选的 {count} 项订阅设为{status}吗？',
-      deleteConfirmAll: '确认批量删除已选的 {count} 项订阅吗？此操作不可恢复。',
-      deleteConfirmPartial: '确认批量删除吗？将删除 {deletable} 项，并跳过 {blocked} 项正常订阅。此操作不可恢复。'
+      deleteConfirmAll: '确认永久删除已选的 {count} 项订阅及其消费记录吗？历史支出统计会改变。若需保留历史，请仅暂停或停用订阅。',
+      deleteConfirmPartial: '将永久删除 {deletable} 项订阅及其消费记录，跳过 {blocked} 项正常订阅；历史支出统计会改变。若需保留历史，请仅暂停或停用订阅。确认删除？'
     },
     detail: {
       title: '订阅详情',

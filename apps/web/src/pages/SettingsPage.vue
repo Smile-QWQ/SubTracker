@@ -782,6 +782,7 @@
         <li>{{ t('settings.backupCompatibility.preserved') }}</li>
         <li>{{ t('settings.backupCompatibility.logoLimit') }}</li>
         <li>{{ t('settings.backupCompatibility.aiLimit') }}</li>
+        <li>{{ t('paymentHistory.legacyExport') }}</li>
         <li><strong>{{ t('settings.backupCompatibility.excluded') }}</strong></li>
         <li>{{ t('settings.backupCompatibility.capacity', { size: legacyBackupMaxKiB }) }}</li>
         <li>{{ t('settings.backupCompatibility.unchanged') }}</li>
@@ -1875,6 +1876,7 @@ async function testApprise() {
 }
 
 function refreshAppQueries() {
+  queryClient.removeQueries({ queryKey: ['payment-history'] })
   queryClient.removeQueries({ queryKey: ['subscriptions'] })
   queryClient.removeQueries({ queryKey: ['tags'] })
   queryClient.removeQueries({ queryKey: ['statistics-overview'] })

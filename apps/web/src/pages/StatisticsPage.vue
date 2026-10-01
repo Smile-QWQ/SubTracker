@@ -7,6 +7,12 @@
       icon-background="linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%)"
     />
 
+    <n-radio-group v-model:value="spendingMode" style="margin-bottom:12px">
+      <n-radio-button value="history">{{ t('paymentHistory.history') }}</n-radio-button>
+      <n-radio-button value="projected">{{ t('paymentHistory.projected') }}</n-radio-button>
+    </n-radio-group>
+    <payment-history-panel v-if="spendingMode === 'history'" charts />
+    <template v-else>
     <n-grid v-if="showAiSummaryCard" :cols="1" :x-gap="12" :y-gap="12">
       <n-grid-item>
         <n-card :title="t('statistics.ai.title')">
@@ -136,6 +142,7 @@
         </n-card>
       </n-grid-item>
     </n-grid>
+    </template>
 
   </div>
 </template>
@@ -144,7 +151,7 @@
 import { computed, ref, watch } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { useQueryClient } from '@tanstack/vue-query'
-import { NAlert, NButton, NCard, NCollapseTransition, NEmpty, NGrid, NGridItem, NSpace, NSpin, useThemeVars } from 'naive-ui'
+import { NAlert, NButton, NCard, NCollapseTransition, NEmpty, NGrid, NGridItem, NSpace, NSpin, NRadioGroup, NRadioButton, useThemeVars } from 'naive-ui'
 import { BarChartOutline } from '@vicons/ionicons5'
 import { t, useAppLocale } from '@/locales'
 import { api } from '@/composables/api'
@@ -152,6 +159,7 @@ import { DASHBOARD_AI_SUMMARY_QUERY_KEY, useDashboardAiSummaryQuery } from '@/co
 import { useSettingsQuery } from '@/composables/settings-query'
 import { useStatisticsOverviewQuery } from '@/composables/statistics-overview-query'
 import ChartView from '@/components/ChartView.vue'
+import PaymentHistoryPanel from '@/components/PaymentHistoryPanel.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { formatAiSummaryPreviewText } from '@subtracker/shared'
 import type { StatisticsOverview, SubscriptionStatus } from '@/types/api'
@@ -162,6 +170,7 @@ import { buildTopSubscriptionsOption } from '@/utils/statistics-top-subscription
 import { buildTagSpendOption } from '@/utils/tag-spend-chart'
 import { useLocalizedMessage } from '@/utils/localized-message'
 
+const spendingMode = ref<'history' | 'projected'>('projected')
 const { width } = useWindowSize()
 const barChartOutline = BarChartOutline
 const themeVars = useThemeVars()

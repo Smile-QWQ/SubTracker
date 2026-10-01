@@ -1,4 +1,5 @@
 import axios from 'axios'
+import type { PaymentQuery, PaymentHistoryPage, PaymentHistorySummary, CreatePaymentInput, UpdatePaymentInput } from '@subtracker/shared'
 import type { LogoImportResult, SubtrackerBackupLimitsDto, SubtrackerBackupExportFormat, SubtrackerBackupExportResultDto } from '@subtracker/shared'
 import type {
   AppLocale,
@@ -198,6 +199,26 @@ export const api = {
 
   async getSubscription(id: string) {
     return unwrap<SubscriptionDetail>((await client.get(`/subscriptions/${id}`)) as { data: Envelope<SubscriptionDetail> })
+  },
+
+  async getPaymentRecords(params: Partial<PaymentQuery>) {
+    return unwrap<PaymentHistoryPage>(await client.get('/payment-records', { params }))
+  },
+
+  async getPaymentSummary(params: Partial<PaymentQuery>) {
+    return unwrap<PaymentHistorySummary>(await client.get('/payment-records/summary', { params }))
+  },
+
+  async createPaymentRecord(payload: CreatePaymentInput) {
+    return postOnce<unknown>('/payment-records', payload)
+  },
+
+  async updatePaymentRecord(id: string, payload: UpdatePaymentInput) {
+    return putOnce<unknown>(`/payment-records/${encodeURIComponent(id)}`, payload)
+  },
+
+  async deletePaymentRecord(id: string, revision: number) {
+    return deleteOnce<unknown>(`/payment-records/${encodeURIComponent(id)}?revision=${revision}`)
   },
 
   async getSubscriptionPaymentRecords(id: string) {

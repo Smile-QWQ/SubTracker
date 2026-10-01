@@ -890,7 +890,7 @@ export default {
       pause: 'Pause this subscription?',
       cancel: 'Cancel this subscription?',
       resume: 'Resume this subscription and set it back to active?',
-      delete: 'Delete "{name}" along with its renewal records and related history? This action cannot be undone.'
+      delete: 'Permanently delete "{name}", its payments and images? Historical spending totals will change. Pause or cancel instead to keep its history.'
     },
     messages: {
       locateNotFound: 'Could not find this subscription. It may have been deleted.',
@@ -938,7 +938,7 @@ export default {
       renewSuccess: 'Renewed {count} subscriptions',
       renewPartial: 'Batch renew complete: {success} succeeded, {failure} failed',
       statusConfirm: 'Set the selected {count} subscriptions to {status}?',
-      deleteConfirmAll: 'Delete the selected {count} subscriptions? This action cannot be undone.',
+      deleteConfirmAll: 'Permanently delete {count} subscriptions and their payments? Historical spending totals will change. Pause or cancel instead to keep history.',
       deleteConfirmPartial:
         'Permanently delete {deletable} subscriptions and their payments, skipping {blocked} active subscriptions? Historical totals will change. Pause or cancel instead to keep history.'
     },

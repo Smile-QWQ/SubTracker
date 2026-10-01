@@ -300,7 +300,7 @@
     />
 
     <subscription-detail-drawer :show="showDetailDrawer" :detail="detail" @close="showDetailDrawer = false" />
-    <subscription-payment-records-drawer :show="showPaymentDrawer" :records="paymentRecords" @close="showPaymentDrawer = false" />
+    <subscription-payment-records-drawer :show="showPaymentDrawer" :subscription-id="paymentSubscriptionId" @close="showPaymentDrawer = false" @changed="refreshPaymentDetail" />
   </div>
 </template>
 
@@ -344,7 +344,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import SubscriptionDetailDrawer from '@/components/SubscriptionDetailDrawer.vue'
 import SubscriptionFormModal from '@/components/SubscriptionFormModal.vue'
 import SubscriptionPaymentRecordsDrawer from '@/components/SubscriptionPaymentRecordsDrawer.vue'
-import type { PaymentRecord, Subscription, SubscriptionDetail, Tag } from '@/types/api'
+import type { Subscription, SubscriptionDetail, Tag } from '@/types/api'
 import { resolveLogoUrl } from '@/utils/logo'
 import { createSingleFlight } from '@/utils/single-flight'
 import { formatSubscriptionTagOverflowTooltip, splitSubscriptionTagsForDisplay } from '@/utils/subscription-tags'
@@ -385,7 +385,7 @@ const { data: settings } = useSettingsQuery()
 const { data: tagsQueryData } = useTagsQuery()
 const { data: snapshotQueryData } = useExchangeRateSnapshotQuery()
 const detail = ref<SubscriptionDetail | null>(null)
-const paymentRecords = ref<PaymentRecord[]>([])
+const paymentSubscriptionId = ref('')
 const currencies = ref<string[]>(['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'HKD'])
 const defaultAdvanceReminderRules = ref('3&09:30;0&09:30;')
 const defaultOverdueReminderRules = ref('1&09:30;2&09:30;3&09:30;')
@@ -906,6 +906,7 @@ watch(
 async function refetchCurrentSubscriptions() {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: ['subscriptions'] }),
+    queryClient.invalidateQueries({ queryKey: ['payment-history'] }),
     queryClient.invalidateQueries({ queryKey: TAGS_QUERY_KEY })
   ])
   await subscriptionsQuery.refetch()
@@ -956,9 +957,13 @@ async function openDetail(id: string) {
   showDetailDrawer.value = true
 }
 
-async function openRecords(id: string) {
-  paymentRecords.value = await api.getSubscriptionPaymentRecords(id)
+function openRecords(id: string) {
+  paymentSubscriptionId.value = id
   showPaymentDrawer.value = true
+}
+
+async function refreshPaymentDetail() {
+  if (detail.value?.id === paymentSubscriptionId.value) detail.value = await api.getSubscription(paymentSubscriptionId.value)
 }
 
 function closeModal() {

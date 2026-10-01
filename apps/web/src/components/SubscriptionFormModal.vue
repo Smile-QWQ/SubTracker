@@ -280,6 +280,13 @@
         </n-grid-item>
       </n-grid>
 
+      <n-form-item v-if="!model" :show-label="false">
+        <div>
+          <n-checkbox v-model:checked="recordInitialPayment" :disabled="saving">{{ t('paymentHistory.initial') }}</n-checkbox>
+          <div v-if="recordInitialPayment" class="card-muted">{{ t('paymentHistory.initialHint') }}</div>
+        </div>
+      </n-form-item>
+
       <reminder-rules-preview
         v-if="!isLifetime"
         ref="subscriptionReminderPreviewRef"
@@ -363,6 +370,7 @@ import {
   NFormItem,
   NGrid,
   NGridItem,
+  NCheckbox,
   NIcon,
   NInput,
   NInputNumber,
@@ -492,6 +500,7 @@ const filteredLocalLogoLibrary = computed(() =>
   filterLocalLogoLibrary(localLogoLibrary.value, localLogoSearchQuery.value)
 )
 
+const recordInitialPayment = ref(false)
 const form = reactive({
   name: '',
   tagIds: [] as string[],
@@ -620,6 +629,7 @@ function applyModelDateValues(model: SubscriptionFormInitialValues, timezone = s
 }
 
 function resetForm() {
+  recordInitialPayment.value = false
   notesTab.value = 'text'
   imagePreviewVisible.value = false
   form.name = ''
@@ -649,6 +659,7 @@ function resetForm() {
 }
 
 function hydrateFromModel(model: SubscriptionFormInitialValues) {
+  recordInitialPayment.value = false
   notesTab.value = 'text'
   imagePreviewVisible.value = false
   form.name = model.name
@@ -1009,6 +1020,7 @@ function submit() {
     'submit',
     {
       name: form.name.trim(),
+      ...(!props.model ? { recordInitialPayment: recordInitialPayment.value } : {}),
       tagIds: form.tagIds,
       description: form.description,
       amount: Number(form.amount ?? 0),
