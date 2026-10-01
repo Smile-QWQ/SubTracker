@@ -75,11 +75,11 @@ Default credentials:
 
 ## Features
 
-- **Subscription management**: create, duplicate, edit, renew, pause, disable, and restore subscriptions; review renewal history; attach multiple note images via local upload or URL; and manage larger collections with tags, multi-tag filtering, custom ordering, search, bulk status updates, and bulk deletion.
+- **Subscription management**: create, duplicate, edit, renew, pause, disable, and restore subscriptions; add, correct, and delete payment records; attach multiple note images via local upload or URL; and manage larger collections with tags, multi-tag filtering, custom ordering, search, bulk status updates, and bulk deletion.
 - **Lifetime purchases**: track lifetime licenses and one-time purchases separately, with a dedicated investment total and no renewal reminders or recurring spending projections.
 - **Reminder rules**: define reminders before renewal, on the renewal day, and after expiration with the `days&time;` format; override defaults per subscription; and preview the resulting trigger schedule before saving.
-- **Statistics and budgets**: normalize multi-currency subscriptions into a base currency, track spending totals and trends, inspect monthly/yearly tag spending and status breakdowns, review the next 30 days of renewals, compare auto-renew ratios, and configure monthly, yearly, or per-tag budgets.
-- **AI assistance**: extract subscription details from text or images into the form, and generate an AI summary on the statistics page.
+- **Statistics and budgets**: normalize multi-currency subscriptions into a base currency, track spending totals and trends, inspect monthly/yearly tag spending and status breakdowns, review the next 30 days of renewals, compare auto-renew ratios, and configure monthly, yearly, or per-tag budgets. Historical spending keeps recorded currencies separate, with monthly trends, subscription rankings, and linked payment details.
+- **AI assistance**: extract subscription details from text or images into the form, and generate an AI summary on the statistics page. Includes provider presets, OpenAI/Claude/Gemini API support, model lists, and capability diagnostics.
 - **Calendar and overview**: view subscriptions in a calendar, track upcoming renewals from the dashboard, and renew in place or jump to the matching subscription.
 - **Notifications**: send reminders through Webhook, SMTP / Resend email, PushPlus, Telegram Bot, ServerChan, Gotify, Bark, NotifyX, and Apprise.
 - **Logos and assets**: upload logos or import them from a URL, reuse saved local logos, search online, and preserve assets in ZIP backups. Supports common raster formats, SVG, and animated GIFs.
