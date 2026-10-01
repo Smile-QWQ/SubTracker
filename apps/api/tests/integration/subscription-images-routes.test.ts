@@ -2,14 +2,22 @@ import { execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { Readable } from 'node:stream'
 import { buffer as collectBuffer } from 'node:stream/consumers'
-import { access, mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { access, readFile, readdir, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { PrismaClient, type Prisma } from '@prisma/client'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { additionalLogos, jpegLogo, pngLogo, webpLogo } from '../unit/logo-fixtures'
 
-const state = vi.hoisted(() => ({ prisma: undefined as unknown as PrismaClient, fetch: vi.fn() }))
+const state = vi.hoisted(() => ({ prisma: undefined as unknown as PrismaClient, fetch: vi.fn(), root: '' }))
+vi.mock('../../src/services/logo.service', async (importOriginal) => {
+  const { mkdtemp } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const path = await import('node:path')
+  state.root = await mkdtemp(path.join(tmpdir(), 'subtracker-images-'))
+  // The logo directory is captured on import, so isolate it before loading the service.
+  vi.stubEnv('LOGO_STORAGE_DIR', path.join(state.root, 'logos'))
+  return importOriginal<typeof import('../../src/services/logo.service')>()
+})
 vi.mock('../../src/db', () => ({ get prisma() { return state.prisma } }))
 vi.mock('../../src/services/auth.service', () => ({
   verifyToken: vi.fn(async (token?: string) => token === 'test-bearer' ? { username: 'admin', mustChangePassword: false } : null)
@@ -23,6 +31,7 @@ vi.mock('../../src/services/settings.service', async (importOriginal) => ({
   getDefaultAdvanceReminderRulesSetting: vi.fn(async () => '3&09:30;0&09:30;')
 }))
 import { buildApp } from '../../src/app'
+import { getLogoStorageDir } from '../../src/services/logo.service'
 import {
   cleanupPendingSubscriptionImages, getSubscriptionImageStorageDir, removeSubscriptionImageFiles,
   SUBSCRIPTION_IMAGE_MAX_BYTES, writeSubscriptionImageFile
@@ -43,7 +52,9 @@ describe('private subscription image routes with an isolated SQLite database', (
   let cwdSpy: ReturnType<typeof vi.spyOn>
 
   beforeAll(async () => {
-    tempDir = await mkdtemp(path.join(tmpdir(), 'subtracker-images-'))
+    tempDir = state.root
+    expect(tempDir).not.toBe('')
+    expect(getLogoStorageDir()).toBe(path.join(tempDir, 'logos'))
     vi.stubEnv('SUBSCRIPTION_IMAGE_STORAGE_DIR', path.join(tempDir, 'private-images'))
     vi.stubEnv('BACKUP_TEMP_DIR', path.join(tempDir, 'backup-temp'))
     state.prisma = new PrismaClient({ datasources: { db: { url: `file:${path.join(tempDir, 'test.db').replace(/\\/g, '/')}` } } })
