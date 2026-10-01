@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { shallowMount } from '@vue/test-utils'
 import { NButton, NCalendar } from 'naive-ui'
+import { BagCheckOutline, CashOutline } from '@vicons/ionicons5'
 import { t } from '@/locales'
 import UpcomingRenewalActions from '@/components/UpcomingRenewalActions.vue'
 import { computed, ref } from 'vue'
@@ -39,6 +40,17 @@ describe('dashboard and calendar actions', () => {
     expect(tooltip.textContent).toContain('USD 120.00')
     expect(tooltip.textContent).toContain('100.00%')
     expect(wrapper.findAllComponents({ name: 'StatCard' }).map((item) => item.props('value'))).toContain('USD 300.00')
+    wrapper.unmount()
+  })
+
+  it('distinguishes lifetime investment from yearly spending with a purchase icon', () => {
+    const wrapper = shallowMount(DashboardPage, { global })
+    const cards = wrapper.findAllComponents({ name: 'StatCard' })
+    const yearly = cards.find(card => card.props('label') === t('dashboard.cards.estimatedYearlySpend'))
+    const lifetime = cards.find(card => card.props('label') === t('dashboard.cards.lifetimeTotal'))
+    expect(yearly?.props('icon')).toBe(CashOutline)
+    expect(lifetime?.props('icon')).toBe(BagCheckOutline)
+    expect(lifetime?.props('icon')).not.toBe(yearly?.props('icon'))
     wrapper.unmount()
   })
 

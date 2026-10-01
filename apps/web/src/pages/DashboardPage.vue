@@ -118,7 +118,7 @@
 import { computed, h } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { NCard, NDataTable, NEmpty, NGrid, NGridItem, NProgress, NTag, useThemeVars } from 'naive-ui'
-import { CashOutline, GridOutline, LayersOutline, NotificationsOutline, WalletOutline } from '@vicons/ionicons5'
+import { BagCheckOutline, CashOutline, GridOutline, LayersOutline, NotificationsOutline, WalletOutline } from '@vicons/ionicons5'
 import { t } from '@/locales'
 import { useSubscriptionRenewal } from '@/composables/subscription-renewal'
 import { useSettingsQuery } from '@/composables/settings-query'
@@ -167,7 +167,7 @@ const summaryCards = computed(() => [
   {
     label: t('dashboard.cards.lifetimeTotal'),
     value: overview.value ? formatMoney(overview.value.lifetimeTotalBase ?? 0, baseCurrency.value) : '--',
-    icon: CashOutline
+    icon: BagCheckOutline
   }
 ])
 
