@@ -19,7 +19,7 @@ import type {
   SubtrackerBackupExportFormat,
   SubtrackerBackupMissingAssetDto
 } from '@subtracker/shared'
-import { DEFAULT_APP_LOCALE, SettingsSchema, NotificationWebhookSettingsSchema, getMessage, LOGO_MIME_BY_EXTENSION, LEGACY_SUBTRACKER_BACKUP_MAX_BYTES, SubtrackerBackupMissingAssetSchema } from '@subtracker/shared'
+import { PaymentMetadataSchema, DEFAULT_APP_LOCALE, SettingsSchema, NotificationWebhookSettingsSchema, getMessage, LOGO_MIME_BY_EXTENSION, LEGACY_SUBTRACKER_BACKUP_MAX_BYTES, SubtrackerBackupMissingAssetSchema } from '@subtracker/shared'
 import { prisma } from '../db'
 import { formatDateInTimezone, parseDateInTimezone, toTimezonedDayjs } from '../utils/timezone'
 import { getLocalLogoLibrary, getLogoStorageDir, saveImportedLogoBuffer } from './logo.service'
@@ -122,6 +122,10 @@ type BackupPaymentRecordRow = {
   periodStart: Date
   periodEnd: Date
   createdAt: Date
+  source?: string
+  rateSource?: string
+  note?: string
+  revision?: number
 }
 
 const previewCache = new Map<string, CachedImportEntry>()
@@ -301,6 +305,7 @@ async function buildBackupManifest(includeSubscriptionImages = true, confirmedMi
   }))
 
   const serializedPaymentRecords: PaymentRecordDto[] = paymentRecords.map((record: BackupPaymentRecordRow) => ({
+    ...PaymentMetadataSchema.parse(record),
     id: record.id,
     subscriptionId: record.subscriptionId,
     amount: record.amount,
@@ -367,6 +372,7 @@ export async function prepareSubtrackerBackupArchive(includeSubscriptionImages =
   const { manifest, files } = await buildBackupManifest(withImages, confirmedMissingAssets)
   if (legacy) {
     manifest.schemaVersion = 1
+    manifest.data.paymentRecords = manifest.data.paymentRecords.map(({ source, rateSource, note, revision, ...record }) => record)
     delete manifest.assets.subscriptionImages
     // The JSON projection intentionally omits apiType for v0.11 readers.
     const { toLegacyAiConfig } = await import('../utils/legacy-ai-config')
@@ -432,6 +438,11 @@ function parseBackupManifest(raw: unknown, locale: AppLocale = DEFAULT_APP_LOCAL
     if (!omitted.success) throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupManifestInvalid'))
     manifest.omittedAssets = omitted.data
   }
+  manifest.data.paymentRecords = manifest.data.paymentRecords.map(record => {
+    const metadata = PaymentMetadataSchema.safeParse(record)
+    if (!metadata.success) throw new Error(getMessage(locale, 'api.errors.imports.subtrackerBackupManifestInvalid'))
+    return { ...record, ...metadata.data }
+  })
   // Strip unknown settings so a business backup cannot overwrite login credentials.
   manifest.data.settings = SettingsSchema.parse(manifest.data.settings)
   manifest.data.notificationWebhook = NotificationWebhookSettingsSchema.parse(manifest.data.notificationWebhook)
@@ -674,6 +685,7 @@ async function buildTagRestoreMap(manifest: BackupManifest, tx: Prisma.Transacti
 
 function toPaymentRecordCreateManyInput(records: PaymentRecordDto[]) {
   return records.map((record) => ({
+    ...PaymentMetadataSchema.parse(record),
     id: record.id,
     subscriptionId: record.subscriptionId,
     amount: record.amount,

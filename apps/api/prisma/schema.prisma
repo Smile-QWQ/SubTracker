@@ -111,8 +111,13 @@ model PaymentRecord {
   periodStart     DateTime
   periodEnd       DateTime
   createdAt       DateTime     @default(now())
+  source          String       @default("legacy")
+  rateSource      String       @default("legacy")
+  note            String       @default("")
+  revision        Int          @default(0)
 
   @@index([subscriptionId, paidAt])
+  @@index([paidAt])
 }
 
 model ExchangeRateSnapshot {

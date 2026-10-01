@@ -12,6 +12,7 @@ import { authRoutes } from './routes/auth'
 import { subscriptionRoutes } from './routes/subscriptions'
 import { subscriptionImageRoutes } from './routes/subscription-images'
 import { statisticsRoutes } from './routes/statistics'
+import { paymentHistoryRoutes } from './routes/payment-history'
 import { calendarRoutes } from './routes/calendar'
 import { exchangeRateRoutes } from './routes/exchange-rates'
 import { settingsRoutes } from './routes/settings'
@@ -111,6 +112,7 @@ export async function buildApp() {
       await subscriptionRoutes(router)
       await subscriptionImageRoutes(router)
       await statisticsRoutes(router)
+      await paymentHistoryRoutes(router)
       await calendarRoutes(router)
       await exchangeRateRoutes(router)
       await settingsRoutes(router)

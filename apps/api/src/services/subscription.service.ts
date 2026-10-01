@@ -22,12 +22,14 @@ async function renewSubscriptionFromSnapshot(
   context: RenewExecutionContext,
   paidAt?: Date,
   paidAmount?: number,
-  paidCurrency?: string
+  paidCurrency?: string,
+  source: 'manual' | 'automatic' = 'manual'
 ) {
   const amount = paidAmount ?? subscription.amount
   const currency = (paidCurrency ?? subscription.currency).toUpperCase()
   const convertedAmount = convertAmount(amount, currency, context.baseCurrency, context.rates.baseCurrency, context.rates.rates)
-  const exchangeRate = amount === 0 ? 0 : Number((convertedAmount / amount).toFixed(8))
+  const rates = { ...context.rates.rates, [context.rates.baseCurrency]: 1 }
+  const exchangeRate = currency === context.baseCurrency ? 1 : rates[context.baseCurrency] / rates[currency]
 
   const periodStart = subscription.nextRenewalDate
   const periodEnd = addInterval(
@@ -47,6 +49,8 @@ async function renewSubscriptionFromSnapshot(
         convertedAmount,
         exchangeRate,
         paidAt: paidAt ?? new Date(),
+        source,
+        rateSource: 'current',
         periodStart,
         periodEnd
       }
@@ -127,7 +131,7 @@ export async function autoRenewDueSubscriptions(today = new Date()) {
       !toTimezonedDayjs(currentSubscription.nextRenewalDate, timezone).isAfter(todayEnd) &&
       guard < AUTO_RENEW_MAX_CYCLES_PER_SUBSCRIPTION
     ) {
-      const result = await renewSubscriptionFromSnapshot(currentSubscription, context)
+      const result = await renewSubscriptionFromSnapshot(currentSubscription, context, currentSubscription.nextRenewalDate, undefined, undefined, 'automatic')
       renewedCount += 1
       currentSubscription = {
         ...currentSubscription,

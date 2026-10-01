@@ -110,9 +110,22 @@ describe('subscription service', () => {
     const result = await renewSubscription('single')
 
     expect(result.payment).toMatchObject({ id: 'pay_1' })
+    expect(subscriptionMocks.paymentCreateMock).toHaveBeenCalledWith({ data: expect.objectContaining({ source: 'manual', rateSource: 'current', exchangeRate: 1 / 0.14 }) })
     expect(subscriptionMocks.getBaseCurrencyMock).toHaveBeenCalledTimes(1)
     expect(subscriptionMocks.ensureExchangeRatesMock).toHaveBeenCalledTimes(1)
     expect(subscriptionMocks.getAppTimezoneMock).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([0, 6.5])('records actual payment %s without changing subscription price or currency', async amount => {
+    const subscription = createSubscription('discount')
+    subscriptionMocks.findUniqueMock.mockResolvedValue(subscription)
+    subscriptionMocks.paymentCreateMock.mockResolvedValue({id:'discount-payment'})
+    subscriptionMocks.subscriptionUpdateMock.mockResolvedValue(subscription)
+    await renewSubscription('discount',undefined,amount,'CNY')
+    expect(subscriptionMocks.paymentCreateMock).toHaveBeenCalledWith({data:expect.objectContaining({amount,currency:'CNY',convertedAmount:amount,exchangeRate:1,source:'manual',periodStart:subscription.nextRenewalDate,periodEnd:new Date('2026-06-01T00:00:00.000Z')})})
+    expect(subscriptionMocks.subscriptionUpdateMock).toHaveBeenCalledWith({where:{id:'discount'},data:{nextRenewalDate:new Date('2026-06-01T00:00:00.000Z'),status:'active'}})
+    expect(subscription.amount).toBe(10)
+    expect(subscription.currency).toBe('USD')
   })
 
   it('returns a locale-aware not-found error when the subscription is missing', async () => {
@@ -168,5 +181,8 @@ describe('subscription service', () => {
 
     expect(renewedCount).toBe(AUTO_RENEW_MAX_CYCLES_PER_SUBSCRIPTION)
     expect(subscriptionMocks.subscriptionUpdateMock).toHaveBeenCalledTimes(AUTO_RENEW_MAX_CYCLES_PER_SUBSCRIPTION)
+    const payments = subscriptionMocks.paymentCreateMock.mock.calls.map(([input]) => input.data)
+    expect(payments.every(row => row.source === 'automatic' && row.rateSource === 'current' && row.paidAt.getTime() === row.periodStart.getTime())).toBe(true)
+    expect(new Set(payments.map(row => row.paidAt.toISOString())).size).toBe(AUTO_RENEW_MAX_CYCLES_PER_SUBSCRIPTION)
   })
 })

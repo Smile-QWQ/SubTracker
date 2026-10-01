@@ -1,4 +1,5 @@
 import { z } from 'zod'
+export * from './payment-history'
 import { AI_API_TYPES, AI_PROVIDER_IDS } from './ai-providers'
 export { AI_API_TYPES, AI_PROVIDER_IDS, AI_PROVIDER_PRESETS, type AiApiType } from './ai-providers'
 import { getMessage } from './i18n'
@@ -266,7 +267,10 @@ const SubscriptionInputSchema = z
   })
   .merge(SubscriptionLogoSchema)
 
-export const CreateSubscriptionSchema = SubscriptionInputSchema.superRefine((input, context) => {
+export const CreateSubscriptionSchema = SubscriptionInputSchema.extend({ recordInitialPayment: z.boolean().default(false) }).superRefine((input, context) => {
+  if (input.recordInitialPayment && input.billingType !== 'lifetime' && input.nextRenewalDate && input.nextRenewalDate < input.startDate) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['nextRenewalDate'], message: 'paymentHistory.errors.period' })
+  }
   if (input.billingType === 'lifetime') return
   if (!input.billingIntervalUnit) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['billingIntervalUnit'], message: 'Required' })
@@ -839,6 +843,10 @@ export interface WallosImportCommitResultDto {
 }
 
 export interface PaymentRecordDto {
+  source?: import('./payment-history').PaymentSource
+  rateSource?: import('./payment-history').PaymentRateSource
+  note?: string
+  revision?: number
   id: string
   subscriptionId: string
   amount: number

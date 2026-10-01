@@ -20,6 +20,7 @@ import {
   sortSubscriptionsByOrder
 } from '../services/subscription-order.service'
 import { renewSubscription } from '../services/subscription.service'
+import { preparePaymentData, PaymentHistoryError } from '../services/payment-history.service'
 import {
   deleteSubscriptionWithImages,
   removeSubscriptionImageFiles,
@@ -41,7 +42,7 @@ import {
   deriveNotifyDaysBeforeFromAdvanceRules,
   normalizeOptionalReminderRules
 } from '../services/reminder-rules.service'
-import { ensureExchangeRates } from '../services/exchange-rate.service'
+import { ensureExchangeRates, getBaseCurrency } from '../services/exchange-rate.service'
 import { getAppTimezone, getDefaultAdvanceReminderRulesSetting } from '../services/settings.service'
 import { parseDateInTimezone, startOfDayDateInTimezone } from '../utils/timezone'
 import { normalizeWebsiteUrlInput } from '../utils/website-url'
@@ -593,6 +594,11 @@ export async function subscriptionRoutes(app: FastifyInstance) {
 
     let created: SubscriptionDetailPayload
     try {
+      const initialPayment = parsed.data.recordInitialPayment ? await preparePaymentData({
+        amount: parsed.data.amount, currency: parsed.data.currency, paidAt: parsed.data.startDate,
+        periodStart: parsed.data.startDate, periodEnd: parsed.data.nextRenewalDate,
+        note: '', confirmManual: true, conversion: { mode: 'current', baseCurrency: await getBaseCurrency() }
+      }, timezone) : null
       created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const subscription = await tx.subscription.create({
           data: {
@@ -622,6 +628,9 @@ export async function subscriptionRoutes(app: FastifyInstance) {
           }
         })
 
+        if (initialPayment) {
+          await tx.paymentRecord.create({ data: { ...initialPayment, subscriptionId: subscription.id, source: 'manual' } })
+        }
         await replaceSubscriptionTags(tx, subscription.id, tagIds)
         if (parsed.data.imageIds !== undefined) {
           await replaceSubscriptionImages(tx, subscription.id, parsed.data.imageIds)
@@ -634,6 +643,9 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     } catch (error) {
       if (error instanceof SubscriptionImageError) {
         return sendError(reply, error.statusCode, 'subscription_image_error', error.message, undefined, { locale: request.locale })
+      }
+      if (error instanceof PaymentHistoryError) {
+        return sendError(reply, error.status, 'payment_error', error.key, undefined, { locale: request.locale })
       }
       throw error
     }
