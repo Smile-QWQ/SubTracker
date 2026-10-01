@@ -106,6 +106,7 @@ vi.mock('../../src/services/settings.service', () => ({
       enabled: false,
       dashboardSummaryEnabled: false,
       providerPreset: 'custom',
+      apiType: 'openai-chat',
       providerName: 'DeepSeek',
       baseUrl: 'https://api.deepseek.com',
       apiKey: '',
@@ -140,6 +141,22 @@ describe('settings routes validation', () => {
 
   afterEach(async () => {
     await app.close()
+  })
+
+  it('preserves native protocol and credentials across partial AI updates', async () => {
+    store.set('aiConfig', { providerPreset: 'anthropic', apiType: 'anthropic-messages', baseUrl: 'https://api.anthropic.com/v1', apiKey: 'saved-key', model: 'native', capabilities: { vision: true, structuredOutput: true } })
+    const result = await app.inject({ method: 'PATCH', url: '/settings', payload: { aiConfig: { capabilities: { vision: false } } } })
+    expect(result.statusCode).toBe(200)
+    expect(store.get('aiConfig')).toMatchObject({ apiType: 'anthropic-messages', providerPreset: 'anthropic', apiKey: 'saved-key', model: 'native', capabilities: { vision: false, structuredOutput: true } })
+    const cleared = await app.inject({ method: 'PATCH', url: '/settings', payload: { aiConfig: { apiKey: '' } } })
+    expect(cleared.statusCode).toBe(200)
+    expect(store.get('aiConfig')).toMatchObject({ apiKey: '', apiType: 'anthropic-messages' })
+  })
+
+  it('keeps old clients on Chat Completions when they omit API type', async () => {
+    const result = await app.inject({ method: 'PATCH', url: '/settings', payload: { aiConfig: { model: 'old-compatible' } } })
+    expect(result.statusCode).toBe(200)
+    expect(store.get('aiConfig')).toMatchObject({ apiType: 'openai-chat', model: 'old-compatible' })
   })
 
   it('rejects incomplete AI config when enabling AI capability', async () => {

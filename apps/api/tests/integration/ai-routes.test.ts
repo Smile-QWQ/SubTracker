@@ -6,7 +6,9 @@ const summaryRouteMocks = vi.hoisted(() => ({
   generateDashboardAiSummaryMock: vi.fn(),
   recognizeSubscriptionByAiMock: vi.fn(),
   testAiConnectionMock: vi.fn(),
-  testAiVisionConnectionMock: vi.fn()
+  testAiVisionConnectionMock: vi.fn(),
+  testAiStructuredConnectionMock: vi.fn(),
+  listAiModelsMock: vi.fn()
 }))
 
 vi.mock('../../src/services/ai-summary.service', () => ({
@@ -17,8 +19,11 @@ vi.mock('../../src/services/ai-summary.service', () => ({
 vi.mock('../../src/services/ai.service', () => ({
   recognizeSubscriptionByAi: summaryRouteMocks.recognizeSubscriptionByAiMock,
   testAiConnection: summaryRouteMocks.testAiConnectionMock,
-  testAiVisionConnection: summaryRouteMocks.testAiVisionConnectionMock
+  testAiVisionConnection: summaryRouteMocks.testAiVisionConnectionMock,
+  testAiStructuredConnection: summaryRouteMocks.testAiStructuredConnectionMock
 }))
+
+vi.mock('../../src/services/ai-provider.service', () => ({ listAiModels: summaryRouteMocks.listAiModelsMock }))
 
 import { aiRoutes } from '../../src/routes/ai'
 
@@ -43,6 +48,8 @@ describe('ai routes', () => {
     summaryRouteMocks.recognizeSubscriptionByAiMock.mockReset()
     summaryRouteMocks.testAiConnectionMock.mockReset()
     summaryRouteMocks.testAiVisionConnectionMock.mockReset()
+    summaryRouteMocks.testAiStructuredConnectionMock.mockReset()
+    summaryRouteMocks.listAiModelsMock.mockReset()
     summaryRouteMocks.testAiConnectionMock.mockResolvedValue({
       success: true,
       providerName: '测试 Provider',
@@ -60,6 +67,19 @@ describe('ai routes', () => {
   afterEach(async () => {
     vi.restoreAllMocks()
     await app.close()
+  })
+
+  it('passes native protocols to model listing and structured diagnostics without persisting settings', async () => {
+    summaryRouteMocks.listAiModelsMock.mockResolvedValue({ models: [{ id: 'native-model', name: 'Native' }], truncated: false })
+    summaryRouteMocks.testAiStructuredConnectionMock.mockResolvedValue({ success: true, format: 'json-schema' })
+    const payload = { enabled: false, providerPreset: 'anthropic', apiType: 'anthropic-messages', baseUrl: 'https://api.example.test/v1', apiKey: 'test-key', model: 'native-model' }
+    for (const url of ['/ai/models', '/ai/test-structured']) {
+      const result = await app.inject({ method: 'POST', url, payload })
+      expect(result.statusCode).toBe(200)
+    }
+    expect(summaryRouteMocks.listAiModelsMock).toHaveBeenCalledWith(expect.objectContaining(payload), undefined)
+    expect(summaryRouteMocks.testAiStructuredConnectionMock).toHaveBeenCalledWith(expect.objectContaining(payload), undefined)
+    expect((await app.inject({ method: 'POST', url: '/ai/models', payload: { apiType: 'unknown' } })).statusCode).toBe(422)
   })
 
   it('tests connection with override payload', async () => {

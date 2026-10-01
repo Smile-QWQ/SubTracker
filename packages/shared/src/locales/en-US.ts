@@ -288,6 +288,21 @@ export default {
       warning: 'This will be an incomplete backup and cannot restore the listed files. Replace mode also deletes existing logos and note images on the receiving instance.',
       unchanged: 'Only missing files and their references in the exported copy are excluded. Subscriptions and text notes are kept. No data in this instance is changed or deleted.'
     },
+    aiMaintenance: {
+      apiType: 'API type',
+      modelHint: 'Select an ID, or type and press Enter',
+      loadModels: 'Load models',
+      modelsLoaded: 'Loaded {count} models. Availability does not guarantee image or structured-output support.',
+      modelsTruncated: 'Loaded {count} models (partial list). You can also type a model ID and press Enter to confirm.',
+      modelsFailed: 'Could not load models. Check the URL, key, and API type, or type a model ID and press Enter to confirm.',
+      credentialHint: 'Changing providers or the service URL clears the previous key. Model capabilities vary; test each feature. The two Google native APIs use different version paths.',
+      structuredTest: 'Test structured output',
+      passed: 'Passed with the current configuration',
+      jsonModePassed: 'JSON object mode passed (Chat Completions does not guarantee strict JSON Schema)',
+      failed: 'Test failed. Check the model and endpoint settings.',
+      diagnostics: { text: 'Text connection', vision: 'Image input', structured: 'Structured output' },
+      protocols: { 'openai-chat': 'OpenAI Chat Completions (compatible)', 'openai-responses': 'OpenAI Responses', 'anthropic-messages': 'Anthropic Messages', 'gemini-content': 'Gemini generateContent', 'gemini-interactions': 'Gemini Interactions' }
+    },
     backupCompatibility: {
       formatLabel: 'Backup format',
       standard: 'Standard backup',
@@ -298,6 +313,7 @@ export default {
       supported: 'Importable by v0.11.0–v0.11.1. Earlier versions are not guaranteed to work.',
       preserved: 'Keeps subscriptions (including lifetime purchases), text notes, tags, payment records, logos, business settings, and ordering. Login credentials are not included.',
       logoLimit: 'Older versions only restore logos referenced by subscriptions, not unused logos in the library.',
+      aiLimit: 'New AI presets become Custom. Non-Chat-Completions configurations are disabled in the legacy copy, with their key cleared and URL reset. Reconfigure AI in the older app; the current instance is unchanged.',
       excluded: 'Note images are excluded. This is not a complete backup.',
       capacity: 'Legacy upload limits cap this ZIP at {size} KiB. If exceeded, use a standard backup and upgrade the receiving instance.',
       unchanged: 'Only the exported file is affected. No data or images in this instance will be modified or deleted.',
@@ -893,7 +909,7 @@ export default {
       statusConfirm: 'Set the selected {count} subscriptions to {status}?',
       deleteConfirmAll: 'Delete the selected {count} subscriptions? This action cannot be undone.',
       deleteConfirmPartial:
-        'Delete subscriptions in batch? {deletable} subscriptions will be deleted, and {blocked} active subscriptions will be skipped. This action cannot be undone.'
+        'Permanently delete {deletable} subscriptions and their payments, skipping {blocked} active subscriptions? Historical totals will change. Pause or cancel instead to keep history.'
     },
     detail: {
       title: 'Subscription details',
@@ -1262,8 +1278,9 @@ Output fields:
 - description
 - amount
 - currency
+- billingType(recurring|lifetime)
 - billingIntervalCount
-- billingIntervalUnit(day|week|month|quarter|year)
+- billingIntervalUnit(day|week|month|year)
 - startDate(YYYY-MM-DD)
 - nextRenewalDate(YYYY-MM-DD)
 - notifyDaysBefore
@@ -1273,11 +1290,13 @@ Output fields:
 - rawText
 
 Rules:
-1. Leave uncertain fields empty. Do not guess.
+1. Return null for uncertain fields. Do not guess.
 2. Amount must be numeric.
 3. Currency must be a 3-letter uppercase code such as CNY or USD.
-4. billingIntervalUnit must be one of day/week/month/quarter/year.
-5. Return JSON only. Do not return Markdown.`
+4. billingIntervalUnit must be one of day/week/month/year. Convert quarterly billing to every 3 months.
+5. Use lifetime for an explicit lifetime license, permanent access, buyout or one-time purchase; use recurring for explicit recurring billing. Otherwise return null. A single payment or discount alone does not imply a lifetime purchase.
+6. For lifetime purchases, amount is the one-time purchase price and startDate is the purchase date. Return null for billing intervals, nextRenewalDate and renewal reminder fields; never invent a renewal date.
+7. Return JSON only. Do not return Markdown.`
       },
       dashboard: {
         summary: {
@@ -1457,7 +1476,11 @@ Hard requirements:
         connectionTestFailed: 'AI connection test failed',
         visionTestFailed: 'AI vision test failed',
         recognitionFailed: 'AI recognition failed',
-        summaryRequestFailed: 'AI summary request failed',
+        invalidStructuredResponse: 'The AI response failed structured-output validation',
+      responseTooLarge: 'The AI response exceeds the safe size limit',
+      invalidResponse: 'The AI response is not recognized. Check the API type and service URL.',
+      requestTimeout: 'The AI request timed out. Check the service or increase the timeout.',
+      summaryRequestFailed: 'AI summary request failed',
         summaryEmpty: 'AI summary returned empty content',
         summaryPreviewRequestFailed: 'AI summary preview request failed',
         summaryPreviewEmpty: 'AI summary preview returned empty content',

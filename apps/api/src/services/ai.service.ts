@@ -5,13 +5,12 @@ import { AiRecognizeSubscriptionSchema, getDefaultAiSubscriptionPrompt, getMessa
 import type { AiRecognitionResultDto } from '@subtracker/shared'
 import { getAiConfig, getResolvedAppLocale } from './settings.service'
 import { apiRootDir } from '../config'
+import { AiRequestError, requestAiText, type AiMessage } from './ai-provider.service'
+import { AI_DIAGNOSTIC_JSON_SCHEMA, AI_RECOGNITION_JSON_SCHEMA, parseAiJson, parseAiRecognition } from '../utils/ai-output'
 
 export type AiSettings = Awaited<ReturnType<typeof getAiConfig>>
 
-type ChatMessage = {
-  role: 'system' | 'user' | 'assistant'
-  content: string | Array<Record<string, unknown>>
-}
+type ChatMessage = AiMessage
 
 type ChatCompletionPayload = {
   choices?: Array<{
@@ -78,7 +77,11 @@ export function looksLikeStructuredOutputUnsupported(errorText: string) {
     normalized.includes('json_object') ||
     normalized.includes('json schema') ||
     normalized.includes('structured output') ||
-    normalized.includes('json mode')
+    normalized.includes('json mode') ||
+    normalized.includes('output_config') ||
+    normalized.includes('responsejsonschema') ||
+    normalized.includes('response_json_schema') ||
+    normalized.includes('responsemimetype')
   )
 }
 
@@ -150,35 +153,10 @@ async function requestAiChatCompletion(params: {
   const locale = params.locale ?? 'zh-CN'
   ensureAiConfig(aiConfig, { requireEnabled: params.requireEnabled, locale })
 
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), aiConfig.timeoutMs)
-
-  try {
-    const response = await fetch(`${aiConfig.baseUrl.replace(/\/$/, '')}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${aiConfig.apiKey}`
-      },
-      body: JSON.stringify({
-        model: aiConfig.model,
-        temperature: 0.1,
-        ...(params.responseFormat ? { response_format: params.responseFormat } : {}),
-        messages: params.messages
-      }),
-      signal: controller.signal
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`${getMessage(locale, 'api.errors.ai.summaryRequestFailed')}: ${response.status}${errorText ? ` - ${errorText}` : ''}`)
-    }
-
-    const payload = (await response.json()) as ChatCompletionPayload
-    return extractChatCompletionText(payload, locale)
-  } finally {
-    clearTimeout(timeout)
-  }
+  return requestAiText(aiConfig, params.messages, {
+    schema: params.responseFormat ? AI_RECOGNITION_JSON_SCHEMA : undefined,
+    locale
+  })
 }
 
 async function requestStructuredJsonCompletion(params: {
@@ -212,7 +190,7 @@ async function requestStructuredJsonCompletion(params: {
     return await attempt(false)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    if (!looksLikeStructuredOutputUnsupported(message)) {
+    if (!(error instanceof AiRequestError) || ![400, 422].includes(error.status) || !looksLikeStructuredOutputUnsupported(message)) {
       throw error
     }
     return attempt(true)
@@ -249,7 +227,7 @@ async function recognizeByTextOnly(params: {
     locale: params.locale
   })
 
-  return JSON.parse(raw) as AiRecognitionResultDto
+  return parseAiRecognition(raw)
 }
 
 async function recognizeByVision(params: {
@@ -281,7 +259,7 @@ async function recognizeByVision(params: {
     locale: params.locale
   })
 
-  return JSON.parse(raw) as AiRecognitionResultDto
+  return parseAiRecognition(raw)
 }
 
 export async function recognizeSubscriptionByAi(input: unknown, locale?: AppLocale): Promise<AiRecognitionResultDto> {
@@ -360,6 +338,21 @@ export async function testAiConnection(overrideConfig?: AiSettings, locale?: App
     model: aiConfig.model,
     response: raw.trim()
   }
+}
+
+export async function testAiStructuredConnection(overrideConfig?: AiSettings, locale?: AppLocale) {
+  const aiConfig = overrideConfig ?? (await getAiConfig())
+  const resolvedLocale = locale ?? (await getResolvedAppLocale())
+  ensureAiConfig(aiConfig, { requireEnabled: false, locale: resolvedLocale })
+  const raw = await requestAiText(aiConfig, [{ role: 'user', content: 'Return exactly a JSON object with one boolean field: {"ok":true}.' }], {
+    schema: AI_DIAGNOSTIC_JSON_SCHEMA, locale: resolvedLocale
+  })
+  const result = parseAiJson(raw)
+  if (!result || typeof result !== 'object' || Array.isArray(result) || (result as { ok?: unknown }).ok !== true || Object.keys(result).length !== 1) {
+    throw new Error(getMessage(resolvedLocale, 'api.errors.ai.invalidStructuredResponse'))
+  }
+  return { success: true, providerName: aiConfig.providerName, model: aiConfig.model, response: raw,
+    format: (aiConfig.apiType ?? 'openai-chat') === 'openai-chat' ? 'json-object' : 'json-schema' }
 }
 
 export async function testAiVisionConnection(overrideConfig?: AiSettings, locale?: AppLocale) {

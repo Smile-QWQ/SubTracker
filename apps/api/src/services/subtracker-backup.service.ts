@@ -368,6 +368,9 @@ export async function prepareSubtrackerBackupArchive(includeSubscriptionImages =
   if (legacy) {
     manifest.schemaVersion = 1
     delete manifest.assets.subscriptionImages
+    // The JSON projection intentionally omits apiType for v0.11 readers.
+    const { toLegacyAiConfig } = await import('../utils/legacy-ai-config')
+    Object.assign(manifest.data.settings, { aiConfig: toLegacyAiConfig(manifest.data.settings.aiConfig) })
     // Old readers ignore this marker; new readers still warn that images are excluded.
   }
   const data = Buffer.from(JSON.stringify(manifest, null, 2), 'utf8')

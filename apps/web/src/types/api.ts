@@ -292,28 +292,17 @@ export interface NotificationTemplateConfig {
 }
 
 export type EmailProvider = 'smtp' | 'resend'
-export type AiProviderPreset = 'custom' | 'aliyun-bailian' | 'tencent-hunyuan' | 'volcengine-ark'
+export type AiProviderPreset = import('@subtracker/shared').AiConfigInput['providerPreset']
 
 export interface AiCapabilities {
   vision: boolean
   structuredOutput: boolean
 }
 
-export interface AiConfig {
-  enabled: boolean
-  dashboardSummaryEnabled: boolean
-  providerPreset: AiProviderPreset
-  providerName: string
-  baseUrl: string
-  apiKey: string
-  model: string
-  timeoutMs: number
-  promptTemplate: string
-  dashboardSummaryPromptTemplate: string
-  capabilities: AiCapabilities
-}
+export type AiConfig = import('@subtracker/shared').AiConfigInput
 
 export interface AiTestResponse {
+  format?: 'json-object' | 'json-schema'
   success: boolean
   providerName: string
   model: string
@@ -429,6 +418,7 @@ export interface LogoSearchResult {
 }
 
 export interface AiRecognitionResult {
+  billingType?: 'recurring' | 'lifetime'
   name?: string
   description?: string
   amount?: number

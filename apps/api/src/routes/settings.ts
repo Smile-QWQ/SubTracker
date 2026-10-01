@@ -1,6 +1,8 @@
 import { FastifyInstance } from 'fastify'
 import {
   AppriseConfigSchema,
+  AiConfigSchema,
+  AiCapabilitiesSchema,
   resolveNotificationTemplateConfig,
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_OVERDUE_REMINDER_RULES,
@@ -378,7 +380,9 @@ export async function settingsRoutes(app: FastifyInstance) {
       })
     }
 
-    const parsed = SettingsSchema.partial().safeParse(request.body)
+    const parsed = SettingsSchema.partial().extend({
+      aiConfig: AiConfigSchema.partial().extend({ capabilities: AiCapabilitiesSchema.partial().optional() }).optional()
+    }).safeParse(request.body)
     if (!parsed.success) {
       return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidSettingsPayload', parsed.error.flatten(), {
         locale
@@ -389,7 +393,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     let normalizedReminderSettings: ReturnType<typeof normalizeReminderSettingsPayload>
 
     try {
-      normalizedReminderSettings = normalizeReminderSettingsPayload(parsed.data, currentSettings, locale)
+      normalizedReminderSettings = normalizeReminderSettingsPayload({ ...parsed.data, aiConfig: undefined }, currentSettings, locale)
     } catch (error) {
       return sendError(reply, 422, 'validation_error', error instanceof Error ? error.message : 'api.errors.validation.invalidReminderRules', undefined, {
         locale
@@ -487,6 +491,7 @@ export async function settingsRoutes(app: FastifyInstance) {
       .map(([key, value]) =>
         key === 'notificationTemplateConfig'
           ? [key, nextSettings.notificationTemplateConfig] as const
+          : key === 'aiConfig' ? [key, nextSettings.aiConfig] as const
           : [key, value] as const
       )
     filteredEntries.push(

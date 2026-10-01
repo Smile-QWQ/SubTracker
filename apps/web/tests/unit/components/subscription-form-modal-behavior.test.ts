@@ -104,6 +104,27 @@ describe('SubscriptionFormModal create, copy and lifetime behavior', () => {
     expect(field(wrapper, t('common.labels.currency')).getComponent(NSelect).props('value')).toBe('JPY')
   })
 
+  it('applies lifetime AI results without renewal controls', async () => {
+    settings.value = { baseCurrency: 'CNY', timezone: 'UTC' }
+    const wrapper = mountForm()
+    wrapper.findComponent({ name: 'SubscriptionAiModal' }).vm.$emit('apply', {
+      name: 'Lifetime license', billingType: 'lifetime', amount: 0, currency: 'USD', startDate: '2026-03-10',
+      billingIntervalCount: 12, billingIntervalUnit: 'year', nextRenewalDate: '2038-03-10'
+    })
+    await nextTick()
+    expect(wrapper.findAllComponents(NDatePicker)).toHaveLength(1)
+    expect((await save(wrapper))?.[0]).toMatchObject({
+      name: 'Lifetime license', billingType: 'lifetime', amount: 0, currency: 'USD', startDate: '2026-03-10',
+      nextRenewalDate: '2026-03-10', autoRenew: false, advanceReminderRules: '', overdueReminderRules: ''
+    })
+    wrapper.findComponent({ name: 'SubscriptionAiModal' }).vm.$emit('apply', { notes: 'Unknown billing type' })
+    await nextTick()
+    expect(field(wrapper,t('subscriptions.labels.billingType')).getComponent(NSelect).props('value')).toBe('lifetime')
+    wrapper.findComponent({ name: 'SubscriptionAiModal' }).vm.$emit('apply', { billingType: 'recurring', billingIntervalCount: 3, billingIntervalUnit: 'month', nextRenewalDate: '2026-06-10' })
+    await nextTick()
+    expect((await save(wrapper))?.[0]).toMatchObject({billingType:'recurring',billingIntervalCount:3,billingIntervalUnit:'month',nextRenewalDate:'2026-06-10'})
+  })
+
   it('prefills a copy as a new subscription without identity or history, preserving its currency and dates', async () => {
     const wrapper = mountForm({ initialValues: buildSubscriptionCopyDraft(original) })
     settings.value = { baseCurrency: 'EUR', timezone: 'America/New_York' }

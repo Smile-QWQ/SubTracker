@@ -307,7 +307,7 @@ export const api = {
     filename?: string
     mimeType?: string
   }) {
-    return postOnce<AiRecognitionResult>('/ai/recognize-subscription', payload)
+    return postOnce<AiRecognitionResult>('/ai/recognize-subscription', payload, { timeout: 260000 })
   },
 
   async testAiConfiguration() {
@@ -315,11 +315,19 @@ export const api = {
   },
 
   async testAiConfigurationWithPayload(payload: Settings['aiConfig']) {
-    return postOnce<AiTestResponse>('/ai/test', payload)
+    return postOnce<AiTestResponse>('/ai/test', payload, { timeout: payload.timeoutMs + 10000 })
   },
 
   async testAiVisionConfigurationWithPayload(payload: Settings['aiConfig']) {
-    return postOnce<AiTestResponse>('/ai/test-vision', payload)
+    return postOnce<AiTestResponse>('/ai/test-vision', payload, { timeout: payload.timeoutMs + 10000 })
+  },
+
+  async testAiStructuredConfigurationWithPayload(payload: Settings['aiConfig']) {
+    return postOnce<AiTestResponse>('/ai/test-structured', payload, { timeout: payload.timeoutMs + 10000 })
+  },
+
+  async listAiModels(payload: Settings['aiConfig']) {
+    return postOnce<{ models: Array<{ id: string; name: string }>; truncated: boolean }>('/ai/models', payload, { timeout: payload.timeoutMs + 10000 })
   },
 
   async getDashboardAiSummary() {
@@ -327,7 +335,7 @@ export const api = {
   },
 
   async generateDashboardAiSummary() {
-    return postOnce<AiDashboardSummary>('/ai/summary/dashboard/generate', undefined, { timeout: 65000 })
+    return postOnce<AiDashboardSummary>('/ai/summary/dashboard/generate', undefined, { timeout: 260000 })
   },
 
   async getTags() {

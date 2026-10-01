@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import { formatAiSummaryPreviewText, getDefaultAiDashboardSummaryPreviewPrompt, getDefaultAiDashboardSummaryPrompt, getMessage, type AppLocale, type AiDashboardSummaryDto, type DashboardOverview } from '@subtracker/shared'
 import { ensureAiSummaryConfig } from './ai.service'
+import { requestAiText, type AiProviderConfig } from './ai-provider.service'
 import { getOverviewStatistics } from './statistics.service'
 import { getAiConfig, getResolvedAppLocale } from './settings.service'
 
@@ -14,14 +15,6 @@ type CachedDashboardSummary = {
   updatedAt: string | null
   generatedLocale: AppLocale | null
   sourceDataHash: string | null
-}
-
-type ChatCompletionPayload = {
-  choices?: Array<{
-    message?: {
-      content?: string | Array<Record<string, unknown>>
-    }
-  }>
 }
 
 const DASHBOARD_SUMMARY_SCOPE = 'dashboard-overview' as const
@@ -63,28 +56,6 @@ async function resolveDashboardSummaryPrompt(locale: AppLocale, promptTemplate?:
 
 async function resolveDashboardSummaryPreviewPrompt(locale: AppLocale) {
   return getDefaultAiDashboardSummaryPreviewPrompt(locale)
-}
-
-function extractChatCompletionText(payload: ChatCompletionPayload) {
-  const content = payload.choices?.[0]?.message?.content
-
-  if (typeof content === 'string') {
-    return content.trim()
-  }
-
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') return part
-        if (typeof part?.text === 'string') return part.text
-        return ''
-      })
-      .filter(Boolean)
-      .join('\n')
-      .trim()
-  }
-
-  return ''
 }
 
 function buildSummaryInput(overview: DashboardOverview) {
@@ -132,8 +103,10 @@ function buildSummaryInput(overview: DashboardOverview) {
   }
 }
 
-function hashSummaryInput(input: ReturnType<typeof buildSummaryInput>) {
-  return crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex')
+function hashSummaryInput(input: ReturnType<typeof buildSummaryInput>, config: Awaited<ReturnType<typeof getAiConfig>>) {
+  const ai = { apiType: config.apiType ?? 'openai-chat', baseUrl: config.baseUrl, model: config.model,
+    prompt: config.dashboardSummaryPromptTemplate, capabilities: config.capabilities }
+  return crypto.createHash('sha256').update(JSON.stringify({ input, ai })).digest('hex')
 }
 
 function canGenerateSummary(aiConfig: Awaited<ReturnType<typeof getAiConfig>>) {
@@ -184,126 +157,32 @@ function setCacheState(next: Partial<CachedDashboardSummary>) {
 }
 
 
-async function requestDashboardSummaryPreviewMarkdown(params: {
-  baseUrl: string
-  apiKey: string
-  model: string
-  timeoutMs: number
+async function requestDashboardSummaryPreviewMarkdown(params: AiProviderConfig & {
   summaryMarkdown: string
   locale: AppLocale
 }) {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), Math.max(params.timeoutMs, 20000))
-
-  try {
-    const response = await fetch(`${params.baseUrl.replace(/\/$/, '')}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${params.apiKey}`
-      },
-      body: JSON.stringify({
-        model: params.model,
-        temperature: 0.1,
-        messages: [
-          {
-            role: 'system',
-            content: await resolveDashboardSummaryPreviewPrompt(params.locale)
-          },
-          {
-            role: 'user',
-            content: getMessage(params.locale, 'ai.prompts.dashboard.previewUser.request', {
-              payload: params.summaryMarkdown
-            })
-          }
-        ]
-      }),
-      signal: controller.signal
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(
-        `${getMessage(params.locale, 'api.errors.ai.summaryPreviewRequestFailed')}: ${response.status}${errorText ? ` - ${errorText}` : ''}`
-      )
-    }
-
-    const payload = (await response.json()) as ChatCompletionPayload
-    const previewMarkdown = extractChatCompletionText(payload)
-
-    if (!previewMarkdown.trim()) {
-      throw new Error(getMessage(params.locale, 'api.errors.ai.summaryPreviewEmpty'))
-    }
-
-    return previewMarkdown
-  } finally {
-    clearTimeout(timeout)
-  }
+  return requestAiText({ ...params, timeoutMs: Math.max(params.timeoutMs, 20000) }, [
+    { role: 'system', content: await resolveDashboardSummaryPreviewPrompt(params.locale) },
+    { role: 'user', content: getMessage(params.locale, 'ai.prompts.dashboard.previewUser.request', { payload: params.summaryMarkdown }) }
+  ], { locale: params.locale })
 }
 
-async function requestDashboardSummaryMarkdown(params: {
-  baseUrl: string
-  apiKey: string
-  model: string
-  timeoutMs: number
+async function requestDashboardSummaryMarkdown(params: AiProviderConfig & {
   promptTemplate?: string | null
   input: ReturnType<typeof buildSummaryInput>
   locale: AppLocale
 }) {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), Math.max(params.timeoutMs, 45000))
-
-  try {
-    const response = await fetch(`${params.baseUrl.replace(/\/$/, '')}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${params.apiKey}`
-      },
-      body: JSON.stringify({
-        model: params.model,
-        temperature: 0.2,
-        messages: [
-          {
-            role: 'system',
-            content: await resolveDashboardSummaryPrompt(params.locale, params.promptTemplate)
-          },
-          {
-            role: 'user',
-            content: getMessage(params.locale, 'ai.prompts.dashboard.user.request', {
-              payload: JSON.stringify(params.input, null, 2)
-            })
-          }
-        ]
-      }),
-      signal: controller.signal
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(
-        `${getMessage(params.locale, 'api.errors.ai.summaryRequestFailed')}: ${response.status}${errorText ? ` - ${errorText}` : ''}`
-      )
-    }
-
-    const payload = (await response.json()) as ChatCompletionPayload
-    const markdown = extractChatCompletionText(payload)
-
-    if (!markdown.trim()) {
-      throw new Error(getMessage(params.locale, 'api.errors.ai.summaryEmpty'))
-    }
-
-    return markdown
-  } finally {
-    clearTimeout(timeout)
-  }
+  return requestAiText({ ...params, timeoutMs: Math.max(params.timeoutMs, 45000) }, [
+    { role: 'system', content: await resolveDashboardSummaryPrompt(params.locale, params.promptTemplate) },
+    { role: 'user', content: getMessage(params.locale, 'ai.prompts.dashboard.user.request', { payload: JSON.stringify(params.input, null, 2) }) }
+  ], { locale: params.locale })
 }
 
 export async function getDashboardAiSummary(locale?: AppLocale): Promise<AiDashboardSummaryDto> {
   const [aiConfig, overview] = await Promise.all([getAiConfig(), getOverviewStatistics()])
   const resolvedLocale = locale ?? (await getResolvedAppLocale())
   const summaryInput = buildSummaryInput(overview)
-  const currentHash = hashSummaryInput(summaryInput)
+  const currentHash = hashSummaryInput(summaryInput, aiConfig)
   const canGenerate = canGenerateSummary(aiConfig)
 
   if (!canGenerate) {
@@ -350,7 +229,7 @@ export async function generateDashboardAiSummary(locale?: AppLocale): Promise<Ai
     const [aiConfig, overview] = await Promise.all([getAiConfig(), getOverviewStatistics()])
     const resolvedLocale = locale ?? (await getResolvedAppLocale())
     const summaryInput = buildSummaryInput(overview)
-    const currentHash = hashSummaryInput(summaryInput)
+    const currentHash = hashSummaryInput(summaryInput, aiConfig)
     const canGenerate = canGenerateSummary(aiConfig)
 
     logAiSummary('generate:start', {
@@ -393,6 +272,7 @@ export async function generateDashboardAiSummary(locale?: AppLocale): Promise<Ai
       })
 
       const markdown = await requestDashboardSummaryMarkdown({
+        apiType: aiConfig.apiType,
         baseUrl: aiConfig.baseUrl,
         apiKey: aiConfig.apiKey,
         model: aiConfig.model,
@@ -403,6 +283,7 @@ export async function generateDashboardAiSummary(locale?: AppLocale): Promise<Ai
       })
 
       const previewMarkdown = await requestDashboardSummaryPreviewMarkdown({
+        apiType: aiConfig.apiType,
         baseUrl: aiConfig.baseUrl,
         apiKey: aiConfig.apiKey,
         model: aiConfig.model,

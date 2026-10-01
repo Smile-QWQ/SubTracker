@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { AI_API_TYPES, AI_PROVIDER_IDS } from './ai-providers'
+export { AI_API_TYPES, AI_PROVIDER_IDS, AI_PROVIDER_PRESETS, type AiApiType } from './ai-providers'
 import { getMessage } from './i18n'
 import {
   AppLocaleSchema,
@@ -363,7 +365,8 @@ export const AppriseConfigSchema = z.object({
   lastSyncError: z.string().max(2000).nullable().default(null)
 })
 
-export const AiProviderPresetSchema = z.enum(['custom', 'aliyun-bailian', 'tencent-hunyuan', 'volcengine-ark'])
+export const AiProviderPresetSchema = z.enum(AI_PROVIDER_IDS)
+export const AiApiTypeSchema = z.enum(AI_API_TYPES)
 
 export const DEFAULT_AI_CAPABILITIES = {
   vision: false,
@@ -374,6 +377,7 @@ export const DEFAULT_AI_CONFIG = {
   enabled: false,
   dashboardSummaryEnabled: false,
   providerPreset: 'custom',
+  apiType: 'openai-chat',
   providerName: 'DeepSeek',
   baseUrl: 'https://api.deepseek.com',
   apiKey: '',
@@ -404,6 +408,7 @@ export const AiConfigSchema = z.object({
   enabled: z.boolean().default(DEFAULT_AI_CONFIG.enabled),
   dashboardSummaryEnabled: z.boolean().default(DEFAULT_AI_CONFIG.dashboardSummaryEnabled),
   providerPreset: AiProviderPresetSchema.default(DEFAULT_AI_CONFIG.providerPreset),
+  apiType: AiApiTypeSchema.default(DEFAULT_AI_CONFIG.apiType),
   providerName: z.string().max(100).default(DEFAULT_AI_CONFIG.providerName),
   baseUrl: z.string().url().default(DEFAULT_AI_CONFIG.baseUrl),
   apiKey: z.string().max(500).default(DEFAULT_AI_CONFIG.apiKey),
@@ -638,6 +643,7 @@ export interface LogoSearchResultDto {
 }
 
 export interface AiRecognitionResultDto {
+  billingType?: 'recurring' | 'lifetime'
   name?: string
   description?: string
   amount?: number

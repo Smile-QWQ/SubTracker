@@ -567,7 +567,21 @@
               </n-grid-item>
               <n-grid-item>
                 <n-form-item :label="t('common.labels.model')">
-                  <n-input v-model:value="settingsForm.aiConfig.model" />
+                  <n-space vertical style="width: 100%; min-width: 0">
+                    <n-select
+                      :value="settingsForm.aiConfig.model || null"
+                      :options="aiTools.modelOptions"
+                      :loading="aiTools.modelsLoading"
+                      :placeholder="t('settings.aiMaintenance.modelHint')"
+                      :input-props="{ 'aria-label': t('common.labels.model') }"
+                      filterable
+                      tag
+                      clearable
+                      @update:value="settingsForm.aiConfig.model = $event ?? ''"
+                    />
+                    <n-button size="small" :loading="aiTools.modelsLoading" :disabled="!settingsForm.aiConfig.apiKey || aiTools.modelsLoading" @click="aiTools.fetchModels">{{ t('settings.aiMaintenance.loadModels') }}</n-button>
+                    <span v-if="aiTools.modelMessage" class="field-hint">{{ aiTools.modelMessage }}</span>
+                  </n-space>
                 </n-form-item>
               </n-grid-item>
               <n-grid-item>
@@ -586,9 +600,13 @@
               </n-grid-item>
             </n-grid>
 
-            <n-form-item :label="t('common.labels.apiBaseUrl')">
-              <n-input v-model:value="settingsForm.aiConfig.baseUrl" :placeholder="t('settings.placeholders.aiBaseUrl')" />
+            <n-form-item :label="t('settings.aiMaintenance.apiType')">
+              <n-select :value="settingsForm.aiConfig.apiType" :options="aiApiTypeOptions" @update:value="aiTools.changeApiType" />
             </n-form-item>
+            <n-form-item :label="t('common.labels.apiBaseUrl')">
+              <n-input :value="settingsForm.aiConfig.baseUrl" :placeholder="t('settings.placeholders.aiBaseUrl')" @update:value="aiTools.changeBaseUrl" />
+            </n-form-item>
+            <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">{{ t('settings.aiMaintenance.credentialHint') }}</n-alert>
             <n-form-item :label="t('common.labels.apiKey')">
               <n-input v-model:value="settingsForm.aiConfig.apiKey" type="password" show-password-on="click" />
             </n-form-item>
@@ -624,9 +642,13 @@
             </n-collapse>
             <n-space class="settings-actions settings-actions--wrap">
               <n-button :loading="savingAiSettings" :disabled="savingAiSettings" @click="saveAiSettings">{{ t('common.actions.save') }}</n-button>
-              <n-button type="primary" ghost @click="testAiConnectionSettings">{{ t('common.actions.connectionTest') }}</n-button>
-              <n-button v-if="settingsForm.aiConfig.capabilities.vision" type="primary" @click="testAiVisionSettings">{{ t('common.actions.visionTest') }}</n-button>
+              <n-button type="primary" ghost :loading="aiTools.busy.text" :disabled="aiTools.busy.text" @click="testAiConnectionSettings">{{ t('common.actions.connectionTest') }}</n-button>
+              <n-button v-if="settingsForm.aiConfig.capabilities.vision" type="primary" ghost :loading="aiTools.busy.vision" :disabled="aiTools.busy.vision" @click="testAiVisionSettings">{{ t('common.actions.visionTest') }}</n-button>
+              <n-button type="primary" ghost :loading="aiTools.busy.structured" :disabled="aiTools.busy.structured" @click="validateAiSettings('connection-test') && aiTools.diagnose('structured')">{{ t('settings.aiMaintenance.structuredTest') }}</n-button>
             </n-space>
+            <template v-for="kind in aiDiagnosticKinds" :key="kind">
+              <n-alert v-if="aiTools.results[kind]" :type="aiTools.success[kind] ? 'success' : 'error'" style="margin-top: 8px; overflow-wrap: anywhere">{{ t(`settings.aiMaintenance.diagnostics.${kind}`) }}: {{ aiTools.results[kind] }}</n-alert>
+            </template>
           </n-form>
         </n-card>
       </n-grid-item>
@@ -759,6 +781,7 @@
         <li>{{ t('settings.backupCompatibility.supported') }}</li>
         <li>{{ t('settings.backupCompatibility.preserved') }}</li>
         <li>{{ t('settings.backupCompatibility.logoLimit') }}</li>
+        <li>{{ t('settings.backupCompatibility.aiLimit') }}</li>
         <li><strong>{{ t('settings.backupCompatibility.excluded') }}</strong></li>
         <li>{{ t('settings.backupCompatibility.capacity', { size: legacyBackupMaxKiB }) }}</li>
         <li>{{ t('settings.backupCompatibility.unchanged') }}</li>
@@ -829,6 +852,8 @@ import { useQueryClient } from '@tanstack/vue-query'
 import {
   DEFAULT_ADVANCE_REMINDER_RULES,
   DEFAULT_AI_CONFIG,
+  AI_PROVIDER_PRESETS,
+  AI_API_TYPES,
   DEFAULT_NOTIFICATION_WEBHOOK_PAYLOAD_TEMPLATE,
   DEFAULT_OVERDUE_REMINDER_RULES,
   DEFAULT_RESEND_API_URL,
@@ -875,6 +900,7 @@ import {
 } from '@vicons/ionicons5'
 import { t, getDefaultAiPromptByLocale, getDefaultAiSummaryPromptByLocale } from '@/locales'
 import { api } from '@/composables/api'
+import { useAiSettings } from '@/composables/ai-settings'
 import { useSubtrackerBackupExport } from '@/composables/subtracker-backup-export'
 import { EXCHANGE_RATE_SNAPSHOT_QUERY_KEY, useExchangeRateSnapshotQuery } from '@/composables/exchange-rate-query'
 import { NOTIFICATION_WEBHOOK_QUERY_KEY, useNotificationWebhookQuery } from '@/composables/notification-webhook-query'
@@ -921,40 +947,6 @@ const openOutline = OpenOutline
 const listSeparator = computed(() => t('common.separators.list'))
 const settingsReminderPreviewRef = ref<InstanceType<typeof ReminderRulesPreview> | null>(null)
 const settingsReminderPreviewVisible = ref(false)
-const AI_PROVIDER_PRESETS: Record<
-  Exclude<AiProviderPreset, 'custom'>,
-  {
-    providerNameKey: string
-  } & Pick<Settings['aiConfig'], 'baseUrl' | 'model' | 'capabilities'>
-> = {
-  'aliyun-bailian': {
-    providerNameKey: 'settings.options.aiProviderPreset.aliyunBailian',
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    model: 'qwen3-vl-plus',
-    capabilities: {
-      vision: true,
-      structuredOutput: true
-    }
-  },
-  'tencent-hunyuan': {
-    providerNameKey: 'settings.options.aiProviderPreset.tencentHunyuan',
-    baseUrl: 'https://api.hunyuan.cloud.tencent.com/v1',
-    model: 'hunyuan-vision',
-    capabilities: {
-      vision: true,
-      structuredOutput: true
-    }
-  },
-  'volcengine-ark': {
-    providerNameKey: 'settings.options.aiProviderPreset.volcengineArk',
-    baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-    model: 'doubao-1-5-vision-pro-32k-250115',
-    capabilities: {
-      vision: true,
-      structuredOutput: true
-    }
-  }
-}
 
 const settingsForm = reactive<SettingsPageForm>({
   baseCurrency: 'CNY',
@@ -1057,6 +1049,21 @@ const webhookForm = reactive<NotificationWebhookSettings>({
 const snapshot = ref<ExchangeRateSnapshot | null>(null)
 const aiPromptInput = ref(getDefaultAiPromptByLocale())
 const dashboardSummaryPromptInput = ref(getDefaultAiSummaryPromptByLocale())
+const aiTools = reactive(useAiSettings(() => settingsForm.aiConfig))
+const aiDiagnosticKinds = ['text', 'vision', 'structured'] as const
+let savedAiDraft = ''
+const aiDraftSnapshot = () => JSON.stringify({ ...settingsForm.aiConfig, promptTemplate: normalizeAiPrompt(aiPromptInput.value), dashboardSummaryPromptTemplate: normalizeDashboardSummaryPrompt(dashboardSummaryPromptInput.value) })
+function hydrateSettings(settings: Settings, forceAi = false) {
+  const preserveAi = !forceAi && savedAiDraft !== '' && savedAiDraft !== aiDraftSnapshot()
+  const aiConfig = settingsForm.aiConfig
+  Object.assign(settingsForm, cloneSettingsForForm(settings))
+  if (preserveAi) settingsForm.aiConfig = aiConfig
+  else {
+    aiPromptInput.value = settings.aiConfig.promptTemplate.trim() || getDefaultAiPromptByLocale()
+    dashboardSummaryPromptInput.value = settings.aiConfig.dashboardSummaryPromptTemplate.trim() || getDefaultAiSummaryPromptByLocale()
+    savedAiDraft = aiDraftSnapshot()
+  }
+}
 const savingBasicSettings = ref(false)
 const savingEmailSettings = ref(false)
 const savingPushplusSettings = ref(false)
@@ -1104,10 +1111,9 @@ const webhookVariablesText =
   '{{phase}}, {{days_until}}, {{days_overdue}}, {{subscription_id}}, {{subscription_name}}, {{subscription_amount}}, {{subscription_currency}}, {{subscription_next_renewal_date}}, {{subscription_tags}}, {{subscription_url}}, {{subscription_notes}}'
 const aiProviderPresetOptions = computed(() => [
   { label: t('settings.options.aiProviderPreset.custom'), value: 'custom' },
-  { label: t('settings.options.aiProviderPreset.aliyunBailian'), value: 'aliyun-bailian' },
-  { label: t('settings.options.aiProviderPreset.tencentHunyuan'), value: 'tencent-hunyuan' },
-  { label: t('settings.options.aiProviderPreset.volcengineArk'), value: 'volcengine-ark' }
+  ...AI_PROVIDER_PRESETS.map(preset => ({ label: preset.name, value: preset.id }))
 ] satisfies Array<{ label: string; value: AiProviderPreset }>)
+const aiApiTypeOptions = computed(() => AI_API_TYPES.map(value => ({ value, label: t(`settings.aiMaintenance.protocols.${value}`) })))
 const emailProviderOptions = computed(() => [
   { label: t('settings.options.emailProvider.smtp'), value: 'smtp' },
   { label: t('settings.options.emailProvider.resend'), value: 'resend' }
@@ -1419,9 +1425,7 @@ watch(
   settingsQueryData,
   (settings) => {
     if (!settings) return
-    Object.assign(settingsForm, cloneSettingsForForm(settings))
-    aiPromptInput.value = settings.aiConfig.promptTemplate.trim() || getDefaultAiPromptByLocale()
-    dashboardSummaryPromptInput.value = settings.aiConfig.dashboardSummaryPromptTemplate.trim() || getDefaultAiSummaryPromptByLocale()
+    hydrateSettings(settings)
     credentialsForm.oldUsername = authStore.username
     credentialsForm.newUsername = authStore.username
     targetCurrency.value = settings.baseCurrency
@@ -1457,7 +1461,7 @@ watch(
 )
 
 function applySavedSettings(result: Settings) {
-  Object.assign(settingsForm, cloneSettingsForForm(result))
+  hydrateSettings(result)
   queryClient.setQueryData(SETTINGS_QUERY_KEY, result)
 }
 
@@ -1640,6 +1644,7 @@ async function saveAiSettings() {
   aiPromptInput.value = promptTemplate || getDefaultAiPromptByLocale()
   dashboardSummaryPromptInput.value = dashboardSummaryPromptTemplate || getDefaultAiSummaryPromptByLocale()
   savingAiSettings.value = true
+  const submittedDraft = aiDraftSnapshot()
   try {
     const result = await api.updateSettings({
       aiConfig: {
@@ -1651,9 +1656,8 @@ async function saveAiSettings() {
         dashboardSummaryPromptTemplate
       }
     })
-    applySavedSettings(result)
-    aiPromptInput.value = result.aiConfig.promptTemplate.trim() || getDefaultAiPromptByLocale()
-    dashboardSummaryPromptInput.value = result.aiConfig.dashboardSummaryPromptTemplate.trim() || getDefaultAiSummaryPromptByLocale()
+    hydrateSettings(result, aiDraftSnapshot() === submittedDraft)
+    queryClient.setQueryData(SETTINGS_QUERY_KEY, result)
     message.success(settingsForm.aiConfig.enabled ? t('settings.messages.aiSaved') : t('settings.messages.aiDisabled'))
   } finally {
     savingAiSettings.value = false
@@ -1661,41 +1665,11 @@ async function saveAiSettings() {
 }
 
 async function testAiConnectionSettings() {
-  if (!validateAiSettings('connection-test')) return
-  try {
-    const promptTemplate = normalizeAiPrompt(aiPromptInput.value)
-    const dashboardSummaryPromptTemplate = normalizeDashboardSummaryPrompt(dashboardSummaryPromptInput.value)
-    const result = await api.testAiConfigurationWithPayload({
-      ...settingsForm.aiConfig,
-      promptTemplate,
-      dashboardSummaryPromptTemplate,
-      capabilities: {
-        ...settingsForm.aiConfig.capabilities
-      }
-    })
-    message.success(t('settings.messages.aiConnectionTestSuccess', { provider: result.providerName, model: result.model, response: result.response }))
-  } catch (error) {
-    message.error(error instanceof Error ? error.message : t('settings.messages.aiConnectionTestFailed'))
-  }
+  if (validateAiSettings('connection-test')) await aiTools.diagnose('text')
 }
 
 async function testAiVisionSettings() {
-  if (!validateAiSettings('vision-test')) return
-  try {
-    const promptTemplate = normalizeAiPrompt(aiPromptInput.value)
-    const dashboardSummaryPromptTemplate = normalizeDashboardSummaryPrompt(dashboardSummaryPromptInput.value)
-    const result = await api.testAiVisionConfigurationWithPayload({
-      ...settingsForm.aiConfig,
-      promptTemplate,
-      dashboardSummaryPromptTemplate,
-      capabilities: {
-        ...settingsForm.aiConfig.capabilities
-      }
-    })
-    message.success(t('settings.messages.aiVisionTestSuccess', { provider: result.providerName, model: result.model, response: result.response }))
-  } catch (error) {
-    message.error(error instanceof Error ? error.message : t('settings.messages.aiVisionTestFailed'))
-  }
+  if (validateAiSettings('vision-test')) await aiTools.diagnose('vision')
 }
 
 function normalizeAiPrompt(value: string) {
@@ -1713,18 +1687,7 @@ function normalizeDashboardSummaryPrompt(value: string) {
 }
 
 function handleAiPresetChange(value: AiProviderPreset) {
-  settingsForm.aiConfig.providerPreset = value
-  if (value === 'custom') {
-    return
-  }
-
-  const preset = AI_PROVIDER_PRESETS[value]
-  settingsForm.aiConfig.providerName = t(preset.providerNameKey)
-  settingsForm.aiConfig.baseUrl = preset.baseUrl
-  settingsForm.aiConfig.model = preset.model
-  settingsForm.aiConfig.capabilities = {
-    ...preset.capabilities
-  }
+  aiTools.changePreset(value)
 }
 
 async function refreshRates() {

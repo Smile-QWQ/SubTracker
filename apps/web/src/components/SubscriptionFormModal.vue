@@ -875,6 +875,12 @@ function handleCreateFrequencyOption(input: string) {
 }
 
 function applyAiResult(result: AiRecognitionResult) {
+  if (result.billingType) form.billingType = result.billingType
+  if (form.billingType === 'lifetime') {
+    form.autoRenew = false
+    form.advanceReminderRules = ''
+    form.overdueReminderRules = ''
+  }
   if (result.name) form.name = result.name
   if (result.description) form.description = result.description
   if (result.amount !== undefined) form.amount = result.amount
@@ -882,13 +888,16 @@ function applyAiResult(result: AiRecognitionResult) {
     form.currency = result.currency
     currencyEdited.value = true
   }
-  if (result.billingIntervalCount) form.billingIntervalCount = result.billingIntervalCount
-  if (result.billingIntervalUnit) form.billingIntervalUnit = result.billingIntervalUnit
+  if (form.billingType !== 'lifetime') {
+    if (result.billingIntervalCount) form.billingIntervalCount = result.billingIntervalCount
+    if (result.billingIntervalUnit) form.billingIntervalUnit = result.billingIntervalUnit
+  }
   if (result.startDate) {
     form.startDateTs = businessDateToPickerTs(result.startDate, settings.value?.timezone)
     dateFieldMode.value = 'manual'
   }
-  if (result.nextRenewalDate) {
+  if (form.billingType === 'lifetime') form.nextRenewalDateTs = form.startDateTs
+  if (form.billingType !== 'lifetime' && result.nextRenewalDate) {
     form.nextRenewalDateTs = businessDateToPickerTs(result.nextRenewalDate, settings.value?.timezone)
     dateFieldMode.value = 'manual'
   }

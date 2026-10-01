@@ -289,6 +289,21 @@ export default {
       warning: '这将是不完整备份，无法恢复列出的文件。覆盖恢复还会删除目标实例中原有的 Logo 和图片备注。',
       unchanged: '仅在导出副本中移除缺失文件及其引用，订阅和文字备注保留，不修改或删除当前实例的数据。'
     },
+    aiMaintenance: {
+      apiType: 'API 类型',
+      modelHint: '选择模型 ID，或输入后按回车',
+      loadModels: '加载模型列表',
+      modelsLoaded: '已加载 {count} 个模型；列表不代表均支持图片或结构化输出。',
+      modelsTruncated: '已加载 {count} 个模型（列表未全部加载），也可输入模型 ID 后按回车确认。',
+      modelsFailed: '无法获取模型列表，请检查地址、Key 和协议；也可输入模型 ID 后按回车确认。',
+      credentialHint: '切换厂商或修改服务地址会清空旧 Key。预设不保证具体模型支持图片；请分别测试。Google 两种原生接口使用不同的版本路径。',
+      structuredTest: '结构化输出测试',
+      passed: '当前配置测试通过',
+      jsonModePassed: 'JSON 对象模式通过（Chat Completions 不保证严格 JSON Schema）',
+      failed: '测试失败，请检查模型和接口配置',
+      diagnostics: { text: '文本连接', vision: '图片输入', structured: '结构化输出' },
+      protocols: { 'openai-chat': 'OpenAI Chat Completions（兼容）', 'openai-responses': 'OpenAI Responses', 'anthropic-messages': 'Anthropic Messages', 'gemini-content': 'Gemini generateContent', 'gemini-interactions': 'Gemini Interactions' }
+    },
     backupCompatibility: {
       formatLabel: '备份格式',
       standard: '标准备份',
@@ -299,6 +314,7 @@ export default {
       supported: '可在 v0.11.0～v0.11.1 中导入，更早版本不保证兼容。',
       preserved: '保留订阅（含买断）、文字备注、标签、付款记录、Logo、业务设置和排序，不包含登录凭据。',
       logoLimit: '旧版只恢复被订阅引用的 Logo，不会恢复图库中未使用的 Logo。',
+      aiLimit: '新增 AI 预设会映射为自定义。非 Chat Completions 的配置会在兼容包中禁用并清除 Key、重置地址，需在旧版重新配置；当前实例不受影响。',
       excluded: '不包含图片备注，不能代替完整备份。',
       capacity: '受旧版上传限制，兼容 ZIP 最大 {size} KiB。超限请使用标准备份，并升级接收端。',
       unchanged: '仅影响导出文件，不会修改或删除当前实例中的数据和图片。',
@@ -1260,8 +1276,9 @@ export default {
 - description
 - amount
 - currency
+- billingType(recurring|lifetime)
 - billingIntervalCount
-- billingIntervalUnit(day|week|month|quarter|year)
+- billingIntervalUnit(day|week|month|year)
 - startDate(YYYY-MM-DD)
 - nextRenewalDate(YYYY-MM-DD)
 - notifyDaysBefore
@@ -1271,11 +1288,13 @@ export default {
 - rawText
 
 规则：
-1. 不确定就留空，不要猜。
+1. 不确定的字段返回 null，不要猜。
 2. 金额必须是数字。
 3. 币种必须是 3 位大写代码，例如 CNY、USD。
-4. 周期单位必须在 day/week/month/quarter/year 中。
-5. 只返回 JSON，不要返回 Markdown。`
+4. 周期单位必须在 day/week/month/year 中；按季付费转换为每 3 个月。
+5. 明确为买断、终身许可、永久使用或一次性购买时 billingType 为 lifetime；明确为周期续费时为 recurring。不明确则返回 null，不要仅因单次付款或折扣判断为买断。
+6. 买断的金额为一次性购买金额，startDate 为购买日期；周期、nextRenewalDate 和续费提醒字段返回 null，不推测下次续费日期。
+7. 只返回 JSON，不要返回 Markdown。`
       },
       dashboard: {
         summary: {
@@ -1455,7 +1474,11 @@ export default {
         connectionTestFailed: 'AI 连接测试失败',
         visionTestFailed: 'AI 视觉测试失败',
         recognitionFailed: 'AI 识别失败',
-        summaryRequestFailed: 'AI 总结请求失败',
+        invalidStructuredResponse: 'AI 返回内容未通过结构化格式校验',
+      responseTooLarge: 'AI 响应超过安全大小限制',
+      invalidResponse: 'AI 接口返回了无法识别的响应，请检查 API 类型和服务地址',
+      requestTimeout: 'AI 请求超时，请检查服务或增加超时时间',
+      summaryRequestFailed: 'AI 总结请求失败',
         summaryEmpty: 'AI 总结返回空内容',
         summaryPreviewRequestFailed: 'AI 摘要提炼失败',
         summaryPreviewEmpty: 'AI 摘要提炼返回空内容',

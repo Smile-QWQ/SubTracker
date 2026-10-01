@@ -856,6 +856,9 @@ describe('subtracker backup service', () => {
     await writeFile(path.join(fixtureRoot, 'images', 'image_1.png'), Buffer.from('fake-image'))
     for (const { extension, buffer } of additionalLogos) await writeFile(path.join(fixtureRoot, 'logos', `extra${extension}`), buffer)
 
+    const sourceSettings = await mocks.getAppSettingsMock()
+    sourceSettings.aiConfig = { ...sourceSettings.aiConfig, providerPreset: 'anthropic', apiType: 'anthropic-messages', baseUrl: 'https://api.anthropic.com/v1', apiKey: 'native-key', model: 'native-model', enabled: true, dashboardSummaryEnabled: true }
+    const sourceSnapshot = JSON.stringify(sourceSettings)
     const legacy = format === 'legacy-v0.11'
     const result = await createSubtrackerBackupArchive(true, format)
 
@@ -882,6 +885,13 @@ describe('subtracker backup service', () => {
       zip.getEntries().find((entry) => entry.entryName === 'manifest.json')!.getData().toString('utf8')
     )
     expect(manifest.schemaVersion).toBe(legacy ? 1 : 2)
+    expect(JSON.stringify(sourceSettings)).toBe(sourceSnapshot)
+    if (legacy) {
+      expect(manifest.data.settings.aiConfig).toMatchObject({ enabled: false, dashboardSummaryEnabled: false, apiKey: '', providerPreset: 'custom' })
+      expect(manifest.data.settings.aiConfig).not.toHaveProperty('apiType')
+    } else {
+      expect(manifest.data.settings.aiConfig).toMatchObject({ apiType: 'anthropic-messages', providerPreset: 'anthropic', apiKey: 'native-key', model: 'native-model', enabled: true })
+    }
     expect(manifest.includesSubscriptionImages).toBe(!legacy)
     expect(manifest.assets.subscriptionImages).toEqual(legacy ? undefined : [{
       id: 'image_1', subscriptionId: 'sub_1', fileName: 'receipt.png', path: 'subscription-images/image_1.png',

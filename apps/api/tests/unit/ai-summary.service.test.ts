@@ -292,7 +292,7 @@ describe('ai summary service', () => {
     const result = await generateDashboardAiSummary()
 
     expect(result.status).toBe('failed')
-    expect(result.errorMessage).toContain('empty content')
+    expect(result.errorMessage).toContain('did not return valid content')
     expect(result.canGenerate).toBe(true)
   })
 

@@ -1,8 +1,10 @@
 import { FastifyInstance } from 'fastify'
 import { AiConfigSchema, DEFAULT_AI_CONFIG, type AiConfigInput } from '@subtracker/shared'
 import { sendError, sendOk } from '../http'
-import { recognizeSubscriptionByAi, testAiConnection, testAiVisionConnection } from '../services/ai.service'
+import { recognizeSubscriptionByAi, testAiConnection, testAiVisionConnection, testAiStructuredConnection } from '../services/ai.service'
 import { generateDashboardAiSummary, getDashboardAiSummary } from '../services/ai-summary.service'
+import { listAiModels } from '../services/ai-provider.service'
+import { getAiConfig } from '../services/settings.service'
 
 function normalizeAiConfigPayload(payload: Partial<AiConfigInput>) {
   return AiConfigSchema.parse({
@@ -88,6 +90,22 @@ export async function aiRoutes(app: FastifyInstance) {
       )
     }
   })
+
+  for (const [path, run] of [
+    ['/ai/models', listAiModels],
+    ['/ai/test-structured', testAiStructuredConnection]
+  ] as const) {
+    app.post(path, async (request, reply) => {
+      try {
+        const parsed = AiConfigSchema.partial().safeParse(request.body ?? {})
+        if (!parsed.success) return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidAiConfigPayload', parsed.error.flatten(), { locale: request.locale })
+        const config = request.body ? normalizeAiConfigPayload(parsed.data) : await getAiConfig()
+        return sendOk(reply, await run(config, request.locale))
+      } catch (error) {
+        return sendError(reply, 400, 'ai_diagnostic_failed', error instanceof Error ? error.message : 'api.errors.ai.connectionTestFailed', undefined, { locale: request.locale })
+      }
+    })
+  }
 
   app.post('/ai/recognize-subscription', async (request, reply) => {
     try {

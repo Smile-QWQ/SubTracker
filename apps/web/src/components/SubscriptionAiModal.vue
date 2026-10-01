@@ -114,6 +114,7 @@ const fieldLabelMap = computed<Record<string, string>>(() => ({
   description: t('subscriptions.aiModal.fields.description'),
   amount: t('subscriptions.aiModal.fields.amount'),
   currency: t('subscriptions.aiModal.fields.currency'),
+  billingType: t('subscriptions.labels.billingType'),
   billingIntervalCount: t('subscriptions.aiModal.fields.billingIntervalCount'),
   billingIntervalUnit: t('subscriptions.aiModal.fields.billingIntervalUnit'),
   startDate: t('subscriptions.aiModal.fields.startDate'),
@@ -136,6 +137,8 @@ const resultRows = computed(() => {
   push('description', result.value.description)
   push('amount', result.value.amount !== undefined ? Number(result.value.amount).toFixed(2) : undefined)
   push('currency', result.value.currency)
+  push('billingType', result.value.billingType ? t(`subscriptions.billingType.${result.value.billingType}`) : undefined)
+  if (result.value.billingType !== 'lifetime') {
   push('billingIntervalCount', result.value.billingIntervalCount)
   push(
     'billingIntervalUnit',
@@ -143,12 +146,15 @@ const resultRows = computed(() => {
       ? intervalUnitLabel(result.value.billingIntervalUnit)
       : undefined
   )
+  }
   push('startDate', result.value.startDate)
+  if (result.value.billingType !== 'lifetime') {
   push('nextRenewalDate', result.value.nextRenewalDate)
   push(
     'notifyDaysBefore',
     result.value.notifyDaysBefore !== undefined ? `${result.value.notifyDaysBefore} ${intervalUnitLabel('day')}` : undefined
   )
+  }
   push('websiteUrl', result.value.websiteUrl)
   push('notes', result.value.notes)
 
