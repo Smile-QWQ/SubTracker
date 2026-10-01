@@ -10,6 +10,7 @@ import {
   LogoSearchSchema,
   LogoUploadSchema,
   RenewSubscriptionSchema,
+  BatchRenewSubscriptionsSchema,
   UpdateSubscriptionSchema,
   getMessage
 } from '@subtracker/shared'
@@ -363,16 +364,18 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   })
 
   app.post('/subscriptions/batch/renew', async (request, reply) => {
-    const parsed = parseBatchIds(request.body)
+    const parsed = BatchRenewSubscriptionsSchema.safeParse(request.body)
     if (!parsed.success) {
       return sendError(reply, 422, 'validation_error', 'api.errors.validation.invalidBatchRenewPayload', parsed.error.flatten(), {
         locale: request.locale
       })
     }
 
+    const payments = new Map((parsed.data.payments ?? []).map(payment => [payment.id, payment]))
     const result = await runBatchAction(parsed.data.ids, async (id) => {
-      await renewSubscription(id, undefined, undefined, undefined, undefined, request.locale)
-    })
+      const payment = payments.get(id)
+      await renewSubscription(id, undefined, payment?.amount, payment?.currency, undefined, request.locale)
+    }, { locale: request.locale })
 
     return sendOk(reply, result)
   })

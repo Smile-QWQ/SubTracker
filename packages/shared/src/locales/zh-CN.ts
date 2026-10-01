@@ -868,6 +868,16 @@ export default {
       cancel: '取消',
       resume: '恢复'
     },
+    renewal: {
+      title: '确认本次续费', batchTitle: '批量续费（{count} 个订阅）',
+      hint: '默认使用订阅当前价格，可修改本次实付（支持 0 元）。仅影响本次消费记录，不修改订阅标价；续费后推进一个账期。',
+      batchHint: '未调整的订阅使用各自当前价格，不同币种不合并、不自动分摊优惠。',
+      paidAmount: '本次实付金额', listPrice: '当前标价：{price}',
+      adjustAmounts: '调整本次金额', hideAmounts: '收起金额明细', confirm: '确认续费',
+      invalidAmount: '请为每个订阅填写有效的非负金额和货币。',
+      unavailable: '该订阅当前不可续费，请刷新后重试。',
+      refreshFailed: '续费已成功，但页面刷新失败。请刷新页面查看，不要重复续费。'
+    },
     billingType: {
       recurring: '周期订阅',
       lifetime: '终身 / 买断'

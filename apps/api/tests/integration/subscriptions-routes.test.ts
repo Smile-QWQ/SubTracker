@@ -137,6 +137,30 @@ describe('subscription routes', () => {
     await app.close()
   })
 
+  it('maps batch payment overrides by ID, including zero, and leaves untouched prices alone', async () => {
+    routeMocks.prismaMock.subscription.findMany.mockResolvedValue([{id:'a',status:'active'},{id:'b',status:'active'},{id:'c',status:'active'}])
+    routeMocks.renewSubscriptionMock.mockResolvedValue({})
+    const response = await app.inject({method:'POST',url:'/subscriptions/batch/renew',payload:{ids:['a','b','c'],payments:[{id:'b',amount:0,currency:'usd'},{id:'a',amount:68,currency:'CNY'}]}})
+    expect(response.statusCode).toBe(200)
+    expect(response.json().data).toMatchObject({successCount:3,failureCount:0})
+    expect(routeMocks.renewSubscriptionMock).toHaveBeenNthCalledWith(1,'a',undefined,68,'CNY',undefined,undefined)
+    expect(routeMocks.renewSubscriptionMock).toHaveBeenNthCalledWith(2,'b',undefined,0,'USD',undefined,undefined)
+    expect(routeMocks.renewSubscriptionMock).toHaveBeenNthCalledWith(3,'c',undefined,undefined,undefined,undefined,undefined)
+  })
+
+  it.each([
+    {ids:['a'],payments:[{id:'a',amount:-1}]},
+    {ids:['a'],payments:[{id:'a',amount:null}]},
+    {ids:['a'],payments:[{id:'a',amount:1,currency:'INVALID'}]},
+    {ids:['a'],payments:[{id:'b',amount:1}]},
+    {ids:['a'],payments:[{id:'a',amount:1},{id:'a',amount:2}]},
+    {ids:['a','a']}
+  ])('rejects invalid batch payment payloads before any renewal (%#)',async payload=>{
+    const response=await app.inject({method:'POST',url:'/subscriptions/batch/renew',payload})
+    expect(response.statusCode).toBe(422)
+    expect(routeMocks.renewSubscriptionMock).not.toHaveBeenCalled()
+  })
+
   it.each([
     { logoUrl: '/static/logos/image.png', logoSource: 'url' },
     { requiresSvgConfirmation: true as const, svgBase64: 'PHN2Zy8+', logoSource: 'url' }

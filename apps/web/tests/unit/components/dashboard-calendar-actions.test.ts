@@ -9,7 +9,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ renew: vi.fn(), push: vi.fn() }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: mocks.push }) }))
-vi.mock('@/composables/subscription-renewal', () => ({ useSubscriptionRenewal: () => ({ renewingIds: ref(new Set()), renew: mocks.renew }) }))
+vi.mock('@/composables/subscription-renewal', () => ({ useSubscriptionRenewal: () => ({
+  renewingIds: ref(new Set()), renew: mocks.renew, renewalOpen: ref(false), renewalSubscriptions: ref([]),
+  renewalBatch: ref(false), renewalSaving: ref(false), renewalErrors: ref({}), confirmRenewal: vi.fn(), cancelRenewal: vi.fn()
+}) }))
 vi.mock('@/composables/settings-query', () => ({ useSettingsQuery: () => ({ data: ref({ baseCurrency: 'USD', timezone: 'UTC' }) }) }))
 vi.mock('@/composables/statistics-overview-query', () => ({ useStatisticsOverviewQuery: () => ({ data: ref({
   activeSubscriptions: 2, monthlyEstimatedBase: 10, yearlyEstimatedBase: 120, lifetimeTotalBase: 300,

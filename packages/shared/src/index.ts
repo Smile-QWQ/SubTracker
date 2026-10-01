@@ -294,9 +294,29 @@ export const UpdateSubscriptionSchema = SubscriptionInputSchema.partial().extend
 
 export const RenewSubscriptionSchema = z.object({
   paidAt: z.string().date().optional(),
-  amount: z.number().nonnegative().optional(),
-  currency: z.string().length(3).optional()
+  amount: z.number().finite().nonnegative().max(1e12).optional(),
+  currency: z.string().trim().regex(/^[A-Za-z]{3}$/).transform(value => value.toUpperCase()).optional()
 })
+
+export const RenewalPaymentOverrideSchema = RenewSubscriptionSchema.pick({ amount: true, currency: true }).extend({
+  id: z.string().min(1),
+  amount: z.number().finite().nonnegative().max(1e12)
+})
+export const BatchRenewSubscriptionsSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1),
+  payments: z.array(RenewalPaymentOverrideSchema).optional()
+}).superRefine((input, context) => {
+  const ids = new Set(input.ids)
+  const overrides = new Set<string>()
+  if (ids.size !== input.ids.length) context.addIssue({ code: z.ZodIssueCode.custom, path: ['ids'], message: 'Duplicate subscription IDs' })
+  for (const [index, payment] of (input.payments ?? []).entries()) {
+    if (!ids.has(payment.id) || overrides.has(payment.id)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['payments', index, 'id'], message: 'Payment override must match one selected subscription' })
+    }
+    overrides.add(payment.id)
+  }
+})
+export type RenewalPaymentOverride = z.infer<typeof RenewalPaymentOverrideSchema>
 
 export const DEFAULT_RESEND_API_URL = 'https://api.resend.com/emails'
 

@@ -299,6 +299,7 @@
       @delete="deleteTag"
     />
 
+    <subscription-renewal-modal :show="renewalOpen" :subscriptions="renewalSubscriptions" :batch="renewalBatch" :saving="renewalSaving" :errors="renewalErrors" @confirm="confirmRenewal" @close="cancelRenewal" />
     <subscription-detail-drawer :show="showDetailDrawer" :detail="detail" @close="showDetailDrawer = false" />
     <subscription-payment-records-drawer :show="showPaymentDrawer" :subscription-id="paymentSubscriptionId" @close="showPaymentDrawer = false" @changed="refreshPaymentDetail" />
   </div>
@@ -336,6 +337,8 @@ import {
 } from '@vicons/ionicons5'
 import { t } from '@/locales'
 import { api } from '@/composables/api'
+import { useSubscriptionRenewal } from '@/composables/subscription-renewal'
+import SubscriptionRenewalModal from '@/components/SubscriptionRenewalModal.vue'
 import { useExchangeRateSnapshotQuery } from '@/composables/exchange-rate-query'
 import { useSettingsQuery } from '@/composables/settings-query'
 import { TAGS_QUERY_KEY, useTagsQuery } from '@/composables/tags-query'
@@ -376,6 +379,12 @@ const pendingFocusId = ref<string | null>(null)
 const focusedSubscriptionId = ref<string | null>(null)
 const { width } = useWindowSize()
 const queryClient = useQueryClient()
+const { renew, renewMany, renewalOpen, renewalSubscriptions, renewalBatch, renewalSaving, renewalErrors, confirmRenewal, cancelRenewal } = useSubscriptionRenewal({
+  onRenewed: async ids => {
+    await refetchCurrentSubscriptions()
+    await refreshOpenDetailIfNeeded(ids)
+  }
+})
 const layersOutline = LayersOutline
 const isMobile = computed(() => width.value < 960)
 
@@ -1100,10 +1109,7 @@ async function runBatchRenew() {
     message.warning(t('subscriptions.batch.lifetimeRenewSkipped', { count: skippedLifetimeCount }))
   }
   if (!ids.length) return
-  const result = await api.batchRenewSubscriptions(ids)
-  summarizeBatchResult(t('subscriptions.actions.batchRenew'), result)
-  await refetchCurrentSubscriptions()
-  await refreshOpenDetailIfNeeded(ids)
+  renewMany(subscriptions.value.filter(row => ids.includes(row.id)))
 }
 
 async function runBatchSetStatus(status: BatchSettableStatus) {
@@ -1157,12 +1163,7 @@ async function runBatchDelete() {
 
 async function quickRenew(row: Subscription) {
   if (!canRenewSubscription(row)) return
-  await api.renewSubscription(row.id)
-  message.success(t('subscriptions.messages.renewed', { name: row.name }))
-  await refetchCurrentSubscriptions()
-  if (detail.value?.id === row.id) {
-    detail.value = await api.getSubscription(row.id)
-  }
+  await renew(row.id, row.name)
 }
 
 async function pause(id: string) {

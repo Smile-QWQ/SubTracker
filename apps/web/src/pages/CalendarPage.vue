@@ -93,6 +93,7 @@
         </n-tab-pane>
       </n-tabs>
     </n-card>
+    <subscription-renewal-modal :show="renewalOpen" :subscriptions="renewalSubscriptions" :batch="renewalBatch" :saving="renewalSaving" :errors="renewalErrors" @confirm="confirmRenewal" @close="cancelRenewal" />
   </div>
 </template>
 
@@ -113,6 +114,7 @@ import { useSubscriptionRenewal } from '@/composables/subscription-renewal'
 import { useSettingsQuery } from '@/composables/settings-query'
 import PageHeader from '@/components/PageHeader.vue'
 import UpcomingRenewalActions from '@/components/UpcomingRenewalActions.vue'
+import SubscriptionRenewalModal from '@/components/SubscriptionRenewalModal.vue'
 import StatCard from '@/components/StatCard.vue'
 import type { CalendarEvent } from '@/types/api'
 import { getSubscriptionStatusTagType, getSubscriptionStatusText } from '@/utils/subscription-status'
@@ -128,7 +130,7 @@ import {
 } from '@/utils/timezone'
 
 const { width } = useWindowSize()
-const { renewingIds, renew } = useSubscriptionRenewal()
+const { renewingIds, renew, renewalOpen, renewalSubscriptions, renewalBatch, renewalSaving, renewalErrors, confirmRenewal, cancelRenewal } = useSubscriptionRenewal()
 const calendarOutline = CalendarOutline
 const calendarClearOutline = CalendarClearOutline
 const notificationsOutline = NotificationsOutline

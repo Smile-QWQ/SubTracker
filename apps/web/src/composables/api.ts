@@ -290,8 +290,8 @@ export const api = {
     return postOnce<{ subscription: Subscription }>(`/subscriptions/${id}/renew`, payload)
   },
 
-  async batchRenewSubscriptions(ids: string[]) {
-    return postOnce<BatchActionResult>('/subscriptions/batch/renew', { ids })
+  async batchRenewSubscriptions(ids: string[], payments?: import('@subtracker/shared').RenewalPaymentOverride[]) {
+    return postOnce<BatchActionResult>('/subscriptions/batch/renew', { ids, ...(payments?.length ? { payments } : {}) })
   },
 
   async pauseSubscription(id: string) {

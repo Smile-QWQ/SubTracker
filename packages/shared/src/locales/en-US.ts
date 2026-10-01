@@ -867,6 +867,16 @@ export default {
       cancel: 'Cancel',
       resume: 'Resume'
     },
+    renewal: {
+      title: 'Confirm renewal', batchTitle: 'Renew {count} subscriptions',
+      hint: 'Defaults to the current subscription price. Adjust the actual payment, including zero, for this record only. The listed price stays unchanged; renewal advances one billing cycle.',
+      batchHint: 'Unchanged entries use their own current prices. Different currencies are not combined, and discounts are not automatically allocated.',
+      paidAmount: 'Amount paid this time', listPrice: 'Listed price: {price}',
+      adjustAmounts: 'Adjust payment amounts', hideAmounts: 'Hide payment details', confirm: 'Confirm renewal',
+      invalidAmount: 'Enter a valid non-negative amount and currency for each subscription.',
+      unavailable: 'This subscription cannot currently be renewed. Refresh and try again.',
+      refreshFailed: 'Renewal succeeded, but refreshing failed. Reload the page to view it; do not renew again.'
+    },
     billingType: {
       recurring: 'Recurring',
       lifetime: 'Lifetime / one-time'

@@ -111,6 +111,7 @@
     <n-card :title="t('dashboard.sections.upcoming30')" style="margin-top: 12px">
       <n-data-table :columns="columns" :data="overview?.upcomingRenewals ?? []" :pagination="false" />
     </n-card>
+    <subscription-renewal-modal :show="renewalOpen" :subscriptions="renewalSubscriptions" :batch="renewalBatch" :saving="renewalSaving" :errors="renewalErrors" @confirm="confirmRenewal" @close="cancelRenewal" />
   </div>
 </template>
 
@@ -125,6 +126,7 @@ import { useSettingsQuery } from '@/composables/settings-query'
 import { useStatisticsOverviewQuery } from '@/composables/statistics-overview-query'
 import ChartView from '@/components/ChartView.vue'
 import UpcomingRenewalActions from '@/components/UpcomingRenewalActions.vue'
+import SubscriptionRenewalModal from '@/components/SubscriptionRenewalModal.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
 import type { StatisticsOverview } from '@/types/api'
@@ -135,7 +137,7 @@ import { buildTagSpendOption } from '@/utils/tag-spend-chart'
 const { width } = useWindowSize()
 const gridOutline = GridOutline
 const themeVars = useThemeVars()
-const { renewingIds, renew } = useSubscriptionRenewal()
+const { renewingIds, renew, renewalOpen, renewalSubscriptions, renewalBatch, renewalSaving, renewalErrors, confirmRenewal, cancelRenewal } = useSubscriptionRenewal()
 
 const { data: overview } = useStatisticsOverviewQuery()
 

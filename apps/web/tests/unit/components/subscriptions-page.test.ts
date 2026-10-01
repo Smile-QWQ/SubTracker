@@ -6,6 +6,7 @@ import { NButton, NDataTable, NInput, NPagination, NSelect } from 'naive-ui'
 import { setStoredSubscriptionPageSize } from '@/utils/subscription-pagination'
 import SubscriptionsPage from '@/pages/SubscriptionsPage.vue'
 import SubscriptionFormModal from '@/components/SubscriptionFormModal.vue'
+import SubscriptionRenewalModal from '@/components/SubscriptionRenewalModal.vue'
 import { api } from '@/composables/api'
 import { t } from '@/locales'
 import type { Subscription, Tag } from '@/types/api'
@@ -32,7 +33,8 @@ vi.mock('@/composables/exchange-rate-query', () => ({ useExchangeRateSnapshotQue
 vi.mock('@/utils/localized-message', () => ({ useLocalizedMessage: () => messages }))
 vi.mock('@/composables/api', () => ({ api: {
   createSubscription: vi.fn().mockResolvedValue({}), updateSubscription: vi.fn().mockResolvedValue({}),
-  batchRenewSubscriptions: vi.fn().mockResolvedValue({ successCount: 1, failureCount: 0 }),
+  batchRenewSubscriptions: vi.fn().mockResolvedValue({ successCount: 1, failureCount: 0, failures: [] }),
+  getSubscription: vi.fn(),
   renewSubscription: vi.fn().mockResolvedValue({})
 } }))
 
@@ -70,6 +72,7 @@ beforeEach(() => {
   window.localStorage.clear()
   Element.prototype.scrollIntoView = scrollIntoView
   vi.clearAllMocks()
+  vi.mocked(api.getSubscription).mockImplementation(async id => ({ ...legacy, id } as Awaited<ReturnType<typeof api.getSubscription>>))
 })
 afterEach(() => {
   for (const wrapper of wrappers.splice(0)) wrapper.unmount()
@@ -139,7 +142,12 @@ describe('SubscriptionsPage copy and renewal actions', () => {
     expect(renewButtons).toHaveLength(1)
     await renewButtons[0].trigger('click')
     await flushPromises()
-    expect(api.renewSubscription).toHaveBeenCalledWith('legacy')
+    expect(api.renewSubscription).not.toHaveBeenCalled()
+    const confirmation = wrapper.getComponent(SubscriptionRenewalModal)
+    expect(confirmation.props('show')).toBe(true)
+    confirmation.vm.$emit('confirm', [{id:'legacy',amount:0,currency:'USD'}])
+    await flushPromises()
+    expect(api.renewSubscription).toHaveBeenCalledWith('legacy', {amount:0,currency:'USD'})
   })
 
   it('excludes lifetime ids from mixed batch renewals and disables all-lifetime batches', async () => {
@@ -148,7 +156,12 @@ describe('SubscriptionsPage copy and renewal actions', () => {
     await findButton(wrapper, t('subscriptions.page.selectCurrentPage')).trigger('click')
     await findButton(wrapper, t('subscriptions.actions.batchRenew')).trigger('click')
     await flushPromises()
-    expect(api.batchRenewSubscriptions).toHaveBeenCalledWith(['legacy'])
+    expect(api.batchRenewSubscriptions).not.toHaveBeenCalled()
+    const confirmation = wrapper.getComponent(SubscriptionRenewalModal)
+    expect(confirmation.props('subscriptions').map(row => row.id)).toEqual(['legacy'])
+    confirmation.vm.$emit('confirm', [])
+    await flushPromises()
+    expect(api.batchRenewSubscriptions).toHaveBeenCalledWith(['legacy'], [])
     expect(messages.warning).toHaveBeenCalledWith(t('subscriptions.batch.lifetimeRenewSkipped', { count: 1 }))
 
     records.value = [{ ...lifetime }]
